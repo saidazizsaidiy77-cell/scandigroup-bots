@@ -171,6 +171,13 @@ tr.click:hover td{background:var(--surface-2)}
 .log .src.fakt{color:var(--ok)}
 .log .src.late{color:var(--bad)}
 /* Amal tugmalari qator balandligini oshirmasin */
+/* Saralanadigan sarlavha: bosiladigani bilinib tursin, faol ustun esa
+   yo'nalish belgisi bilan ajralsin. */
+.log th.sortable{cursor:pointer;user-select:none}
+.log th.sortable:hover{color:var(--text)}
+.log th.sortable.on{color:var(--accent)}
+.log th.sortable.on::after{content:' \25B2';font-size:9px}
+.log th.sortable.on[data-dir="desc"]::after{content:' \25BC'}
 .log .act{white-space:nowrap}
 .log .act button{padding:7px 11px;font-size:13px}
 .log .act .ic{padding:7px 10px;color:var(--muted)}

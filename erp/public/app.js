@@ -22,6 +22,23 @@ const App = (() => {
     return j;
   }
 
+  // Fayl yuklab olish. Sessiya tokeni sarlavhada yuboriladi, shuning uchun
+  // oddiy havola ishlamaydi — so'rov shu yerdan ketadi va javob brauzerga
+  // fayl bo'lib beriladi.
+  async function download(path, filename) {
+    const r = await fetch(path, {
+      headers: token() ? { Authorization: 'Bearer ' + token() } : {},
+    });
+    if (r.status === 401) { setToken(null); gate(); throw new Error('Sessiya tugadi'); }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Xato');
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   const can = (...p) => !!me && p.some((x) => me.permissions.includes(x));
 
   async function logout() {
@@ -218,6 +235,6 @@ const App = (() => {
     onReady(me);
   }
 
-  return { api, can, start, logout, me: () => me, pages,
+  return { api, download, can, start, logout, me: () => me, pages,
            modules: () => MODULES.filter((m) => !m.perm.length || can(...m.perm)) };
 })();

@@ -8,7 +8,7 @@
 //    sales.manage      — zakaz raqami, mijoz, narx, chiqish sanasi
 // ============================================================================
 const express = require('express');
-const { db, wrap, audit } = require('../db');
+const { db, wrap, audit, today } = require('../db');
 const { need } = require('../auth');
 const { resolveShift } = require('./shift');
 
@@ -109,10 +109,32 @@ router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────────────────────── JURNAL
-router.get('/', need('production.view'), wrap(async (req, res) => {
-  const { order_no, conveyor_no, customer_id, shop_id, status, from, to, q } = req.query;
-  const { rows } = await db.query(
-    `SELECT * FROM v_unit_register
+// Saralash klientda emas, serverda: ro'yxat 500 qator bilan cheklangan,
+// shuning uchun faqat ko'rinib turgan qatorlarni saralash yolg'on natija
+// beradi — "eng qimmat mahsulot" 501-qatorda qolib ketishi mumkin.
+//
+// Ustun nomi klientdan keladi, shuning uchun ro'yxat qat'iy: SQL ga faqat
+// shu jadvaldagi qiymat tushadi.
+const SORT = {
+  started_on: 'started_on', conveyor_no: 'conveyor_no', order_no: 'order_no',
+  product: 'product', product_type: 'product_type', color: 'color',
+  fabric: 'fabric', qty: 'qty', section: 'section',
+  lak_on: 'lak_on', pack_on: 'pack_on', fg_on: 'fg_on',
+  customer_name: 'customer_name', unit_price: 'unit_price',
+  total_amount: 'total_amount',
+};
+
+// Jurnal va Excel bitta so'rovdan chiqadi: ekranda ko'ringan filtr va
+// saralash faylda ham aynan shunday bo'lishi kerak, aks holda xodim
+// ikkitasini solishtirib chalkashadi.
+function registerQuery(q, limit) {
+  // Bo'sh katak har doim oxirida tursin: saralash sababi — nimadir izlash,
+  // "—" esa izlanayotgan narsa emas.
+  const col = SORT[q.sort] || 'started_on';
+  const way = String(q.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  return {
+    text: `SELECT * FROM v_unit_register
       -- Bekor qilinganlar faqat maxsus so'ralganda ko'rinadi
       WHERE ($5::text IS NOT NULL OR status <> 'cancelled')
         AND ($1::text IS NULL OR order_no ILIKE '%' || $1 || '%')
@@ -124,11 +146,86 @@ router.get('/', need('production.view'), wrap(async (req, res) => {
         AND ($7::date IS NULL OR started_on <= $7)
         AND ($8::text IS NULL OR product ILIKE '%' || $8 || '%'
              OR sku ILIKE '%' || $8 || '%' OR customer_name ILIKE '%' || $8 || '%')
-      ORDER BY started_on DESC, conveyor_no DESC
-      LIMIT 500`,
-    [order_no || null, conveyor_no || null, customer_id || null, shop_id || null,
-     status || null, from || null, to || null, q || null]);
+        AND ($9::int  IS NULL OR group_id = $9)
+        AND ($10::int IS NULL OR fason_id = $10)
+      ORDER BY ${col} ${way} NULLS LAST, conveyor_no DESC
+      LIMIT ${limit}`,
+    params: [q.order_no || null, q.conveyor_no || null, q.customer_id || null,
+             q.shop_id || null, q.status || null, q.from || null, q.to || null,
+             q.q || null, q.group_id || null, q.fason_id || null],
+  };
+}
+
+router.get('/', need('production.view'), wrap(async (req, res) => {
+  const { text, params } = registerQuery(req.query, 500);
+  const { rows } = await db.query(text, params);
   res.json(rows);
+}));
+
+// ─────────────────────────────────────────────────────── EXCELGA YUKLAB OLISH
+//
+//  CSV, chunki xlsx uchun kutubxona kerak bo'lardi — bu yerda esa fayl
+//  Excel'da ochilsa bas. Excel'ni to'g'ri ochishi uchun uchta shart:
+//    · UTF-8 BOM — bo'lmasa o'zbekcha harflar buziladi
+//    · ustun ajratgich `;` — MDH mintaqasidagi Excel shuni kutadi
+//    · kasr `,` — o'sha mintaqada raqam aks holda matn bo'lib qoladi
+//  Sana YYYY-MM-DD: Excel uni har qanday tilda sana deb taniydi.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+const csvNum = (v) => v == null ? '' : String(v).replace('.', ',');
+
+// Bazadan sana `Date` bo'lib keladi, uni shundayligicha yozsa Excel'ga
+// "Sun Sep 06 2026 ..." tushadi. Kun mahalliy qismlardan yig'iladi:
+// toISOString() vaqt mintaqasiga qarab sanani bir kunga surib yuborishi
+// mumkin, DATE ustunida esa vaqt umuman yo'q.
+const pad = (n) => String(n).padStart(2, '0');
+const csvDate = (v) => !v ? ''
+  : v instanceof Date
+    ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`
+    : String(v).slice(0, 10);
+
+const STATUS_UZ = { production: 'ishlab chiqarishda', fg: 'T/M omborda',
+                    shipped: "jo'natilgan", cancelled: 'bekor qilingan' };
+
+const EXPORT_COLUMNS = [
+  ['Bosh sana',        (r) => csvDate(r.started_on)],
+  ['Konveyer raqami',  (r) => r.conveyor_no],
+  ['Zakaz raqami',     (r) => r.order_no],
+  ['Maxsulot nomi',    (r) => r.product],
+  ['Maxsulot guruhi',  (r) => r.product_type],
+  ['Rang',             (r) => r.color],
+  ['Mato',             (r) => r.fabric],
+  ['Soni',             (r) => r.qty],
+  ['Tsex',             (r) => r.shop],
+  ["Bo'lim",           (r) => r.section],
+  ['Lak tsehi',        (r) => csvDate(r.lak_on)],
+  ['Lak manbasi',      (r) => r.lak_src],
+  ['Qadoqlash tsehi',  (r) => csvDate(r.pack_on)],
+  ['Qadoqlash manbasi',(r) => r.pack_src],
+  ['T/M ombor',        (r) => csvDate(r.fg_on)],
+  ['T/M manbasi',      (r) => r.fg_src],
+  ['Mijoz nomi',       (r) => r.customer_name],
+  ['Narx, $',          (r) => csvNum(r.unit_price)],
+  ['Summa, $',         (r) => csvNum(r.total_amount)],
+  ['Holat',            (r) => STATUS_UZ[r.status] || r.status],
+];
+
+router.get('/export', need('production.view'), wrap(async (req, res) => {
+  // Ekrandagi ro'yxat 500 qator bilan cheklangan, fayl esa hisobot uchun —
+  // unda butun jurnal bo'lishi kerak.
+  const { text, params } = registerQuery(req.query, 20000);
+  const { rows } = await db.query(text, params);
+
+  const head = EXPORT_COLUMNS.map(([name]) => csvCell(name)).join(';');
+  const body = rows.map((r) =>
+    EXPORT_COLUMNS.map(([, get]) => csvCell(get(r))).join(';'));
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="jurnal-${today()}.csv"`);
+  res.send('\uFEFF' + [head, ...body].join('\r\n') + '\r\n');
 }));
 
 router.get('/orders', need('production.view'), wrap(async (_req, res) => {

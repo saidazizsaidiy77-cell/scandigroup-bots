@@ -194,6 +194,20 @@ Mijoz nomi · Narx · Summa
 Ustunlar zavodda yuritilgan qog'oz jurnaldan olingan — xodim yangi tartibga
 o'rganishi shart emas. Pul birligi — **dollar**.
 
+Filtr, saralash va Excel — uchalasi bitta so'rovdan chiqadi: zakaz va konveyer
+raqami, tsex, holat, guruh, mahsulot nomi, sana oralig'i va erkin qidiruv.
+Sarlavhaga bosilsa o'sha ustun bo'yicha saralanadi, ikkinchi bosishda teskari
+tartibda. Saralash **serverda** bajariladi — ro'yxat 500 qator bilan
+cheklangan, faqat ko'rinib turganini saralash "eng qimmat mahsulot"ni
+501-qatorda qoldirib ketardi.
+
+**Excelga yuklash** o'sha filtr va saralash bilan CSV beradi (20 000 qatorgacha,
+ya'ni ekrandagidan ko'proq). Fayl Excel'da to'g'ri ochilishi uchun UTF-8 BOM,
+`;` ajratgich va `,` kasr bilan yoziladi; sana `YYYY-MM-DD` — Excel uni har
+qanday tilda sana deb taniydi. Sana ustunlari yonida `fakt/reja/taxmin`
+manbasi alohida ustunda turadi: faylda tahlil qilinadigan bo'lsa, sana bilan
+belgi bir katakda bo'lmasligi kerak.
+
 - **Konveyer №** — ishlab chiqarish beradi, takrorlanmas. `K26-0001`
   shaklida avtomatik taklif qilinadi. Har mahsulot o'z raqami bilan yuradi:
   "Zero · Penal — K26-0001", "Zero · Kamod — K26-0002". Faqat to'plam

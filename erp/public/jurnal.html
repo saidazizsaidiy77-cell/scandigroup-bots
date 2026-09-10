@@ -30,9 +30,17 @@
         <option value="shipped">Jo'natilgan</option>
         <option value="cancelled">Bekor qilingan</option>
       </select></div>
+    <div style="flex:1;min-width:140px"><label>Guruhi</label>
+      <select id="fGroup" onchange="load()"></select></div>
+    <div style="flex:1;min-width:140px"><label>Maxsulot nomi</label>
+      <select id="fFason" onchange="load()"></select></div>
+    <div style="flex:1;min-width:135px"><label>Sana: dan</label>
+      <input id="fFrom" type="date" onchange="load()"></div>
+    <div style="flex:1;min-width:135px"><label>Sana: gacha</label>
+      <input id="fTo" type="date" onchange="load()"></div>
     <div style="flex:1.5;min-width:180px"><label>Qidiruv</label>
       <input id="fQ" placeholder="mahsulot yoki mijoz" oninput="deb()"></div>
-    <button onclick="load()">Yangilash</button>
+    <button onclick="clearFilters()">Filtrni tozalash</button>
   </div>
 </div>
 
@@ -40,19 +48,30 @@
 
 <div class="card" style="margin-top:16px">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
-    <h2 style="margin:0">Jurnal</h2>
+    <div class="row" style="gap:12px">
+      <h2 style="margin:0">Jurnal</h2>
+      <span class="muted" id="rowCount" style="font-size:13px"></span>
+    </div>
     <div class="row" id="bulkBar"></div>
+    <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
   </div>
   <div style="overflow:auto;max-height:72vh">
     <table id="tbl" class="log">
       <thead><tr>
-        <th class="k"><input type="checkbox" id="chAll" style="width:auto" onchange="checkAll()"> K&#8470;</th>
-        <th>Bosh sana</th><th>Z&#8470;</th>
-        <th class="sep">Maxsulot nomi</th><th>Guruhi</th><th>Rang</th><th>Mato</th>
-        <th class="num">Soni</th>
-        <th class="sep">Qayerda</th>
-        <th class="sep">Lak tsehi</th><th>Qadoqlash tsehi</th><th>T/M ombor</th>
-        <th class="sep">Mijoz nomi</th><th class="num">Narx, $</th><th class="num">Summa, $</th>
+        <th class="k"><input type="checkbox" id="chAll" style="width:auto" onchange="checkAll()">
+          <span data-sort="conveyor_no">K&#8470;</span></th>
+        <th data-sort="started_on">Bosh sana</th><th data-sort="order_no">Z&#8470;</th>
+        <th class="sep" data-sort="product">Maxsulot nomi</th>
+        <th data-sort="product_type">Guruhi</th>
+        <th data-sort="color">Rang</th><th data-sort="fabric">Mato</th>
+        <th class="num" data-sort="qty">Soni</th>
+        <th class="sep" data-sort="section">Qayerda</th>
+        <th class="sep" data-sort="lak_on">Lak tsehi</th>
+        <th data-sort="pack_on">Qadoqlash tsehi</th>
+        <th data-sort="fg_on">T/M ombor</th>
+        <th class="sep" data-sort="customer_name">Mijoz nomi</th>
+        <th class="num" data-sort="unit_price">Narx, $</th>
+        <th class="num" data-sort="total_amount">Summa, $</th>
         <th class="sep"></th>
       </tr></thead>
       <tbody id="tB"></tbody>
@@ -90,6 +109,9 @@ const STATUS = { production:['warn','ishlab chiqarishda'], fg:['ok','T/M omborda
                  shipped:['','jo\'natilgan'], cancelled:['bad','bekor'] };
 
 let ref = null, rows = [], customers = [], timer = null;
+// Saralash serverda bajariladi: ro'yxat 500 qator bilan cheklangan, faqat
+// ko'rinib turganini saralash noto'g'ri javob beradi.
+let sort = { col: 'started_on', dir: 'desc' };
 const deb = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
 
 async function boot(){
@@ -102,17 +124,72 @@ async function boot(){
   ref = r; customers = c.customers;
   $('fShop').innerHTML = '<option value="">Barcha tsex</option>' +
     ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+
+  // Guruh va mahsulot nomi ro'yxati katalogdan chiqadi — jurnalda faqat
+  // haqiqatan mavjud bo'lganlari tanlanadi.
+  const groups = [...new Map(ref.products.map(p =>
+    [p.group_id, p.group_name])).entries()];
+  $('fGroup').innerHTML = '<option value="">Barchasi</option>' +
+    groups.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('');
+  const fasons = [...new Map(ref.products.filter(p => p.fason_id)
+    .map(p => [p.fason_id, p.name])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  $('fFason').innerHTML = '<option value="">Barchasi</option>' +
+    fasons.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('');
+
+  // Sarlavhaga bosilsa o'sha ustun bo'yicha saralanadi, ikkinchi bosishda
+  // teskari tartibda.
+  for (const th of document.querySelectorAll('#tbl thead [data-sort]')){
+    th.classList.add('sortable');
+    th.onclick = () => {
+      const col = th.dataset.sort;
+      sort = { col, dir: sort.col === col && sort.dir === 'desc' ? 'asc' : 'desc' };
+      load();
+    };
+  }
   load();
 }
 
-async function load(){
+// Filtr va saralash bitta joyda yig'iladi: jurnal ham, Excel fayli ham
+// aynan shu so'rovdan chiqadi.
+function params(){
   const p = new URLSearchParams();
   if ($('fOrder').value.trim())  p.set('order_no', $('fOrder').value.trim());
   if ($('fConv').value.trim())   p.set('conveyor_no', $('fConv').value.trim());
   if ($('fShop').value)          p.set('shop_id', $('fShop').value);
   if ($('fStatus').value)        p.set('status', $('fStatus').value);
+  if ($('fGroup').value)         p.set('group_id', $('fGroup').value);
+  if ($('fFason').value)         p.set('fason_id', $('fFason').value);
+  if ($('fFrom').value)          p.set('from', $('fFrom').value);
+  if ($('fTo').value)            p.set('to', $('fTo').value);
   if ($('fQ').value.trim())      p.set('q', $('fQ').value.trim());
-  rows = await App.api('/api/units?' + p);
+  p.set('sort', sort.col);
+  p.set('dir', sort.dir);
+  return p;
+}
+
+function clearFilters(){
+  for (const id of ['fOrder','fConv','fShop','fStatus','fGroup','fFason','fFrom','fTo','fQ'])
+    $(id).value = '';
+  load();
+}
+
+async function exportCsv(){
+  $('btnCsv').disabled = true;
+  try{
+    await App.download('/api/units/export?' + params(),
+      `jurnal-${new Date().toISOString().slice(0, 10)}.csv`);
+  }catch(e){ alert(e.message); }
+  finally{ $('btnCsv').disabled = false; }
+}
+
+async function load(){
+  rows = await App.api('/api/units?' + params());
+  // Qaysi ustun bo'yicha saralanganini sarlavhada ko'rsatamiz
+  for (const th of document.querySelectorAll('#tbl thead [data-sort]')){
+    th.classList.toggle('on', th.dataset.sort === sort.col);
+    th.dataset.dir = th.dataset.sort === sort.col ? sort.dir : '';
+  }
   render();
 }
 
@@ -161,6 +238,12 @@ function render(){
           ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
     </tr>`).join('')
     : '<tr><td class="muted" colspan="16">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
+
+  $('rowCount').textContent = rows.length
+    ? (rows.length >= 500
+        ? '500 qator ko\'rsatildi — Excel faylida hammasi bor'
+        : rows.length + ' qator')
+    : '';
 
   $('tF').innerHTML = rows.length ? `<tr>
     <td colspan="7"></td><td class="num"><strong>${qty}</strong></td>

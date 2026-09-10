@@ -95,6 +95,10 @@ SELECT
   p.name  AS product,
   p.sku,
   g.name  AS product_type,                        -- mahsulot turi (guruh)
+  -- Jurnal guruh va fason bo'yicha filtrlanadi. Nom bo'yicha emas, id
+  -- bo'yicha: saytdan nom o'zgartirilsa filtr buzilmasin.
+  p.group_id,
+  p.fason_id,
   u.qty,
   pp.shop, pp.shop_id, pp.section, pp.section_id, pp.step_no,
   u.entered_section_on,
