@@ -8,6 +8,9 @@
 body{background:var(--bg);color:var(--text);
   font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;padding:24px;max-width:1280px;margin:0 auto}
+/* Ko'p ustunli jadval sahifasi ekranni to'liq ishlatsin — 1280px da jurnal
+   gorizontal aylantirishsiz sig'maydi. */
+body.wide{max-width:1720px}
 h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
 h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
   color:var(--muted);margin-bottom:12px}
@@ -24,10 +27,15 @@ h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 .kpi{font-size:32px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
 .kpi small{font-size:13px;font-weight:400;color:var(--muted);letter-spacing:0}
 table{width:100%;border-collapse:collapse;font-size:14px}
+/* Ustunlar orasida bo'shliq bo'lmasa sarlavhalar bir-biriga yopishib
+   o'qilmay qoladi ("Guruh" + "Rang" = "Guruhirang"). Chetki kataklar
+   kartochka chetiga tekis tursin. */
 th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;
-  text-transform:uppercase;letter-spacing:.05em;padding:0 0 10px;
-  border-bottom:1px solid var(--line)}
-td{padding:10px 0;border-bottom:1px solid var(--line)}
+  text-transform:uppercase;letter-spacing:.05em;padding:0 14px 10px;
+  white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{padding-left:0}
+th:last-child,td:last-child{padding-right:0}
 tr:last-child td{border-bottom:none}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .bar{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;margin-top:6px}
@@ -127,3 +135,42 @@ tr.click:hover td{background:var(--surface-2)}
 .nav.sub a{font-size:14px;padding:7px 13px;color:var(--muted)}
 .nav.sub a:hover{color:var(--text);background:var(--surface)}
 .nav.sub a.on{color:var(--text);background:var(--surface-2);border-color:var(--line)}
+
+/* ─────────────────────────────────────────────── JURNAL JADVALI
+   O'n oltita ustun bitta ekranga sig'maydi, shuning uchun:
+     · jadval torayib qolmasin — min-width, ortig'i gorizontal aylanadi
+     · qator ko'zdan qochmasin — bir qatordan zebra va hover
+     · qaysi birlik ekani doim ko'rinsin — K№ ustuni chapda qotib turadi
+     · uzoq ro'yxatda sarlavha yo'qolmasin — thead tepada qotib turadi
+     · ustunlar mantiqiy bloklarga bo'linsin — blok boshida ingichka chiziq
+   Zebra rangi qattiq qiymat: qotib turgan ustun ostidan qator ko'rinmasligi
+   uchun shaffof bo'lmasligi kerak. */
+.log{min-width:1240px;font-size:13.5px}
+.log th,.log td{padding-left:11px;padding-right:11px}
+.log th:first-child,.log td:first-child{padding-left:0}
+.log th:last-child,.log td:last-child{padding-right:0}
+/* Konveyer raqami, sana va soni bo'linib ketmasin */
+.log .num,.log td:nth-child(2){white-space:nowrap}
+.log tbody td{background:var(--surface)}
+.log tbody tr:nth-child(even) td{background:#171a1e}
+.log tbody tr:hover td{background:var(--surface-2)}
+.log thead th{position:sticky;top:0;z-index:3;background:var(--surface)}
+/* Konveyer raqami tanlash katakchasi bilan bitta ustunda: shunda chapda
+   qotib turadigan ustun bitta bo'ladi va siljish hisobi kerak emas. */
+.log .k{position:sticky;left:0;z-index:2;white-space:nowrap}
+.log thead .k{z-index:4}
+.log .k input{margin-right:8px;vertical-align:-1px}
+.log .k .pad{display:inline-block;width:21px}
+/* Mantiqiy bloklar: raqamlar · mahsulot · joylashuv · muddat · pul */
+.log .sep{border-left:1px solid var(--line)}
+.log thead .sep{border-left:1px solid var(--line)}
+/* Sana ostidagi belgi — kichik va rangsiz, faqat fakt va kechikish
+   ajralib tursin. Har qatorda uchta belgi bor, ular ko'z tortmasligi kerak. */
+.log .src{display:block;margin-top:2px;font-size:10.5px;letter-spacing:.04em;
+  color:var(--muted);text-transform:uppercase}
+.log .src.fakt{color:var(--ok)}
+.log .src.late{color:var(--bad)}
+/* Amal tugmalari qator balandligini oshirmasin */
+.log .act{white-space:nowrap}
+.log .act button{padding:7px 11px;font-size:13px}
+.log .act .ic{padding:7px 10px;color:var(--muted)}

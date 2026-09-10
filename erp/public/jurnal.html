@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/style.css">
 <script src="/app.js"></script>
 </head>
-<body>
+<body class="wide">
 
 <div class="top">
   <div class="brand"><span class="dot"></span><h1>Ishlab chiqarish jurnali</h1></div>
@@ -43,16 +43,17 @@
     <h2 style="margin:0">Jurnal</h2>
     <div class="row" id="bulkBar"></div>
   </div>
-  <div style="overflow-x:auto">
-    <table id="tbl">
+  <div style="overflow:auto;max-height:72vh">
+    <table id="tbl" class="log">
       <thead><tr>
-        <th style="width:26px"><input type="checkbox" id="chAll" style="width:auto" onchange="checkAll()"></th>
-        <th>Bosh sana</th><th>K&#8470;</th><th>Z&#8470;</th>
-        <th>Maxsulot nomi</th><th>Guruhi</th><th>Rang</th><th>Mato</th>
-        <th class="num">Soni</th><th>Tseh</th><th>Bo'lim</th>
-        <th>Lak tsehi</th><th>Qadoqlash tsehi</th><th>T/M ombor</th>
-        <th>Mijoz nomi</th><th class="num">Narx, $</th><th class="num">Summa, $</th>
-        <th></th>
+        <th class="k"><input type="checkbox" id="chAll" style="width:auto" onchange="checkAll()"> K&#8470;</th>
+        <th>Bosh sana</th><th>Z&#8470;</th>
+        <th class="sep">Maxsulot nomi</th><th>Guruhi</th><th>Rang</th><th>Mato</th>
+        <th class="num">Soni</th>
+        <th class="sep">Qayerda</th>
+        <th class="sep">Lak tsehi</th><th>Qadoqlash tsehi</th><th>T/M ombor</th>
+        <th class="sep">Mijoz nomi</th><th class="num">Narx, $</th><th class="num">Summa, $</th>
+        <th class="sep"></th>
       </tr></thead>
       <tbody id="tB"></tbody>
       <tfoot id="tF"></tfoot>
@@ -83,8 +84,8 @@ const d8 = s => { if (!s) return '—'; const d = new Date(s);
 // rejaga va'da beriladi, taxminga esa ehtiyot bo'lib qaraladi.
 const dateWithSrc = (s, src, late) => !s ? '<span class="muted">—</span>' :
   `<span class="${late ? 'late' : ''}">${d8(s)}</span>
-   <span class="tag ${late ? 'bad' : src === 'fakt' ? 'ok' : src === 'reja' ? '' : 'warn'}"
-      style="font-size:11px">${late ? 'kechikdi' : (src || '')}</span>`;
+   <span class="src ${late ? 'late' : src === 'fakt' ? 'fakt' : ''}"
+     >${late ? 'kechikdi' : (src || '')}</span>`;
 const STATUS = { production:['warn','ishlab chiqarishda'], fg:['ok','T/M omborda'],
                  shipped:['','jo\'natilgan'], cancelled:['bad','bekor'] };
 
@@ -130,37 +131,40 @@ function render(){
 
   $('tB').innerHTML = rows.length ? rows.map(r => `
     <tr>
-      <td>${r.status === 'production'
-        ? `<input type="checkbox" class="sel" value="${r.id}" style="width:auto" onchange="bulk()">` : ''}</td>
+      <td class="k">${r.status === 'production'
+        ? `<input type="checkbox" class="sel" value="${r.id}" style="width:auto" onchange="bulk()">`
+        : '<span class="pad"></span>'}<strong>${esc(r.conveyor_no)}</strong></td>
       <td class="muted">${d8(r.started_on)}</td>
-      <td><strong>${esc(r.conveyor_no)}</strong></td>
       <td>${r.order_no ? esc(r.order_no) : '<span class="muted">—</span>'}</td>
-      <td>${esc(r.product)}<div class="muted" style="font-size:12px">${esc(r.sku)}</div></td>
+      <td class="sep">${esc(r.product)}</td>
       <td class="muted">${esc(r.product_type)}</td>
       <td>${r.color ? esc(r.color) : '<span class="muted">—</span>'}</td>
       <td>${r.fabric ? esc(r.fabric) : '<span class="muted">—</span>'}</td>
       <td class="num">${r.qty}</td>
-      <td class="muted">${r.shop ? esc(r.shop) : '—'}</td>
-      <td>${r.section ? esc(r.section) : '<span class="muted">boshlanmagan</span>'}</td>
-      <td>${dateWithSrc(r.lak_on,  r.lak_src,  r.lak_late)}</td>
+      <td class="sep">${r.section
+        ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${esc(r.shop || '')}</div>`
+        : '<span class="muted">boshlanmagan</span>'}</td>
+      <td class="sep">${dateWithSrc(r.lak_on,  r.lak_src,  r.lak_late)}</td>
       <td>${dateWithSrc(r.pack_on, r.pack_src, r.pack_late)}</td>
       <td>${dateWithSrc(r.fg_on,   r.fg_src,   r.fg_late)}</td>
-      <td>${r.customer_id ? esc(r.customer_name)
-            : '<span class="tag">T/M ombor</span>'}</td>
+      <td class="sep">${r.customer_id ? esc(r.customer_name)
+            : '<span class="muted">T/M ombor</span>'}</td>
       <td class="num muted">${money(r.unit_price)}</td>
-      <td class="num">${money(r.total_amount)}</td>
-      <td class="num" style="white-space:nowrap">
+      <td class="num">${r.unit_price == null
+        ? '<span class="muted">—</span>'
+        : `<strong>${money(r.total_amount)}</strong>`}</td>
+      <td class="act sep">
         ${r.status === 'production'
           ? `<button onclick="move(${r.id})">O'tkazish</button>` : ''}
-        <button onclick="edit(${r.id})">✎</button>
+        <button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>
         ${r.status !== 'cancelled'
-          ? `<button onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
+          ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
     </tr>`).join('')
-    : '<tr><td class="muted" colspan="18">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
+    : '<tr><td class="muted" colspan="16">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
 
   $('tF').innerHTML = rows.length ? `<tr>
-    <td colspan="8"></td><td class="num"><strong>${qty}</strong></td>
-    <td colspan="7"></td><td class="num"><strong>${money(amount)}</strong></td>
+    <td colspan="7"></td><td class="num"><strong>${qty}</strong></td>
+    <td colspan="6"></td><td class="num"><strong>${money(amount)}</strong></td>
     <td></td></tr>` : '';
   bulk();
 }
