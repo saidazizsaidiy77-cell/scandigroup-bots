@@ -192,8 +192,10 @@ const App = (() => {
     { mod: 'sales', nav: 'Buyurtmalar arxivi',          perm: ['sales.view'] },
     { mod: 'sales', nav: "O'chirilgan buyurtmalar",     perm: ['sales.manage'] },
     { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },
-    { mod: 'sales', nav: "O'zaro hisob",                perm: ['sales.view'] },
-    { mod: 'sales', nav: 'Mijozlar bilan hisob-kitob',  perm: ['sales.view'] },
+    // Ikkalasi bir xil narsani anglatib qolmasin: dalolatnoma — mijoz bilan
+    // imzolanadigan hujjat, qarzdorlik — kim qancha qarzda degan hisobot.
+    { mod: 'sales', nav: 'Solishtirma dalolatnoma',     perm: ['sales.view'] },
+    { mod: 'sales', nav: 'Qarzdorlik',                  perm: ['sales.view'] },
 
     // Ta'minot
     { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },
@@ -201,8 +203,8 @@ const App = (() => {
     { mod: 'purchasing', nav: 'Kirimlar arxivi',                   perm: ['purchasing.view'] },
     { mod: 'purchasing', nav: "O'chirilgan kirimlar",              perm: ['purchasing.manage'] },
     { mod: 'purchasing', nav: "Qaytarib berish (ta'minotchiga)",   perm: ['purchasing.manage'] },
-    { mod: 'purchasing', nav: "O'zaro hisob",                      perm: ['purchasing.view'] },
-    { mod: 'purchasing', nav: "Ta'minotchilar bilan hisob-kitob",  perm: ['purchasing.view'] },
+    { mod: 'purchasing', nav: 'Solishtirma dalolatnoma',           perm: ['purchasing.view'] },
+    { mod: 'purchasing', nav: 'Qarzdorlik',                        perm: ['purchasing.view'] },
 
     // Ombor
     { mod: 'warehouse', nav: 'Omborlar',                perm: ['warehouse.view'] },

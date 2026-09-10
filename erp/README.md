@@ -128,14 +128,18 @@ shu reja sahifasiga.
 
 | Modul | Bo'limlar |
 |---|---|
-| **Savdo** | Mijozlar ✅ · Buyurtmalar · Buyurtma shakllantirish · Buyurtmalar arxivi · O'chirilgan buyurtmalar · Qaytib olish (mijozdan) · O'zaro hisob · Mijozlar bilan hisob-kitob |
-| **Ta'minot** | Xaridlar · Kirim shakllantirish · Kirimlar arxivi · O'chirilgan kirimlar · Qaytarib berish (ta'minotchiga) · O'zaro hisob · Ta'minotchilar bilan hisob-kitob |
+| **Savdo** | Mijozlar ✅ · Buyurtmalar · Buyurtma shakllantirish · Buyurtmalar arxivi · O'chirilgan buyurtmalar · Qaytib olish (mijozdan) · Solishtirma dalolatnoma · Qarzdorlik |
+| **Ta'minot** | Xaridlar · Kirim shakllantirish · Kirimlar arxivi · O'chirilgan kirimlar · Qaytarib berish (ta'minotchiga) · Solishtirma dalolatnoma · Qarzdorlik |
 | **Ombor** | Omborlar · Omborga kirim · Qoldiqlar · Hisobdan chiqarish · Omborlar aro harakatlar |
 | **Ishlab chiqarish** | Jurnal ✅ · Boshlang'ich qoldiq ✅ · Smena ✅ · Terminal ✅ |
 | **Hisobotlar** | Zavod ko'rinishi ✅ · Boshqaruv paneli ✅ · Moliyaviy hisobotlar · Savdo hisobotlari · Ombor va tovarlar |
 | **Ma'lumotnomalar** | Katalog ✅ · Bo'lim quvvati ✅ |
 | **Xodimlar va ish haqi** | Xodimlar ✅ |
 | **Bank va kassa** | tarkibi hali kelishilmagan |
+
+**Solishtirma dalolatnoma** va **Qarzdorlik** — ikki xil narsa, shuning uchun
+nomlari ham ikki xil: birinchisi mijoz yoki ta'minotchi bilan imzolanadigan
+hujjat, ikkinchisi kim qancha qarzda degan hisobot.
 
 | Modul | Holat | Nima bo'ladi |
 |---|---|---|
