@@ -17,6 +17,7 @@ const FILES = [
   'units.sql',           // konveyer jurnali: birlik, mijoz, harakat
   'register.sql',        // jurnal ustunlari: rang, mato, lak/qadoqlash sanalari
   'catalog.sql',         // katalogni saytdan boshqarish: guruh, fason, SKU
+  'purchasing.sql',      // ta'minot: ta'minotchilar spravochnigi
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

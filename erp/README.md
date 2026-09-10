@@ -74,6 +74,7 @@ erp/
     production.js      ishlab chiqarish API (jamlanma hisob)
     units.js           konveyer jurnali va mijozlar
     admin.js           xodimlar va rollar
+    purchasing.js      ta'minot: ta'minotchilar
     shift.js           smenani mahsulot yo'nalishidan aniqlash
   sql/
     core.sql           xodim, rol, huquq, sessiya, audit, bildirishnoma
@@ -83,6 +84,7 @@ erp/
     catalog-groups.sql  mahsulot guruhlari: penal, kamod, sp, stol, stul
     production-sku.sql  fason va SKU katalogi
     units.sql          konveyer jurnali: birlik, harakat, mijoz, kanal
+    purchasing.sql     ta'minotchilar spravochnigi
   public/
     app.js             klient: sessiya, huquq, so'rov
     index.html         modullar menyusi
@@ -90,6 +92,7 @@ erp/
     jurnal.html        ishlab chiqarish jurnali
     qoldiq.html        boshlang'ich qoldiq
     mijozlar.html      mijozlar va kanal tahlili
+    taminotchilar.html ta'minotchilar
     zavod.html         zavod ko'rinishi
     dashboard.html     ko'rsatkichlar paneli
     smena.html         tsex boshlig'ining kiritish jadvali
@@ -137,11 +140,11 @@ shu reja sahifasiga.
 | Modul | Bo'limlar |
 |---|---|
 | **Savdo** | Mijozlar ✅ (ma'lumotnomalarda ham) · Buyurtmalar · Buyurtma shakllantirish · Buyurtmalar arxivi · O'chirilgan buyurtmalar · Qaytib olish (mijozdan) · Solishtirma dalolatnoma · Qarzdorlik |
-| **Ta'minot** | Xaridlar · Kirim shakllantirish · Kirimlar arxivi · O'chirilgan kirimlar · Qaytarib berish (ta'minotchiga) · Solishtirma dalolatnoma · Qarzdorlik |
+| **Ta'minot** | Ta'minotchilar ✅ (ma'lumotnomalarda ham) · Xaridlar · Kirim shakllantirish · Kirimlar arxivi · O'chirilgan kirimlar · Qaytarib berish (ta'minotchiga) · Solishtirma dalolatnoma · Qarzdorlik |
 | **Ombor** | Omborlar · Omborga kirim · Qoldiqlar · Hisobdan chiqarish · Omborlar aro harakatlar |
-| **Ishlab chiqarish** | Jurnal ✅ · Boshlang'ich qoldiq ✅ · Smena ✅ · Terminal ✅ |
+| **Ishlab chiqarish** | Jurnal ✅ · Boshlang'ich qoldiq ✅ — Smena va Terminal menyudan olib tashlangan, manzil bilan ochiladi |
 | **Hisobotlar** | Ishlab chiqarish hisobotlari: Zavod ko'rinishi ✅ · Boshqaruv paneli ✅ — hamda Moliyaviy hisobotlar · Savdo hisobotlari · Ombor va tovarlar |
-| **Ma'lumotnomalar** | Mijozlar ✅ (savdoda ham) · Katalog ✅ |
+| **Ma'lumotnomalar** | Mijozlar ✅ (savdoda ham) · Ta'minotchilar ✅ (ta'minotda ham) · Katalog ✅ |
 | **Xodimlar va ish haqi** | Xodimlar ✅ |
 | **Bank va kassa** | tarkibi hali kelishilmagan |
 
@@ -157,7 +160,7 @@ hujjat, ikkinchisi kim qancha qarzda degan hisobot.
 | **Ma'lumotnomalar** | ✅ ishlayapti | Katalog |
 | **Xodimlar va ish haqi** | ⚙️ qisman | Xodim, rol va PIN bor; davomat, ishbay hisob, to'lov rejada |
 | **Ombor** | rejada | Xom ashyo va tayyor mahsulot: kirim, chiqim, qoldiq, inventarizatsiya |
-| **Ta'minot** | rejada | Ta'minotchilar, buyurtmalar, kirim hujjatlari, qarzdorlik |
+| **Ta'minot** | ⚙️ qisman | Ta'minotchilar ro'yxati bor; xarid, kirim hujjati, qaytarish, qarzdorlik rejada |
 | **Bank va kassa** | rejada | Kirim/chiqim, kun yopish, hisobotlar |
 | **Asosiy vositalar** | rejada | `assets.*` huquqlari hali yaratilmagan — modul menyuda ko'rinmaydi |
 
@@ -207,10 +210,11 @@ Operator smenani tanlamaydi — tizim uni mahsulot yo'nalishidan aniqlaydi.
 | `/jurnal.html` | **Ishlab chiqarish boshlig'i**: har mahsulot konveyer raqami bilan | `production.view` |
 | `/qoldiq.html` | Boshlang'ich qoldiq — bir martalik kiritish | `production.manage` |
 | `/mijozlar.html` | Mijozlar ro'yxati, kanal va menejer tahlili | `production.view` |
+| `/taminotchilar.html` | **Ta'minotchilar** — nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim | `purchasing.view` |
 | `/zavod.html` | Nima qayerda, qachon keyingi tsexga o'tadi, qachon omborga kiradi | `production.view` |
 | `/dashboard.html` | Reja/fakt, bottleneck, komplektlilik, umumiy tsex yuklamasi, Pareto | `production.view` |
-| `/smena.html` | **Tsex boshlig'i**: bir tsexning barcha bo'limlari bo'yicha kunlik kiritish | `production.entry` |
-| `/terminal.html` | Tsex planshetlari: bo'lim bo'yicha real vaqtda kiritish | `production.entry` |
+| `/smena.html` | **Tsex boshlig'i**: bir tsexning barcha bo'limlari bo'yicha kunlik kiritish. **Menyuda yo'q** — manzil bilan ochiladi | `production.entry` |
+| `/terminal.html` | Tsex planshetlari: bo'lim bo'yicha real vaqtda kiritish. **Menyuda yo'q** — manzil bilan ochiladi | `production.entry` |
 | `/sozlamalar.html` | Bo'lim quvvati — muddat bashorati shunga tayanadi. **Menyuda yo'q**: manzil bilan ochiladi, kerak bo'lsa `app.js` dagi izohlangan qator qaytariladi | `production.manage` |
 | `/xodimlar.html` | Xodim, PIN, rol va tsex biriktirish | `admin.users` |
 | `/katalog.html` | **Mahsulot nomi va guruhi** — katalog kodda emas, shu yerda | `production.manage` |
@@ -313,6 +317,11 @@ dona va summa. Kanal kesimi reklama byudjetini taqsimlashda asosiy ko'rsatkich.
 
 ### Ikki xil kiritish usuli
 
+Ikkalasi ham menyudan olib tashlangan — bugun ishlab chiqarish jurnal orqali
+yuritiladi: birlik "O'tkazish" bilan marshrutdagi keyingi bo'limga o'tadi va
+jamlanma yozuv o'sha yerda yoziladi. Sahifalar va API joyida, manzil bilan
+ochiladi; menyuga qaytarish uchun `app.js` da izohlangan ikki qator bor.
+
 Bir xil ma'lumot, ikki xil ish uslubi — tsex o'zi tanlaydi:
 
 - **`/smena.html`** — tsex boshlig'i smena oxirida bitta jadvalda hammasini kiritadi.
@@ -414,7 +423,7 @@ o'chirish yoki o'zgartirish** (`/xodimlar.html`).
 6. `/qoldiq.html` — bugun konveyerda turgan va T/M omborida yotgan
    mahsulotlarni konveyer raqami bilan kiriting. Bu bir martalik ish.
 7. Kundalik ish: ishlab chiqarish boshlig'i `/jurnal.html` da birliklarni
-   o'tkazadi, tsex boshliqlari `/smena.html` da jamlanma kiritadi.
+   o'tkazadi — jamlanma yozuv shu bilan birga yoziladi.
 8. Siz `/zavod.html` va `/dashboard.html` dan kuzatasiz.
 
 ## Joriy qilish tartibi

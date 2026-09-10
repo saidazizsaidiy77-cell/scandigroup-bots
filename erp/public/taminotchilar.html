@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ta'minotchilar · Scandi</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Ta'minotchilar</h1></div>
+  <div class="row"><button class="primary" onclick="openForm()">Ta'minotchi qo'shish</button>
+    <button onclick="openImport()">Ro'yxatni import qilish</button>
+    <span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <p class="muted">Kirim hujjati kimdan kelgani, qarzdorlik kim bilan ekani va
+  solishtirma dalolatnoma kimga yozilishi shu ro'yxatdan olinadi.</p>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <h2>Yo'nalish kesimi</h2>
+    <table><thead><tr><th>Nima yetkazadi</th><th class="num">Ta'minotchi</th></tr></thead>
+      <tbody id="tCat"></tbody></table>
+  </div>
+  <div class="card">
+    <h2>Mas'ul xodim kesimi</h2>
+    <table><thead><tr><th>Xodim</th><th class="num">Ta'minotchi</th></tr></thead>
+      <tbody id="tMg"></tbody></table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h2 style="margin:0">Ro'yxat <span class="muted" id="cnt" style="font-size:13px"></span></h2>
+    <input id="fQ" placeholder="nom, region, telefon yoki STIR" style="max-width:300px" oninput="render()">
+  </div>
+  <div style="overflow-x:auto"><table>
+    <thead><tr><th>Ta'minotchi</th><th>Nima yetkazadi</th><th>Respublika</th><th>Region</th>
+      <th>Tel raqami</th><th>STIR</th><th>Mas'ul xodim</th><th></th></tr></thead>
+    <tbody id="tB"></tbody>
+  </table></div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// Respublika → region ro'yxati. Region matn maydoni, ro'yxat faqat taklif —
+// yangi shahar qo'shish uchun kod o'zgartirish shart emas. Mijozlar
+// sahifasidagi bilan bir xil: ta'minotchi ham xuddi shu geografiyada.
+const GEO = {
+  "O'zbekiston": ['Toshkent shahri','Toshkent viloyati','Andijon','Buxoro',"Farg'ona",
+    'Jizzax','Xorazm','Namangan','Navoiy','Qashqadaryo',"Qoraqalpog'iston",'Samarqand',
+    'Sirdaryo','Surxondaryo'],
+  "Qozog'iston": ['Almati','Ostona','Shimkent',"Qarag'anda","Aqto'be",'Taraz'],
+  "Qirg'iziston": ['Bishkek','Osh','Jalolobod'],
+  'Rossiya': ['Moskva','Sankt-Peterburg','Yekaterinburg','Novosibirsk'],
+  'Turkiya': ['Istanbul','Ankara','Izmir','Bursa','Kayseri'],
+  'Xitoy': ['Guanchjou','Shanxay','Foshan','Sichjuan'],
+  'Belarus': ['Minsk','Gomel','Brest'],
+  'Boshqa': [],
+};
+const COUNTRIES = Object.keys(GEO);
+
+let suppliers = [], categories = [], managers = [];
+
+async function load(){
+  const d = await App.api('/api/purchasing/suppliers');
+  suppliers = d.suppliers; categories = d.categories; managers = d.managers;
+
+  // Kesimlar ro'yxatning o'zidan hisoblanadi — hozircha kirim hujjati yo'q,
+  // shuning uchun summa emas, ta'minotchi soni ko'rsatiladi.
+  const count = (key, label) => {
+    const m = new Map();
+    for (const s of suppliers) {
+      const k = s[key] || null;
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+      `<tr><td>${k ? esc(k) : `<span class="tag warn">${label}</span>`}</td>
+        <td class="num">${n}</td></tr>`).join('');
+  };
+  $('tCat').innerHTML = suppliers.length ? count('category_name', 'ko\'rsatilmagan')
+    : '<tr><td class="muted" colspan="2">Ta\'minotchi kiritilmagan</td></tr>';
+  $('tMg').innerHTML = suppliers.length ? count('manager_name', 'biriktirilmagan')
+    : '<tr><td class="muted" colspan="2">Ta\'minotchi kiritilmagan</td></tr>';
+  render();
+}
+
+function render(){
+  const q = $('fQ').value.trim().toLowerCase();
+  const rows = suppliers.filter(s => !q ||
+    [s.name, s.country, s.region, s.phone, s.inn, s.category_name, s.manager_name]
+      .some(v => (v || '').toLowerCase().includes(q)));
+  $('cnt').textContent = rows.length ? rows.length + ' ta' : '';
+  $('tB').innerHTML = rows.length ? rows.map(s => `
+    <tr>
+      <td><strong>${esc(s.name)}</strong></td>
+      <td>${s.category_name ? `<span class="tag">${esc(s.category_name)}</span>`
+            : '<span class="muted">—</span>'}</td>
+      <td class="muted">${s.country ? esc(s.country) : '—'}</td>
+      <td class="muted">${s.region ? esc(s.region) : '—'}</td>
+      <td class="muted">${s.phone ? esc(s.phone) : '—'}</td>
+      <td class="muted">${s.inn ? esc(s.inn) : '—'}</td>
+      <td class="muted">${s.manager_name ? esc(s.manager_name)
+            : '<span class="tag warn">biriktirilmagan</span>'}</td>
+      <td class="num"><button onclick="openForm(${s.id})">✎</button></td>
+    </tr>`).join('')
+    : '<tr><td class="muted" colspan="8">Ta\'minotchi topilmadi</td></tr>';
+}
+
+function openForm(id){
+  const s = id ? suppliers.find(x => x.id === id) : null;
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:520px">
+        <div class="row" style="justify-content:space-between;margin-bottom:18px">
+          <h1>${s ? "Ta'minotchini tahrirlash" : "Yangi ta'minotchi"}</h1>
+          <button onclick="close_()">Yopish</button></div>
+        <div class="stack">
+          <div><label>Ta'minotchi nomi</label>
+            <input id="sName" value="${esc(s?.name || '')}"></div>
+          <div><label>Nima yetkazib beradi</label>
+            <select id="sCat"><option value="">—</option>
+              ${categories.map(c => `<option value="${c.code}"
+                ${s?.category === c.code ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+            </select></div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Respublika</label>
+              <select id="sCountry" onchange="fillRegions()">
+                ${COUNTRIES.map(k => `<option ${(s?.country || COUNTRIES[0]) === k ? 'selected' : ''}
+                  >${esc(k)}</option>`).join('')}
+              </select></div>
+            <div style="flex:1"><label>Region</label>
+              <input id="sRegion" list="regionList" value="${esc(s?.region || '')}"
+                     placeholder="shahar / viloyat">
+              <datalist id="regionList"></datalist></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Tel raqami</label>
+              <input id="sPhone" value="${esc(s?.phone || '')}" placeholder="+998..."></div>
+            <div style="flex:1"><label>STIR (INN)</label>
+              <input id="sInn" value="${esc(s?.inn || '')}" placeholder="hujjat uchun"></div>
+          </div>
+          <div><label>Mas'ul xodim</label>
+            <select id="sManager"><option value="">— biriktirilmagan —</option>
+              ${managers.map(m => `<option value="${m.id}"
+                ${s?.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+            </select></div>
+          <div><label>Izoh</label>
+            <input id="sNote" value="${esc(s?.note || '')}"></div>
+          <button class="primary" onclick="save(${id || 'null'})">Saqlash</button>
+        </div>
+      </div></div>`;
+  fillRegions();
+}
+
+// Region ro'yxati respublikaga qarab o'zgaradi. Maydon matnli — ro'yxatda
+// yo'q shaharni ham yozish mumkin.
+function fillRegions(){
+  const list = GEO[$('sCountry').value] || [];
+  $('regionList').innerHTML = list.map(r => `<option value="${esc(r)}">`).join('');
+}
+
+function openImport(){
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:680px">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <h1>Ro'yxatni import qilish</h1><button onclick="close_()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:14px">Har qator bitta ta'minotchi,
+          maydonlar nuqtali vergul bilan ajratiladi:<br>
+          <code>Nomi ; Yo'nalish kodi ; Respublika ; Region ; Tel raqami ; STIR ; Mas'ul xodim</code></p>
+        <p class="muted" style="margin-bottom:14px;font-size:13px">Respublika bo'sh
+          qoldirilsa O'zbekiston deb olinadi.</p>
+        <p class="muted" style="margin-bottom:14px;font-size:13px">Yo'nalish kodlari:
+          ${categories.map(c => esc(c.code)).join(' · ')}</p>
+        <p class="muted" style="margin-bottom:14px;font-size:13px">Mas'ul xodim —
+          ism, aynan ro'yxatdagidek. Bo'sh qoldirilsa biriktirilmaydi.</p>
+        <textarea id="imp" rows="9" style="width:100%;font:13px ui-monospace,monospace;
+          background:var(--surface-2);color:var(--text);border:1px solid var(--line);
+          border-radius:10px;padding:12px"
+          placeholder="Yog'och Savdo MCHJ ; LDSP ; O'zbekiston ; Toshkent viloyati ; +998901112233 ; 301234567 ;
+Furnitura Plus ; FURNITURA ; Turkiya ; Istanbul ; ; ;"></textarea>
+        <button class="primary" style="width:100%;margin-top:14px" onclick="runImport()">Import qilish</button>
+      </div></div>`;
+}
+
+async function runImport(){
+  const unknown = new Set();
+  const items = $('imp').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const [name, category, country, region, phone, inn, manager] =
+      l.split(';').map(x => (x || '').trim());
+    const m = manager
+      ? managers.find(w => w.name.toLowerCase() === manager.toLowerCase()) : null;
+    if (manager && !m) unknown.add(manager);
+    return { name, category: category ? category.toUpperCase() : null,
+             country: country || null, region: region || null,
+             phone: phone || null, inn: inn || null, manager_id: m ? m.id : null };
+  }).filter(x => x.name);
+  if (!items.length) return alert('Qator topilmadi');
+  // Nomi topilmagan xodim jim o'tkazib yuborilsa, ta'minotchi mas'ulsiz
+  // kirib qolardi. Shuning uchun to'xtatamiz.
+  if (unknown.size) return alert('Bu xodimlar ro\'yxatda yo\'q:\n\n' +
+    [...unknown].join('\n') +
+    '\n\nAvval Xodimlar sahifasida qo\'shing, keyin qayta import qiling.');
+  try{
+    const r = await App.api('/api/purchasing/suppliers',
+      { method:'POST', body: JSON.stringify({ items }) });
+    close_(); await load();
+    alert(`${r.saved.length} ta ta'minotchi kiritildi.`);
+  }catch(e){ alert(e.message); }
+}
+
+const close_ = () => { $('modalRoot').innerHTML = ''; };
+
+async function save(id){
+  const body = {
+    name: $('sName').value.trim(),
+    category: $('sCat').value || null,
+    country: $('sCountry').value || null,
+    region: $('sRegion').value.trim() || null,
+    phone: $('sPhone').value.trim() || null,
+    inn: $('sInn').value.trim() || null,
+    manager_id: $('sManager').value || null,
+    note: $('sNote').value.trim() || null,
+  };
+  if (!body.name) return alert("Ta'minotchi nomi majburiy");
+  try{
+    await App.api(id ? '/api/purchasing/suppliers/' + id : '/api/purchasing/suppliers',
+      { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
+    close_(); load();
+  }catch(e){ alert(e.message); }
+}
+
+App.start(load, 'purchasing.view', 'purchasing.manage');
+</script>
+</body>
+</html>

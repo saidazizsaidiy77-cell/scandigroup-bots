@@ -27,8 +27,8 @@ app.use('/api', require('./modules/production'));
 app.use('/api/admin', require('./modules/admin'));
 app.use('/api/units', require('./modules/units'));
 app.use('/api/catalog', require('./modules/catalog'));
+app.use('/api/purchasing', require('./modules/purchasing'));
 // app.use('/api/warehouse',  require('./modules/warehouse'));   // xom ashyo + tayyor mahsulot
-// app.use('/api/purchasing', require('./modules/purchasing'));  // ta'minotchilar
 // app.use('/api/sales',      require('./modules/sales'));       // mijozlar, sotuv
 // app.use('/api/cash',       require('./modules/cash'));        // kassa
 // app.use('/api/payroll',    require('./modules/payroll'));     // maosh

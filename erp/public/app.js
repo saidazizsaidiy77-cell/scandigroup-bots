@@ -153,18 +153,31 @@ const App = (() => {
       title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",
       text: "Reja/fakt \u00b7 bottleneck \u00b7 komplektlilik \u00b7 umumiy tsex yuklamasi \u00b7 Pareto",
       perm: ['production.view'] },
-    { href: '/smena.html', mod: 'production', nav: 'Smena',
-      title: 'Smena kiritish', lead: 'Tsex boshliqlari uchun',
-      text: "Bir tsexning barcha bo'limlari bo'yicha kunlik ma'lumotni bitta jadvalda kiritish",
-      perm: ['production.entry'] },
-    { href: '/terminal.html', mod: 'production', nav: 'Terminal',
-      title: "Bo'lim terminali", lead: 'Tsex planshetlari',
-      text: "Dona qayd etish \u00b7 brak \u00b7 to'xtash \u00b7 kamera partiyasi",
-      perm: ['production.entry'] },
+    // Smena va Terminal menyudan olib tashlangan. Sahifalar va API joyida —
+    // manzil bilan ochiladi, qaytarish uchun shu qatorlarni izohdan
+    // chiqarish kifoya:
+    //
+    //   { href: '/smena.html', mod: 'production', nav: 'Smena',
+    //     title: 'Smena kiritish', lead: 'Tsex boshliqlari uchun',
+    //     text: "Bir tsexning barcha bo'limlari bo'yicha kunlik ma'lumotni bitta jadvalda kiritish",
+    //     perm: ['production.entry'] },
+    //   { href: '/terminal.html', mod: 'production', nav: 'Terminal',
+    //     title: "Bo'lim terminali", lead: 'Tsex planshetlari',
+    //     text: "Dona qayd etish · brak · to'xtash · kamera partiyasi",
+    //     perm: ['production.entry'] },
+    //
+    // Jamlanma kiritish shu ikki sahifadan bo'lardi. Ularsiz ishlab
+    // chiqarish jurnal orqali yuritiladi: birlik "O'tkazish" bilan
+    // marshrutdagi keyingi bo'limga o'tadi va jamlanma yozuv ham
+    // o'sha yerda yoziladi.
     { href: '/mijozlar.html', mod: ['sales', 'refs'], nav: 'Mijozlar',
       title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
       text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
       perm: ['production.view', 'sales.view'] },
+    { href: '/taminotchilar.html', mod: ['purchasing', 'refs'], nav: "Ta'minotchilar",
+      title: "Ta'minotchilar", lead: "Kimdan sotib olinadi",
+      text: "Nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim \u00b7 kirim hujjati va qarzdorlik shunga tayanadi",
+      perm: ['purchasing.view', 'purchasing.manage'] },
     { href: '/katalog.html', mod: 'refs', nav: 'Katalog',
       title: 'Katalog', lead: 'Mahsulot nomi va guruhi',
       text: "Fason, guruh va marshrut \u2014 yangi mahsulot qo'shish uchun kod tegilmaydi",
