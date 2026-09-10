@@ -12,6 +12,7 @@ const FILES = [
   'core-seed.sql',       // huquqlar va rollar
   'production.sql',      // ishlab chiqarish jadvallari va view'lari
   'production-seed.sql', // tsexlar, bo'limlar, marshrutlar
+  'catalog-groups.sql',  // mahsulot guruhlari: penal, kamod, sp, stol, stul
   'production-sku.sql',  // fason va SKU katalogi
   'units.sql',           // konveyer jurnali: birlik, mijoz, harakat
   'register.sql',        // jurnal ustunlari: rang, mato, lak/qadoqlash sanalari

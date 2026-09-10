@@ -108,3 +108,13 @@ CREATE TABLE IF NOT EXISTS notifications (
   CHECK (worker_id IS NOT NULL OR permission_code IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS idx_notif_pending ON notifications(sent_at) WHERE sent_at IS NULL;
+
+-- -------------------------------------------------- BIR MARTALIK KO'CHIRISH
+-- Migratsiya har deploy'da qaytadan ishlaydi, shuning uchun ma'lumotni
+-- ko'chiradigan UPDATE'lar xavfli: saytdan qilingan o'zgarish ikkinchi
+-- deploy'da bekor bo'lib qolishi mumkin. Bajarilgan ko'chirish shu yerga
+-- belgilanadi va boshqa takrorlanmaydi.
+CREATE TABLE IF NOT EXISTS migration_flags (
+  key        TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

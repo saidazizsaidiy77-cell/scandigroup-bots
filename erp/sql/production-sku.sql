@@ -1,10 +1,10 @@
 -- ============================================================================
 --  MAHSULOT KATALOGI: fason va SKU
---  schema.sql va seed.sql dan KEYIN ishga tushiriladi.
+--  production-seed.sql va catalog-groups.sql dan KEYIN ishga tushiriladi.
 --
---  17 fason × 4 guruh. Bir fason bir nechta guruhda uchraydi
---  (Laura → mehmonxona, yotoqxona, stol, stul) — shuning uchun fason
---  alohida spravochnik, SKU esa "fason + guruh".
+--  17 fason × 5 guruh = 42 SKU. Bir fason bir nechta guruhda uchraydi
+--  (Laura → penal, kamod, sp, stol, stul) — shuning uchun fason alohida
+--  spravochnik, SKU esa "fason + guruh".
 -- ============================================================================
 
 INSERT INTO fasons (code, name) VALUES
@@ -15,39 +15,65 @@ INSERT INTO fasons (code, name) VALUES
   ('ONIX','Onix'), ('PALAZZO','Palazzo')
 ON CONFLICT (code) DO NOTHING;
 
--- --------------------------------------------------------- MEHMONXONA TO'PLAMI
--- Marshrut bu yerda NULL qoldiriladi — uni fayl oxiridagi UPDATE beradi,
--- chunki u allaqachon kiritilgan to'plamlarni ham tuzatishi kerak.
+-- ------------------------------------------------------------------- PENAL
+-- Mehmonxona penali. Yakka mahsulot: o'z konveyer raqami bilan yuradi,
+-- kamoddan alohida kuzatiladi.
 INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set)
 SELECT v.sku, f.name,
-       (SELECT id FROM product_groups WHERE code='MEH'),
-       f.id, NULL, true
+       (SELECT id FROM product_groups WHERE code='PENAL'),
+       f.id,
+       (SELECT id FROM route_templates WHERE code='L1-FULL'), false
 FROM (VALUES
-  ('MEH-ALMAZ', 'ALMAZ'),
-  ('MEH-9083', '9083'),
-  ('MEH-LAURA', 'LAURA'),
-  ('MEH-ZARA', 'ZARA'),
-  ('MEH-MILANO', 'MILANO'),
-  ('MEH-OWEN', 'OWEN'),
-  ('MEH-SHEIKH', 'SHEIKH'),
-  ('MEH-BAROCCO', 'BAROCCO'),
-  ('MEH-ZERO', 'ZERO'),
-  ('MEH-OREX', 'OREX')
+  ('PEN-ALMAZ', 'ALMAZ'),
+  ('PEN-9083', '9083'),
+  ('PEN-LAURA', 'LAURA'),
+  ('PEN-ZARA', 'ZARA'),
+  ('PEN-MILANO', 'MILANO'),
+  ('PEN-OWEN', 'OWEN'),
+  ('PEN-SHEIKH', 'SHEIKH'),
+  ('PEN-BAROCCO', 'BAROCCO'),
+  ('PEN-ZERO', 'ZERO'),
+  ('PEN-OREX', 'OREX')
 ) AS v(sku, fason)
 JOIN fasons f ON f.code = v.fason
 ON CONFLICT (sku) DO NOTHING;
 
--- ---------------------------------------------------------- YOTOQXONA TO'PLAMI
+-- ------------------------------------------------------------------- KAMOD
+-- Xuddi shu fasonlar, alohida mahsulot sifatida.
 INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set)
 SELECT v.sku, f.name,
-       (SELECT id FROM product_groups WHERE code='YOT'),
+       (SELECT id FROM product_groups WHERE code='KAMOD'),
+       f.id,
+       (SELECT id FROM route_templates WHERE code='L1-FULL'), false
+FROM (VALUES
+  ('KAM-ALMAZ', 'ALMAZ'),
+  ('KAM-9083', '9083'),
+  ('KAM-LAURA', 'LAURA'),
+  ('KAM-ZARA', 'ZARA'),
+  ('KAM-MILANO', 'MILANO'),
+  ('KAM-OWEN', 'OWEN'),
+  ('KAM-SHEIKH', 'SHEIKH'),
+  ('KAM-BAROCCO', 'BAROCCO'),
+  ('KAM-ZERO', 'ZERO'),
+  ('KAM-OREX', 'OREX')
+) AS v(sku, fason)
+JOIN fasons f ON f.code = v.fason
+ON CONFLICT (sku) DO NOTHING;
+
+-- ---------------------------------------------------------------------- SP
+-- Yotoqxona to'plami. To'plam — marshrut bu yerda NULL qoldiriladi, uni
+-- fayl oxiridagi UPDATE beradi, chunki u allaqachon kiritilgan
+-- to'plamlarni ham tuzatishi kerak.
+INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set)
+SELECT v.sku, f.name,
+       (SELECT id FROM product_groups WHERE code='SP'),
        f.id, NULL, true
 FROM (VALUES
-  ('YOT-LAURA', 'LAURA'),
-  ('YOT-MILANO', 'MILANO'),
-  ('YOT-OWEN', 'OWEN'),
-  ('YOT-VERSACI', 'VERSACI'),
-  ('YOT-MONACO', 'MONACO')
+  ('SP-LAURA', 'LAURA'),
+  ('SP-MILANO', 'MILANO'),
+  ('SP-OWEN', 'OWEN'),
+  ('SP-VERSACI', 'VERSACI'),
+  ('SP-MONACO', 'MONACO')
 ) AS v(sku, fason)
 JOIN fasons f ON f.code = v.fason
 ON CONFLICT (sku) DO NOTHING;
@@ -97,9 +123,9 @@ ON CONFLICT (sku) DO NOTHING;
 -- ============================================================================
 --  TO'PLAM BIR BUTUN BO'LIB LINIYADAN O'TADI
 --
---  Konveyer raqami butun to'plamga qo'yiladi ("Milano · Mehmonxona to'plami — K26-0001"),
---  alohida pozitsiyalarga emas. Shuning uchun to'plamning o'zi marshrutga
---  ega bo'lishi kerak.
+--  Sp to'plamiga konveyer raqami butun to'plamga qo'yiladi
+--  ("Milano · Sp — K26-0001"), alohida pozitsiyalarga emas. Shuning uchun
+--  to'plamning o'zi marshrutga ega bo'lishi kerak.
 --
 --  Bu UPDATE seed'dan alohida turadi: yuqoridagi INSERT'lar
 --  ON CONFLICT DO NOTHING bilan yozilgan, ya'ni mavjud qatorlarni
@@ -114,7 +140,7 @@ UPDATE products SET route_template_id =
 --
 --  Avval to'plam nomiga guruh qo'shib yozilardi: "Milano PK", "Milano Sp".
 --  Guruh jadvalda alohida ustun bo'lgani uchun bu takror edi — endi nom
---  faqat fason: "Milano · Mehmonxona to'plami".
+--  faqat fason: "Milano · Sp".
 --
 --  Yuqoridagi INSERT'lar kabi bu ham seed'dan alohida: ON CONFLICT DO NOTHING
 --  mavjud qatorlarni yangilamaydi.
@@ -125,40 +151,40 @@ UPDATE products SET route_template_id =
 UPDATE products p SET name = f.name
   FROM fasons f, product_groups g
  WHERE p.fason_id = f.id AND p.group_id = g.id
-   AND g.code IN ('MEH', 'YOT')
+   AND g.code IN ('PENAL', 'KAMOD', 'SP')
    AND p.name ~ ' (PK|Sp)$';
 
 -- ============================================================================
 --  TO'PLAM TARKIBI — ixtiyoriy, keyingi bosqich uchun
 --
 --  Komplektlilik hisoboti (v_set_completeness) SHU MA'LUMOTSIZ ISHLAMAYDI.
---  Har to'plam qaysi pozitsiyalardan iborat ekani kiritilishi kerak, va har
---  pozitsiya alohida SKU sifatida ro'yxatga olinadi — chunki marshrutdan
---  aynan pozitsiyalar o'tadi, to'plam emas.
+--  Bugun to'plam bitta — Sp. Uning qaysi pozitsiyalardan iborat ekani
+--  kiritilishi kerak, va har pozitsiya alohida SKU sifatida ro'yxatga
+--  olinadi: marshrutdan aynan pozitsiyalar o'tadi, to'plam emas.
 --
---  Misol — "Milano" mehmonxona to'plami vitrina + 2 tumba + TV stenddan
+--  Misol — "Milano" sp to'plami krovat + 2 tumba + tualet stolidan
 --  iborat bo'lsa:
 --
 --    INSERT INTO products (sku, name, group_id, fason_id, route_template_id) VALUES
---      ('MEH-MILANO-VIT','Milano vitrina',   (SELECT id FROM product_groups WHERE code='MEH'),
+--      ('SP-MILANO-KRO','Milano krovat',  (SELECT id FROM product_groups WHERE code='SP'),
 --        (SELECT id FROM fasons WHERE code='MILANO'),(SELECT id FROM route_templates WHERE code='L1-FULL')),
---      ('MEH-MILANO-TUM','Milano tumba',     (SELECT id FROM product_groups WHERE code='MEH'),
+--      ('SP-MILANO-TUM','Milano tumba',   (SELECT id FROM product_groups WHERE code='SP'),
 --        (SELECT id FROM fasons WHERE code='MILANO'),(SELECT id FROM route_templates WHERE code='L1-NOGLAS')),
---      ('MEH-MILANO-TV', 'Milano TV stend',  (SELECT id FROM product_groups WHERE code='MEH'),
+--      ('SP-MILANO-TUA','Milano tualet',  (SELECT id FROM product_groups WHERE code='SP'),
 --        (SELECT id FROM fasons WHERE code='MILANO'),(SELECT id FROM route_templates WHERE code='L1-BASE'));
 --
 --    INSERT INTO set_items (set_product_id, item_product_id, qty) VALUES
---      ((SELECT id FROM products WHERE sku='MEH-MILANO'),(SELECT id FROM products WHERE sku='MEH-MILANO-VIT'),1),
---      ((SELECT id FROM products WHERE sku='MEH-MILANO'),(SELECT id FROM products WHERE sku='MEH-MILANO-TUM'),2),
---      ((SELECT id FROM products WHERE sku='MEH-MILANO'),(SELECT id FROM products WHERE sku='MEH-MILANO-TV'),1);
+--      ((SELECT id FROM products WHERE sku='SP-MILANO'),(SELECT id FROM products WHERE sku='SP-MILANO-KRO'),1),
+--      ((SELECT id FROM products WHERE sku='SP-MILANO'),(SELECT id FROM products WHERE sku='SP-MILANO-TUM'),2),
+--      ((SELECT id FROM products WHERE sku='SP-MILANO'),(SELECT id FROM products WHERE sku='SP-MILANO-TUA'),1);
 --
---  E'TIBOR: hozir barcha stol va stullarga L1-FULL / L2-FULL shabloni
---  biriktirilgan. Qaysi fason qaysi bo'limga kirmasligi aniqlangach,
+--  E'TIBOR: hozir barcha penal, kamod, stol va stullarga L1-FULL / L2-FULL
+--  shabloni biriktirilgan. Qaysi fason qaysi bo'limga kirmasligi aniqlangach,
 --  ikki yo'ldan biri tanlanadi:
 --    1) Boshqa shablon:  UPDATE products SET route_template_id =
---         (SELECT id FROM route_templates WHERE code='L1-NOPAL') WHERE sku='STL-SAFIA';
+--         (SELECT id FROM route_templates WHERE code='L1-NOPAL') WHERE sku='PEN-ZERO';
 --    2) Bitta-ikkita bo'lim farq qilsa — istisno:
 --         INSERT INTO product_route_skip (product_id, section_id, note) VALUES
---           ((SELECT id FROM products WHERE sku='STL-SAFIA'),
+--           ((SELECT id FROM products WHERE sku='PEN-ZERO'),
 --            (SELECT id FROM sections WHERE code='BOY-ABOY'), 'Aboysiz fason');
 -- ============================================================================

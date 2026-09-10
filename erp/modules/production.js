@@ -25,7 +25,10 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
                  WHERE sc.active ORDER BY sh.sort, sc.sort`),
       db.query(`SELECT p.*, g.name AS group_name, g.line_id
                   FROM products p JOIN product_groups g ON g.id = p.group_id
-                 WHERE p.active ORDER BY g.code, p.name`),
+                 -- Guruh tartibi saytdan qo'yiladi (product_groups.sort),
+                 -- shuning uchun ro'yxat kod bo'yicha emas, shu tartibda
+                 -- chiqadi: Penal · Kamod · Sp · Stol · Stul
+                 WHERE p.active ORDER BY g.sort, g.code, p.name`),
       db.query(`SELECT * FROM chambers WHERE active ORDER BY name`),
       db.query(`SELECT * FROM defect_reasons ORDER BY sort`),
       db.query(`SELECT * FROM downtime_reasons ORDER BY sort`),

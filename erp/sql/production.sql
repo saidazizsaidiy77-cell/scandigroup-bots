@@ -117,6 +117,26 @@ CREATE TABLE IF NOT EXISTS products (
 );
 CREATE INDEX IF NOT EXISTS idx_products_group ON products(group_id);
 
+-- Guruh spravochnigining qo'shimcha ustunlari. Jadval yuqorida yaratilgan,
+-- lekin ustunlar keyin qo'shilgan — mavjud bazalarda ular ALTER bilan
+-- paydo bo'ladi. `route_template_id` shu yerda turadi, chunki
+-- `route_templates` product_groups dan keyin yaratiladi.
+--
+--   active  — o'chirilmaydi, faolsizlantiriladi: kiritilgan birlik o'z
+--             mahsulotiga bog'liq, o'chirilsa jurnal tarixi buziladi
+--   sort    — jadvaldagi ko'rinish tartibi
+--   is_set  — to'plammi yoki yakka mahsulot. To'plam bitta konveyer raqami
+--             bilan bir butun bo'lib liniyadan o'tadi
+--   route_template_id — guruhning odatdagi marshruti: yangi mahsulot shu
+--             bilan yaratiladi, keyin alohida o'zgartirilishi mumkin
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS sort   INT     NOT NULL DEFAULT 0;
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS is_set BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS route_template_id INT
+  REFERENCES route_templates(id);
+
+ALTER TABLE fasons ADD COLUMN IF NOT EXISTS sort INT NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS set_items (
   set_product_id  INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   item_product_id INT NOT NULL REFERENCES products(id),

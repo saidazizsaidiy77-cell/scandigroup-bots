@@ -3,34 +3,20 @@
 --
 --  Katalog kodda emas, bazada turishi kerak: zavod yangi fason chiqarganda
 --  yoki guruhni boshqacha ataganda dasturchi kutib o'tirilmaydi. Seed'dagi
---  17 fason va 4 guruh — boshlang'ich taklif, sayt orqali o'zgartiriladi.
+--  17 fason va 5 guruh — boshlang'ich taklif, sayt orqali o'zgartiriladi.
 --
 --  O'chirish emas, FAOLSIZLANTIRISH: kiritilgan birlik o'z mahsulotiga
 --  bog'liq, uni o'chirish jurnal tarixini buzadi. Faolsizlantirilgan yozuv
 --  yangi kiritishda ro'yxatda ko'rinmaydi, eskisi joyida qoladi.
 -- ============================================================================
 
-ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
-ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS sort   INT     NOT NULL DEFAULT 0;
--- To'plammi yoki yakka mahsulotmi. To'plam bitta konveyer raqami bilan
--- bir butun bo'lib liniyadan o'tadi.
-ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS is_set BOOLEAN NOT NULL DEFAULT false;
--- Guruhning odatdagi marshruti. Yangi mahsulot shu bilan yaratiladi,
--- keyin alohida o'zgartirilishi mumkin.
-ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS route_template_id INT
-  REFERENCES route_templates(id);
-
-ALTER TABLE fasons ADD COLUMN IF NOT EXISTS sort INT NOT NULL DEFAULT 0;
-
--- Seed'dagi guruhlarning turini bir marta belgilaymiz. Saytdan
--- o'zgartirilgan bo'lsa tegilmaydi — shuning uchun sharti bor.
-UPDATE product_groups SET is_set = true
- WHERE code IN ('MEH','YOT') AND is_set = false
-   AND NOT EXISTS (SELECT 1 FROM products p
-                    WHERE p.group_id = product_groups.id AND p.is_set = false);
+-- Guruh va fason ustunlari `production.sql` da (jadval o'sha yerda yaratiladi),
+-- guruhlarning o'zi esa `catalog-groups.sql` da turadi. Bu fayl faqat
+-- katalog ko'rinishini beradi.
 
 -- Guruhning odatdagi marshruti seed'dagi mahsulotlardan olinadi: guruhda
 -- qaysi marshrut ko'p ishlatilgan bo'lsa, o'sha guruhning odatdagisi.
+-- Saytdan marshrut tanlangan guruhga tegilmaydi.
 UPDATE product_groups g SET route_template_id = t.rt
   FROM (SELECT group_id, route_template_id AS rt,
                ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY COUNT(*) DESC) AS rn

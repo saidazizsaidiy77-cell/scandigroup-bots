@@ -80,6 +80,7 @@ erp/
     core-seed.sql      huquqlar va rollar
     production.sql     ishlab chiqarish jadvallari va hisobot view'lari
     production-seed.sql tsexlar, bo'limlar, marshrutlar
+    catalog-groups.sql  mahsulot guruhlari: penal, kamod, sp, stol, stul
     production-sku.sql  fason va SKU katalogi
     units.sql          konveyer jurnali: birlik, harakat, mijoz, kanal
   public/
@@ -194,13 +195,13 @@ Ustunlar zavodda yuritilgan qog'oz jurnaldan olingan — xodim yangi tartibga
 o'rganishi shart emas. Pul birligi — **dollar**.
 
 - **Konveyer №** — ishlab chiqarish beradi, takrorlanmas. `K26-0001`
-  shaklida avtomatik taklif qilinadi. Raqam **butun to'plamga** qo'yiladi:
-  "Milano · Mehmonxona to'plami — K26-0001". To'plam bir butun bo'lib
-  liniyadan o'tadi, shuning uchun to'plamning o'zi marshrutga ega.
-  Mahsulot nomi — faqat fason ("Milano"); turi guruh ustunida alohida
+  shaklida avtomatik taklif qilinadi. Har mahsulot o'z raqami bilan yuradi:
+  "Zero · Penal — K26-0001", "Zero · Kamod — K26-0002". Faqat to'plam
+  (Sp) bitta raqam ostida bir butun bo'lib o'tadi.
+  Mahsulot nomi — faqat fason ("Zero"); turi guruh ustunida alohida
   turadi, shuning uchun nomga takrorlab yozilmaydi.
-- **Zakaz №** — savdo bo'limi zakaz tushganda qo'yadi. Bir mijoz mehmonxona
-  to'plami + stol + stul olsa, uchalasiga bitta zakaz raqami qo'yiladi va
+- **Zakaz №** — savdo bo'limi zakaz tushganda qo'yadi. Bir mijoz penal +
+  kamod + stol + stul olsa, hammasiga bitta zakaz raqami qo'yiladi va
   jurnalda shu raqam bo'yicha filtrlanadi. Zakaz hali yo'q bo'lsa faqat
   konveyer raqami turadi.
 - **Mijoz** — biriktirilmagan bo'lsa `T/M ombor` deb ko'rsatiladi.
@@ -331,7 +332,7 @@ o'chirish yoki o'zgartirish** (`/xodimlar.html`).
 
 ## Birinchi kun tartibi
 
-1. `npm run erp:migrate` — baza tayyor bo'ladi (4 tsex, 24 bo'lim, 32 SKU).
+1. `npm run erp:migrate` — baza tayyor bo'ladi (4 tsex, 24 bo'lim, 42 SKU).
 2. `/katalog.html` — o'z mahsulot nomlari va guruhlaringizni kiriting.
    Ishlatmaydigan fason va guruhlarni yashiring.
 3. `/xodimlar.html` — xodimlarni kiriting, PIN bering, rol biriktiring.
@@ -352,10 +353,12 @@ o'chirish yoki o'zgartirish** (`/xodimlar.html`).
 
 **0-faza — katalog.** `/katalog.html` da o'z mahsulot nomlaringiz va
 guruhlaringizni kiriting, ishlatmaydiganlarini yashiring. Seed'dagi 17 fason va
-4 guruh — boshlang'ich taklif, majburiy emas.
+5 guruh (Penal · Kamod · Sp · Stol · Stul) — boshlang'ich taklif,
+majburiy emas.
 
-**1-faza — ishga tushirishdan oldin.** To'plam tarkibini kiritish (`set_items`)
-— komplektlilik hisoboti shusiz ishlamaydi. Fasonlarning real marshrutlarini
+**1-faza — ishga tushirishdan oldin.** Sp to'plami tarkibini kiritish
+(`set_items`) — komplektlilik hisoboti shusiz ishlamaydi. Penal, kamod,
+stol va stul yakka mahsulot, ularga tarkib kerak emas. Fasonlarning real marshrutlarini
 biriktirish. Kamera sig'imi va siklini (`chambers`) to'ldirish. Muddat bashorati
 birinchi kundan ishlashi uchun `sections.capacity_per_day` ga taxminiy quvvatni
 kiritish. **Normani (`route_steps.norma_min`) bo'sh qoldiring.**

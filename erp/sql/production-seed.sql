@@ -78,13 +78,9 @@ INSERT INTO chambers (shop_id, code, name) VALUES
   ((SELECT id FROM shops WHERE code='BOYOQ'), 'KAM-2', 'Kamera 2')
 ON CONFLICT (code) DO NOTHING;
 
--- ----------------------------------------------------------- MAHSULOT GURUHI
-INSERT INTO product_groups (code, name, line_id) VALUES
-  ('MEH', 'Mehmonxona to''plami', (SELECT id FROM lines WHERE code='L1')),
-  ('YOT', 'Yotoqxona to''plami',  (SELECT id FROM lines WHERE code='L1')),
-  ('STL', 'Stol',                 (SELECT id FROM lines WHERE code='L1')),
-  ('STU', 'Stul',                 (SELECT id FROM lines WHERE code='L2'))
-ON CONFLICT (code) DO NOTHING;
+-- Mahsulot guruhlari `catalog-groups.sql` da: u eski guruhlarni yangisiga
+-- ko'chirishi ham kerak, shuning uchun marshrut shablonlaridan keyin,
+-- mahsulotlar kiritilishidan oldin alohida fayl bo'lib turadi.
 
 -- ------------------------------------------------------- MARSHRUT SHABLONLARI
 
