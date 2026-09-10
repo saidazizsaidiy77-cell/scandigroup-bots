@@ -175,6 +175,46 @@ const App = (() => {
       title: 'Xodimlar', lead: 'Rollar va kirish',
       text: "Xodim qo'shish, PIN berish, rol va tsex biriktirish",
       perm: ['admin.users'] },
+
+    // ─────────────────────────────────────────── HALI YOZILMAGAN BO'LIMLAR
+    //
+    //  Sahifasi yo'q bo'lim ham ro'yxatda turadi: `href` bo'lmasa menyuda
+    //  kulrang, bosilmaydigan bo'lib chiqadi. Tizim qanday o'sishi
+    //  ko'rinib tursin — xodim ham, ishlab chiquvchi ham qayerda nima
+    //  turishini oldindan biladi.
+    //
+    //  Bo'lim yozilganda shu qatorga `href`, `title`, `lead` va `text`
+    //  qo'shiladi, boshqa hech narsa o'zgartirilmaydi.
+
+    // Savdo
+    { mod: 'sales', nav: 'Buyurtmalar',                 perm: ['sales.view'] },
+    { mod: 'sales', nav: 'Buyurtma shakllantirish',     perm: ['sales.manage'] },
+    { mod: 'sales', nav: 'Buyurtmalar arxivi',          perm: ['sales.view'] },
+    { mod: 'sales', nav: "O'chirilgan buyurtmalar",     perm: ['sales.manage'] },
+    { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },
+    { mod: 'sales', nav: "O'zaro hisob",                perm: ['sales.view'] },
+    { mod: 'sales', nav: 'Mijozlar bilan hisob-kitob',  perm: ['sales.view'] },
+
+    // Ta'minot
+    { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },
+    { mod: 'purchasing', nav: 'Kirim shakllantirish',              perm: ['purchasing.manage'] },
+    { mod: 'purchasing', nav: 'Kirimlar arxivi',                   perm: ['purchasing.view'] },
+    { mod: 'purchasing', nav: "O'chirilgan kirimlar",              perm: ['purchasing.manage'] },
+    { mod: 'purchasing', nav: "Qaytarib berish (ta'minotchiga)",   perm: ['purchasing.manage'] },
+    { mod: 'purchasing', nav: "O'zaro hisob",                      perm: ['purchasing.view'] },
+    { mod: 'purchasing', nav: "Ta'minotchilar bilan hisob-kitob",  perm: ['purchasing.view'] },
+
+    // Ombor
+    { mod: 'warehouse', nav: 'Omborlar',                perm: ['warehouse.view'] },
+    { mod: 'warehouse', nav: 'Omborga kirim',           perm: ['warehouse.move'] },
+    { mod: 'warehouse', nav: 'Qoldiqlar',               perm: ['warehouse.view'] },
+    { mod: 'warehouse', nav: 'Hisobdan chiqarish',      perm: ['warehouse.manage'] },
+    { mod: 'warehouse', nav: 'Omborlar aro harakatlar', perm: ['warehouse.move'] },
+
+    // Hisobotlar
+    { mod: 'reports', nav: 'Moliyaviy hisobotlar', perm: ['cash.view', 'production.manage'] },
+    { mod: 'reports', nav: 'Savdo hisobotlari',    perm: ['sales.view', 'production.view'] },
+    { mod: 'reports', nav: 'Ombor va tovarlar',    perm: ['warehouse.view', 'production.view'] },
   ];
 
   // Xodimga ochiq sahifalar
@@ -189,8 +229,11 @@ const App = (() => {
 
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
     const open = pages();
-    // Qaysi bo'limdamiz: shu sahifaning moduli
-    const active = (PAGES.find((p) => p.href === here) || {}).mod || null;
+    // Qaysi bo'limdamiz: shu sahifaning moduli. Modul rejasi sahifasida esa
+    // modul manzildan olinadi — u bitta sahifa bo'lib hammasiga xizmat qiladi.
+    const active = here === '/modul.html'
+      ? new URLSearchParams(location.search).get('m')
+      : (PAGES.find((p) => p.href === here) || {}).mod || null;
 
     // Xodim faqat o'ziga biriktirilgan bo'limlarni ko'radi. Huquqi yo'q
     // bo'lim umuman chizilmaydi — "rejada" deb ko'rsatish ham ortiqcha:
@@ -198,18 +241,23 @@ const App = (() => {
     const mods = MODULES
       .filter((m) => !m.perm.length || can(...m.perm))
       .map((m) => {
-        const first = open.find((p) => p.mod === m.code);
-        // Huquqi bor, lekin sahifasi hali yozilmagan bo'lim
-        if (!first) return `<span class="soon" title="Bu bo'lim hali yozilmagan">${m.name}</span>`;
-        return `<a href="${first.href}"${m.code === active ? ' class="on"' : ''}>${m.name}</a>`;
+        const on = m.code === active ? ' class="on"' : '';
+        const first = open.find((p) => p.mod === m.code && p.href);
+        if (first) return `<a href="${first.href}"${on}>${m.name}</a>`;
+        // Sahifasi yo'q, lekin bo'limlari rejalashtirilgan modul: reja
+        // sahifasiga olib boradi — nima kutilayotgani ko'rinib tursin.
+        if (open.some((p) => p.mod === m.code))
+          return `<a href="/modul.html?m=${m.code}"${on}>${m.name}</a>`;
+        return `<span class="soon" title="Bu bo'lim hali yozilmagan">${m.name}</span>`;
       }).join('');
 
     // Faol bo'limning sahifalari. Bo'limda bitta sahifa bo'lsa ikkinchi
     // qator ortiqcha — ko'rsatilmaydi.
     const sub = active ? open.filter((p) => p.mod === active) : [];
     const subRow = sub.length > 1
-      ? `<nav class="nav sub">${sub.map((p) =>
-          `<a href="${p.href}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`).join('')}</nav>`
+      ? `<nav class="nav sub">${sub.map((p) => p.href
+          ? `<a href="${p.href}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`
+          : `<span class="soon" title="Bu bo'lim hali yozilmagan">${p.nav}</span>`).join('')}</nav>`
       : '';
 
     top.insertAdjacentHTML('afterend', `<nav class="nav mods">${mods}</nav>${subRow}`);
@@ -249,5 +297,6 @@ const App = (() => {
   return { api, download, can, start, logout, me: () => me, pages,
            modules: () => MODULES
              .filter((m) => !m.perm.length || can(...m.perm))
-             .map((m) => ({ ...m, ready: pages().some((p) => p.mod === m.code) })) };
+             .map((m) => ({ ...m,
+               ready: pages().some((p) => p.mod === m.code && p.href) })) };
 })();

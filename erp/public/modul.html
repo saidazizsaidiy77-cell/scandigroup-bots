@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modul · Scandi</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1 id="modName">Modul</h1></div>
+  <div class="row" id="erpUser"></div>
+</div>
+
+<div id="body"></div>
+
+<script>
+// Modulning bo'limlari. Bitta sahifa hamma modulga xizmat qiladi: ro'yxat
+// app.js dagi PAGES dan olinadi, shuning uchun yangi bo'lim qo'shilganda
+// bu fayl o'zgarmaydi.
+//
+// Yozilgan bo'lim — bosiladigan kartochka. Yozilmagani — kulrang qator:
+// zavod tizim qanday o'sishini oldindan ko'rib turadi, va kelishilgan
+// tarkib bir joyda yozilib qoladi.
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+App.start(async () => {
+  const code = new URLSearchParams(location.search).get('m');
+  const mod = App.modules().find(m => m.code === code);
+
+  if (!mod) {
+    $('body').innerHTML = `<div class="card"><h2>Modul topilmadi</h2>
+      <p class="muted" style="margin-top:8px">Bunday bo'lim yo'q yoki
+      sizning rolingizga ochiq emas.</p></div>`;
+    return;
+  }
+
+  document.title = mod.name + ' · Scandi';
+  $('modName').textContent = mod.name;
+
+  const list = App.pages().filter(p => p.mod === code);
+  const done = list.filter(p => p.href);
+  const soon = list.filter(p => !p.href);
+
+  $('body').innerHTML = `
+    ${done.length ? `<div class="grid g3">${done.map(p => `
+      <a class="card" href="${p.href}" style="text-decoration:none;color:inherit">
+        <h2>${esc(p.title || p.nav)}</h2>
+        ${p.lead ? `<p style="font-size:18px;font-weight:500">${esc(p.lead)}</p>` : ''}
+        ${p.text ? `<p class="muted" style="margin-top:8px">${esc(p.text)}</p>` : ''}
+      </a>`).join('')}</div>` : ''}
+
+    ${soon.length ? `<div class="card" style="margin-top:${done.length ? 16 : 0}px">
+      <h2>Bo'limlar</h2>
+      <p class="muted" style="margin:8px 0 16px;font-size:13px">
+        Kelishilgan tarkib. Hali yozilmagan bo'lim kulrang turadi —
+        yozilgach shu ro'yxatda bosiladigan bo'ladi.</p>
+      <table>
+        <tbody>${soon.map(p => `
+          <tr><td>${esc(p.nav)}</td>
+              <td class="num"><span class="tag">rejada</span></td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}`;
+});
+</script>
+</body>
+</html>

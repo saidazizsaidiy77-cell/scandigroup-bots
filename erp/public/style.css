@@ -135,6 +135,8 @@ tr.click:hover td{background:var(--surface-2)}
 .nav.sub a{font-size:14px;padding:7px 13px;color:var(--muted)}
 .nav.sub a:hover{color:var(--text);background:var(--surface)}
 .nav.sub a.on{color:var(--text);background:var(--surface-2);border-color:var(--line)}
+/* Hali yozilmagan bo'lim — asosiy qatordagi kabi ko'rinadi, bosilmaydi */
+.nav.sub .soon{font-size:14px;padding:7px 13px;color:var(--line);cursor:default}
 
 /* ─────────────────────────────────────────────── JURNAL JADVALI
    O'n oltita ustun bitta ekranga sig'maydi, shuning uchun:

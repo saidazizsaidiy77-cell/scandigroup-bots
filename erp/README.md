@@ -86,6 +86,7 @@ erp/
   public/
     app.js             klient: sessiya, huquq, so'rov
     index.html         modullar menyusi
+    modul.html         modul bo'limlari: yozilgani va rejadagisi
     jurnal.html        ishlab chiqarish jurnali
     qoldiq.html        boshlang'ich qoldiq
     mijozlar.html      mijozlar va kanal tahlili
@@ -106,11 +107,35 @@ Pul yoki ombor tegadigan amallarda `audit(req, {...})` chaqiriladi.
 
 ## Modullar
 
-Modul nomi va sahifalar ro'yxati bitta joyda — `public/app.js` dagi `MODULES`
+Modul nomi va bo'limlar ro'yxati bitta joyda — `public/app.js` dagi `MODULES`
 va `PAGES`. Menyu ham, bosh sahifadagi kartochkalar ham shundan chiziladi.
 "Ishlayaptimi yoki rejadami" alohida yozilmaydi: moduldan xodimga ochiq
 sahifa bo'lsa — ishlayapti. Shuning uchun menyu bilan kartochka hech qachon
 qarama-qarshi bo'lmaydi.
+
+**Hali yozilmagan bo'lim ham ro'yxatda turadi** — `href` siz. Menyuda kulrang,
+bosilmaydigan bo'lib chiqadi, `modul.html` da esa "rejada" belgisi bilan.
+Zavod tizim qanday o'sishini oldindan ko'rib turadi, kelishilgan tarkib esa
+bir joyda yozilib qoladi. Bo'lim yozilganda o'sha qatorga `href`, `title`,
+`lead` va `text` qo'shiladi — boshqa hech narsa o'zgartirilmaydi.
+
+`modul.html` bitta sahifa bo'lib hamma modulga xizmat qiladi: `?m=<kod>` bilan
+ochiladi va bo'limlar ro'yxatini `PAGES` dan chizadi. Sahifasi bor modul
+menyudan to'g'ridan-to'g'ri o'sha sahifaga kiradi, sahifasi yo'q moduli esa
+shu reja sahifasiga.
+
+### Bo'limlar tarkibi
+
+| Modul | Bo'limlar |
+|---|---|
+| **Savdo** | Mijozlar ✅ · Buyurtmalar · Buyurtma shakllantirish · Buyurtmalar arxivi · O'chirilgan buyurtmalar · Qaytib olish (mijozdan) · O'zaro hisob · Mijozlar bilan hisob-kitob |
+| **Ta'minot** | Xaridlar · Kirim shakllantirish · Kirimlar arxivi · O'chirilgan kirimlar · Qaytarib berish (ta'minotchiga) · O'zaro hisob · Ta'minotchilar bilan hisob-kitob |
+| **Ombor** | Omborlar · Omborga kirim · Qoldiqlar · Hisobdan chiqarish · Omborlar aro harakatlar |
+| **Ishlab chiqarish** | Jurnal ✅ · Boshlang'ich qoldiq ✅ · Smena ✅ · Terminal ✅ |
+| **Hisobotlar** | Zavod ko'rinishi ✅ · Boshqaruv paneli ✅ · Moliyaviy hisobotlar · Savdo hisobotlari · Ombor va tovarlar |
+| **Ma'lumotnomalar** | Katalog ✅ · Bo'lim quvvati ✅ |
+| **Xodimlar va ish haqi** | Xodimlar ✅ |
+| **Bank va kassa** | tarkibi hali kelishilmagan |
 
 | Modul | Holat | Nima bo'ladi |
 |---|---|---|
