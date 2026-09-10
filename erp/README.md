@@ -113,11 +113,19 @@ va `PAGES`. Menyu ham, bosh sahifadagi kartochkalar ham shundan chiziladi.
 sahifa bo'lsa — ishlayapti. Shuning uchun menyu bilan kartochka hech qachon
 qarama-qarshi bo'lmaydi.
 
-**Hali yozilmagan bo'lim ham ro'yxatda turadi** — `href` siz. Menyuda kulrang,
-bosilmaydigan bo'lib chiqadi, `modul.html` da esa "rejada" belgisi bilan.
-Zavod tizim qanday o'sishini oldindan ko'rib turadi, kelishilgan tarkib esa
-bir joyda yozilib qoladi. Bo'lim yozilganda o'sha qatorga `href`, `title`,
-`lead` va `text` qo'shiladi — boshqa hech narsa o'zgartirilmaydi.
+**Hali yozilmagan bo'lim ham ro'yxatda turadi** — `href` siz. U menyuda
+ko'rsatilmaydi (aks holda modul sahifasidagi ro'yxatni ikkinchi marta
+takrorlardi), balki "Bo'limlar" havolasi ortida, `modul.html` da "rejada"
+belgisi bilan turadi. Zavod tizim qanday o'sishini oldindan ko'rib turadi,
+kelishilgan tarkib esa bir joyda yozilib qoladi. Bo'lim yozilganda o'sha
+qatorga `href`, `title`, `lead` va `text` qo'shiladi — boshqa hech narsa
+o'zgartirilmaydi.
+
+Ikkita ixtiyoriy maydon bor. `mod` ro'yxat bo'lsa sahifa bir nechta modulda
+turadi — Mijozlar shunday: savdo uchun ham kerak, ma'lumotnoma sifatida ham
+(qaysi bo'limdan kirilgani manzildagi `?m=` da qoladi, shunda menyu o'sha
+bo'limni yoqib turadi). `group` esa modul ichida toifa yasaydi — Hisobotlarda
+"Ishlab chiqarish hisobotlari" shunday.
 
 `modul.html` bitta sahifa bo'lib hamma modulga xizmat qiladi: `?m=<kod>` bilan
 ochiladi va bo'limlar ro'yxatini `PAGES` dan chizadi. Sahifasi bor modul
@@ -128,12 +136,12 @@ shu reja sahifasiga.
 
 | Modul | Bo'limlar |
 |---|---|
-| **Savdo** | Mijozlar ✅ · Buyurtmalar · Buyurtma shakllantirish · Buyurtmalar arxivi · O'chirilgan buyurtmalar · Qaytib olish (mijozdan) · Solishtirma dalolatnoma · Qarzdorlik |
+| **Savdo** | Mijozlar ✅ (ma'lumotnomalarda ham) · Buyurtmalar · Buyurtma shakllantirish · Buyurtmalar arxivi · O'chirilgan buyurtmalar · Qaytib olish (mijozdan) · Solishtirma dalolatnoma · Qarzdorlik |
 | **Ta'minot** | Xaridlar · Kirim shakllantirish · Kirimlar arxivi · O'chirilgan kirimlar · Qaytarib berish (ta'minotchiga) · Solishtirma dalolatnoma · Qarzdorlik |
 | **Ombor** | Omborlar · Omborga kirim · Qoldiqlar · Hisobdan chiqarish · Omborlar aro harakatlar |
 | **Ishlab chiqarish** | Jurnal ✅ · Boshlang'ich qoldiq ✅ · Smena ✅ · Terminal ✅ |
-| **Hisobotlar** | Zavod ko'rinishi ✅ · Boshqaruv paneli ✅ · Moliyaviy hisobotlar · Savdo hisobotlari · Ombor va tovarlar |
-| **Ma'lumotnomalar** | Katalog ✅ |
+| **Hisobotlar** | Ishlab chiqarish hisobotlari: Zavod ko'rinishi ✅ · Boshqaruv paneli ✅ — hamda Moliyaviy hisobotlar · Savdo hisobotlari · Ombor va tovarlar |
+| **Ma'lumotnomalar** | Mijozlar ✅ (savdoda ham) · Katalog ✅ |
 | **Xodimlar va ish haqi** | Xodimlar ✅ |
 | **Bank va kassa** | tarkibi hali kelishilmagan |
 

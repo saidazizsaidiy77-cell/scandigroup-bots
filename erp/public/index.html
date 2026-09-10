@@ -32,14 +32,14 @@ App.start(async () => {
   // qoladi. Faqat o'ziga ochiq bo'lim va sahifalar chiqadi.
   const open = App.pages().filter(p => p.title);
   const groups = App.modules()
-    .map(m => ({ m, list: open.filter(p => p.mod === m.code) }))
+    .map(m => ({ m, list: open.filter(p => App.inMod(p, m.code)) }))
     .filter(g => g.list.length);
 
   $('pages').innerHTML = groups.map(g => `
     <section style="margin-bottom:26px">
       <h2>${g.m.name}</h2>
       <div class="grid g3">${g.list.map(p => `
-        <a class="card" href="${p.href}" style="text-decoration:none;color:inherit">
+        <a class="card" href="${App.hrefFor(p, g.m.code)}" style="text-decoration:none;color:inherit">
           <h2>${p.title}</h2>
           <p style="font-size:18px;font-weight:500">${p.lead}</p>
           <p class="muted" style="margin-top:8px">${p.text}</p></a>`).join('')}</div>

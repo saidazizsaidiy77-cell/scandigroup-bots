@@ -42,17 +42,28 @@ App.start(async () => {
   document.title = mod.name + ' · Scandi';
   $('modName').textContent = mod.name;
 
-  const list = App.pages().filter(p => p.mod === code);
+  const list = App.pages().filter(p => App.inMod(p, code));
   const done = list.filter(p => p.href);
   const soon = list.filter(p => !p.href);
 
+  // Yozilgan sahifalar toifaga bo'linishi mumkin — masalan Hisobotlarda
+  // "Ishlab chiqarish hisobotlari". Toifasizlari sarlavhasiz, yuqorida.
+  const card = p => `
+    <a class="card" href="${App.hrefFor(p, code)}" style="text-decoration:none;color:inherit">
+      <h2>${esc(p.title || p.nav)}</h2>
+      ${p.lead ? `<p style="font-size:18px;font-weight:500">${esc(p.lead)}</p>` : ''}
+      ${p.text ? `<p class="muted" style="margin-top:8px">${esc(p.text)}</p>` : ''}
+    </a>`;
+  const groups = [...new Set(done.map(p => p.group || ''))];
+
   $('body').innerHTML = `
-    ${done.length ? `<div class="grid g3">${done.map(p => `
-      <a class="card" href="${p.href}" style="text-decoration:none;color:inherit">
-        <h2>${esc(p.title || p.nav)}</h2>
-        ${p.lead ? `<p style="font-size:18px;font-weight:500">${esc(p.lead)}</p>` : ''}
-        ${p.text ? `<p class="muted" style="margin-top:8px">${esc(p.text)}</p>` : ''}
-      </a>`).join('')}</div>` : ''}
+    ${groups.map(g => {
+      const inG = done.filter(p => (p.group || '') === g);
+      return `<section style="margin-bottom:22px">
+        ${g ? `<h2>${esc(g)}</h2>` : ''}
+        <div class="grid g3">${inG.map(card).join('')}</div>
+      </section>`;
+    }).join('')}
 
     ${soon.length ? `<div class="card" style="margin-top:${done.length ? 16 : 0}px">
       <h2>Bo'limlar</h2>

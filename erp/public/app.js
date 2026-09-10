@@ -144,10 +144,12 @@ const App = (() => {
       text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",
       perm: ['production.units', 'production.manage'] },
     { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
+      group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',
       text: "Har mahsulot qaysi tsex va bo'limda \u00b7 qachon keyingi tsexga o'tadi \u00b7 qachon omborga kiradi",
       perm: ['production.view'] },
     { href: '/dashboard.html', mod: 'reports', nav: 'Panel',
+      group: 'Ishlab chiqarish hisobotlari',
       title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",
       text: "Reja/fakt \u00b7 bottleneck \u00b7 komplektlilik \u00b7 umumiy tsex yuklamasi \u00b7 Pareto",
       perm: ['production.view'] },
@@ -159,7 +161,7 @@ const App = (() => {
       title: "Bo'lim terminali", lead: 'Tsex planshetlari',
       text: "Dona qayd etish \u00b7 brak \u00b7 to'xtash \u00b7 kamera partiyasi",
       perm: ['production.entry'] },
-    { href: '/mijozlar.html', mod: 'sales', nav: 'Mijozlar',
+    { href: '/mijozlar.html', mod: ['sales', 'refs'], nav: 'Mijozlar',
       title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
       text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
       perm: ['production.view', 'sales.view'] },
@@ -227,6 +229,15 @@ const App = (() => {
     { mod: 'reports', nav: 'Ombor va tovarlar',    perm: ['warehouse.view', 'production.view'] },
   ];
 
+  // Sahifa bir nechta modulda turishi mumkin: `mod` ro'yxat bo'lsa, u har
+  // birida ko'rinadi. Mijozlar shunday — savdo uchun ham kerak,
+  // ma'lumotnoma sifatida ham.
+  const inMod = (p, code) => Array.isArray(p.mod) ? p.mod.includes(code) : p.mod === code;
+
+  // Bir nechta modulda turgan sahifaga qaysi bo'limdan kirilgani manzilga
+  // yoziladi — shunda menyu o'sha bo'limni yoqib turadi.
+  const hrefFor = (p, code) => Array.isArray(p.mod) ? `${p.href}?m=${code}` : p.href;
+
   // Xodimga ochiq sahifalar
   const pages = () => PAGES.filter((p) => !p.perm.length || can(...p.perm));
 
@@ -239,11 +250,13 @@ const App = (() => {
 
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
     const open = pages();
-    // Qaysi bo'limdamiz: shu sahifaning moduli. Modul rejasi sahifasida esa
-    // modul manzildan olinadi — u bitta sahifa bo'lib hammasiga xizmat qiladi.
-    const active = here === '/modul.html'
-      ? new URLSearchParams(location.search).get('m')
-      : (PAGES.find((p) => p.href === here) || {}).mod || null;
+    // Qaysi bo'limdamiz. Manzildagi `?m=` ustuvor: modul rejasi sahifasi ham,
+    // bir nechta modulda turgan sahifa ham qaysi bo'limdan kirilganini
+    // shu bilan aytadi.
+    const q = new URLSearchParams(location.search).get('m');
+    const cur = PAGES.find((p) => p.href === here);
+    const active = (q && MODULES.some((m) => m.code === q)) ? q
+      : cur ? (Array.isArray(cur.mod) ? cur.mod[0] : cur.mod) : null;
 
     // Xodim faqat o'ziga biriktirilgan bo'limlarni ko'radi. Huquqi yo'q
     // bo'lim umuman chizilmaydi — "rejada" deb ko'rsatish ham ortiqcha:
@@ -252,23 +265,28 @@ const App = (() => {
       .filter((m) => !m.perm.length || can(...m.perm))
       .map((m) => {
         const on = m.code === active ? ' class="on"' : '';
-        const first = open.find((p) => p.mod === m.code && p.href);
-        if (first) return `<a href="${first.href}"${on}>${m.name}</a>`;
+        const first = open.find((p) => inMod(p, m.code) && p.href);
+        if (first) return `<a href="${hrefFor(first, m.code)}"${on}>${m.name}</a>`;
         // Sahifasi yo'q, lekin bo'limlari rejalashtirilgan modul: reja
         // sahifasiga olib boradi — nima kutilayotgani ko'rinib tursin.
-        if (open.some((p) => p.mod === m.code))
+        if (open.some((p) => inMod(p, m.code)))
           return `<a href="/modul.html?m=${m.code}"${on}>${m.name}</a>`;
         return `<span class="soon" title="Bu bo'lim hali yozilmagan">${m.name}</span>`;
       }).join('');
 
     // Faol bo'limning sahifalari. Bo'limda bitta sahifa bo'lsa ikkinchi
     // qator ortiqcha — ko'rsatilmaydi.
-    const sub = active ? open.filter((p) => p.mod === active) : [];
-    const subRow = sub.length > 1
-      ? `<nav class="nav sub">${sub.map((p) => p.href
-          ? `<a href="${p.href}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`
-          : `<span class="soon" title="Bu bo'lim hali yozilmagan">${p.nav}</span>`).join('')}</nav>`
+    // Ostki qatorda faqat yozilgan sahifalar. Rejadagilar bu yerda ham
+    // ko'rsatilsa, modul sahifasidagi ro'yxatni ikkinchi marta takrorlab
+    // qo'yardi — ular "Bo'limlar" havolasi ortida, bir joyda turadi.
+    const sub = active ? open.filter((p) => inMod(p, active) && p.href) : [];
+    const plan = active && open.some((p) => inMod(p, active) && !p.href)
+      ? `<a href="/modul.html?m=${active}"${here === '/modul.html' ? ' class="on"' : ''}>Bo'limlar</a>`
       : '';
+    const links = sub.map((p) =>
+      `<a href="${hrefFor(p, active)}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`).join('');
+    const subRow = (sub.length + (plan ? 1 : 0)) > 1
+      ? `<nav class="nav sub">${links}${plan}</nav>` : '';
 
     top.insertAdjacentHTML('afterend', `<nav class="nav mods">${mods}</nav>${subRow}`);
 
@@ -304,9 +322,9 @@ const App = (() => {
     onReady(me);
   }
 
-  return { api, download, can, start, logout, me: () => me, pages,
+  return { api, download, can, start, logout, me: () => me, pages, inMod, hrefFor,
            modules: () => MODULES
              .filter((m) => !m.perm.length || can(...m.perm))
              .map((m) => ({ ...m,
-               ready: pages().some((p) => p.mod === m.code && p.href) })) };
+               ready: pages().some((p) => inMod(p, m.code) && p.href) })) };
 })();
