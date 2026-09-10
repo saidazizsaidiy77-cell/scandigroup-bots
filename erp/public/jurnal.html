@@ -16,30 +16,16 @@
 
 <div class="card">
   <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-    <div style="flex:1;min-width:150px"><label>Zakaz raqami</label>
+    <div style="flex:1;min-width:160px"><label>Zakaz raqami</label>
       <input id="fOrder" placeholder="Z-1024" oninput="deb()"></div>
-    <div style="flex:1;min-width:150px"><label>Konveyer raqami</label>
-      <input id="fConv" placeholder="K26-" oninput="deb()"></div>
-    <div style="flex:1;min-width:150px"><label>Tsex</label>
-      <select id="fShop" onchange="load()"></select></div>
-    <div style="flex:1;min-width:140px"><label>Holat</label>
-      <select id="fStatus" onchange="load()">
-        <option value="">Barchasi</option>
-        <option value="production">Ishlab chiqarishda</option>
-        <option value="fg">T/M omborida</option>
-        <option value="shipped">Jo'natilgan</option>
-        <option value="cancelled">Bekor qilingan</option>
-      </select></div>
-    <div style="flex:1;min-width:140px"><label>Guruhi</label>
-      <select id="fGroup" onchange="load()"></select></div>
-    <div style="flex:1;min-width:140px"><label>Maxsulot nomi</label>
+    <div style="flex:1;min-width:160px"><label>Maxsulot nomi</label>
       <select id="fFason" onchange="load()"></select></div>
-    <div style="flex:1;min-width:135px"><label>Sana: dan</label>
-      <input id="fFrom" type="date" onchange="load()"></div>
-    <div style="flex:1;min-width:135px"><label>Sana: gacha</label>
-      <input id="fTo" type="date" onchange="load()"></div>
-    <div style="flex:1.5;min-width:180px"><label>Qidiruv</label>
-      <input id="fQ" placeholder="mahsulot yoki mijoz" oninput="deb()"></div>
+    <div style="flex:1;min-width:160px"><label>Maxsulot guruhi</label>
+      <select id="fGroup" onchange="load()"></select></div>
+    <div style="flex:1;min-width:160px"><label>Tsex</label>
+      <select id="fShop" onchange="load()"></select></div>
+    <div style="flex:1;min-width:170px"><label>Mijoz nomi</label>
+      <select id="fCust" onchange="load()"></select></div>
     <button onclick="clearFilters()">Filtrni tozalash</button>
   </div>
 </div>
@@ -122,8 +108,10 @@ async function boot(){
   document.getElementById('dlFabric').innerHTML =
     sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
   ref = r; customers = c.customers;
-  $('fShop').innerHTML = '<option value="">Barcha tsex</option>' +
+  $('fShop').innerHTML = '<option value="">Barchasi</option>' +
     ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  $('fCust').innerHTML = '<option value="">Barchasi</option>' +
+    customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
 
   // Guruh va mahsulot nomi ro'yxati katalogdan chiqadi — jurnalda faqat
   // haqiqatan mavjud bo'lganlari tanlanadi.
@@ -152,25 +140,26 @@ async function boot(){
 
 // Filtr va saralash bitta joyda yig'iladi: jurnal ham, Excel fayli ham
 // aynan shu so'rovdan chiqadi.
+// Zakaz raqami, mahsulot nomi, guruh, tsex va mijoz — zavod jurnalni shu
+// besh kesimda qidiradi. API boshqa kesimlarni ham qabul qiladi (holat,
+// sana oralig'i, erkin qidiruv), lekin ular sahifada ko'rsatilmaydi: kunda
+// ishlatilmaydigan katak faqat panelni og'irlashtiradi.
+const FILTERS = ['fOrder', 'fFason', 'fGroup', 'fShop', 'fCust'];
+
 function params(){
   const p = new URLSearchParams();
   if ($('fOrder').value.trim())  p.set('order_no', $('fOrder').value.trim());
-  if ($('fConv').value.trim())   p.set('conveyor_no', $('fConv').value.trim());
-  if ($('fShop').value)          p.set('shop_id', $('fShop').value);
-  if ($('fStatus').value)        p.set('status', $('fStatus').value);
-  if ($('fGroup').value)         p.set('group_id', $('fGroup').value);
   if ($('fFason').value)         p.set('fason_id', $('fFason').value);
-  if ($('fFrom').value)          p.set('from', $('fFrom').value);
-  if ($('fTo').value)            p.set('to', $('fTo').value);
-  if ($('fQ').value.trim())      p.set('q', $('fQ').value.trim());
+  if ($('fGroup').value)         p.set('group_id', $('fGroup').value);
+  if ($('fShop').value)          p.set('shop_id', $('fShop').value);
+  if ($('fCust').value)          p.set('customer_id', $('fCust').value);
   p.set('sort', sort.col);
   p.set('dir', sort.dir);
   return p;
 }
 
 function clearFilters(){
-  for (const id of ['fOrder','fConv','fShop','fStatus','fGroup','fFason','fFrom','fTo','fQ'])
-    $(id).value = '';
+  for (const id of FILTERS) $(id).value = '';
   load();
 }
 

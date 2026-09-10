@@ -194,8 +194,12 @@ Mijoz nomi · Narx · Summa
 Ustunlar zavodda yuritilgan qog'oz jurnaldan olingan — xodim yangi tartibga
 o'rganishi shart emas. Pul birligi — **dollar**.
 
-Filtr, saralash va Excel — uchalasi bitta so'rovdan chiqadi: zakaz va konveyer
-raqami, tsex, holat, guruh, mahsulot nomi, sana oralig'i va erkin qidiruv.
+Filtr, saralash va Excel — uchalasi bitta so'rovdan chiqadi. Sahifada beshta
+filtr: zakaz raqami, mahsulot nomi, mahsulot guruhi, tsex va mijoz — zavod
+jurnalni aynan shu kesimlarda qidiradi. API holat, sana oralig'i va erkin
+qidiruvni ham qabul qiladi, lekin ular sahifada ko'rsatilmaydi: kunda
+ishlatilmaydigan katak faqat panelni og'irlashtiradi.
+
 Sarlavhaga bosilsa o'sha ustun bo'yicha saralanadi, ikkinchi bosishda teskari
 tartibda. Saralash **serverda** bajariladi — ro'yxat 500 qator bilan
 cheklangan, faqat ko'rinib turganini saralash "eng qimmat mahsulot"ni
