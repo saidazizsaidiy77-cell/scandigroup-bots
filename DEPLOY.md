@@ -128,7 +128,7 @@ Brauzerda: **http://localhost:3000**
 |---|---|---|
 | 1 | `/xodimlar.html` | Xodimlarni kiriting, PIN bering, rol biriktiring |
 | 2 | `/xodimlar.html` | **Demo PIN'larni o'chiring** (`0000`, `1111`–`6666` hozir ochiq) |
-| 3 | `/sozlamalar.html` | Bo'lim quvvatlari — muddat bashorati shusiz ishlamaydi |
+| 3 | `/sozlamalar.html` | Bo'lim quvvatlari — ixtiyoriy. Kiritilsa muddat bashorati o'zi hisoblanadi, kiritilmasa muddat qo'lda qo'yiladi. Sahifa menyuda yo'q, manzil bilan ochiladi |
 | 4 | `/mijozlar.html` | Mijozlar ro'yxatini import qiling |
 | 5 | `/qoldiq.html` | Konveyerdagi va T/M omboridagi mahsulotlar |
 

@@ -167,10 +167,18 @@ const App = (() => {
       title: 'Katalog', lead: 'Mahsulot nomi va guruhi',
       text: "Fason, guruh va marshrut \u2014 yangi mahsulot qo'shish uchun kod tegilmaydi",
       perm: ['production.manage'] },
-    { href: '/sozlamalar.html', mod: 'refs', nav: "Bo'lim quvvati",
-      title: "Bo'lim quvvati", lead: 'Muddat bashorati',
-      text: "Har bo'limning kunlik quvvati \u2014 muddat hisobi shunga tayanadi",
-      perm: ['production.manage'] },
+    // Bo'lim quvvati menyudan olib tashlangan. Sahifaning o'zi
+    // (`sozlamalar.html`) va API joyida — kerak bo'lganda shu qatorni
+    // izohdan chiqarish kifoya:
+    //
+    //   { href: '/sozlamalar.html', mod: 'refs', nav: "Bo'lim quvvati",
+    //     title: "Bo'lim quvvati", lead: 'Muddat bashorati',
+    //     text: "Har bo'limning kunlik quvvati — muddat hisobi shunga tayanadi",
+    //     perm: ['production.manage'] },
+    //
+    // Quvvatsiz muddat `taxmin` ustunlari bo'sh qoladi; `reja` (tsex
+    // boshlig'i qo'lda qo'ygan) va `fakt` (tizim yozgan) sanalar
+    // o'zgarishsiz ishlayveradi.
     { href: '/xodimlar.html', mod: 'payroll', nav: 'Xodimlar',
       title: 'Xodimlar', lead: 'Rollar va kirish',
       text: "Xodim qo'shish, PIN berish, rol va tsex biriktirish",

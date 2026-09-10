@@ -133,7 +133,7 @@ shu reja sahifasiga.
 | **Ombor** | Omborlar · Omborga kirim · Qoldiqlar · Hisobdan chiqarish · Omborlar aro harakatlar |
 | **Ishlab chiqarish** | Jurnal ✅ · Boshlang'ich qoldiq ✅ · Smena ✅ · Terminal ✅ |
 | **Hisobotlar** | Zavod ko'rinishi ✅ · Boshqaruv paneli ✅ · Moliyaviy hisobotlar · Savdo hisobotlari · Ombor va tovarlar |
-| **Ma'lumotnomalar** | Katalog ✅ · Bo'lim quvvati ✅ |
+| **Ma'lumotnomalar** | Katalog ✅ |
 | **Xodimlar va ish haqi** | Xodimlar ✅ |
 | **Bank va kassa** | tarkibi hali kelishilmagan |
 
@@ -146,7 +146,7 @@ hujjat, ikkinchisi kim qancha qarzda degan hisobot.
 | **Ishlab chiqarish** | ✅ ishlayapti | Tsex/bo'lim, marshrut, WIP, komplektlilik, muddat bashorati |
 | **Savdo** | ⚙️ qisman | Mijozlar va kanal tahlili bor; zakaz, jo'natma, debitorlik rejada |
 | **Hisobotlar** | ✅ ishlayapti | Zavod ko'rinishi, boshqaruv paneli |
-| **Ma'lumotnomalar** | ✅ ishlayapti | Katalog, bo'lim quvvati |
+| **Ma'lumotnomalar** | ✅ ishlayapti | Katalog |
 | **Xodimlar va ish haqi** | ⚙️ qisman | Xodim, rol va PIN bor; davomat, ishbay hisob, to'lov rejada |
 | **Ombor** | rejada | Xom ashyo va tayyor mahsulot: kirim, chiqim, qoldiq, inventarizatsiya |
 | **Ta'minot** | rejada | Ta'minotchilar, buyurtmalar, kirim hujjatlari, qarzdorlik |
@@ -203,7 +203,7 @@ Operator smenani tanlamaydi — tizim uni mahsulot yo'nalishidan aniqlaydi.
 | `/dashboard.html` | Reja/fakt, bottleneck, komplektlilik, umumiy tsex yuklamasi, Pareto | `production.view` |
 | `/smena.html` | **Tsex boshlig'i**: bir tsexning barcha bo'limlari bo'yicha kunlik kiritish | `production.entry` |
 | `/terminal.html` | Tsex planshetlari: bo'lim bo'yicha real vaqtda kiritish | `production.entry` |
-| `/sozlamalar.html` | Bo'lim quvvati — muddat bashorati shunga tayanadi | `production.manage` |
+| `/sozlamalar.html` | Bo'lim quvvati — muddat bashorati shunga tayanadi. **Menyuda yo'q**: manzil bilan ochiladi, kerak bo'lsa `app.js` dagi izohlangan qator qaytariladi | `production.manage` |
 | `/xodimlar.html` | Xodim, PIN, rol va tsex biriktirish | `admin.users` |
 | `/katalog.html` | **Mahsulot nomi va guruhi** — katalog kodda emas, shu yerda | `production.manage` |
 
@@ -278,8 +278,9 @@ belgi bir katakda bo'lmasligi kerak.
 
   Yo'lda quvvati kiritilmagan bo'lim tursa **taxmin umuman ko'rsatilmaydi**.
   Yarim ma'lumotdan chiqqan sana bo'sh katakdan yomonroq: unga ishonib mijozga
-  va'da beriladi. Bo'sh ustun "`/sozlamalar.html` da quvvatni kiriting"
-  degani.
+  va'da beriladi. Bo'sh ustun "quvvat kiritilmagan" degani — u
+  `/sozlamalar.html` da kiritiladi (sahifa menyuda yo'q, manzil bilan
+  ochiladi).
 
 Birlik "O'tkazish" tugmasi bilan marshrutdagi **keyingi bo'limga** o'tadi —
 qaysi bo'lim ekanini tizim marshrutdan o'zi topadi. Chiqish bo'limiga
@@ -396,6 +397,9 @@ o'chirish yoki o'zgartirish** (`/xodimlar.html`).
    ular jurnal va qoldiqni to'ldiradi, lekin marshrut, bo'lim quvvati va
    xodimlarga tegmaydi. Demo xodimlarni o'chiring.
 4. `/sozlamalar.html` — har bo'limning taxminiy kunlik quvvatini kiriting.
+   Sahifa menyuda yo'q, manzil bilan ochiladi. **Ixtiyoriy:** quvvatsiz ham
+   hammasi ishlaydi, faqat muddat `taxmin`i hisoblanmaydi — muddat qo'lda
+   `reja` sifatida qo'yiladi.
    Aniq bo'lmasa ham kiriting: muddat bashorati shusiz ishlamaydi, real fakt
    yig'ilgach bu qiymatlar avtomatik ustunlikni yo'qotadi.
 5. `/mijozlar.html` — mijozlar ro'yxatini import qiling.
