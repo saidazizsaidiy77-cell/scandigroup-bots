@@ -106,14 +106,23 @@ Pul yoki ombor tegadigan amallarda `audit(req, {...})` chaqiriladi.
 
 ## Modullar
 
+Modul nomi va sahifalar ro'yxati bitta joyda — `public/app.js` dagi `MODULES`
+va `PAGES`. Menyu ham, bosh sahifadagi kartochkalar ham shundan chiziladi.
+"Ishlayaptimi yoki rejadami" alohida yozilmaydi: moduldan xodimga ochiq
+sahifa bo'lsa — ishlayapti. Shuning uchun menyu bilan kartochka hech qachon
+qarama-qarshi bo'lmaydi.
+
 | Modul | Holat | Nima bo'ladi |
 |---|---|---|
 | **Ishlab chiqarish** | ✅ ishlayapti | Tsex/bo'lim, marshrut, WIP, komplektlilik, muddat bashorati |
+| **Savdo** | ⚙️ qisman | Mijozlar va kanal tahlili bor; zakaz, jo'natma, debitorlik rejada |
+| **Hisobotlar** | ✅ ishlayapti | Zavod ko'rinishi, boshqaruv paneli |
+| **Ma'lumotnomalar** | ✅ ishlayapti | Katalog, bo'lim quvvati |
+| **Xodimlar va ish haqi** | ⚙️ qisman | Xodim, rol va PIN bor; davomat, ishbay hisob, to'lov rejada |
 | **Ombor** | rejada | Xom ashyo va tayyor mahsulot: kirim, chiqim, qoldiq, inventarizatsiya |
 | **Ta'minot** | rejada | Ta'minotchilar, buyurtmalar, kirim hujjatlari, qarzdorlik |
-| **Savdo** | rejada | Mijozlar, zakazlar, jo'natma, debitorlik |
-| **Kassa** | rejada | Kirim/chiqim, kun yopish, hisobotlar |
-| **Maosh** | rejada | Xodim, davomat, ishbay hisob, to'lov |
+| **Bank va kassa** | rejada | Kirim/chiqim, kun yopish, hisobotlar |
+| **Asosiy vositalar** | rejada | `assets.*` huquqlari hali yaratilmagan — modul menyuda ko'rinmaydi |
 
 Ishlab chiqarish moduli maosh uchun poydevorni allaqachon yozib boradi:
 `flow_log` da kim, qaysi bo'limda, nechta dona qilgani turadi — ishbay

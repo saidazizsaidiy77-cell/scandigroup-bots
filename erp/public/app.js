@@ -102,17 +102,28 @@ const App = (() => {
   // Hali yozilmagan modul ham ko'rinadi: rahbar tizim qayerga o'sishini
   // ko'rib tursin. Bosilmaydi va "rejada" deb belgilanadi — ochilmaydigan
   // havola ochilmaydigan havoladan yomonroq.
+  // Modul ro'yxati BITTA joyda: menyu ham, bosh sahifadagi kartochkalar ham
+  // shundan chiziladi. Ilgari nomlar bu yerda ham, server.js da ham yozilgan
+  // edi — natijada bitta modul bitta ekranda ikki xil atalardi
+  // ("Sotib olish" / "Ta'minot"). Endi nom faqat shu ro'yxatda.
+  //
+  //   perm  — bo'sh bo'lsa hammaga ochiq; aks holda sanalganidan bittasi yetarli.
+  //
+  // "Ishlayaptimi yoki rejadami" bu yerda yozilmaydi — u sahifalar
+  // ro'yxatidan chiqadi: moduldan xodimga ochiq sahifa bo'lsa, modul
+  // ishlayapti. Shu sabab menyu bilan bosh sahifadagi kartochka hech qachon
+  // qarama-qarshi bo'lmaydi: kulrang modul kartochkada ham "rejada" turadi.
   const MODULES = [
-    { code: 'main',       name: 'Asosiy',             perm: [] },
-    { code: 'cash',       name: 'Bank va kassa',      perm: ['cash.view', 'cash.entry', 'cash.manage'] },
-    { code: 'sales',      name: 'Savdo',              perm: ['sales.view', 'sales.manage'] },
-    { code: 'purchasing', name: 'Sotib olish',        perm: ['purchasing.view', 'purchasing.manage'] },
-    { code: 'warehouse',  name: 'Ombor',              perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
-    { code: 'production', name: 'Ishlab chiqarish',   perm: ['production.view', 'production.entry', 'production.units', 'production.manage'] },
-    { code: 'assets',     name: 'Asosiy vositalar',   perm: ['assets.view', 'assets.manage'] },
-    { code: 'payroll',    name: 'Oylik va xodimlar',  perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
-    { code: 'reports',    name: 'Hisobotlar',         perm: ['production.view'] },
-    { code: 'refs',       name: "Ma'lumotlar",        perm: ['production.manage'] },
+    { code: 'main',       name: 'Bosh sahifa',          perm: [] },
+    { code: 'cash',       name: 'Bank va kassa',        perm: ['cash.view', 'cash.entry', 'cash.manage'] },
+    { code: 'sales',      name: 'Savdo',                perm: ['sales.view', 'sales.manage'] },
+    { code: 'purchasing', name: "Ta'minot",             perm: ['purchasing.view', 'purchasing.manage'] },
+    { code: 'warehouse',  name: 'Ombor',                perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
+    { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage'] },
+    { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
+    { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
+    { code: 'reports',    name: 'Hisobotlar',           perm: ['production.view'] },
+    { code: 'refs',       name: "Ma'lumotnomalar",      perm: ['production.manage'] },
   ];
 
 
@@ -236,5 +247,7 @@ const App = (() => {
   }
 
   return { api, download, can, start, logout, me: () => me, pages,
-           modules: () => MODULES.filter((m) => !m.perm.length || can(...m.perm)) };
+           modules: () => MODULES
+             .filter((m) => !m.perm.length || can(...m.perm))
+             .map((m) => ({ ...m, ready: pages().some((p) => p.mod === m.code) })) };
 })();

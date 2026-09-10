@@ -45,8 +45,10 @@ App.start(async () => {
           <p class="muted" style="margin-top:8px">${p.text}</p></a>`).join('')}</div>
     </section>`).join('');
 
-  const mods = await App.api('/api/modules');
-  $('modules').innerHTML = mods.map(m => `
+  // Modul ro'yxati app.js dan olinadi — nom bitta joyda yozilgan.
+  // Ro'yxat huquq bo'yicha allaqachon filtrlangan, "Bosh sahifa" esa
+  // modul emas, shuning uchun kartochkalar orasida ko'rsatilmaydi.
+  $('modules').innerHTML = App.modules().filter(m => m.code !== 'main').map(m => `
     <div class="card" style="background:var(--surface-2)">
       <div class="row" style="justify-content:space-between">
         <strong>${m.name}</strong>

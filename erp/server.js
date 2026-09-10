@@ -33,20 +33,11 @@ app.use('/api/catalog', require('./modules/catalog'));
 // app.use('/api/cash',       require('./modules/cash'));        // kassa
 // app.use('/api/payroll',    require('./modules/payroll'));     // maosh
 
-// Foydalanuvchiga qaysi modullar ochiq — front shunga qarab menyu chizadi
-app.get('/api/modules', (req, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Kirish talab qilinadi' });
-  const has = (p) => req.user.permissions.includes(p);
-  res.json([
-    { code: 'production', name: 'Ishlab chiqarish', ready: true,
-      open: has('production.view') || has('production.entry') },
-    { code: 'warehouse',  name: 'Ombor',            ready: false, open: has('warehouse.view') },
-    { code: 'purchasing', name: "Ta'minot",         ready: false, open: has('purchasing.view') },
-    { code: 'sales',      name: 'Savdo va mijozlar',ready: false, open: has('sales.view') },
-    { code: 'cash',       name: 'Kassa',            ready: false, open: has('cash.view') },
-    { code: 'payroll',    name: 'Maosh',            ready: false, open: has('payroll.view') },
-  ].filter((m) => m.open));
-});
+// Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:
+// menyu sahifa ochilishi bilan chiziladi, ya'ni nom klientda baribir kerak.
+// Ikki joyda saqlanganda esa bitta modul bitta ekranda ikki xil atalib
+// qolgan edi. Kimga nima ochiqligini xodimning huquqlari hal qiladi —
+// ular `/api/auth/me` javobida keladi.
 
 // Qaysi versiya ishlayotganini brauzerdan ko'rish uchun: /health ni ochib
 // commit raqamiga qarash kifoya. "Deploy o'tdimi yoki brauzer eskisini
