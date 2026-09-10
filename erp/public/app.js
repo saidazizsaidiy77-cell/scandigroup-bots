@@ -74,6 +74,126 @@ const App = (() => {
     } catch { return false; }
   }
 
+
+
+  // ASOSIY BO'LIMLAR — saytning yuqori qatori.
+  //
+  // Tartib zavod ishiga qarab: pul, sotuv, ombor, ishlab chiqarish, mulk.
+  // Modul "tayyor" deb hisoblanadi, agar unga tegishli sahifa bo'lsa —
+  // alohida bayroq yuritilmaydi, chunki u ro'yxatdan ajralib ketardi.
+  //
+  // Hali yozilmagan modul ham ko'rinadi: rahbar tizim qayerga o'sishini
+  // ko'rib tursin. Bosilmaydi va "rejada" deb belgilanadi — ochilmaydigan
+  // havola ochilmaydigan havoladan yomonroq.
+  const MODULES = [
+    { code: 'main',       name: 'Asosiy',             perm: [] },
+    { code: 'cash',       name: 'Bank va kassa',      perm: ['cash.view', 'cash.entry', 'cash.manage'] },
+    { code: 'sales',      name: 'Savdo',              perm: ['sales.view', 'sales.manage'] },
+    { code: 'purchasing', name: 'Sotib olish',        perm: ['purchasing.view', 'purchasing.manage'] },
+    { code: 'warehouse',  name: 'Ombor',              perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
+    { code: 'production', name: 'Ishlab chiqarish',   perm: ['production.view', 'production.entry', 'production.units', 'production.manage'] },
+    { code: 'assets',     name: 'Asosiy vositalar',   perm: ['assets.view', 'assets.manage'] },
+    { code: 'payroll',    name: 'Oylik va xodimlar',  perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
+    { code: 'reports',    name: 'Hisobotlar',         perm: ['production.view'] },
+    { code: 'refs',       name: "Ma'lumotlar",        perm: ['production.manage'] },
+  ];
+
+
+  // Sahifalar ro'yxati BITTA joyda: har sahifadagi navigatsiya ham, bosh
+  // sahifadagi kartochkalar ham shundan chiziladi. Yangi sahifa qo'shilganda
+  // shu ro'yxatga bitta qator qo'shiladi, qolgani o'zi ishlaydi.
+  //
+  // perm bo'sh bo'lsa sahifa hammaga ochiq; aks holda sanab o'tilgan
+  // huquqlardan bittasi yetarli.
+  const PAGES = [
+    { href: '/', mod: 'main', nav: 'Bosh sahifa', perm: [] },
+    { href: '/jurnal.html', mod: 'production', nav: 'Jurnal',
+      title: 'Ishlab chiqarish jurnali', lead: 'Konveyer raqami bo\'yicha',
+      text: "Har mahsulot: bosh sana, K\u2116, Z\u2116, rang, mato, tsex, bo'lim, mijoz, narx, muddatlar",
+      perm: ['production.view'] },
+    { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
+      title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',
+      text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",
+      perm: ['production.units', 'production.manage'] },
+    { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
+      title: "Zavod ko'rinishi", lead: 'Nima qayerda',
+      text: "Har mahsulot qaysi tsex va bo'limda \u00b7 qachon keyingi tsexga o'tadi \u00b7 qachon omborga kiradi",
+      perm: ['production.view'] },
+    { href: '/dashboard.html', mod: 'reports', nav: 'Panel',
+      title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",
+      text: "Reja/fakt \u00b7 bottleneck \u00b7 komplektlilik \u00b7 umumiy tsex yuklamasi \u00b7 Pareto",
+      perm: ['production.view'] },
+    { href: '/smena.html', mod: 'production', nav: 'Smena',
+      title: 'Smena kiritish', lead: 'Tsex boshliqlari uchun',
+      text: "Bir tsexning barcha bo'limlari bo'yicha kunlik ma'lumotni bitta jadvalda kiritish",
+      perm: ['production.entry'] },
+    { href: '/terminal.html', mod: 'production', nav: 'Terminal',
+      title: "Bo'lim terminali", lead: 'Tsex planshetlari',
+      text: "Dona qayd etish \u00b7 brak \u00b7 to'xtash \u00b7 kamera partiyasi",
+      perm: ['production.entry'] },
+    { href: '/mijozlar.html', mod: 'sales', nav: 'Mijozlar',
+      title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
+      text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
+      perm: ['production.view', 'sales.view'] },
+    { href: '/katalog.html', mod: 'refs', nav: 'Katalog',
+      title: 'Katalog', lead: 'Mahsulot nomi va guruhi',
+      text: "Fason, guruh va marshrut \u2014 yangi mahsulot qo'shish uchun kod tegilmaydi",
+      perm: ['production.manage'] },
+    { href: '/sozlamalar.html', mod: 'refs', nav: "Bo'lim quvvati",
+      title: "Bo'lim quvvati", lead: 'Muddat bashorati',
+      text: "Har bo'limning kunlik quvvati \u2014 muddat hisobi shunga tayanadi",
+      perm: ['production.manage'] },
+    { href: '/xodimlar.html', mod: 'payroll', nav: 'Xodimlar',
+      title: 'Xodimlar', lead: 'Rollar va kirish',
+      text: "Xodim qo'shish, PIN berish, rol va tsex biriktirish",
+      perm: ['admin.users'] },
+  ];
+
+  // Xodimga ochiq sahifalar
+  const pages = () => PAGES.filter((p) => !p.perm.length || can(...p.perm));
+
+  // Har sahifada bir xil navigatsiya: yuqorida asosiy bo'limlar, ostida
+  // shu bo'limning sahifalari. Ilgari sahifalar bir-biriga bog'lanmagan edi
+  // va har biriga alohida manzil bilan kirilardi — xodim uchun bu ishlamaydi.
+  function drawNav() {
+    const top = document.querySelector('.top');
+    if (!top || document.querySelector('.nav')) return;
+
+    const here = location.pathname === '/index.html' ? '/' : location.pathname;
+    const open = pages();
+    // Qaysi bo'limdamiz: shu sahifaning moduli
+    const active = (PAGES.find((p) => p.href === here) || {}).mod || null;
+
+    // Xodim faqat o'ziga biriktirilgan bo'limlarni ko'radi. Huquqi yo'q
+    // bo'lim umuman chizilmaydi — "rejada" deb ko'rsatish ham ortiqcha:
+    // kassirga ishlab chiqarish bo'limi hech qachon kerak bo'lmaydi.
+    const mods = MODULES
+      .filter((m) => !m.perm.length || can(...m.perm))
+      .map((m) => {
+        const first = open.find((p) => p.mod === m.code);
+        // Huquqi bor, lekin sahifasi hali yozilmagan bo'lim
+        if (!first) return `<span class="soon" title="Bu bo'lim hali yozilmagan">${m.name}</span>`;
+        return `<a href="${first.href}"${m.code === active ? ' class="on"' : ''}>${m.name}</a>`;
+      }).join('');
+
+    // Faol bo'limning sahifalari. Bo'limda bitta sahifa bo'lsa ikkinchi
+    // qator ortiqcha — ko'rsatilmaydi.
+    const sub = active ? open.filter((p) => p.mod === active) : [];
+    const subRow = sub.length > 1
+      ? `<nav class="nav sub">${sub.map((p) =>
+          `<a href="${p.href}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`).join('')}</nav>`
+      : '';
+
+    top.insertAdjacentHTML('afterend', `<nav class="nav mods">${mods}</nav>${subRow}`);
+
+    // Sarlavha bosh sahifaga olib borsin — odam avval shuni bosadi
+    const brand = top.querySelector('.brand');
+    if (brand && here !== '/') {
+      brand.style.cursor = 'pointer';
+      brand.onclick = () => { location.href = '/'; };
+    }
+  }
+
   // Sahifa shu bilan boshlanadi:
   //   App.start(me => { ... }, 'production.view')
   async function start(onReady, ...required) {
@@ -94,8 +214,10 @@ const App = (() => {
     if (slot) slot.innerHTML =
       `<span class="muted">${me.name}${me.roles[0] ? ' · ' + me.roles[0].name : ''}</span>
        <button onclick="App.logout()">Chiqish</button>`;
+    drawNav();
     onReady(me);
   }
 
-  return { api, can, start, logout, me: () => me };
+  return { api, can, start, logout, me: () => me, pages,
+           modules: () => MODULES.filter((m) => !m.perm.length || can(...m.perm)) };
 })();

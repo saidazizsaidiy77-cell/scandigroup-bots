@@ -15,7 +15,7 @@
   <div class="row" id="erpUser"></div>
 </div>
 
-<div class="grid g3" id="pages"></div>
+<div id="pages"></div>
 
 <div class="card" style="margin-top:16px">
   <h2>Modullar</h2>
@@ -25,45 +25,25 @@
 <script>
 const $ = id => document.getElementById(id);
 
-const PAGES = [
-  { href:'/jurnal.html', title:'Ishlab chiqarish jurnali', lead:'Konveyer raqami bo\'yicha',
-    text:"Har mahsulot: sana, konveyer №, zakaz №, tsex, bo'lim, mijoz, narx, muddatlar",
-    perm:['production.view'] },
-  { href:'/qoldiq.html', title:"Boshlang'ich qoldiq", lead:'Bir martalik kiritish',
-    text:"Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",
-    perm:['production.units','production.manage'] },
-  { href:'/mijozlar.html', title:'Mijozlar', lead:'Ro\'yxat va kanal tahlili',
-    text:"Mijoz nomi, region, telefon, kanal · qaysi kanal qancha sotuv keltirdi",
-    perm:['production.view'] },
-  { href:'/zavod.html', title:"Zavod ko'rinishi", lead:'Nima qayerda',
-    text:"Har mahsulot qaysi tsex va bo'limda · qachon keyingi tsexga o'tadi · qachon omborga kiradi",
-    perm:['production.view'] },
-  { href:'/dashboard.html', title:'Boshqaruv paneli', lead:"Ko'rsatkichlar",
-    text:"Reja/fakt · bottleneck · komplektlilik · umumiy tsex yuklamasi · Pareto",
-    perm:['production.view'] },
-  { href:'/smena.html', title:'Smena kiritish', lead:'Tsex boshliqlari uchun',
-    text:"Bir tsexning barcha bo'limlari bo'yicha kunlik ma'lumotni bitta jadvalda kiritish",
-    perm:['production.entry'] },
-  { href:'/terminal.html', title:"Bo'lim terminali", lead:'Tsex planshetlari',
-    text:"Dona qayd etish · brak · to'xtash · kamera partiyasi",
-    perm:['production.entry'] },
-  { href:'/xodimlar.html', title:'Xodimlar', lead:'Rollar va kirish',
-    text:"Xodim qo'shish, PIN berish, rol va tsex biriktirish",
-    perm:['admin.users'] },
-  { href:'/katalog.html', title:'Katalog', lead:'Mahsulot nomi va guruhi',
-    text:"Fason, guruh va marshrut \u2014 yangi mahsulot qo'shish uchun kod tegilmaydi",
-    perm:['production.manage'] },
-  { href:'/sozlamalar.html', title:'Bo\'lim quvvati', lead:'Muddat bashorati',
-    text:"Har bo'limning kunlik quvvati — muddat hisobi shunga tayanadi",
-    perm:['production.manage'] },
-];
 
 App.start(async () => {
-  $('pages').innerHTML = PAGES.filter(p => App.can(...p.perm)).map(p => `
-    <a class="card" href="${p.href}" style="text-decoration:none;color:inherit">
-      <h2>${p.title}</h2>
-      <p style="font-size:18px;font-weight:500">${p.lead}</p>
-      <p class="muted" style="margin-top:8px">${p.text}</p></a>`).join('');
+  // Bosh sahifa bo'limlar bo'yicha guruhlanadi — yuqoridagi qator bilan
+  // bir xil tartibda, shunda xodim qayerda nima turishini bir marta eslab
+  // qoladi. Faqat o'ziga ochiq bo'lim va sahifalar chiqadi.
+  const open = App.pages().filter(p => p.title);
+  const groups = App.modules()
+    .map(m => ({ m, list: open.filter(p => p.mod === m.code) }))
+    .filter(g => g.list.length);
+
+  $('pages').innerHTML = groups.map(g => `
+    <section style="margin-bottom:26px">
+      <h2>${g.m.name}</h2>
+      <div class="grid g3">${g.list.map(p => `
+        <a class="card" href="${p.href}" style="text-decoration:none;color:inherit">
+          <h2>${p.title}</h2>
+          <p style="font-size:18px;font-weight:500">${p.lead}</p>
+          <p class="muted" style="margin-top:8px">${p.text}</p></a>`).join('')}</div>
+    </section>`).join('');
 
   const mods = await App.api('/api/modules');
   $('modules').innerHTML = mods.map(m => `

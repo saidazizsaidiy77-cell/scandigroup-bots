@@ -104,3 +104,26 @@ tr.click:hover td{background:var(--surface-2)}
 .src-taxmin{color:var(--muted);font-style:italic}
 .late{color:var(--bad)}
 .scroll{overflow-x:auto;overflow-y:visible}
+
+/* Navigatsiya — ikki qavat: asosiy bo'limlar, ostida sahifalar.
+   Tsex planshetida ham sig'ishi uchun gorizontal siljiydi. */
+.nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a,.nav .soon{white-space:nowrap;text-decoration:none;border-radius:9px;
+  border:1px solid transparent;transition:.15s}
+
+/* Asosiy bo'limlar */
+.nav.mods{margin:-10px 0 14px;padding-bottom:6px;
+  border-bottom:1px solid var(--line)}
+.nav.mods a,.nav.mods .soon{font-size:15px;padding:9px 15px}
+.nav.mods a{color:var(--muted)}
+.nav.mods a:hover{color:var(--text);background:var(--surface)}
+.nav.mods a.on{color:var(--text);background:var(--surface-2);border-color:var(--line)}
+/* Hali yozilmagan bo'lim — ko'rinadi, lekin bosilmaydi */
+.nav.mods .soon{color:var(--line);cursor:default}
+
+/* Faol bo'limning sahifalari */
+.nav.sub{margin:0 0 22px;padding-bottom:6px}
+.nav.sub a{font-size:14px;padding:7px 13px;color:var(--muted)}
+.nav.sub a:hover{color:var(--text);background:var(--surface)}
+.nav.sub a.on{color:var(--text);background:var(--surface-2);border-color:var(--line)}
