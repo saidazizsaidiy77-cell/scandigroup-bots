@@ -28,7 +28,13 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
                  -- Guruh tartibi saytdan qo'yiladi (product_groups.sort),
                  -- shuning uchun ro'yxat kod bo'yicha emas, shu tartibda
                  -- chiqadi: Penal · Kamod · Sp · Stol · Stul
-                 WHERE p.active ORDER BY g.sort, g.code, p.name`),
+                 --
+                 -- O'lcham oxirgi tartib: stolda bitta fason oltita
+                 -- uzunlikda, ular 3,5 → 6 m bo'lib ketma-ket tursin.
+                 -- Matn tartibi shu yozuvda to'g'ri ishlaydi ("4 m" < "4,5 m",
+                 -- chunki bo'shliq vergulda oldin turadi).
+                 WHERE p.active
+                 ORDER BY g.sort, g.code, p.name, p.size_label NULLS FIRST`),
       db.query(`SELECT * FROM chambers WHERE active ORDER BY name`),
       db.query(`SELECT * FROM defect_reasons ORDER BY sort`),
       db.query(`SELECT * FROM downtime_reasons ORDER BY sort`),

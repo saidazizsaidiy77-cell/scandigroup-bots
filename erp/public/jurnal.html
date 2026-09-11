@@ -236,7 +236,8 @@ function render(){
         : '<span class="pad"></span>'}<strong>${esc(r.conveyor_no)}</strong></td>
       <td class="muted">${d8(r.started_on)}</td>
       <td>${r.order_no ? esc(r.order_no) : '<span class="muted">—</span>'}</td>
-      <td class="sep">${esc(r.product)}</td>
+      <td class="sep">${esc(r.product)}${r.size_label
+        ? ` <span class="muted">${esc(r.size_label)}</span>` : ''}</td>
       <td class="muted">${esc(r.product_type)}</td>
       <td>${r.color ? esc(r.color) : '<span class="muted">—</span>'}</td>
       <td>${r.fabric ? esc(r.fabric) : '<span class="muted">—</span>'}</td>

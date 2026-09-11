@@ -27,11 +27,18 @@ UPDATE product_groups g SET route_template_id = t.rt
 -- Katalog jadvali: qaysi fason qaysi guruhda mavjud, nechta birlik kiritilgan.
 -- Birligi bor mahsulotni faolsizlantirish mumkin, o'chirish esa mumkin emas —
 -- sahifa shu ustunga qarab qaror qiladi.
-CREATE OR REPLACE VIEW v_catalog AS
+--
+-- DROP + CREATE, CREATE OR REPLACE emas: replace ustunni faqat oxiriga
+-- qo'sha oladi — o'rtaga qo'yib ham, nomini o'zgartirib ham bo'lmaydi.
+-- (Shu xato bir marta tutilgan: `size_label` o'rtaga qo'shilganda mavjud
+-- bazada migratsiya "cannot change name of view column" bilan yiqilgan.)
+-- Unga bog'liq boshqa view yo'q, shuning uchun DROP xavfsiz.
+DROP VIEW IF EXISTS v_catalog;
+CREATE VIEW v_catalog AS
 SELECT p.id, p.sku, p.name, p.active, p.is_set,
        p.group_id, g.name AS group_name, g.code AS group_code,
        p.fason_id, f.name AS fason_name,
-       p.route_template_id, rt.name AS route_name,
+       p.route_template_id, rt.name AS route_name, p.size_label,
        (SELECT COUNT(*) FROM production_units u WHERE u.product_id = p.id) AS units
 FROM products p
 JOIN product_groups g       ON g.id = p.group_id

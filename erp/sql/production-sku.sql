@@ -2,7 +2,8 @@
 --  MAHSULOT KATALOGI: fason va SKU
 --  production-seed.sql va catalog-groups.sql dan KEYIN ishga tushiriladi.
 --
---  17 fason × 5 guruh = 42 SKU. Bir fason bir nechta guruhda uchraydi
+--  17 fason × 5 guruh. Stol uzunlik bo'yicha ham bo'linadi (7 × 6 = 42),
+--  shuning uchun jami 77 SKU. Bir fason bir nechta guruhda uchraydi
 --  (Laura → penal, kamod, sp, stol, stul) — shuning uchun fason alohida
 --  spravochnik, SKU esa "fason + guruh".
 -- ============================================================================
@@ -79,25 +80,50 @@ JOIN fasons f ON f.code = v.fason
 ON CONFLICT (sku) DO NOTHING;
 
 -- ------------------------------------------------------------------- STOLLAR
--- Yakka mahsulot: marshrut bevosita biriktiriladi.
--- Boshlang'ich shablon — L1-FULL. Fason bo'yicha real marshrut
--- aniqlangach o'zgartiriladi (pastdagi izohga qarang).
-INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set)
-SELECT v.sku, f.name,
+--
+--  Stol uzunligi bo'yicha ham bo'linadi: har fason 3,5 m dan 6 m gacha
+--  oltita o'lchamda chiqadi. Har o'lcham ALOHIDA mahsulot — narxi boshqa
+--  va omborda alohida turadi.
+--
+--  7 fason × 6 o'lcham = 42 SKU. Ro'yxat qo'lda yozilmaydi, ikkita
+--  jadvalning kesishmasidan chiqadi: yangi o'lcham qo'shilsa bitta qator
+--  yetarli.
+--
+--  Yakka mahsulot: marshrut bevosita biriktiriladi. Boshlang'ich shablon —
+--  L1-FULL. Fason bo'yicha real marshrut aniqlangach o'zgartiriladi
+--  (pastdagi izohga qarang).
+INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set, size_label)
+SELECT 'STL-' || f.code || '-' || z.code, f.name,
        (SELECT id FROM product_groups WHERE code='STL'),
        f.id,
-       (SELECT id FROM route_templates WHERE code='L1-FULL'), false
+       (SELECT id FROM route_templates WHERE code='L1-FULL'), false, z.label
 FROM (VALUES
-  ('STL-SAFIA', 'SAFIA'),
-  ('STL-SULTAN', 'SULTAN'),
-  ('STL-LAURA', 'LAURA'),
-  ('STL-ELIZABETTA', 'ELIZABETTA'),
-  ('STL-OWEN', 'OWEN'),
-  ('STL-SHEIKH', 'SHEIKH'),
-  ('STL-BAROCCO', 'BAROCCO')
-) AS v(sku, fason)
+  ('SAFIA'), ('SULTAN'), ('LAURA'), ('ELIZABETTA'),
+  ('OWEN'), ('SHEIKH'), ('BAROCCO')
+) AS v(fason)
 JOIN fasons f ON f.code = v.fason
+CROSS JOIN (VALUES
+  ('35', '3,5 m'), ('40', '4 m'),   ('45', '4,5 m'),
+  ('50', '5 m'),   ('55', '5,5 m'), ('60', '6 m')
+) AS z(code, label)
 ON CONFLICT (sku) DO NOTHING;
+
+--  O'lchamsiz eski stol mahsulotlari (STL-SAFIA va h.k.) o'rnini shular
+--  egalladi. O'chirilmaydi — ularda kiritilgan birlik bo'lishi mumkin,
+--  o'chirilsa jurnal tarixi buziladi. Faolsizlantiriladi: yangi kiritishda
+--  ro'yxatda ko'rinmaydi, eski yozuvlar joyida qoladi.
+--
+--  Bir marta bajariladi: saytdan qayta yoqilgan bo'lsa keyingi deploy uni
+--  yana o'chirib qo'ymasligi kerak.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'stol-olchamlari') THEN
+    UPDATE products SET active = false
+     WHERE group_id = (SELECT id FROM product_groups WHERE code = 'STL')
+       AND size_label IS NULL;
+    INSERT INTO migration_flags (key) VALUES ('stol-olchamlari');
+  END IF;
+END $$;
 
 -- ------------------------------------------------------------------- STULLAR
 INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set)

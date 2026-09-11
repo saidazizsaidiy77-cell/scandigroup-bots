@@ -65,7 +65,8 @@ router.get('/', need('production.view', 'production.manage'), wrap(async (_req, 
     db.query(`SELECT f.*,
                      (SELECT COUNT(*) FROM products p WHERE p.fason_id = f.id) AS products
                 FROM fasons f ORDER BY f.sort, f.name`),
-    db.query(`SELECT * FROM v_catalog ORDER BY group_name, name`),
+    db.query(`SELECT * FROM v_catalog
+                  ORDER BY group_name, name, size_label NULLS FIRST`),
     db.query(`SELECT * FROM lines ORDER BY sort`),
     db.query(`SELECT id, code, name, line_id FROM route_templates ORDER BY code`),
   ]);
@@ -186,6 +187,8 @@ router.patch('/fasons/:id', need('production.manage'), wrap(async (req, res) => 
 
 // ──────────────────────────────────────────────────────────── MAHSULOT (SKU)
 // Fason × guruh kesishmasi. Sahifadagi katakcha belgilanganda yaratiladi.
+// Guruhda o'lcham bo'lsa (stol — oltita uzunlik), katakcha bittasini emas,
+// barcha o'lchamlarni birdan yaratadi.
 router.post('/products', need('production.manage'), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   const client = await db.connect();
@@ -200,17 +203,30 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
         `SELECT * FROM fasons WHERE id = $1`, [it.fason_id])).rows[0];
       if (!f) throw new Error('Mahsulot nomi topilmadi');
 
+      // Guruhda o'lcham ishlatiladimi — shu guruhning mavjud mahsulotlaridan
+      // bilinadi. Stolda oltita uzunlik bor, demak yangi fason ham oltita
+      // mahsulot bo'lib yaratiladi: xodim ularni bittalab kiritmaydi.
+      const sizes = (await client.query(
+        `SELECT DISTINCT size_label FROM products
+          WHERE group_id = $1 AND size_label IS NOT NULL ORDER BY size_label`,
+        [g.id])).rows.map((r) => r.size_label);
+
       // Mahsulot nomi — FAQAT fason. Turi guruh ustunida alohida turadi,
-      // shuning uchun nomga takrorlab yozilmaydi.
-      const sku = `${g.code}-${f.code}`;
-      const { rows } = await client.query(
-        `INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set)
-         VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (sku) DO UPDATE SET active = true, name = EXCLUDED.name
-         RETURNING id, sku, name`,
-        [sku, f.name, g.id, f.id, it.route_template_id || g.route_template_id || null,
-         it.is_set == null ? g.is_set : !!it.is_set]);
-      saved.push(rows[0]);
+      // shuning uchun nomga takrorlab yozilmaydi. O'lcham esa o'z ustunida.
+      for (const size of (sizes.length ? sizes : [null])) {
+        // O'lcham kodi SKU ga qo'shiladi: "4,5 m" → 45
+        const sku = size
+          ? `${g.code}-${f.code}-${size.replace(/[^0-9]/g, '').padEnd(2, '0')}`
+          : `${g.code}-${f.code}`;
+        const { rows } = await client.query(
+          `INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set, size_label)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (sku) DO UPDATE SET active = true, name = EXCLUDED.name
+           RETURNING id, sku, name, size_label`,
+          [sku, f.name, g.id, f.id, it.route_template_id || g.route_template_id || null,
+           it.is_set == null ? g.is_set : !!it.is_set, size]);
+        saved.push(rows[0]);
+      }
     }
     await audit(req, { module: 'production', action: 'create', entity: 'product',
                        entity_id: saved.length, payload: { count: saved.length } }, client);

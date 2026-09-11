@@ -284,6 +284,12 @@ belgi bir katakda bo'lmasligi kerak.
 - **Rang va Mato** — birlikning o'zida, SKU da emas: bitta fason har xil
   rangda va matoda chiqadi. Ro'yxat oldindan tuzilmaydi — kiritilgani o'zi
   yig'iladi va keyingi safar tanlash uchun taklif qilinadi.
+- **O'lcham** — aksincha, SKU ning bir qismi. Stol har fasonda 3,5 m dan
+  6 m gacha oltita uzunlikda chiqadi va ularning har biri alohida mahsulot:
+  narxi boshqa, omborda alohida turadi — "3 dona stol bor" degan gap
+  uzunliksiz ma'no bermaydi. Rangdan farqi shu: rang birlikning belgisi,
+  o'lcham esa mahsulotning o'zini o'zgartiradi. 7 fason × 6 o'lcham =
+  **42 stol SKU**, jami 77.
 - **Lak tsehi · Qadoqlash tsehi · T/M ombor** — uchalasi bir mantiqda
   ishlaydi:
   `fakt` — birlik o'sha tsexga o'tganda tizim o'zi yozadi;
@@ -427,7 +433,7 @@ o'chirish yoki o'zgartirish** (`/xodimlar.html`).
 
 ## Birinchi kun tartibi
 
-1. `npm run erp:migrate` — baza tayyor bo'ladi (4 tsex, 24 bo'lim, 42 SKU).
+1. `npm run erp:migrate` — baza tayyor bo'ladi (4 tsex, 24 bo'lim, 77 SKU).
 2. `/katalog.html` — o'z mahsulot nomlari va guruhlaringizni kiriting.
    Ishlatmaydigan fason va guruhlarni yashiring.
 3. `/xodimlar.html` — xodimlarni kiriting, PIN bering, rol biriktiring.

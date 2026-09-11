@@ -206,6 +206,7 @@ const EXPORT_COLUMNS = [
   ['Zakaz raqami',     (r) => r.order_no],
   ['Maxsulot nomi',    (r) => r.product],
   ['Maxsulot guruhi',  (r) => r.product_type],
+  ["O'lcham",          (r) => r.size_label],
   ['Rang',             (r) => r.color],
   ['Mato',             (r) => r.fabric],
   ['Soni',             (r) => r.qty],

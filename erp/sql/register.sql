@@ -93,6 +93,7 @@ SELECT
   u.conveyor_no,
   u.order_no,
   p.name  AS product,
+  p.size_label,                                   -- stol uzunligi; boshqalarda NULL
   p.sku,
   g.name  AS product_type,                        -- mahsulot turi (guruh)
   -- Jurnal guruh va fason bo'yicha filtrlanadi. Nom bo'yicha emas, id

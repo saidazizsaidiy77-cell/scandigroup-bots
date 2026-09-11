@@ -168,8 +168,10 @@ function addRow(k = 1){
 function fillGroup(sel){
   const tr = sel.closest('tr');
   const list = sel.value ? (byFason.get(sel.value) || []) : [];
+  // Stolda bitta fason oltita uzunlikda bor — guruh nomi yolg'iz yetmaydi
   tr.querySelector('.c-group').innerHTML = list.length
-    ? list.map(p => `<option value="${p.id}">${esc(p.group_name)}</option>`).join('')
+    ? list.map(p => `<option value="${p.id}">${esc(p.group_name)}${
+        p.size_label ? ' · ' + esc(p.size_label) : ''}</option>`).join('')
     : '<option value="">—</option>';
   sum();
 }

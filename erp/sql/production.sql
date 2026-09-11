@@ -137,6 +137,17 @@ ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS route_template_id INT
 
 ALTER TABLE fasons ADD COLUMN IF NOT EXISTS sort INT NOT NULL DEFAULT 0;
 
+-- Mahsulot o'lchami. Bitta fason bir nechta o'lchamda chiqadigan guruhlar
+-- uchun: stol "Safia" 3,5 m dan 6 m gacha oltita uzunlikda yasaladi va
+-- ularning har biri ALOHIDA mahsulot — narxi boshqa, omborda alohida
+-- turadi, "3 dona stol bor" degan gap uzunliksiz ma'no bermaydi.
+--
+-- Rang va matodan farqi shu: ular birlikning belgisi (bitta fason har xil
+-- rangda chiqaveradi), o'lcham esa mahsulotning o'zini o'zgartiradi.
+--
+-- O'lchami yo'q guruhlarda (penal, kamod, sp, stul) NULL bo'lib qoladi.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS size_label TEXT;
+
 CREATE TABLE IF NOT EXISTS set_items (
   set_product_id  INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   item_product_id INT NOT NULL REFERENCES products(id),

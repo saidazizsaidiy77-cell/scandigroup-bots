@@ -235,31 +235,44 @@ function drawGrid(){
       Avval kamida bitta guruh va bitta mahsulot nomi kiriting.</td></tr>`;
     return;
   }
-  const key = (f, g) => cat.products.find(p => p.fason_id === f && p.group_id === g);
+  // Bitta katakda bir nechta mahsulot bo'lishi mumkin: stolda har fason
+  // oltita uzunlikda. Katak ularning hammasini birgalikda boshqaradi.
+  const key = (f, g) => cat.products.filter(p => p.fason_id === f && p.group_id === g);
   $('grid').innerHTML = `
     <thead><tr><th>Nom</th>
       ${groups.map(g => `<th>${esc(g.name)}</th>`).join('')}</tr></thead>
     <tbody>${fasons.map(f => `
       <tr><td>${esc(f.name)}</td>
         ${groups.map(g => {
-          const p = key(f.id, g.id);
-          const on = p && p.active;
-          return `<td><button class="cell ${on ? 'on' : ''} ${p?.units > 0 ? 'used' : ''}"
-            title="${p ? esc(p.sku) + (p.units ? ` · ${p.units} birlik` : '') : 'yaratilmagan'}"
-            ${canManage() ? `onclick="toggleCell(${f.id},${g.id},${p ? p.id : 0},${on ? 1 : 0})"`
+          const list = key(f.id, g.id);
+          const on = list.some(p => p.active);
+          const units = list.reduce((s, p) => s + Number(p.units || 0), 0);
+          const sizes = list.filter(p => p.size_label).length;
+          const title = list.length
+            ? (sizes ? `${sizes} o'lcham` : esc(list[0].sku)) +
+              (units ? ` · ${units} birlik` : '')
+            : 'yaratilmagan';
+          return `<td><button class="cell ${on ? 'on' : ''} ${units > 0 ? 'used' : ''}"
+            title="${title}"
+            ${canManage() ? `onclick="toggleCell(${f.id},${g.id},${on ? 1 : 0})"`
                           : 'disabled'}></button></td>`;
         }).join('')}
       </tr>`).join('')}</tbody>`;
 }
 
-async function toggleCell(fasonId, groupId, productId, on){
+// Katak butun kesishmani boshqaradi. Stolda bu oltita mahsulot degani —
+// xodim uzunliklarni bittalab yoqib-o'chirmaydi.
+async function toggleCell(fasonId, groupId, on){
+  const list = cat.products.filter(p => p.fason_id === fasonId && p.group_id === groupId);
   try{
-    if (!productId){
+    if (!list.length){
+      // Hali yaratilmagan: guruhda o'lcham bo'lsa, server hammasini yaratadi
       await App.api('/api/catalog/products',
         { method:'POST', body: JSON.stringify({ fason_id: fasonId, group_id: groupId }) });
     } else {
-      await App.api('/api/catalog/products/' + productId,
-        { method:'PATCH', body: JSON.stringify({ active: !on }) });
+      for (const p of list)
+        await App.api('/api/catalog/products/' + p.id,
+          { method:'PATCH', body: JSON.stringify({ active: !on }) });
     }
     await load();
   }catch(e){ alert(e.message); }
