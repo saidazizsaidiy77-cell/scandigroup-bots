@@ -136,7 +136,16 @@ function groupIds(q) {
   return ids.length ? ids : null;
 }
 
-function registerQuery(q, limit) {
+// Tsex doirasi. Bo'lim boshlig'ida `scope_shop_id` bor — u faqat o'z
+// tsexidagi birlikni ko'radi va o'tkazadi. Admin va ishlab chiqarish
+// boshlig'ida doira yo'q, ya'ni ro'yxat bo'sh — ular hammasini ko'radi.
+// Shu sababli tekshiruv har doim "doira bor bo'lsa" shartidan boshlanadi.
+const scopeOf = (req) => {
+  const s = req.user?.scope_shop_ids || [];
+  return s.length ? s : null;
+};
+
+function registerQuery(q, limit, scope = null) {
   // Bo'sh katak har doim oxirida tursin: saralash sababi — nimadir izlash,
   // "—" esa izlanayotgan narsa emas.
   const col = SORT[q.sort] || 'started_on';
@@ -159,16 +168,18 @@ function registerQuery(q, limit) {
         -- hammasi" deb qaraydi — bitta qiymat bunga yetmaydi.
         AND ($9::int[] IS NULL OR group_id = ANY($9))
         AND ($10::int  IS NULL OR fason_id = $10)
+        -- Tsex doirasi: filtr emas, chegara. Klient uni o'chira olmaydi.
+        AND ($11::int[] IS NULL OR shop_id = ANY($11))
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no DESC
       LIMIT ${limit}`,
     params: [q.order_no || null, q.conveyor_no || null, q.customer_id || null,
              q.shop_id || null, q.status || null, q.from || null, q.to || null,
-             q.q || null, groupIds(q), q.fason_id || null],
+             q.q || null, groupIds(q), q.fason_id || null, scope],
   };
 }
 
 router.get('/', need('production.view'), wrap(async (req, res) => {
-  const { text, params } = registerQuery(req.query, 500);
+  const { text, params } = registerQuery(req.query, 500, scopeOf(req));
   const { rows } = await db.query(text, params);
   res.json(rows);
 }));
@@ -231,7 +242,7 @@ const EXPORT_COLUMNS = [
 router.get('/export', need('production.view'), wrap(async (req, res) => {
   // Ekrandagi ro'yxat 500 qator bilan cheklangan, fayl esa hisobot uchun —
   // unda butun jurnal bo'lishi kerak.
-  const { text, params } = registerQuery(req.query, 20000);
+  const { text, params } = registerQuery(req.query, 20000, scopeOf(req));
   const { rows } = await db.query(text, params);
 
   const head = EXPORT_COLUMNS.map(([name]) => csvCell(name)).join(';');
@@ -471,9 +482,33 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   }
 
   const sec = (await client.query(
-    `SELECT s.is_exit, sh.milestone
+    `SELECT s.is_exit, s.shop_id, sh.name AS shop, sh.milestone
        FROM sections s JOIN shops sh ON sh.id = s.shop_id
       WHERE s.id = $1`, [target])).rows[0];
+
+  // ★ QABUL QILISH QOIDASI
+  //   Birlikni X tsexining bo'limiga o'tkazish uchun X tsexi doirasida
+  //   bo'lish kerak. Bundan ikki narsa o'z-o'zidan kelib chiqadi:
+  //     · tsex ichidagi harakatni o'sha tsex boshlig'i qiladi;
+  //     · tsexdan tsexga o'tkazishni QABUL QILUVCHI tomon bosadi.
+  //   Ya'ni "topshirdim" degan alohida tugma va alohida holat kerak emas —
+  //   birlik oldingi tsexning oxirgi bo'limida turibdi degani "topshirishga
+  //   tayyor" degani, va uni faqat keyingi tsex o'ziga ola oladi. Kim qabul
+  //   qilgani va qachon — unit_moves da allaqachon yoziladi.
+  const scope = scopeOf(req);
+  if (scope && !scope.includes(sec.shop_id))
+    throw new Error(
+      `${u.conveyor_no}: «${sec.shop}» sizning doirangizda emas — ` +
+      `birlikni o'sha tsex boshlig'i qabul qiladi`);
+
+  // Keyingi tsexga topshirish rejasi faqat birlik HAQIQATAN boshqa tsexga
+  // o'tganda tozalanadi. Tsex ichidagi harakat (arra → freza) rejaga
+  // tegmasligi kerak: aks holda boshliq qo'ygan muddat birinchi
+  // o'tkazishdayoq yo'qoladi.
+  const from = u.current_section_id ? (await client.query(
+    `SELECT shop_id FROM sections WHERE id = $1`, [u.current_section_id])).rows[0] : null;
+  const shopChanged = !from || from.shop_id !== sec.shop_id;
+
   const defect = Number(qty_defect) || 0;
   if (defect > 0 && !defect_reason) throw new Error('Brak uchun sabab kodi majburiy');
 
@@ -486,10 +521,11 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
     `UPDATE production_units SET
        current_section_id   = $2,
        entered_section_on   = COALESCE($3::date, CURRENT_DATE),
-       next_shop_planned_on = NULL,
+       next_shop_planned_on = CASE WHEN $5::boolean THEN NULL
+                                   ELSE next_shop_planned_on END,
        status = CASE WHEN $4 THEN 'fg' ELSE status END,
        fg_on  = CASE WHEN $4 THEN COALESCE($3::date, CURRENT_DATE) ELSE fg_on END
-     WHERE id = $1`, [unit_id, target, moved_on || null, sec.is_exit]);
+     WHERE id = $1`, [unit_id, target, moved_on || null, sec.is_exit, shopChanged]);
 
   // Lak va Qadoqlash tsexiga kirish sanasi jurnalda alohida ustun. Reja
   // sanasini tsex boshlig'i qo'yadi, faktni esa birlik o'sha tsexga
@@ -557,6 +593,17 @@ async function undoLastMove(client, req, unit_id) {
        JOIN sections s ON s.id = m.section_id
       WHERE m.unit_id = $1 ORDER BY m.id DESC LIMIT 1`, [unit_id])).rows[0];
   if (!last) throw new Error(`${u.conveyor_no}: qaytariladigan o'tkazish yo'q`);
+
+  // Qaytarish — o'tkazishning teskarisi, demak qoida ham o'sha: birlik
+  // hozir turgan tsex doirangizda bo'lsagina orqaga ola olasiz.
+  const scope = scopeOf(req);
+  if (scope) {
+    const at = (await client.query(
+      `SELECT sh.id, sh.name FROM sections s JOIN shops sh ON sh.id = s.shop_id
+        WHERE s.id = $1`, [last.section_id])).rows[0];
+    if (at && !scope.includes(at.id))
+      throw new Error(`${u.conveyor_no}: birlik «${at.name}» tsexida — qaytarishni o'sha tsex qiladi`);
+  }
 
   // Jamlanma yozuv. Bog'lanish ustuni qo'shilishidan oldingi harakatlarda
   // NULL — ular uchun bo'lim, mahsulot, sana va konveyer raqami bo'yicha
@@ -651,6 +698,166 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
   } finally {
     client.release();
   }
+}));
+
+// ══════════════════════════════════ BO'LIMLAR ARO HARAKAT — TSEX EKRANI
+//
+//  Bo'lim boshlig'ining kunlik ekrani. Jurnal emas: jurnal 16 ustunli
+//  hisobot, bu esa ish quroli — konverlar bo'limlar bo'yicha turadi va
+//  bitta bosishda keyingi bo'limga o'tadi.
+//
+//  Uch qism bir so'rovdan chiqadi:
+//    · sections — o'z tsexining bo'limlari va ularda turgan birliklar
+//    · inbox    — oldingi tsexda "topshirishga tayyor" turganlar, ya'ni
+//                 marshruti bo'yicha keyingi qadami MENING tsexim
+//    · muddat   — keyingi tsexga topshirishga necha kun qolgani
+//
+//  Muddat v_unit_register dan keladi: qo'lda qo'yilgan reja bo'lsa u,
+//  aks holda marshrut va bo'lim tezligidan chiqqan taxmin. Tezlik oxirgi
+//  14 kunlik haqiqiy o'tkazishlardan o'lchanadi (v_section_rate), shuning
+//  uchun zavod ishlay boshlagach muddatlar o'z-o'zidan aniqlashadi.
+router.get('/board', need('production.view', 'production.entry'), wrap(async (req, res) => {
+  const scope = scopeOf(req);
+
+  const shops = (await db.query(
+    `SELECT id, name, sort FROM shops
+      WHERE ($1::int[] IS NULL OR id = ANY($1))
+      ORDER BY sort, name`, [scope])).rows;
+  if (!shops.length) return res.json({ shops: [], shop: null, sections: [], inbox: [] });
+
+  const shopId = Number(req.query.shop_id) || shops[0].id;
+  if (!shops.some((s) => s.id === shopId))
+    return res.status(403).json({ error: 'Bu tsex sizning doirangizda emas' });
+
+  const rows = (await db.query(
+    `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.sku, r.qty,
+            r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
+            r.section, r.section_id, r.entered_section_on,
+            r.next_shop_on, r.next_shop_src, r.is_stock, r.waiting,
+            (CURRENT_DATE - r.entered_section_on)::int AS days_here,
+            (r.next_shop_on - CURRENT_DATE)::int       AS days_left,
+            n.section_id AS next_section_id,
+            ns.name      AS next_section,
+            ns.shop_id   AS next_shop_id,
+            nsh.name     AS next_shop_name
+       FROM v_unit_register r
+       -- Marshrutdagi keyingi qadam. Bo'lim boshlig'i ro'yxatdan tanlab
+       -- o'tirmasligi uchun tugmada aynan shu bo'lim nomi yoziladi.
+       LEFT JOIN LATERAL (
+         SELECT pr.section_id FROM v_product_route pr
+          WHERE pr.product_id = r.product_id AND pr.step_no > r.step_no
+          ORDER BY pr.step_no LIMIT 1) n ON true
+       LEFT JOIN sections ns  ON ns.id  = n.section_id
+       LEFT JOIN shops    nsh ON nsh.id = ns.shop_id
+      WHERE r.status = 'production' AND r.section_id IS NOT NULL
+        AND (r.shop_id = $1 OR ns.shop_id = $1)
+      -- Eng shoshilinchi yuqorida. Muddatsizlari oxirida: ular kutmayapti,
+      -- ular haqida hali ma'lumot yo'q.
+      ORDER BY r.next_shop_on NULLS LAST, r.conveyor_no`, [shopId])).rows;
+
+  const sections = (await db.query(
+    `SELECT id, name, sort, is_exit FROM sections
+      WHERE shop_id = $1 AND active ORDER BY sort, name`, [shopId])).rows;
+
+  const mine = rows.filter((r) => r.shop_id === shopId);
+  res.json({
+    shops,
+    shop: shops.find((s) => s.id === shopId),
+    sections: sections.map((sc) => ({
+      ...sc, units: mine.filter((u) => u.section_id === sc.id) })),
+    // Qabul qilishni kutayotganlar: boshqa tsexda turibdi, keyingi qadami menda
+    inbox: rows.filter((r) => r.shop_id !== shopId),
+  });
+}));
+
+// ═══════════════════════════════════════════════ BUGUNGI HARAKATLAR — NAZORAT
+//
+//  Admin xodimlar kiritgan ma'lumotni shu yerdan ko'radi. Jurnalni 500
+//  qator bo'ylab ko'zdan kechirish bilan nazorat qilib bo'lmaydi — u har
+//  kuni takrorlanadigan ish bo'lgani uchun arzon bo'lishi shart. Bu yerda
+//  kun xronologik lenta bo'lib turadi: kim, qachon, qaysi konverni,
+//  qayerdan qayerga.
+function feedQuery(q, scope, limit) {
+  return {
+    text: `SELECT m.id, m.moved_on, m.moved_at, m.qty_defect, m.defect_reason, m.note,
+            u.conveyor_no, u.order_no, u.qty, u.is_opening,
+            p.name AS product,
+            sc.name AS section, sh.id AS shop_id, sh.name AS shop,
+            w.id AS worker_id, COALESCE(w.name, '—') AS worker,
+            pr.name AS from_section, psh.name AS from_shop, psh.id AS from_shop_id
+       FROM unit_moves m
+       JOIN production_units u ON u.id = m.unit_id
+       JOIN products p         ON p.id = u.product_id
+       JOIN sections sc        ON sc.id = m.section_id
+       JOIN shops sh           ON sh.id = sc.shop_id
+       LEFT JOIN workers w     ON w.id = m.worker_id
+       -- Oldingi harakat: "qayerdan" shundan chiqadi. Bo'lmasa — birlik
+       -- endi kiritilgan (boshlang'ich qoldiq yoki yangi konver).
+       LEFT JOIN LATERAL (
+         SELECT m2.section_id FROM unit_moves m2
+          WHERE m2.unit_id = m.unit_id AND m2.id < m.id
+          ORDER BY m2.id DESC LIMIT 1) pm ON true
+       LEFT JOIN sections pr ON pr.id = pm.section_id
+       LEFT JOIN shops    psh ON psh.id = pr.shop_id
+      WHERE m.moved_on BETWEEN $1::date AND $2::date
+        AND ($3::int[] IS NULL OR sh.id = ANY($3))
+        AND ($4::int   IS NULL OR sh.id = $4)
+        AND ($5::int   IS NULL OR w.id  = $5)
+        AND ($6::text  IS NULL OR u.conveyor_no ILIKE '%' || $6 || '%')
+      ORDER BY m.moved_at DESC, m.id DESC
+      LIMIT ${limit}`,
+    params: [q.from || today(), q.to || q.from || today(), scope,
+             q.shop_id || null, q.worker_id || null, q.conveyor_no || null],
+  };
+}
+
+router.get('/feed', need('production.view'), wrap(async (req, res) => {
+  const scope = scopeOf(req);
+  const { text, params } = feedQuery(req.query, scope, 500);
+  const [moves, shops, workers] = await Promise.all([
+    db.query(text, params),
+    db.query(`SELECT id, name FROM shops
+               WHERE ($1::int[] IS NULL OR id = ANY($1)) ORDER BY sort, name`, [scope]),
+    // Filtr ro'yxati: oxirgi oyda haqiqatan yozuv kiritganlar. Butun xodimlar
+    // ro'yxati emas — 90% i hech qachon jurnalga tegmaydi.
+    db.query(
+      `SELECT DISTINCT w.id, w.name
+         FROM unit_moves m
+         JOIN workers w   ON w.id = m.worker_id
+         JOIN sections sc ON sc.id = m.section_id
+        WHERE m.moved_on >= CURRENT_DATE - 30
+          AND ($1::int[] IS NULL OR sc.shop_id = ANY($1))
+        ORDER BY w.name`, [scope]),
+  ]);
+  res.json({ moves: moves.rows, shops: shops.rows, workers: workers.rows });
+}));
+
+const FEED_COLUMNS = [
+  ['Sana',            (r) => csvDate(r.moved_on)],
+  ['Vaqt',            (r) => new Date(r.moved_at).toLocaleTimeString('ru-RU')],
+  ['Xodim',           (r) => r.worker],
+  ['Konveyer raqami', (r) => r.conveyor_no],
+  ['Zakaz raqami',    (r) => r.order_no],
+  ['Maxsulot',        (r) => r.product],
+  ['Soni',            (r) => r.qty],
+  ['Qayerdan',        (r) => r.from_section || (r.is_opening ? "boshlang'ich qoldiq" : 'yangi konver')],
+  ['Qayerga',         (r) => r.section],
+  ['Tsex',            (r) => r.shop],
+  ['Tsexdan tsexga',  (r) => (r.from_shop_id && r.from_shop_id !== r.shop_id ? 'ha' : '')],
+  ['Brak',            (r) => r.qty_defect || ''],
+  ['Brak sababi',     (r) => r.defect_reason],
+  ['Izoh',            (r) => r.note],
+];
+
+router.get('/feed/export', need('production.view'), wrap(async (req, res) => {
+  const { text, params } = feedQuery(req.query, scopeOf(req), 20000);
+  const { rows } = await db.query(text, params);
+  const head = FEED_COLUMNS.map(([name]) => csvCell(name)).join(';');
+  const body = rows.map((r) => FEED_COLUMNS.map(([, get]) => csvCell(get(r))).join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="harakatlar-${req.query.from || today()}.csv"`);
+  res.send('﻿' + [head, ...body].join('\r\n') + '\r\n');
 }));
 
 module.exports = router;

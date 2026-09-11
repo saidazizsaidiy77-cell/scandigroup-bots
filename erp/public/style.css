@@ -84,7 +84,17 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   letter-spacing:-.03em;font-variant-numeric:tabular-nums;padding:12px 0}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
   background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
-  padding:14px 22px;box-shadow:0 8px 28px rgba(20,26,36,.12)}
+  padding:14px 22px;box-shadow:0 8px 28px rgba(20,26,36,.12);max-width:min(92vw,520px)}
+/* Xato xabari o'tib ketmasin: rangi bilan ajralib tursin, chunki u
+   "saqlanmadi" degani — xodim ko'rmasa ishini yo'qotadi. */
+.toast.bad{background:rgba(178,60,60,.10);border-color:rgba(178,60,60,.35);color:var(--bad)}
+
+/* Bugungi harakatlar lentasi: vaqt chap ustunda, qator yupqa */
+.feed td{padding:9px 12px;vertical-align:top}
+.feed td:first-child{padding-left:0;white-space:nowrap;font-variant-numeric:tabular-nums;
+  color:var(--muted);font-size:13px}
+.feed .who{font-weight:500}
+.feed .arw{color:var(--muted)}
 
 /* Zavod ko'rinishi — oqim xaritasi va modal */
 .flow{display:flex;align-items:stretch;gap:10px;overflow-x:auto;padding-bottom:4px}
@@ -169,7 +179,7 @@ tr.click:hover td{background:var(--surface-2)}
      · ustunlar mantiqiy bloklarga bo'linsin — blok boshida ingichka chiziq
    Zebra rangi qattiq qiymat: qotib turgan ustun ostidan qator ko'rinmasligi
    uchun shaffof bo'lmasligi kerak. */
-.log{min-width:1240px;font-size:13.5px}
+.log{min-width:1360px;font-size:13.5px}
 .log th,.log td{padding-left:11px;padding-right:11px}
 .log th:first-child,.log td:first-child{padding-left:0}
 .log th:last-child,.log td:last-child{padding-right:0}

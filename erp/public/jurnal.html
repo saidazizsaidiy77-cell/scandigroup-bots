@@ -67,6 +67,7 @@
         <th data-sort="color">Rang</th><th data-sort="fabric">Mato</th>
         <th class="num" data-sort="qty">Soni</th>
         <th class="sep" data-sort="section">Qayerda</th>
+        <th>Oxirgi harakat</th>
         <th class="sep" data-sort="lak_on">Lak tsehi</th>
         <th data-sort="pack_on">Qadoqlash tsehi</th>
         <th data-sort="fg_on">T/M ombor</th>
@@ -237,6 +238,17 @@ async function load(){
   render();
 }
 
+// Oxirgi harakat: kim va qachon. Admin xodimlar kiritgan ma'lumotni
+// jurnaldan nazorat qiladi — har qatorni bosib tarix ochish shart
+// bo'lmasin, oxirgi yozuv ro'yxatning o'zida ko'rinsin.
+function lastMove(r) {
+  if (!r.last_move_at) return '<span class="muted">—</span>';
+  const d = new Date(r.last_move_at);
+  const p = n => String(n).padStart(2, '0');
+  return `${esc(r.last_move_by || '—')}<div class="muted" style="font-size:11.5px">${
+    p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}</div>`;
+}
+
 function render(){
   // Zakaz, mijoz va narxni savdo qo'yadi — tsex ustasida bu huquq yo'q.
   // Tugmani ko'rsatib, keyin "ruxsat yo'q" deyish yomon: xodim nima
@@ -272,6 +284,7 @@ function render(){
         ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${
             r.waiting ? 'buyurtma kutilmoqda' : esc(r.shop || '')}</div>`
         : '<span class="muted">boshlanmagan</span>'}</td>
+      <td>${lastMove(r)}</td>
       <td class="sep">${dateWithSrc(r.lak_on, r.lak_src, r.lak_late)}</td>
       <td>${dateCell(r, r.pack_on, r.pack_src, r.pack_late)}</td>
       <td>${dateCell(r, r.fg_on,   r.fg_src,   r.fg_late)}</td>
@@ -291,7 +304,7 @@ function render(){
         ${canEdit && r.status !== 'cancelled'
           ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
     </tr>`).join('')
-    : '<tr><td class="muted" colspan="16">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
+    : '<tr><td class="muted" colspan="17">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
 
   $('rowCount').textContent = rows.length
     ? (rows.length >= 500
@@ -301,7 +314,7 @@ function render(){
 
   $('tF').innerHTML = rows.length ? `<tr>
     <td colspan="7"></td><td class="num"><strong>${qty}</strong></td>
-    <td colspan="6"></td><td class="num"><strong>${money(amount)}</strong></td>
+    <td colspan="7"></td><td class="num"><strong>${money(amount)}</strong></td>
     <td></td></tr>` : '';
   bulk();
 }

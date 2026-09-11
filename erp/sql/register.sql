@@ -95,6 +95,7 @@ SELECT
   p.name  AS product,
   p.size_label,                                   -- stol uzunligi; boshqalarda NULL
   p.sku,
+  p.id AS product_id,                               -- keyingi bo'limni marshrutdan topish uchun
   g.name  AS product_type,                        -- mahsulot turi (guruh)
   -- Jurnal guruh va fason bo'yicha filtrlanadi. Nom bo'yicha emas, id
   -- bo'yicha: saytdan nom o'zgartirilsa filtr buzilmasin.
@@ -178,7 +179,13 @@ SELECT
   -- Zahirami va kutish nuqtasida turibdimi — jurnal shu ikki belgiga
   -- qarab "buyurtma kutilmoqda" deb ko'rsatadi.
   u.is_stock,
-  (u.is_stock AND COALESCE(cur.is_hold, false)) AS waiting
+  (u.is_stock AND COALESCE(cur.is_hold, false)) AS waiting,
+
+  -- Oxirgi harakat: kim va qachon. Admin jurnalni ko'rib nazorat qiladi —
+  -- buning uchun har qatorni bosib tarix ochish shart bo'lmasin, oxirgi
+  -- yozuv ro'yxatning o'zida ko'rinsin.
+  lm.moved_at AS last_move_at,
+  lm.worker   AS last_move_by
 FROM production_units u
 JOIN products p        ON p.id = u.product_id
 JOIN product_groups g  ON g.id = p.group_id
@@ -190,4 +197,14 @@ LEFT JOIN customers c     ON c.id = u.customer_id
 LEFT JOIN v_unit_shop_eta lak ON lak.unit_id = u.id
      AND lak.shop_id = (SELECT id FROM shops WHERE milestone = 'lak'  LIMIT 1)
 LEFT JOIN v_unit_shop_eta pk  ON pk.unit_id = u.id
-     AND pk.shop_id  = (SELECT id FROM shops WHERE milestone = 'pack' LIMIT 1);
+     AND pk.shop_id  = (SELECT id FROM shops WHERE milestone = 'pack' LIMIT 1)
+-- Oxirgi harakat. idx_moves_unit(unit_id, moved_at) bo'yicha bitta qator
+-- o'qiladi, shuning uchun 20 000 qatorli eksportda ham og'irlik qilmaydi.
+LEFT JOIN LATERAL (
+  SELECT m.moved_at, w.name AS worker
+    FROM unit_moves m
+    LEFT JOIN workers w ON w.id = m.worker_id
+   WHERE m.unit_id = u.id
+   ORDER BY m.moved_at DESC
+   LIMIT 1
+) lm ON true;
