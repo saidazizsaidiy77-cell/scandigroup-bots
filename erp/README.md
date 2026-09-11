@@ -1,6 +1,8 @@
-# Scandi ERP
+# ZELTA ERP
 
-Zavod uchun modulli boshqaruv tizimi. Yadro bitta: bitta baza, bitta API,
+Scandi Group mebel zavodi uchun modulli boshqaruv tizimi. Tizim nomi —
+**ZELTA ERP**, zavod nomi — Scandi Group: ikkalasi interfeysda va
+hujjatlarda shunday ajratiladi. Yadro bitta: bitta baza, bitta API,
 bitta rol/huquq tizimi. Modullar shu yadroga ulanadi.
 
 Bugun **ishlab chiqarish** moduli ishlaydi. Ombor, ta'minot, savdo, kassa va

@@ -1,4 +1,4 @@
-/* Scandi ERP — umumiy klient qatlami: sessiya, huquq, so'rov.
+/* ZELTA ERP — umumiy klient qatlami: sessiya, huquq, so'rov.
    Har sahifa shuni ulaydi va App.start() bilan boshlaydi. */
 const App = (() => {
   const KEY = 'erp.token';
@@ -53,7 +53,7 @@ const App = (() => {
     document.body.insertAdjacentHTML('beforeend', `
       <div class="overlay" id="erpGate">
         <div class="modal" style="max-width:360px">
-          <h2>Scandi ERP</h2>
+          <h2>ZELTA ERP</h2>
           <p class="muted" style="margin:8px 0 18px">Kirish uchun PIN kodingizni kiriting</p>
           ${message ? `<p class="tag bad" style="display:block;margin-bottom:12px">${message}</p>` : ''}
           <input id="erpPin" type="tel" inputmode="numeric" maxlength="6" placeholder="••••"

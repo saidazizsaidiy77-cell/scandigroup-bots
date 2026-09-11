@@ -2,7 +2,7 @@
 
 | Nima | Qayerda |
 |---|---|
-| **Ishlab chiqarish ERP** — zavod monitoringi, jurnal, mijozlar | [`erp/`](erp/) · [README](erp/README.md) |
+| **ZELTA ERP** — zavod monitoringi, jurnal, mijozlar, ta'minot | [`erp/`](erp/) · [README](erp/README.md) |
 | **Brauzerdan qanday kirish** | [DEPLOY.md](DEPLOY.md) |
 | Nomzod boti (Telegram) | `candidate-bot.js` |
 | HR boti (Telegram) | `hr-bot.js` |

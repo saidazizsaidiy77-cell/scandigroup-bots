@@ -80,5 +80,5 @@ const PORT = process.env.PORT || 3000;
       process.exit(1);
     }
   }
-  app.listen(PORT, () => console.log(`Scandi ERP → http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`ZELTA ERP → http://localhost:${PORT}`));
 })();

@@ -44,7 +44,7 @@ brauzer eski nusxani ko'rsatayotganini shundan ajratasiz.
 **Deploy logida nima ko'rinishi kerak:**
 ```
 Migratsiya bajarildi: {"tsexlar":"4","bolimlar":"24","sku":"32",...}
-Scandi ERP → http://localhost:3000
+ZELTA ERP → http://localhost:3000
 ```
 Bu ikki qator chiqsa — hammasi joyida.
 
@@ -61,7 +61,7 @@ Bu ikki qator chiqsa — hammasi joyida.
 Logda quyidagi ko'rinsa hammasi joyida:
 ```
 Migratsiya bajarildi: {"tsexlar":"4","bolimlar":"24","sku":"32",...}
-Scandi ERP → http://localhost:3000
+ZELTA ERP → http://localhost:3000
 ```
 
 ### Render
