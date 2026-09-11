@@ -248,7 +248,13 @@ o'rganishi shart emas. Pul birligi — **dollar**.
 
 Filtr, saralash va Excel — uchalasi bitta so'rovdan chiqadi. Sahifada beshta
 filtr: zakaz raqami, mahsulot nomi, mahsulot guruhi, tsex va mijoz — zavod
-jurnalni aynan shu kesimlarda qidiradi. API holat, sana oralig'i va erkin
+jurnalni aynan shu kesimlarda qidiradi.
+
+**Mahsulot guruhi** ochilma ro'yxat emas, yoqib-o'chiriladigan tugmalar
+qatori: zavod ko'pincha "stuldan tashqari hammasi" deb qaraydi, bittalik
+tanlov esa bunga javob bermaydi. Boshida hammasi yoqilgan; keraksizini
+bosib o'chiriladi. Oxirgi guruh o'chirilmaydi — bo'sh jadval hech kimga
+kerak emas. API holat, sana oralig'i va erkin
 qidiruvni ham qabul qiladi, lekin ular sahifada ko'rsatilmaydi: kunda
 ishlatilmaydigan katak faqat panelni og'irlashtiradi.
 

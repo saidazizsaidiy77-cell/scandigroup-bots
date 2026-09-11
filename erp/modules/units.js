@@ -127,6 +127,15 @@ const SORT = {
 // Jurnal va Excel bitta so'rovdan chiqadi: ekranda ko'ringan filtr va
 // saralash faylda ham aynan shunday bo'lishi kerak, aks holda xodim
 // ikkitasini solishtirib chalkashadi.
+// Guruh ro'yxati vergul bilan keladi: `group_ids=2,3`. Bitta qiymatli eski
+// `group_id` ham qabul qilinadi — havola yoki xatcho'p buzilmasin.
+function groupIds(q) {
+  const raw = q.group_ids || q.group_id;
+  if (!raw) return null;
+  const ids = String(raw).split(',').map((x) => Number(x)).filter(Number.isInteger);
+  return ids.length ? ids : null;
+}
+
 function registerQuery(q, limit) {
   // Bo'sh katak har doim oxirida tursin: saralash sababi — nimadir izlash,
   // "—" esa izlanayotgan narsa emas.
@@ -146,13 +155,15 @@ function registerQuery(q, limit) {
         AND ($7::date IS NULL OR started_on <= $7)
         AND ($8::text IS NULL OR product ILIKE '%' || $8 || '%'
              OR sku ILIKE '%' || $8 || '%' OR customer_name ILIKE '%' || $8 || '%')
-        AND ($9::int  IS NULL OR group_id = $9)
-        AND ($10::int IS NULL OR fason_id = $10)
+        -- Guruh: bittasi emas, ro'yxat. Zavod ko'pincha "stuldan tashqari
+        -- hammasi" deb qaraydi — bitta qiymat bunga yetmaydi.
+        AND ($9::int[] IS NULL OR group_id = ANY($9))
+        AND ($10::int  IS NULL OR fason_id = $10)
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no DESC
       LIMIT ${limit}`,
     params: [q.order_no || null, q.conveyor_no || null, q.customer_id || null,
              q.shop_id || null, q.status || null, q.from || null, q.to || null,
-             q.q || null, q.group_id || null, q.fason_id || null],
+             q.q || null, groupIds(q), q.fason_id || null],
   };
 }
 

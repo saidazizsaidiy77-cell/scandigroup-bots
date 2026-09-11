@@ -190,6 +190,16 @@ tr.click:hover td{background:var(--surface-2)}
 .log .src.fakt{color:var(--ok)}
 .log .src.late{color:var(--bad)}
 /* Amal tugmalari qator balandligini oshirmasin */
+/* Yoqib-o'chiriladigan filtr tugmasi. Ro'yxatdan bittasini tanlash emas,
+   keraksizini o'chirish uchun: zavod ko'pincha "stuldan tashqari hammasi"
+   deb qaraydi, ochilma ro'yxat esa bunga javob bermaydi. */
+.chip{font:inherit;font-size:13px;padding:8px 14px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--muted);
+  transition:.15s}
+.chip:hover{color:var(--text)}
+.chip.on{background:var(--surface);border-color:var(--accent);color:var(--text);
+  font-weight:500}
+
 /* Saralanadigan sarlavha: bosiladigani bilinib tursin, faol ustun esa
    yo'nalish belgisi bilan ajralsin. */
 .log th.sortable{cursor:pointer;user-select:none}

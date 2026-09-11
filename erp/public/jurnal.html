@@ -20,13 +20,16 @@
       <input id="fOrder" placeholder="Z-1024" oninput="deb()"></div>
     <div style="flex:1;min-width:160px"><label>Maxsulot nomi</label>
       <select id="fFason" onchange="load()"></select></div>
-    <div style="flex:1;min-width:160px"><label>Maxsulot guruhi</label>
-      <select id="fGroup" onchange="load()"></select></div>
     <div style="flex:1;min-width:160px"><label>Tsex</label>
       <select id="fShop" onchange="load()"></select></div>
     <div style="flex:1;min-width:170px"><label>Mijoz nomi</label>
       <select id="fCust" onchange="load()"></select></div>
     <button onclick="clearFilters()">Filtrni tozalash</button>
+  </div>
+  <div style="margin-top:16px">
+    <label>Maxsulot guruhi <span class="muted" style="text-transform:none;
+      letter-spacing:0">— keraksizini bosib o'chiring</span></label>
+    <div class="row" id="fGroups" style="gap:8px;flex-wrap:wrap"></div>
   </div>
 </div>
 
@@ -115,10 +118,9 @@ async function boot(){
 
   // Guruh va mahsulot nomi ro'yxati katalogdan chiqadi — jurnalda faqat
   // haqiqatan mavjud bo'lganlari tanlanadi.
-  const groups = [...new Map(ref.products.map(p =>
+  allGroups = [...new Map(ref.products.map(p =>
     [p.group_id, p.group_name])).entries()];
-  $('fGroup').innerHTML = '<option value="">Barchasi</option>' +
-    groups.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('');
+  drawGroups();
   const fasons = [...new Map(ref.products.filter(p => p.fason_id)
     .map(p => [p.fason_id, p.name])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
@@ -144,13 +146,43 @@ async function boot(){
 // besh kesimda qidiradi. API boshqa kesimlarni ham qabul qiladi (holat,
 // sana oralig'i, erkin qidiruv), lekin ular sahifada ko'rsatilmaydi: kunda
 // ishlatilmaydigan katak faqat panelni og'irlashtiradi.
-const FILTERS = ['fOrder', 'fFason', 'fGroup', 'fShop', 'fCust'];
+const FILTERS = ['fOrder', 'fFason', 'fShop', 'fCust'];
+
+// Guruhlar ochilma ro'yxat emas, yoqib-o'chiriladigan tugma: "stuldan
+// tashqari hammasi" degan savolga bittalik tanlov javob bermaydi.
+// Bo'sh to'plam — hech qanday cheklov yo'q, ya'ni hammasi ko'rinadi.
+let allGroups = [], groupSel = new Set();
+
+function drawGroups(){
+  $('fGroups').innerHTML = allGroups.map(([id, name]) => {
+    const on = !groupSel.size || groupSel.has(id);
+    return `<button class="chip${on ? ' on' : ''}" onclick="toggleGroup(${id})"
+      >${esc(name)}</button>`;
+  }).join('');
+}
+
+function toggleGroup(id){
+  // "Hammasi" holatidan birinchi bosishda aniq ro'yxatga o'tamiz, shunda
+  // bosilgan guruh ro'yxatdan chiqadi — odam aynan shuni kutadi.
+  if (!groupSel.size) allGroups.forEach(([g]) => groupSel.add(g));
+  if (groupSel.has(id)){
+    // Oxirgi guruhni ham o'chirib bo'lmaydi: bo'sh jadval hech kimga
+    // kerak emas, va bo'sh to'plam "hammasi" degani.
+    if (groupSel.size === 1) return;
+    groupSel.delete(id);
+  } else {
+    groupSel.add(id);
+  }
+  if (groupSel.size === allGroups.length) groupSel.clear();
+  drawGroups();
+  load();
+}
 
 function params(){
   const p = new URLSearchParams();
   if ($('fOrder').value.trim())  p.set('order_no', $('fOrder').value.trim());
   if ($('fFason').value)         p.set('fason_id', $('fFason').value);
-  if ($('fGroup').value)         p.set('group_id', $('fGroup').value);
+  if (groupSel.size)             p.set('group_ids', [...groupSel].join(','));
   if ($('fShop').value)          p.set('shop_id', $('fShop').value);
   if ($('fCust').value)          p.set('customer_id', $('fCust').value);
   p.set('sort', sort.col);
@@ -160,6 +192,8 @@ function params(){
 
 function clearFilters(){
   for (const id of FILTERS) $(id).value = '';
+  groupSel.clear();
+  drawGroups();
   load();
 }
 
