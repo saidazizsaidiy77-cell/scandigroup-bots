@@ -200,13 +200,18 @@ const csvDate = (v) => !v ? ''
 const STATUS_UZ = { production: 'ishlab chiqarishda', fg: 'T/M omborda',
                     shipped: "jo'natilgan", cancelled: 'bekor qilingan' };
 
+// Zahirada sana yo'q — sabab manba ustunida yoziladi. Sananing o'rniga
+// so'z qo'yib bo'lmaydi: Excel o'sha ustunni sana deb o'qiydi va bitta
+// matn butun ustunni matnga aylantiradi.
+const srcCell = (r, src) => src || (r.is_stock ? 'zahira' : '');
+
 const EXPORT_COLUMNS = [
   ['Bosh sana',        (r) => csvDate(r.started_on)],
   ['Konveyer raqami',  (r) => r.conveyor_no],
   ['Zakaz raqami',     (r) => r.order_no],
   ['Maxsulot nomi',    (r) => r.product],
   ['Maxsulot guruhi',  (r) => r.product_type],
-  ['Rang',             (r) => r.color],
+  ['Rang',             (r) => r.color || (r.is_stock ? 'zahira' : '')],
   ['Mato',             (r) => r.fabric],
   ['Soni',             (r) => r.qty],
   ['Tsex',             (r) => r.shop],
@@ -214,9 +219,9 @@ const EXPORT_COLUMNS = [
   ['Lak tsehi',        (r) => csvDate(r.lak_on)],
   ['Lak manbasi',      (r) => r.lak_src],
   ['Qadoqlash tsehi',  (r) => csvDate(r.pack_on)],
-  ['Qadoqlash manbasi',(r) => r.pack_src],
+  ['Qadoqlash manbasi',(r) => srcCell(r, r.pack_src)],
   ['T/M ombor',        (r) => csvDate(r.fg_on)],
-  ['T/M manbasi',      (r) => r.fg_src],
+  ['T/M manbasi',      (r) => srcCell(r, r.fg_src)],
   ['Mijoz nomi',       (r) => r.customer_name],
   ['Narx, $',          (r) => csvNum(r.unit_price)],
   ['Summa, $',         (r) => csvNum(r.total_amount)],

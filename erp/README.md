@@ -312,9 +312,14 @@ belgi bir katakda bo'lmasligi kerak.
   rangigacha hammasi bir xil, rang esa buyurtma tushgandan keyin beriladi.
   Bunday birlik qachon lakka, qadoqlashga va omborga tushishini hech qanday
   quvvat hisobi ayta olmaydi — u **buyurtma kutadi, quvvat kutmaydi**.
-  Shuning uchun uch ustun ham bo'sh qoladi va jurnalda `zahira` belgisi
-  turadi. Bo'sh katak "hali ma'lum emas" degani, o'ylab topilgan sanadan
-  halolroq.
+  Shuning uchun sana o'rniga **`zahira`** deb yoziladi — `Rang`,
+  `Qadoqlash tsehi` va `T/M ombor` ustunlarida. Bo'sh katak "unutilgan"
+  deb o'qiladi, "zahira" esa sababni aytadi: mahsulot buyurtma kutmoqda,
+  qadoqlash ham, omborga kirish ham o'shandan keyin bo'ladi.
+
+  Excel'da sana ustuni bo'sh qoladi, "zahira" esa manba ustuniga tushadi:
+  sana ustuniga matn qo'yilsa Excel butun ustunni matn deb o'qiydi va
+  hisob-kitob buziladi.
 
   Zahira nima bilan aniqlanadi: **mijozi ham, zakaz raqami ham yo'q birlik**.
   Alohida belgi qo'yilmaydi — buyurtma tushib mijoz yoki zakaz biriktirilgan

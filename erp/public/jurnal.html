@@ -97,6 +97,13 @@ const dateWithSrc = (s, src, late) => !s ? '<span class="muted">—</span>' :
   `<span class="${late ? 'late' : ''}">${d8(s)}</span>
    <span class="src ${late ? 'late' : src === 'fakt' ? 'fakt' : ''}"
      >${late ? 'kechikdi' : (src || '')}</span>`;
+// Zahirada sana o'rniga holatning o'zi yoziladi. Bo'sh katak "unutilgan"
+// deb o'qiladi, "zahira" esa sabab aytadi: mahsulot buyurtma kutmoqda va
+// qadoqlash ham, omborga kirish ham o'shandan keyin bo'ladi.
+const dateCell = (r, s, src, late) => s
+  ? dateWithSrc(s, src, late)
+  : (r.is_stock ? '<span class="tag">zahira</span>' : '<span class="muted">—</span>');
+
 const STATUS = { production:['warn','ishlab chiqarishda'], fg:['ok','T/M omborda'],
                  shipped:['','jo\'natilgan'], cancelled:['bad','bekor'] };
 
@@ -243,19 +250,20 @@ function render(){
       <td>${r.order_no ? esc(r.order_no) : '<span class="muted">—</span>'}</td>
       <td class="sep">${esc(r.product)}</td>
       <td class="muted">${esc(r.product_type)}</td>
-      <td>${r.color ? esc(r.color) : '<span class="muted">—</span>'}</td>
+      <td>${r.color ? esc(r.color)
+            : (r.is_stock ? '<span class="tag">zahira</span>'
+                          : '<span class="muted">—</span>')}</td>
       <td>${r.fabric ? esc(r.fabric) : '<span class="muted">—</span>'}</td>
       <td class="num">${r.qty}</td>
       <td class="sep">${r.section
         ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${
             r.waiting ? 'buyurtma kutilmoqda' : esc(r.shop || '')}</div>`
         : '<span class="muted">boshlanmagan</span>'}</td>
-      <td class="sep">${dateWithSrc(r.lak_on,  r.lak_src,  r.lak_late)}</td>
-      <td>${dateWithSrc(r.pack_on, r.pack_src, r.pack_late)}</td>
-      <td>${dateWithSrc(r.fg_on,   r.fg_src,   r.fg_late)}</td>
+      <td class="sep">${dateWithSrc(r.lak_on, r.lak_src, r.lak_late)}</td>
+      <td>${dateCell(r, r.pack_on, r.pack_src, r.pack_late)}</td>
+      <td>${dateCell(r, r.fg_on,   r.fg_src,   r.fg_late)}</td>
       <td class="sep">${r.customer_id ? esc(r.customer_name)
-            : `<span class="tag${r.waiting ? ' warn' : ''}">${
-                r.is_stock ? 'zahira' : 'T/M ombor'}</span>`}</td>
+            : '<span class="muted">T/M ombor</span>'}</td>
       <td class="num muted">${money(r.unit_price)}</td>
       <td class="num">${r.unit_price == null
         ? '<span class="muted">—</span>'
