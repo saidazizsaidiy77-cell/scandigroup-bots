@@ -229,6 +229,10 @@ async function load(){
 }
 
 function render(){
+  // Zakaz, mijoz va narxni savdo qo'yadi — tsex ustasida bu huquq yo'q.
+  // Tugmani ko'rsatib, keyin "ruxsat yo'q" deyish yomon: xodim nima
+  // qilayotganini bilmay qoladi. Shuning uchun umuman ko'rsatilmaydi.
+  const canEdit = App.can('production.units', 'sales.manage', 'production.manage');
   const inProd = rows.filter(r => r.status === 'production').length;
   const inFg   = rows.filter(r => r.status === 'fg').length;
   const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);
@@ -274,8 +278,8 @@ function render(){
         ${r.section && r.status !== 'shipped'
           ? `<button class="ic" onclick="undo(${r.id})"
                title="Oxirgi o'tkazishni qaytarish">↩</button>` : ''}
-        <button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>
-        ${r.status !== 'cancelled'
+        ${canEdit ? `<button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>` : ''}
+        ${canEdit && r.status !== 'cancelled'
           ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
     </tr>`).join('')
     : '<tr><td class="muted" colspan="16">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
