@@ -222,6 +222,9 @@ function render(){
       <td class="act sep">
         ${r.status === 'production'
           ? `<button onclick="move(${r.id})">O'tkazish</button>` : ''}
+        ${r.section && r.status !== 'shipped'
+          ? `<button class="ic" onclick="undo(${r.id})"
+               title="Oxirgi o'tkazishni qaytarish">↩</button>` : ''}
         <button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>
         ${r.status !== 'cancelled'
           ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
@@ -267,6 +270,23 @@ async function move(id){
     await load();
     alert(`${r.moved.length} ta birlik o'tkazildi` +
       (toFg ? `, shundan ${toFg} tasi T/M omboriga kirdi.` : '.'));
+  }catch(e){ alert(e.message); }
+}
+
+// Oxirgi o'tkazishni qaytarish — "O'tkazish" bexosdan bosilganda.
+// Bekor qilish bunga yaramaydi: u birlikni jurnaldan butunlay chiqaradi.
+async function undo(id){
+  const r = rows.find(x => x.id === id);
+  const joy = r.section ? `${r.section} (${r.shop})` : 'boshlanmagan';
+  if (!confirm(`${r.conveyor_no} — oxirgi o'tkazish qaytarilsinmi?\n\n` +
+    `Hozir: ${joy}\nQaytarilgach avvalgi bo'limga tushadi.` +
+    (r.status === 'fg' ? '\n\nT/M ombor qoldig\'idan ham ayriladi.' : ''))) return;
+  try{
+    const d = await App.api('/api/units/undo',
+      { method:'POST', body: JSON.stringify({ unit_id: id }) });
+    await load();
+    const u = d.undone[0];
+    alert(`${u.conveyor_no} qaytarildi.`);
   }catch(e){ alert(e.message); }
 }
 

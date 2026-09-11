@@ -456,10 +456,10 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   const defect = Number(qty_defect) || 0;
   if (defect > 0 && !defect_reason) throw new Error('Brak uchun sabab kodi majburiy');
 
-  await client.query(
+  const move = (await client.query(
     `INSERT INTO unit_moves (unit_id, section_id, moved_on, qty_defect, defect_reason, worker_id, note)
-     VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4,$5,$6,$7)`,
-    [unit_id, target, moved_on || null, defect, defect_reason || null, req.user.id, note || null]);
+     VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4,$5,$6,$7) RETURNING id`,
+    [unit_id, target, moved_on || null, defect, defect_reason || null, req.user.id, note || null])).rows[0];
 
   await client.query(
     `UPDATE production_units SET
@@ -495,6 +495,9 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
        VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3,$4,$5,$6)`,
       [flow.id, moved_on || null, target, u.product_id, defect_reason, defect]);
   }
+  // Qaytarishda aynan shu jamlanma yozuvni topish uchun bog'lab qo'yamiz
+  await client.query(`UPDATE unit_moves SET flow_log_id = $2 WHERE id = $1`,
+                     [move.id, flow.id]);
   if (sec.is_exit) {
     await client.query(
       `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
@@ -503,6 +506,114 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   }
   return { unit_id, section_id: target, is_exit: sec.is_exit };
 }
+
+// ────────────────────────────────────────── OXIRGI O'TKAZISHNI QAYTARISH
+//
+//  "O'tkazish" bexosdan bosilishi oddiy hol — ayniqsa birlik shu bilan T/M
+//  omboriga tushib ketsa. Bekor qilish bunga yaramaydi: u birlikni
+//  jurnaldan butunlay chiqaradi. Shuning uchun bitta qadam orqaga
+//  qaytariladi.
+//
+//  FAQAT OXIRGI harakat qaytariladi. O'rtadagisini olib tashlash tarixni
+//  yolg'on qiladi: birlik o'tmagan bo'limdan o'tgan bo'lib ko'rinadi.
+//
+//  Qaytariladigan narsalar — o'tkazish nimani yozgan bo'lsa, o'shalar:
+//    · harakat yozuvi (unit_moves)
+//    · jamlanma yozuv (flow_log) va undagi brak (defects · CASCADE)
+//    · birlikning joyi, holati va T/M omborga kirish sanasi
+//    · lak va qadoqlash tsexiga kirish sanasi — qolgan harakatlardan
+//      qaytadan hisoblanadi, chunki birinchi kirish sanasi saqlanadi
+//    · T/M ombor qoldig'i (fg_stock)
+async function undoLastMove(client, req, unit_id) {
+  const u = (await client.query(
+    `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`, [unit_id])).rows[0];
+  if (!u) throw new Error('Birlik topilmadi');
+  if (u.status === 'shipped')
+    throw new Error(`${u.conveyor_no}: mijozga jo'natilgan, avval jo'natmani bekor qiling`);
+
+  const last = (await client.query(
+    `SELECT m.*, s.is_exit FROM unit_moves m
+       JOIN sections s ON s.id = m.section_id
+      WHERE m.unit_id = $1 ORDER BY m.id DESC LIMIT 1`, [unit_id])).rows[0];
+  if (!last) throw new Error(`${u.conveyor_no}: qaytariladigan o'tkazish yo'q`);
+
+  // Jamlanma yozuv. Bog'lanish ustuni qo'shilishidan oldingi harakatlarda
+  // NULL — ular uchun bo'lim, mahsulot, sana va konveyer raqami bo'yicha
+  // eng oxirgi mos yozuv olinadi.
+  const flowId = last.flow_log_id || (await client.query(
+    `SELECT f.id FROM flow_log f JOIN shifts sh ON sh.id = f.shift_id
+      WHERE f.section_id = $1 AND f.product_id = $2
+        AND sh.work_date = $3 AND f.note = $4
+      ORDER BY f.id DESC LIMIT 1`,
+    [last.section_id, u.product_id, last.moved_on, u.conveyor_no])).rows[0]?.id;
+  if (flowId) await client.query(`DELETE FROM flow_log WHERE id = $1`, [flowId]);
+
+  await client.query(`DELETE FROM unit_moves WHERE id = $1`, [last.id]);
+
+  // Oldingi harakat — birlik shu yerga qaytadi. Umuman harakat qolmasa,
+  // birlik "boshlanmagan" holatga tushadi.
+  const prev = (await client.query(
+    `SELECT m.*, s.is_exit FROM unit_moves m
+       JOIN sections s ON s.id = m.section_id
+      WHERE m.unit_id = $1 ORDER BY m.id DESC LIMIT 1`, [unit_id])).rows[0];
+
+  await client.query(
+    `UPDATE production_units SET
+       current_section_id = $2::int,
+       entered_section_on = $3::date,
+       status = CASE WHEN status = 'cancelled' THEN status
+                     WHEN $4::boolean THEN 'fg' ELSE 'production' END,
+       fg_on  = CASE WHEN $4::boolean THEN $3::date ELSE NULL END
+     WHERE id = $1`,
+    [unit_id, prev?.section_id || null, prev?.moved_on || null, prev?.is_exit || false]);
+
+  // Lak va qadoqlash sanalari qolgan harakatlardan qaytadan olinadi
+  await client.query(
+    `UPDATE production_units u SET
+       lak_on  = (SELECT MIN(m.moved_on) FROM unit_moves m
+                    JOIN sections s ON s.id = m.section_id
+                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'lak'
+                   WHERE m.unit_id = u.id),
+       pack_on = (SELECT MIN(m.moved_on) FROM unit_moves m
+                    JOIN sections s ON s.id = m.section_id
+                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'pack'
+                   WHERE m.unit_id = u.id)
+     WHERE u.id = $1`, [unit_id]);
+
+  // T/M ombor qoldig'i: chiqish bo'limiga o'tkazilgan bo'lsa, qaytariladi.
+  // Manfiyga tushmasin — qoldiq qo'lda ham tuzatilgan bo'lishi mumkin.
+  if (last.is_exit) {
+    await client.query(
+      `UPDATE fg_stock SET qty = GREATEST(qty - $2, 0), updated_at = NOW()
+        WHERE product_id = $1`, [u.product_id, u.qty]);
+  }
+
+  return { unit_id, conveyor_no: u.conveyor_no,
+           from_section_id: last.section_id, to_section_id: prev?.section_id || null };
+}
+
+// Oxirgi o'tkazishni qaytarish. Bir nechta birlikni birdan ham qabul qiladi.
+router.post('/undo', need('production.entry'), wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
+  if (!ids.length) throw new Error('Birlik tanlanmagan');
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const undone = [];
+    for (const id of ids) undone.push(await undoLastMove(client, req, id));
+    // Ombor qoldig'i tegadigan amal — audit jurnaliga tushadi
+    await audit(req, { module: 'production', action: 'undo', entity: 'unit_move',
+                       entity_id: undone.length,
+                       payload: { units: undone.map((x) => x.conveyor_no) } }, client);
+    await client.query('COMMIT');
+    res.json({ undone });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+}));
 
 router.post('/move', need('production.entry'), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];

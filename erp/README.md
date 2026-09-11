@@ -298,6 +298,19 @@ Birlik "O'tkazish" tugmasi bilan marshrutdagi **keyingi bo'limga** o'tadi —
 qaysi bo'lim ekanini tizim marshrutdan o'zi topadi. Chiqish bo'limiga
 yetganda birlik avtomatik T/M omboriga tushadi va `fg_stock` yangilanadi.
 
+**↩ tugmasi — oxirgi o'tkazishni qaytaradi.** "O'tkazish" bexosdan bosilishi
+oddiy hol, ayniqsa birlik shu bilan T/M omboriga tushib ketsa. Bekor qilish
+bunga yaramaydi: u birlikni jurnaldan butunlay chiqaradi. Qaytarish esa
+bitta qadam orqaga oladi va o'tkazish nima yozgan bo'lsa, o'shalarni
+tozalaydi: harakat yozuvi, jamlanma `flow_log` yozuvi va undagi brak,
+birlikning joyi va holati, T/M omborga kirish sanasi, `fg_stock` qoldig'i.
+Lak va qadoqlash sanalari qolgan harakatlardan qayta hisoblanadi.
+
+Faqat **oxirgi** harakat qaytariladi: o'rtadagisini olib tashlash tarixni
+yolg'on qiladi — birlik o'tmagan bo'limdan o'tgan bo'lib ko'rinadi. Ketma-ket
+bosilsa birlik qadamma-qadam orqaga, oxirida "boshlanmagan" holatga qaytadi.
+Mijozga jo'natilgan birlik qaytarilmaydi.
+
 ### Mijozlar
 
 | Maydon | Izoh |

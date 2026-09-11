@@ -129,6 +129,17 @@ CREATE TABLE IF NOT EXISTS unit_moves (
   worker_id   INT  REFERENCES workers(id),
   note        TEXT
 );
+
+-- Har o'tkazish jamlanma `flow_log` ga ham yoziladi. O'tkazish qaytarilganda
+-- o'sha jamlanma yozuvni ham olib tashlash kerak, aks holda WIP va panel
+-- bo'lmagan ishni ko'rsatib qoladi. Qaysi yozuv ekanini topish uchun
+-- bog'lanish shu yerda saqlanadi.
+--
+-- Bu ustun qo'shilishidan oldin kiritilgan harakatlarda NULL — ular uchun
+-- jamlanma yozuv bo'lim, mahsulot, sana va konveyer raqami bo'yicha
+-- topiladi (izoh: modules/units.js).
+ALTER TABLE unit_moves ADD COLUMN IF NOT EXISTS flow_log_id BIGINT
+  REFERENCES flow_log(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_moves_unit ON unit_moves(unit_id, moved_at);
 
 -- ========================================================== HISOBOT VIEW'LARI
