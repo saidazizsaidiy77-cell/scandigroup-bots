@@ -341,3 +341,12 @@ const App = (() => {
              .map((m) => ({ ...m,
                ready: pages().some((p) => inMod(p, m.code) && p.href) })) };
 })();
+
+// Telefonga o'rnatish. Xizmat ishchisi ro'yxatdan o'tgach brauzer ZELTA ni
+// alohida ilova sifatida bosh ekranga qo'sha oladi: xodim manzil yozmaydi,
+// brauzer paneli ko'rinmaydi. Ro'yxatdan o'tmasa ham sayt ishlayveradi —
+// shuning uchun xatosi jim yutiladi.
+if ('serviceWorker' in navigator && location.protocol === 'https:')
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
