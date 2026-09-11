@@ -10,10 +10,15 @@ const db = new Pool({
 });
 
 // Har modul shu yordamchilarni ishlatadi — xatolikni bir joyda ushlash uchun.
+// Xatoni javobga aylantiradi. `e.status` qo'yilgan bo'lsa — bu xodimga
+// atay yozilgan xabar (masalan "PIN 4-6 raqam"), server nosozligi emas:
+// shunda 400 qaytadi va log'ga yozilmaydi. Aks holda logda haqiqiy
+// nosozlik xodimning kiritish xatolari orasida ko'rinmay qoladi.
 const wrap = (fn) => (req, res) =>
   fn(req, res).catch((e) => {
-    console.error(e);
-    res.status(500).json({ error: e.message });
+    const status = e.status || 500;
+    if (status >= 500) console.error(e);
+    res.status(status).json({ error: e.message });
   });
 
 const today   = () => new Date().toISOString().slice(0, 10);

@@ -34,19 +34,40 @@ router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
   res.json({ roles: roles.rows, shops: shops.rows });
 }));
 
+// Telegram ID — RAQAM, @nom emas (bazada bigint). Bot ichida /myid
+// yozilganda aynan shu raqam chiqadi. Xodim @nomini yozsa baza
+// "invalid input syntax for type bigint" deb javob berardi — bu xabar
+// hech kimga hech narsa tushuntirmaydi, shuning uchun tekshiruv shu yerda.
+//
+// Maydon ixtiyoriy: u faqat Telegram ilovasi orqali kirish uchun kerak,
+// saytga PIN bilan kiriladi.
+function tgId(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  if (!/^\d{1,19}$/.test(s)) {
+    const e = new Error(
+      "Telegram ID raqam bo'lishi kerak (masalan 123456789), @nom emas. " +
+      "Bilmasangiz bo'sh qoldiring — saytga PIN bilan kiriladi.");
+    e.status = 400;
+    throw e;
+  }
+  return s;
+}
+
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, pin, tg_id, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   if (pin && !/^\d{4,6}$/.test(String(pin)))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
+  const tg = tgId(tg_id);
 
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     const w = (await client.query(
       `INSERT INTO workers (name, phone, pin, tg_id) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [name.trim(), phone || null, pin ? String(pin) : null, tg_id || null])).rows[0];
+      [name.trim(), phone || null, pin ? String(pin) : null, tg])).rows[0];
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id) VALUES ($1,$2,$3)`,
@@ -68,6 +89,10 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
 router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
   const { name, phone, pin, tg_id, active, roles } = req.body;
+  if (pin && !/^\d{4,6}$/.test(String(pin)))
+    return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
+  const tg = tgId(tg_id);
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -80,7 +105,7 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          active = COALESCE($6, active)
        WHERE id = $1`,
       [id, name || null, phone || null, pin ? String(pin) : null,
-       tg_id || null, typeof active === 'boolean' ? active : null]);
+       tg, typeof active === 'boolean' ? active : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {

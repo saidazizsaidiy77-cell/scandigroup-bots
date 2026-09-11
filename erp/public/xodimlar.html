@@ -96,9 +96,15 @@ function openForm(id){
             <div style="flex:1"><label>PIN (4-6 raqam)</label>
               <input id="wPin" inputmode="numeric" value="${esc(w?.pin || '')}"></div>
           </div>
-          <div><label>Telegram ID <span style="text-transform:none">— bot ichida
-            /myid yozib olinadi</span></label>
-            <input id="wTg" inputmode="numeric" value="${esc(w?.tg_id || '')}"></div>
+          <!-- Telegram ID ixtiyoriy: u faqat Telegram ilovasi orqali kirish
+               uchun kerak, saytga PIN bilan kiriladi. Maydonga @nom yozilishi
+               oddiy hol edi — shuning uchun sarlavhada raqam ekani aytilgan
+               va faqat raqam kiritiladi. -->
+          <div><label>Telegram ID <span style="text-transform:none">— ixtiyoriy,
+            faqat raqam (bot ichida /myid yozib olinadi). @nom emas.</span></label>
+            <input id="wTg" inputmode="numeric" placeholder="123456789"
+                   oninput="this.value = this.value.replace(/\D/g, '')"
+                   value="${esc(w?.tg_id || '')}"></div>
 
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
