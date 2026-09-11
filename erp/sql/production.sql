@@ -148,6 +148,15 @@ ALTER TABLE fasons ADD COLUMN IF NOT EXISTS sort INT NOT NULL DEFAULT 0;
 -- O'lchami yo'q guruhlarda (penal, kamod, sp, stul) NULL bo'lib qoladi.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS size_label TEXT;
 
+-- KUTISH NUQTASI. Zavod zahira uchun mahsulotni shu bo'limda to'xtatib
+-- turadi: rang sepishgacha hammasi bir xil, rang esa buyurtma tushgandan
+-- keyin beriladi. Shunda mijozga yetkazish muddati qisqaradi.
+--
+-- Muddat hisobiga ta'siri bor: shu bo'limda buyurtmasiz turgan birlik
+-- qachon keyingi bo'limga o'tishi NOMA'LUM — u buyurtma kutadi, quvvat
+-- kutmaydi. Bunday birlikka taxmin chiqarilmaydi.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS is_hold BOOLEAN NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS set_items (
   set_product_id  INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   item_product_id INT NOT NULL REFERENCES products(id),

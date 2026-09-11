@@ -104,20 +104,35 @@ SELECT
   pp.shop, pp.shop_id, pp.section, pp.section_id, pp.step_no,
   u.entered_section_on,
 
-  -- Keyingi tsexga o'tkazish sanasi: qo'lda reja bo'lsa u, aks holda taxmin
+  -- Keyingi tsexga o'tkazish sanasi: qo'lda reja bo'lsa u, aks holda taxmin.
+  -- Kutish nuqtasida turgan zahiraga taxmin yo'q: u buyurtma kutadi,
+  -- quvvat kutmaydi — qachon o'tishini hech qanday hisob ayta olmaydi.
   COALESCE(u.next_shop_planned_on,
-           CURRENT_DATE + (e.next_shop_days || ' days')::interval)::date AS next_shop_on,
+           CASE WHEN st.is_stock AND COALESCE(cur.is_hold, false) THEN NULL
+                ELSE CURRENT_DATE + (e.next_shop_days || ' days')::interval END)::date
+    AS next_shop_on,
   CASE WHEN u.next_shop_planned_on IS NOT NULL THEN 'reja'
-       WHEN e.next_shop_days IS NOT NULL       THEN 'taxmin'
+       WHEN e.next_shop_days IS NOT NULL
+            AND NOT (st.is_stock AND COALESCE(cur.is_hold, false)) THEN 'taxmin'
        ELSE NULL END AS next_shop_src,
   e.next_shop AS next_shop,
 
-  -- T/M omboriga kirish: fakt → reja → taxmin (lak va qadoqlash bilan bir xil)
+  -- T/M omboriga kirish: fakt → reja → taxmin (lak va qadoqlash bilan bir xil).
+  --
+  -- ZAHIRAGA TAXMIN CHIQARILMAYDI. Egasi yo'q birlik rang sepishda
+  -- buyurtma kutadi, undan keyingi bosqichlar esa buyurtma tushgandan
+  -- keyin bajariladi — ya'ni qachon lakka, qadoqlashga va omborga
+  -- tushishini hech qanday quvvat hisobi ayta olmaydi. Bo'sh katak
+  -- "hali ma'lum emas" degani, o'ylab topilgan sanadan halolroq.
+  --
+  -- Qo'lda qo'yilgan REJA ko'rsatilaveradi: tsex boshlig'i ataylab
+  -- muddat belgilagan bo'lsa, u haqiqiy va'da.
   COALESCE(u.fg_on, u.fg_planned_on,
-           (CURRENT_DATE + (e.fg_days || ' days')::interval)::date) AS fg_on,
+           CASE WHEN st.is_stock THEN NULL
+                ELSE (CURRENT_DATE + (e.fg_days || ' days')::interval)::date END) AS fg_on,
   CASE WHEN u.fg_on         IS NOT NULL THEN 'fakt'
        WHEN u.fg_planned_on IS NOT NULL THEN 'reja'
-       WHEN e.fg_days       IS NOT NULL THEN 'taxmin'
+       WHEN e.fg_days IS NOT NULL AND NOT st.is_stock THEN 'taxmin'
        ELSE NULL END AS fg_src,
 
   COALESCE(c.name, 'T/M ombor') AS customer_name,  -- mijoz yo'q bo'lsa T/M ombor
@@ -135,18 +150,20 @@ SELECT
 
   -- Lak tsexi: fakt → reja → taxmin
   COALESCE(u.lak_on, u.lak_planned_on,
-           (CURRENT_DATE + (lak.days || ' days')::interval)::date) AS lak_on,
+           CASE WHEN st.is_stock THEN NULL
+                ELSE (CURRENT_DATE + (lak.days || ' days')::interval)::date END) AS lak_on,
   CASE WHEN u.lak_on         IS NOT NULL THEN 'fakt'
        WHEN u.lak_planned_on IS NOT NULL THEN 'reja'
-       WHEN lak.days         IS NOT NULL THEN 'taxmin'
+       WHEN lak.days IS NOT NULL AND NOT st.is_stock THEN 'taxmin'
        ELSE NULL END AS lak_src,
 
   -- Qadoqlash tsexi: savdo mijozga muddat aytishda shunga qaraydi
   COALESCE(u.pack_on, u.pack_planned_on,
-           (CURRENT_DATE + (pk.days || ' days')::interval)::date) AS pack_on,
+           CASE WHEN st.is_stock THEN NULL
+                ELSE (CURRENT_DATE + (pk.days || ' days')::interval)::date END) AS pack_on,
   CASE WHEN u.pack_on         IS NOT NULL THEN 'fakt'
        WHEN u.pack_planned_on IS NOT NULL THEN 'reja'
-       WHEN pk.days           IS NOT NULL THEN 'taxmin'
+       WHEN pk.days IS NOT NULL AND NOT st.is_stock THEN 'taxmin'
        ELSE NULL END AS pack_src,
 
   -- Reja bor, fakt yo'q va muddat o'tib ketgan — nazorat shu ustunda
@@ -157,10 +174,22 @@ SELECT
   -- Reja sanalarining o'zi: tahrirlashda kiritilgan qiymat kerak bo'ladi
   u.lak_planned_on,
   u.pack_planned_on,
-  u.fg_planned_on
+  u.fg_planned_on,
+
+  -- Zahirami va kutish nuqtasida turibdimi — jurnal shu ikki belgiga
+  -- qarab "buyurtma kutilmoqda" deb ko'rsatadi.
+  st.is_stock,
+  (st.is_stock AND COALESCE(cur.is_hold, false)) AS waiting
 FROM production_units u
 JOIN products p        ON p.id = u.product_id
 JOIN product_groups g  ON g.id = p.group_id
+-- Birlik hozir turgan bo'lim: kutish nuqtasimi yoki yo'q
+LEFT JOIN sections cur ON cur.id = u.current_section_id
+-- Zahira: egasi yo'q birlik. Mijoz yoki zakaz biriktirilishi bilan
+-- birlik buyurtmaga aylanadi va muddat hisobi o'zi tiklanadi —
+-- buning uchun alohida amal qilish shart emas.
+LEFT JOIN LATERAL (SELECT (u.customer_id IS NULL AND u.order_no IS NULL) AS is_stock)
+       st ON TRUE
 LEFT JOIN v_unit_place pp ON pp.unit_id = u.id
 LEFT JOIN v_unit_eta e    ON e.unit_id = u.id
 LEFT JOIN customers c     ON c.id = u.customer_id

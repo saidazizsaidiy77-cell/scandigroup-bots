@@ -247,13 +247,15 @@ function render(){
       <td>${r.fabric ? esc(r.fabric) : '<span class="muted">—</span>'}</td>
       <td class="num">${r.qty}</td>
       <td class="sep">${r.section
-        ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${esc(r.shop || '')}</div>`
+        ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${
+            r.waiting ? 'buyurtma kutilmoqda' : esc(r.shop || '')}</div>`
         : '<span class="muted">boshlanmagan</span>'}</td>
       <td class="sep">${dateWithSrc(r.lak_on,  r.lak_src,  r.lak_late)}</td>
       <td>${dateWithSrc(r.pack_on, r.pack_src, r.pack_late)}</td>
       <td>${dateWithSrc(r.fg_on,   r.fg_src,   r.fg_late)}</td>
       <td class="sep">${r.customer_id ? esc(r.customer_name)
-            : '<span class="muted">T/M ombor</span>'}</td>
+            : `<span class="tag${r.waiting ? ' warn' : ''}">${
+                r.is_stock ? 'zahira' : 'T/M ombor'}</span>`}</td>
       <td class="num muted">${money(r.unit_price)}</td>
       <td class="num">${r.unit_price == null
         ? '<span class="muted">—</span>'

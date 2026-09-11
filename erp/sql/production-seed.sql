@@ -78,6 +78,13 @@ INSERT INTO chambers (shop_id, code, name) VALUES
   ((SELECT id FROM shops WHERE code='BOYOQ'), 'KAM-2', 'Kamera 2')
 ON CONFLICT (code) DO NOTHING;
 
+-- Zahira shu bo'limda kutadi: rang sepishgacha mahsulot bir xil, rang
+-- buyurtmadan keyin beriladi. Bir marta belgilanadi — saytdan boshqa
+-- bo'lim tanlansa, keyingi deploy uni qaytarib qo'ymaydi.
+UPDATE sections SET is_hold = true
+ WHERE code = 'BOY-RANG'
+   AND NOT EXISTS (SELECT 1 FROM sections WHERE is_hold);
+
 -- Mahsulot guruhlari `catalog-groups.sql` da: u eski guruhlarni yangisiga
 -- ko'chirishi ham kerak, shuning uchun marshrut shablonlaridan keyin,
 -- mahsulotlar kiritilishidan oldin alohida fayl bo'lib turadi.

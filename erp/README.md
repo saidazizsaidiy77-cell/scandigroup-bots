@@ -307,6 +307,24 @@ belgi bir katakda bo'lmasligi kerak.
   bo'lim quvvatidan `taxmin`, allaqachon kirgan bo'lsa `fakt` belgisi bilan
   chiqadi.
 
+  **Zahiraga taxmin chiqarilmaydi.** Zavod mijozga yetkazishni qisqartirish
+  uchun mahsulotni rangsiz holda **rang sepish** bo'limida ushlab turadi:
+  rangigacha hammasi bir xil, rang esa buyurtma tushgandan keyin beriladi.
+  Bunday birlik qachon lakka, qadoqlashga va omborga tushishini hech qanday
+  quvvat hisobi ayta olmaydi — u **buyurtma kutadi, quvvat kutmaydi**.
+  Shuning uchun uch ustun ham bo'sh qoladi va jurnalda `zahira` belgisi
+  turadi. Bo'sh katak "hali ma'lum emas" degani, o'ylab topilgan sanadan
+  halolroq.
+
+  Zahira nima bilan aniqlanadi: **mijozi ham, zakaz raqami ham yo'q birlik**.
+  Alohida belgi qo'yilmaydi — buyurtma tushib mijoz yoki zakaz biriktirilgan
+  zahoti birlik buyurtmaga aylanadi va muddat hisobi o'zi tiklanadi.
+
+  Kutish nuqtasi `sections.is_hold` bilan belgilanadi (seed'da — Rang
+  sepish). Kutish nuqtasida turgan zahiraga "keyingi tsexga" taxmini ham
+  chiqarilmaydi; undan oldingi bo'limlarda esa chiqaveradi, chunki
+  rang sepishgacha yo'l quvvat bilan o'lchanadi.
+
   Yo'lda quvvati kiritilmagan bo'lim tursa **taxmin umuman ko'rsatilmaydi**.
   Yarim ma'lumotdan chiqqan sana bo'sh katakdan yomonroq: unga ishonib mijozga
   va'da beriladi. Bo'sh ustun "quvvat kiritilmagan" degani — u
