@@ -211,9 +211,12 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
           WHERE group_id = $1 AND size_label IS NOT NULL ORDER BY size_label`,
         [g.id])).rows.map((r) => r.size_label);
 
-      // Mahsulot nomi — FAQAT fason. Turi guruh ustunida alohida turadi,
-      // shuning uchun nomga takrorlab yozilmaydi. O'lcham esa o'z ustunida.
+      // Mahsulot nomi — fason. Turi guruh ustunida alohida turadi, shuning
+      // uchun nomga takrorlab yozilmaydi. O'lcham esa aksincha nomning bir
+      // qismi: "Safia 3,5 m" — zavod uni shunday ataydi va alohida SKU deb
+      // hisoblaydi.
       for (const size of (sizes.length ? sizes : [null])) {
+        const name = size ? `${f.name} ${size}` : f.name;
         // O'lcham kodi SKU ga qo'shiladi: "4,5 m" → 45
         const sku = size
           ? `${g.code}-${f.code}-${size.replace(/[^0-9]/g, '').padEnd(2, '0')}`
@@ -223,7 +226,7 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
            VALUES ($1,$2,$3,$4,$5,$6,$7)
            ON CONFLICT (sku) DO UPDATE SET active = true, name = EXCLUDED.name
            RETURNING id, sku, name, size_label`,
-          [sku, f.name, g.id, f.id, it.route_template_id || g.route_template_id || null,
+          [sku, name, g.id, f.id, it.route_template_id || g.route_template_id || null,
            it.is_set == null ? g.is_set : !!it.is_set, size]);
         saved.push(rows[0]);
       }

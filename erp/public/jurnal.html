@@ -241,8 +241,7 @@ function render(){
         : '<span class="pad"></span>'}<strong>${esc(r.conveyor_no)}</strong></td>
       <td class="muted">${d8(r.started_on)}</td>
       <td>${r.order_no ? esc(r.order_no) : '<span class="muted">—</span>'}</td>
-      <td class="sep">${esc(r.product)}${r.size_label
-        ? ` <span class="muted">${esc(r.size_label)}</span>` : ''}</td>
+      <td class="sep">${esc(r.product)}</td>
       <td class="muted">${esc(r.product_type)}</td>
       <td>${r.color ? esc(r.color) : '<span class="muted">—</span>'}</td>
       <td>${r.fabric ? esc(r.fabric) : '<span class="muted">—</span>'}</td>
@@ -325,7 +324,10 @@ async function newUnit(){
   let no = '';
   try { no = (await App.api('/api/units/next-no')).conveyor_no || ''; } catch {}
   const today = new Date().toISOString().slice(0, 10);
-  const fasons = [...new Set(ref.products.filter(p => p.route_template_id).map(p => p.name))];
+  // O'lcham nomning bir qismi ("Safia 3,5 m"), shuning uchun ro'yxat uzun —
+  // alifbo tartibida beriladi.
+  const fasons = [...new Set(ref.products.filter(p => p.route_template_id)
+    .map(p => p.name))].sort((a, b) => a.localeCompare(b));
 
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
@@ -346,14 +348,10 @@ async function newUnit(){
                 ${fasons.map(f => `<option>${esc(f)}</option>`).join('')}
               </select></div>
             <div style="flex:1"><label>Maxsulot guruhi</label>
-              <select id="nGroup" onchange="nFillSize()"></select></div>
+              <select id="nGroup"></select></div>
           </div>
-          <div class="row" style="gap:12px">
-            <div style="flex:1"><label>O'lcham</label>
-              <select id="nSize"></select></div>
-            <div style="flex:1"><label>Soni</label>
-              <input id="nQty" type="number" min="1" value="1"></div>
-          </div>
+          <div><label>Soni</label>
+            <input id="nQty" type="number" min="1" value="1"></div>
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Rang</label>
               <input id="nColor" list="dlColor" placeholder="—"></div>
@@ -379,31 +377,19 @@ async function newUnit(){
   nFillGroup();
 }
 
-// Guruh bir marta chiqadi, uzunlik esa alohida ustunda — qoldiq
-// sahifasidagi bilan bir xil mantiq.
+// O'lcham mahsulot nomining bir qismi, shuning uchun nom tanlangach
+// guruhdan boshqa tanlanadigan narsa qolmaydi.
 function nFillGroup(){
   const list = ref.products.filter(p => p.route_template_id && p.name === $('nFason').value);
-  const groups = [...new Map(list.map(p => [p.group_id, p.group_name])).entries()];
-  $('nGroup').innerHTML = groups.length
-    ? groups.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('')
+  $('nGroup').innerHTML = list.length
+    ? list.map(p => `<option value="${p.id}">${esc(p.group_name)}</option>`).join('')
     : '<option value="">—</option>';
-  nFillSize();
-}
-
-function nFillSize(){
-  const list = ref.products.filter(p => p.route_template_id
-    && p.name === $('nFason').value && p.group_id === +$('nGroup').value);
-  $('nSize').innerHTML = list.length
-    ? list.map(p => `<option value="${p.id}">${
-        p.size_label ? esc(p.size_label) : '—'}</option>`).join('')
-    : '<option value="">—</option>';
-  $('nSize').disabled = !list.some(p => p.size_label);
 }
 
 async function saveNew(){
   const body = {
     conveyor_no: $('nNo').value.trim(),
-    product_id:  +$('nSize').value,
+    product_id:  +$('nGroup').value,
     qty:         Number($('nQty').value) || 1,
     started_on:  $('nStart').value || null,
     order_no:    $('nOrder').value.trim() || null,

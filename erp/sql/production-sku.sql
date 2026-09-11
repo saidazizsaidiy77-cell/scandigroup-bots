@@ -93,7 +93,7 @@ ON CONFLICT (sku) DO NOTHING;
 --  L1-FULL. Fason bo'yicha real marshrut aniqlangach o'zgartiriladi
 --  (pastdagi izohga qarang).
 INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set, size_label)
-SELECT 'STL-' || f.code || '-' || z.code, f.name,
+SELECT 'STL-' || f.code || '-' || z.code, f.name || ' ' || z.label,
        (SELECT id FROM product_groups WHERE code='STL'),
        f.id,
        (SELECT id FROM route_templates WHERE code='L1-FULL'), false, z.label
@@ -107,6 +107,18 @@ CROSS JOIN (VALUES
   ('50', '5 m'),   ('55', '5,5 m'), ('60', '6 m')
 ) AS z(code, label)
 ON CONFLICT (sku) DO NOTHING;
+
+--  Nom o'lcham bilan birga: "Safia 3,5 m". Uzunlik alohida ustun emas,
+--  mahsulot nomining bir qismi — zavod uni shunday ataydi.
+--
+--  Yuqoridagi INSERT mavjud qatorlarni yangilamaydi (ON CONFLICT DO NOTHING),
+--  shuning uchun nom alohida tuzatiladi. Takrorlansa xavfsiz: nomi allaqachon
+--  to'g'ri qatorga tegmaydi. Fason nomi o'zgartirilsa ham shu qator uni
+--  mahsulot nomlariga yetkazadi.
+UPDATE products p SET name = f.name || ' ' || p.size_label
+  FROM fasons f
+ WHERE p.fason_id = f.id AND p.size_label IS NOT NULL
+   AND p.name <> f.name || ' ' || p.size_label;
 
 --  O'lchamsiz eski stol mahsulotlari (STL-SAFIA va h.k.) o'rnini shular
 --  egalladi. O'chirilmaydi — ularda kiritilgan birlik bo'lishi mumkin,

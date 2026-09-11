@@ -284,17 +284,17 @@ belgi bir katakda bo'lmasligi kerak.
 - **Rang va Mato** — birlikning o'zida, SKU da emas: bitta fason har xil
   rangda va matoda chiqadi. Ro'yxat oldindan tuzilmaydi — kiritilgani o'zi
   yig'iladi va keyingi safar tanlash uchun taklif qilinadi.
-- **O'lcham** — aksincha, SKU ning bir qismi. Stol har fasonda 3,5 m dan
-  6 m gacha oltita uzunlikda chiqadi va ularning har biri alohida mahsulot:
-  narxi boshqa, omborda alohida turadi — "3 dona stol bor" degan gap
-  uzunliksiz ma'no bermaydi. Rangdan farqi shu: rang birlikning belgisi,
-  o'lcham esa mahsulotning o'zini o'zgartiradi. 7 fason × 6 o'lcham =
-  **42 stol SKU**, jami 77.
+- **O'lcham** — aksincha, mahsulot nomining bir qismi. Stol har fasonda
+  3,5 m dan 6 m gacha oltita uzunlikda chiqadi va ularning har biri alohida
+  mahsulot: narxi boshqa, omborda alohida turadi — "3 dona stol bor" degan
+  gap uzunliksiz ma'no bermaydi. Rangdan farqi shu: rang birlikning belgisi,
+  o'lcham esa mahsulotning o'zini o'zgartiradi.
 
-  Kiritishda o'lcham alohida ustunda turadi — jurnalda ham, qoldiqda ham,
-  Excel'da ham. Guruh ustuni "Stol" ni bir marta ko'rsatadi: oltita uzunlikni
-  guruh ro'yxatiga tiqish uni guruh emas, mahsulot ro'yxatiga aylantirardi.
-  O'lchamsiz guruhda (penal, kamod, sp, stul) ustun bo'sh va tanlanmaydi.
+  Shuning uchun nom o'lcham bilan birga yoziladi — **"Safia 3,5 m"** — va
+  alohida ustun yo'q: zavod uni shunday ataydi, jadvalga qo'shimcha ustun
+  qo'yish esa faqat kengaytirardi. 7 fason × 6 o'lcham = **42 stol SKU**,
+  jami 77. Bazada `products.size_label` saqlanadi, lekin u faqat ichki
+  ehtiyoj uchun: tartib va yangi fasonga o'lchamlarni birdan yaratish.
 - **Lak tsehi · Qadoqlash tsehi · T/M ombor** — uchalasi bir mantiqda
   ishlaydi:
   `fakt` — birlik o'sha tsexga o'tganda tizim o'zi yozadi;
