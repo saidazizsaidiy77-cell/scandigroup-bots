@@ -346,11 +346,11 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
             entered_section_on, customer_id, unit_price, ship_on, next_shop_planned_on,
             status, is_opening, note, created_by,
             color, fabric, lak_planned_on, lak_on, pack_planned_on, pack_on,
-            fg_planned_on)
+            fg_planned_on, is_stock)
          VALUES ($1,$2,$3,$4, COALESCE($5::date, CURRENT_DATE), $6,
                  COALESCE($7::date, CURRENT_DATE), $8,$9,$10,$11,
                  $12, $13, $14, $15,
-                 $16,$17,$18,$19,$20,$21,$22)
+                 $16,$17,$18,$19,$20,$21,$22,$23)
          RETURNING id, conveyor_no`,
         [String(it.conveyor_no).trim(), it.order_no || null, it.product_id,
          Number(it.qty) || 1, it.started_on || null, it.section_id || null,
@@ -360,7 +360,7 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
          trim(it.color), trim(it.fabric),
          it.lak_planned_on || null, lakOn,
          it.pack_planned_on || null, packOn,
-         it.fg_planned_on || null])).rows[0];
+         it.fg_planned_on || null, !!it.is_stock])).rows[0];
 
       if (it.section_id) {
         await client.query(
@@ -429,13 +429,18 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
        pack_planned_on      = COALESCE($12::date, pack_planned_on),
        lak_on               = COALESCE($13::date, lak_on),
        pack_on              = COALESCE($14::date, pack_on),
-       fg_planned_on        = COALESCE($15::date, fg_planned_on)
+       fg_planned_on        = COALESCE($15::date, fg_planned_on),
+       -- Zahira belgisi COALESCE bilan emas: uni O'CHIRISH ham kerak
+       -- (buyurtma tushdi, endi zahira emas), COALESCE esa false ni
+       -- "tegilmadi" deb o'qib, belgini hech qachon yechmasdi.
+       is_stock             = COALESCE($16::boolean, is_stock)
      WHERE id = $1 RETURNING id`,
     [req.params.id, order_no || null, customer_id || null,
      unit_price === '' || unit_price == null ? null : Number(unit_price),
      ship_on || null, next_shop_planned_on || null, note || null, status || null,
      trim(color), trim(fabric), lak_planned_on || null, pack_planned_on || null,
-     lak_on || null, pack_on || null, req.body.fg_planned_on || null]);
+     lak_on || null, pack_on || null, req.body.fg_planned_on || null,
+     typeof req.body.is_stock === 'boolean' ? req.body.is_stock : null]);
   if (!rows[0]) return res.status(404).json({ error: 'Birlik topilmadi' });
   await audit(req, { module: 'production', action: 'update', entity: 'unit',
                      entity_id: req.params.id, payload: req.body });

@@ -378,6 +378,10 @@ async function newUnit(){
           </div>
           <div><label>Mahsulot narxi, $</label>
             <input id="nPrice" type="number" min="0" placeholder="keyin ham qo'yiladi"></div>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <input id="nStock" type="checkbox" style="width:auto">
+            <span style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--text)"
+              >Zahira — qadoqlash va T/M ombor muddati hisoblanmaydi</span></label>
           <p class="muted" style="font-size:13px">Birlik <strong>boshlanmagan</strong>
             holatda yaratiladi. Konveyerga chiqqanda jurnaldan
             "O'tkazish" bilan birinchi bo'limga o'tkaziladi.</p>
@@ -407,6 +411,7 @@ async function saveNew(){
     unit_price:  $('nPrice').value === '' ? null : $('nPrice').value,
     color:       $('nColor').value.trim() || null,
     fabric:      $('nFabric').value.trim() || null,
+    is_stock:    $('nStock').checked,
   };
   if (!body.product_id) return alert('Mahsulot tanlanmagan');
   try{
@@ -502,6 +507,10 @@ async function edit(id){
           </div>
           <div><label>Mijozga chiqadigan sana</label>
             <input id="eShip" type="date" value="${r.ship_on || ''}"></div>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <input id="eStock" type="checkbox" style="width:auto" ${r.is_stock ? 'checked' : ''}>
+            <span style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--text)"
+              >Zahira — qadoqlash va T/M ombor muddati hisoblanmaydi</span></label>
           <div><label>Izoh</label><input id="eNote" value="${esc(r.note || '')}"></div>
           <button class="primary" onclick="saveEdit(${id})">Saqlash</button>
         </div>
@@ -541,6 +550,7 @@ async function saveEdit(id){
       color:  $('eColor').value.trim() || null,
       fabric: $('eFabric').value.trim() || null,
       // Fakt tushgan sana maydoni disabled — qiymat yuborilmaydi
+      is_stock: $('eStock').checked,
       lak_planned_on:  $('eLak').disabled  ? null : ($('eLak').value  || null),
       pack_planned_on: $('ePack').disabled ? null : ($('ePack').value || null),
       fg_planned_on:   $('eFg').disabled   ? null : ($('eFg').value   || null),

@@ -313,7 +313,9 @@ belgi bir katakda bo'lmasligi kerak.
   Bunday birlik qachon lakka, qadoqlashga va omborga tushishini hech qanday
   quvvat hisobi ayta olmaydi — u **buyurtma kutadi, quvvat kutmaydi**.
   Shuning uchun sana o'rniga **`zahira`** deb yoziladi — `Rang`,
-  `Qadoqlash tsehi` va `T/M ombor` ustunlarida. Bo'sh katak "unutilgan"
+  `Qadoqlash tsehi` va `T/M ombor` ustunlarida. Qoldiq jadvalida ham
+  shunday: sana maydoniga so'z yozib bo'lmaydi, shuning uchun belgilangan
+  qatorda maydonning o'zi yashirinadi va o'rnida "zahira" turadi. Bo'sh katak "unutilgan"
   deb o'qiladi, "zahira" esa sababni aytadi: mahsulot buyurtma kutmoqda,
   qadoqlash ham, omborga kirish ham o'shandan keyin bo'ladi.
 
@@ -321,9 +323,14 @@ belgi bir katakda bo'lmasligi kerak.
   sana ustuniga matn qo'yilsa Excel butun ustunni matn deb o'qiydi va
   hisob-kitob buziladi.
 
-  Zahira nima bilan aniqlanadi: **mijozi ham, zakaz raqami ham yo'q birlik**.
-  Alohida belgi qo'yilmaydi — buyurtma tushib mijoz yoki zakaz biriktirilgan
-  zahoti birlik buyurtmaga aylanadi va muddat hisobi o'zi tiklanadi.
+  Zahira — **birlikning o'z belgisi** (`production_units.is_stock`),
+  qoldiq jadvalida va jurnal oynalarida katakcha bilan qo'yiladi. Mijozdan
+  mustaqil: zahira mahsulot **qanday ishlanayotganini** aytadi, kimga
+  ketishini emas. Mijozi bor birlik ham zahiradan olinishi, mijozsiz birlik
+  esa oddiy tartibda to'liq yasalishi mumkin — shuning uchun uni mijozning
+  bor-yo'qligidan chiqarib bo'lmaydi.
+
+  Buyurtma tushgach katakcha yechiladi va muddat hisobi qaytadi.
 
   Kutish nuqtasi `sections.is_hold` bilan belgilanadi (seed'da — Rang
   sepish). Kutish nuqtasida turgan zahiraga "keyingi tsexga" taxmini ham

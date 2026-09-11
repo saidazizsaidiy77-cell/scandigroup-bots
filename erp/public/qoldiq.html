@@ -26,6 +26,11 @@
     o'tkaziladi. Qadoqlash bo'limi tanlansa birlik darrov T/M omboriga tushadi.
     Zakaz, mijoz va narx keyin ham qo'yilishi mumkin — jurnal sahifasidan.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
+    <strong>Zahira</strong> — belgilansa qadoqlash va T/M ombor kataklarida
+    sana o'rniga <strong>zahira</strong> so'zi turadi: mahsulot rang sepishda
+    buyurtma kutadi, qachon qadoqlanishi hali noma'lum. Mijozga bog'liq emas —
+    zahira mahsulot qanday ishlanayotganini aytadi.</p>
+  <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Lak va Qadoqlash sanalari</strong> — reja: qaysi kunga topshirish
     kelishilgan. Birlik o'sha tsexga o'tganda tizim faktni o'zi yozadi.
     Mahsulot allaqachon o'sha tsexda bo'lsa, sanani kiritish shart emas.</p>
@@ -52,6 +57,7 @@
       <th class="num" style="width:80px">Soni</th>
       <th style="min-width:150px">Tseh</th>
       <th style="min-width:160px">Bo'lim</th>
+      <th class="num" style="width:70px">Zahira</th>
       <th style="min-width:135px">Lak tsehi</th>
       <th style="min-width:135px">Qadoqlash tsehi</th>
       <th style="min-width:135px">T/M ombor</th>
@@ -150,9 +156,11 @@ function addRow(k = 1){
           ${ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
         </select></td>
         <td><select class="c-sec" onchange="sum()"><option value="">—</option></select></td>
+        <td class="num"><input class="c-stock" type="checkbox" style="width:auto"
+          onchange="markStock(this)"></td>
         <td><input class="c-lak" type="date"></td>
-        <td><input class="c-pack" type="date"></td>
-        <td><input class="c-fg" type="date"></td>
+        <td><input class="c-pack" type="date"><span class="zah">zahira</span></td>
+        <td><input class="c-fg" type="date"><span class="zah">zahira</span></td>
         <td><select class="c-cust"><option value="">T/M ombor</option>
           ${customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
         </select></td>
@@ -161,6 +169,7 @@ function addRow(k = 1){
         <td class="num"><button class="del" onclick="this.closest('tr').remove();sum()">&times;</button></td>
       </tr>`);
     fillGroup($('tB').lastElementChild.querySelector('.c-fason'));
+    markStock($('tB').lastElementChild.querySelector('.c-cust'));
   }
   sum();
 }
@@ -187,6 +196,24 @@ function fillSec(sel){
   sum();
 }
 
+// Zahira — mustaqil belgi: mahsulot qanday ishlanayotganini aytadi, kimga
+// ketishini emas. Mijozi bor birlik ham zahiradan olinishi mumkin, mijozsiz
+// birlik esa oddiy tartibda to'liq yasalishi mumkin.
+//
+// Belgilangach qadoqlash va T/M ombor kataklarida sana o'rniga "zahira"
+// so'zi turadi: sana maydoniga so'z yozib bo'lmaydi, shuning uchun maydonning
+// o'zi yashiriladi.
+function markStock(el){
+  const tr = el.closest('tr');
+  const stock = tr.querySelector('.c-stock').checked;
+  tr.classList.toggle('stock', stock);
+  if (stock) {
+    tr.querySelector('.c-pack').value = '';
+    tr.querySelector('.c-fg').value = '';
+  }
+  tr.querySelector('.c-color').placeholder = stock ? 'zahira' : '—';
+}
+
 function collect(){
   return [...document.querySelectorAll('#tB tr')].map(tr => {
     const g = (v) => tr.querySelector(v)?.value ?? '';
@@ -209,6 +236,7 @@ function collect(){
       fg_planned_on:   g('.c-fg')   || null,
       customer_id: g('.c-cust') || null,
       customer_id_raw: g('.c-cust'),
+      is_stock:    tr.querySelector('.c-stock').checked,
       is_opening:  true,
       _tr: tr,
     };

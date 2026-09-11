@@ -130,6 +130,20 @@ CREATE TABLE IF NOT EXISTS unit_moves (
   note        TEXT
 );
 
+-- ZAHIRA. Zavod mijozga yetkazishni qisqartirish uchun mahsulotni oldindan,
+-- rangsiz holda tayyorlab qo'yadi va rang sepish bo'limida ushlab turadi.
+-- Buyurtma tushgach rang beriladi, lak sepiladi, qadoqlanadi.
+--
+-- Bu mijozdan mustaqil belgi: zahira mahsulotning qanday ishlanayotganini
+-- aytadi, kimga ketishini emas. Mijozi bor birlik ham zahiradan olinishi,
+-- mijozsiz birlik esa oddiy tartibda to'liq yasalishi mumkin — shuning
+-- uchun uni mijozning bor-yo'qligidan chiqarib bo'lmaydi, alohida
+-- belgilanadi.
+--
+-- Ta'siri: zahiraga qadoqlash va T/M ombor muddati hisoblanmaydi —
+-- u buyurtma kutadi, quvvat kutmaydi.
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS is_stock BOOLEAN NOT NULL DEFAULT false;
+
 -- Har o'tkazish jamlanma `flow_log` ga ham yoziladi. O'tkazish qaytarilganda
 -- o'sha jamlanma yozuvni ham olib tashlash kerak, aks holda WIP va panel
 -- bo'lmagan ishni ko'rsatib qoladi. Qaysi yozuv ekanini topish uchun

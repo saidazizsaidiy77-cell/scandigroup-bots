@@ -123,6 +123,11 @@ tr.click:hover td{background:var(--surface-2)}
 .sheet .fix{position:sticky;left:0;background:var(--surface);z-index:1}
 .sheet tr:hover .fix{background:var(--surface-2)}
 .sheet .del{padding:6px 10px;font-size:13px;line-height:1;color:var(--muted)}
+/* Zahira qatorida sana maydoni o'rniga so'zning o'zi turadi: sana
+   maydoniga "zahira" deb yozib bo'lmaydi. */
+.sheet .zah{display:none;padding:8px 12px;font-size:13px;color:var(--muted)}
+.sheet tr.stock .zah{display:inline-block}
+.sheet tr.stock .c-pack,.sheet tr.stock .c-fg{display:none}
 /* Sana ustunlari uch xil manbadan keladi — qaysi ekani rang bilan ajratiladi */
 .src-fakt{color:var(--ok)}
 .src-reja{color:var(--text)}
