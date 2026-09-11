@@ -47,6 +47,7 @@
       <th style="min-width:110px">Z&#8470;</th>
       <th style="min-width:145px">Maxsulot nomi</th>
       <th style="min-width:165px">Maxsulot guruhi</th>
+      <th style="min-width:115px">O'lcham</th>
       <th style="min-width:120px">Rang</th>
       <th style="min-width:120px">Mato</th>
       <th class="num" style="width:80px">Soni</th>
@@ -139,7 +140,8 @@ function addRow(k = 1){
           <option value="">— tanlang —</option>
           ${fasons.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}
         </select></td>
-        <td><select class="c-group"></select></td>
+        <td><select class="c-group" onchange="fillSize(this)"></select></td>
+        <td><select class="c-size" onchange="sum()"></select></td>
         <td><input class="c-color" list="dlColor" placeholder="—"></td>
         <td><input class="c-fabric" list="dlFabric" placeholder="—"></td>
         <td><input class="c-qty" type="number" min="1" value="1" oninput="sum()"></td>
@@ -168,11 +170,27 @@ function addRow(k = 1){
 function fillGroup(sel){
   const tr = sel.closest('tr');
   const list = sel.value ? (byFason.get(sel.value) || []) : [];
-  // Stolda bitta fason oltita uzunlikda bor — guruh nomi yolg'iz yetmaydi
-  tr.querySelector('.c-group').innerHTML = list.length
-    ? list.map(p => `<option value="${p.id}">${esc(p.group_name)}${
-        p.size_label ? ' · ' + esc(p.size_label) : ''}</option>`).join('')
+  // Guruh bir marta chiqadi. Stolda bitta guruhda oltita mahsulot bor
+  // (uzunliklar) — ular guruh ustunida emas, o'lcham ustunida tanlanadi.
+  const groups = [...new Map(list.map(p => [p.group_id, p.group_name])).entries()];
+  tr.querySelector('.c-group').innerHTML = groups.length
+    ? groups.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('')
     : '<option value="">—</option>';
+  fillSize(tr.querySelector('.c-group'));
+}
+
+// Mahsulot aynan shu ustunda aniqlanadi: o'lchamli guruhda uzunlik
+// tanlanadi, o'lchamsizida bitta variant turadi va tanlanadigan narsa yo'q.
+function fillSize(sel){
+  const tr = sel.closest('tr');
+  const fason = tr.querySelector('.c-fason').value;
+  const list = (byFason.get(fason) || []).filter(p => p.group_id === +sel.value);
+  const size = tr.querySelector('.c-size');
+  size.innerHTML = list.length
+    ? list.map(p => `<option value="${p.id}">${
+        p.size_label ? esc(p.size_label) : '—'}</option>`).join('')
+    : '<option value="">—</option>';
+  size.disabled = !list.some(p => p.size_label);
   sum();
 }
 
@@ -192,7 +210,7 @@ function collect(){
     const price = g('.c-price') === '' ? null : +g('.c-price');
     return {
       conveyor_no: g('.c-no').trim(),
-      product_id:  +g('.c-group'),
+      product_id:  +g('.c-size'),
       qty, unit_price: price,
       order_no:    g('.c-order').trim() || null,
       color:       g('.c-color').trim() || null,

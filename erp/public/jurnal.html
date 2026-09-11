@@ -42,7 +42,10 @@
       <span class="muted" id="rowCount" style="font-size:13px"></span>
     </div>
     <div class="row" id="bulkBar"></div>
-    <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+    <div class="row">
+      <button class="primary" id="btnNew" onclick="newUnit()">+ Yangi birlik</button>
+      <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+    </div>
   </div>
   <div style="overflow:auto;max-height:72vh">
     <table id="tbl" class="log">
@@ -111,6 +114,8 @@ async function boot(){
   document.getElementById('dlFabric').innerHTML =
     sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
   ref = r; customers = c.customers;
+  // Birlik yaratish huquqi yo'q xodimga tugma ko'rsatilmaydi
+  if (!App.can('production.units', 'production.manage')) $('btnNew').remove();
   $('fShop').innerHTML = '<option value="">Barchasi</option>' +
     ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   $('fCust').innerHTML = '<option value="">Barchasi</option>' +
@@ -305,6 +310,112 @@ async function move(id){
     await load();
     alert(`${r.moved.length} ta birlik o'tkazildi` +
       (toFg ? `, shundan ${toFg} tasi T/M omboriga kirdi.` : '.'));
+  }catch(e){ alert(e.message); }
+}
+
+// ─────────────────────────────────────────────────────────── YANGI BIRLIK
+//
+//  Kundalik ish: yangi mahsulot konveyerga chiqdi. Ilgari birlik faqat
+//  "Boshlang'ich qoldiq" sahifasidan yaratilardi, u esa bir martalik ish
+//  uchun — tizim ishga tushgan kundagi holatni kiritish uchun yozilgan.
+//
+//  Bo'lim majburiy emas: hali konveyerga qo'yilmagan birlik "boshlanmagan"
+//  holatda yotadi va o'z vaqtida "O'tkazish" bilan liniyaga chiqadi.
+async function newUnit(){
+  let no = '';
+  try { no = (await App.api('/api/units/next-no')).conveyor_no || ''; } catch {}
+  const today = new Date().toISOString().slice(0, 10);
+  const fasons = [...new Set(ref.products.filter(p => p.route_template_id).map(p => p.name))];
+
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:560px">
+        <div class="row" style="justify-content:space-between;margin-bottom:18px">
+          <h1>Yangi birlik</h1><button onclick="close_()">Yopish</button></div>
+        <div class="stack">
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Bosh sana</label>
+              <input id="nStart" type="date" value="${today}"></div>
+            <div style="flex:1"><label>Konveyer raqami</label>
+              <input id="nNo" value="${esc(no)}"></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Maxsulot nomi</label>
+              <select id="nFason" onchange="nFillGroup()">
+                <option value="">— tanlang —</option>
+                ${fasons.map(f => `<option>${esc(f)}</option>`).join('')}
+              </select></div>
+            <div style="flex:1"><label>Maxsulot guruhi</label>
+              <select id="nGroup" onchange="nFillSize()"></select></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>O'lcham</label>
+              <select id="nSize"></select></div>
+            <div style="flex:1"><label>Soni</label>
+              <input id="nQty" type="number" min="1" value="1"></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Rang</label>
+              <input id="nColor" list="dlColor" placeholder="—"></div>
+            <div style="flex:1"><label>Mato</label>
+              <input id="nFabric" list="dlFabric" placeholder="—"></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Zakaz raqami</label>
+              <input id="nOrder" placeholder="zakaz tushganda"></div>
+            <div style="flex:1"><label>Mijoz</label>
+              <select id="nCust"><option value="">T/M ombor</option>
+                ${customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+              </select></div>
+          </div>
+          <div><label>Mahsulot narxi, $</label>
+            <input id="nPrice" type="number" min="0" placeholder="keyin ham qo'yiladi"></div>
+          <p class="muted" style="font-size:13px">Birlik <strong>boshlanmagan</strong>
+            holatda yaratiladi. Konveyerga chiqqanda jurnaldan
+            "O'tkazish" bilan birinchi bo'limga o'tkaziladi.</p>
+          <button class="primary" onclick="saveNew()">Saqlash</button>
+        </div>
+      </div></div>`;
+  nFillGroup();
+}
+
+// Guruh bir marta chiqadi, uzunlik esa alohida ustunda — qoldiq
+// sahifasidagi bilan bir xil mantiq.
+function nFillGroup(){
+  const list = ref.products.filter(p => p.route_template_id && p.name === $('nFason').value);
+  const groups = [...new Map(list.map(p => [p.group_id, p.group_name])).entries()];
+  $('nGroup').innerHTML = groups.length
+    ? groups.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('')
+    : '<option value="">—</option>';
+  nFillSize();
+}
+
+function nFillSize(){
+  const list = ref.products.filter(p => p.route_template_id
+    && p.name === $('nFason').value && p.group_id === +$('nGroup').value);
+  $('nSize').innerHTML = list.length
+    ? list.map(p => `<option value="${p.id}">${
+        p.size_label ? esc(p.size_label) : '—'}</option>`).join('')
+    : '<option value="">—</option>';
+  $('nSize').disabled = !list.some(p => p.size_label);
+}
+
+async function saveNew(){
+  const body = {
+    conveyor_no: $('nNo').value.trim(),
+    product_id:  +$('nSize').value,
+    qty:         Number($('nQty').value) || 1,
+    started_on:  $('nStart').value || null,
+    order_no:    $('nOrder').value.trim() || null,
+    customer_id: $('nCust').value || null,
+    unit_price:  $('nPrice').value === '' ? null : $('nPrice').value,
+    color:       $('nColor').value.trim() || null,
+    fabric:      $('nFabric').value.trim() || null,
+  };
+  if (!body.product_id) return alert('Mahsulot tanlanmagan');
+  try{
+    await App.api('/api/units', { method:'POST', body: JSON.stringify(body) });
+    close_(); load();
   }catch(e){ alert(e.message); }
 }
 

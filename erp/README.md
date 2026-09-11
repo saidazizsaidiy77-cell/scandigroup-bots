@@ -209,7 +209,7 @@ Operator smenani tanlamaydi — tizim uni mahsulot yo'nalishidan aniqlaydi.
 
 | Sahifa | Kim uchun | Huquq |
 |---|---|---|
-| `/jurnal.html` | **Ishlab chiqarish boshlig'i**: har mahsulot konveyer raqami bilan | `production.view` |
+| `/jurnal.html` | **Ishlab chiqarish boshlig'i**: yangi birlik qo'shish, o'tkazish, har mahsulot konveyer raqami bilan | `production.view` |
 | `/qoldiq.html` | Boshlang'ich qoldiq — bir martalik kiritish | `production.manage` |
 | `/mijozlar.html` | Mijozlar ro'yxati, kanal va menejer tahlili | `production.view` |
 | `/taminotchilar.html` | **Ta'minotchilar** — nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim | `purchasing.view` |
@@ -290,6 +290,11 @@ belgi bir katakda bo'lmasligi kerak.
   uzunliksiz ma'no bermaydi. Rangdan farqi shu: rang birlikning belgisi,
   o'lcham esa mahsulotning o'zini o'zgartiradi. 7 fason × 6 o'lcham =
   **42 stol SKU**, jami 77.
+
+  Kiritishda o'lcham alohida ustunda turadi — jurnalda ham, qoldiqda ham,
+  Excel'da ham. Guruh ustuni "Stol" ni bir marta ko'rsatadi: oltita uzunlikni
+  guruh ro'yxatiga tiqish uni guruh emas, mahsulot ro'yxatiga aylantirardi.
+  O'lchamsiz guruhda (penal, kamod, sp, stul) ustun bo'sh va tanlanmaydi.
 - **Lak tsehi · Qadoqlash tsehi · T/M ombor** — uchalasi bir mantiqda
   ishlaydi:
   `fakt` — birlik o'sha tsexga o'tganda tizim o'zi yozadi;
@@ -311,6 +316,12 @@ belgi bir katakda bo'lmasligi kerak.
 Birlik "O'tkazish" tugmasi bilan marshrutdagi **keyingi bo'limga** o'tadi —
 qaysi bo'lim ekanini tizim marshrutdan o'zi topadi. Chiqish bo'limiga
 yetganda birlik avtomatik T/M omboriga tushadi va `fg_stock` yangilanadi.
+
+**+ Yangi birlik** — kundalik ish shu tugmadan boshlanadi: yangi mahsulot
+konveyerga chiqdi. Ilgari birlik faqat "Boshlang'ich qoldiq" sahifasidan
+yaratilardi, u esa bir martalik ish uchun — tizim ishga tushgan kundagi
+holatni kiritish uchun yozilgan. Birlik **boshlanmagan** holatda tug'iladi
+va "O'tkazish" bilan marshrutning birinchi bo'limiga chiqadi.
 
 **↩ tugmasi — oxirgi o'tkazishni qaytaradi.** "O'tkazish" bexosdan bosilishi
 oddiy hol, ayniqsa birlik shu bilan T/M omboriga tushib ketsa. Bekor qilish
