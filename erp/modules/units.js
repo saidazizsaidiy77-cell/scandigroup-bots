@@ -853,7 +853,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
     return res.status(403).json({ error: 'Bu tsex sizning doirangizda emas' });
 
   const rows = (await db.query(
-    `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.sku, r.qty,
+    `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.sku, r.qty,
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
             r.section, r.section_id, r.entered_section_on,
             r.next_shop_on, r.next_shop_src, r.is_stock, r.waiting,

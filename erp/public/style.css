@@ -89,6 +89,41 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
    "saqlanmadi" degani — xodim ko'rmasa ishini yo'qotadi. */
 .toast.bad{background:rgba(178,60,60,.10);border-color:rgba(178,60,60,.35);color:var(--bad)}
 
+/* Telefonda sarlavha va foydalanuvchi paneli bir qatorga sig'maydi —
+   sig'dirishga urinish ikkalasini ham siqib, o'qilmas qiladi. */
+@media (max-width:520px){
+  body{padding:16px}
+  .top{flex-wrap:wrap;gap:12px;padding-bottom:14px;margin-bottom:16px}
+  .top h1{font-size:17px}
+  .top .row{font-size:13px}
+}
+
+/* ────────────────────────────── TSEX USTASINING EKRANI
+   Kompyuterda oddiy jadval. Telefonda esa yettita ustun sig'maydi va eng
+   muhimi — O'TKAZISH TUGMASI — chetga chiqib ketadi. Gorizontal aylantirish
+   yechim emas: usta kuniga o'nlab marta bosadi, har safar surib o'tirmaydi.
+   Shuning uchun tor ekranda qator jadval bo'lishdan to'xtaydi va kartochkaga
+   aylanadi: yuqorida raqam va soni, ostida nomi, keyin turi bilan muddat,
+   eng pastda butun kenglikdagi tugma. */
+.board .c-act{text-align:right}
+@media (max-width:620px){
+  .board thead{display:none}
+  .board td{border:0;padding:0}
+  .board tr{display:grid;align-items:center;gap:4px 10px;
+    grid-template-columns:22px 1fr auto;
+    grid-template-areas:"sel no qty" "sel name name" "sel type due" "act act act";
+    padding:14px 0;border-bottom:1px solid var(--line)}
+  .board tr:last-child{border-bottom:0}
+  .board .c-sel {grid-area:sel;align-self:start;padding-top:3px}
+  .board .c-no  {grid-area:no;font-size:15px}
+  .board .c-name{grid-area:name}
+  .board .c-type{grid-area:type;font-size:13px}
+  .board .c-qty {grid-area:qty;font-weight:500}
+  .board .c-due {grid-area:due;text-align:right}
+  .board .c-act {grid-area:act;text-align:left;margin-top:10px}
+  .board .c-act button{width:100%;padding:14px}
+}
+
 /* Bugungi harakatlar lentasi: vaqt chap ustunda, qator yupqa */
 .feed td{padding:9px 12px;vertical-align:top}
 .feed td:first-child{padding-left:0;white-space:nowrap;font-variant-numeric:tabular-nums;

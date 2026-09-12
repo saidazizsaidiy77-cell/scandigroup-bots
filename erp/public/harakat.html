@@ -62,9 +62,13 @@ function toast(msg, bad) {
   setTimeout(() => el.remove(), bad ? 5000 : 2600);
 }
 
-const TABS = [['board', "Bo'limlar"], ['feed', 'Bugungi harakatlar']];
+// Lenta nazorat uchun — unda tsex ustasining ishi yo'q, va uning
+// huquqi ham yetmaydi (production.view). Bitta ko'rinish qolsa
+// tugmalar umuman chizilmaydi: tanlov yo'q joyda tanlov ko'rsatilmaydi.
 function drawTabs() {
-  $('tabs').innerHTML = TABS.map(([k, t]) =>
+  const tabs = [['board', "Bo'limlar"]];
+  if (App.can('production.view')) tabs.push(['feed', 'Bugungi harakatlar']);
+  $('tabs').innerHTML = tabs.length < 2 ? '' : tabs.map(([k, t]) =>
     `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}</button>`).join('');
 }
 
@@ -87,11 +91,14 @@ function due(u) {
   const txt = d < 0 ? `${-d} kun kechikdi`
             : d === 0 ? 'Bugun oxirgi kun'
             : `${d} kun qoldi`;
-  const src = u.next_shop_src === 'taxmin'
-    ? ` <span class="muted" style="font-size:11px">taxmin</span>` : '';
-  return `<span class="tag ${cls}">${txt}</span>${src}`;
+  // Sana reja yoki taxmindan kelgani ustaga farq qilmaydi — u kunlar
+  // sonini ko'rib navbatni belgilaydi, xolos. Manba jurnalda ko'rinadi.
+  return `<span class="tag ${cls}">${txt}</span>`;
 }
 
+// Ustaning ekranida oltita ustundan boshqa hech narsa yo'q. Zakaz raqami,
+// rang, mijoz, qancha kun turgani — bularning hammasi ish uchun kerak emas
+// va faqat chalkashtiradi; kerak bo'lsa jurnalda turibdi.
 function row(u, mine) {
   const leaves = u.next_shop_id && u.next_shop_id !== shopId;
   const act = !canMove ? ''
@@ -105,20 +112,28 @@ function row(u, mine) {
     ? `<input type="checkbox" style="width:auto" ${picked.has(u.id) ? 'checked' : ''}
          onchange="pick(${u.id},this.checked)">` : '';
   return `<tr>
-    <td style="width:28px">${sel}</td>
-    <td><b>${esc(u.conveyor_no)}</b>${u.order_no
-        ? `<div class="muted" style="font-size:12px">${esc(u.order_no)}</div>` : ''}</td>
-    <td>${esc(u.product)}${u.color
-        ? `<div class="muted" style="font-size:12px">${esc(u.color)}</div>` : ''}</td>
-    <td class="num">${u.qty}</td>
-    <td class="muted" style="font-size:13px">${
-        mine ? `${u.days_here ?? 0} kun turibdi` : esc(u.shop) + ' · ' + esc(u.section)}</td>
-    <td>${due(u)}</td>
-    <td style="text-align:right">${act}</td></tr>`;
+    <td class="c-sel">${sel}</td>
+    <td class="c-no"><b>${esc(u.conveyor_no)}</b></td>
+    <td class="c-name">${esc(u.product)}</td>
+    <td class="c-type muted">${esc(u.product_type || '')}</td>
+    <td class="c-qty num">${u.qty}</td>
+    <td class="c-due">${due(u)}${mine ? '' :
+      `<div class="muted" style="font-size:12px">${esc(u.shop)} · ${esc(u.section)}</div>`}</td>
+    <td class="c-act">${act}</td></tr>`;
 }
 
-function block(title, units, mine, note) {
-  if (!units.length) return '';
+const HEAD = `<thead><tr>
+    <th class="c-sel"></th>
+    <th class="c-no">Konveyer &#8470;</th><th class="c-name">Nomi</th>
+    <th class="c-type">Turi</th><th class="c-qty num">Soni</th>
+    <th class="c-due">Berishga qolgan</th><th class="c-act"></th>
+  </tr></thead>`;
+
+// Bo'sh bo'lim ham ko'rsatiladi: usta o'z tsexining hamma bo'limini bir
+// ro'yxatda ko'rib tursin, va bo'shligi ham ma'lumot — u yerda ish yo'q.
+// Yashirilsa ro'yxat har kuni boshqacha bo'lib, o'rganish qiyinlashadi.
+function block(title, units, mine, note, hideEmpty) {
+  if (!units.length && hideEmpty) return '';
   const ids = units.filter(u => u.next_section_id && !(mine && u.next_shop_id !== shopId))
                    .map(u => u.id);
   const sel = ids.filter(id => picked.has(id)).length;
@@ -132,7 +147,9 @@ function block(title, units, mine, note) {
       ${canMove && ids.length > 1 ? `<button ${sel ? 'class="primary"' : ''}
         onclick="bulk([${ids}])">${sel ? `${sel} tasini o'tkazish` : 'Hammasini tanlash'}</button>` : ''}
     </div>
-    <table><tbody>${units.map(u => row(u, mine)).join('')}</tbody></table>
+    ${units.length
+      ? `<table class="board">${HEAD}<tbody>${units.map(u => row(u, mine)).join('')}</tbody></table>`
+      : `<p class="muted" style="font-size:13px">Bo'sh — bu bo'limda mahsulot yo'q</p>`}
   </div>`;
 }
 
@@ -143,7 +160,6 @@ function drawBoard() {
       Administrator Xodimlar bo'limidan biriktirib beradi.</p></div>`;
     return;
   }
-  const total = data.sections.reduce((n, s) => n + s.units.length, 0);
   const head = data.shops.length > 1
     ? `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:16px">${
         data.shops.map(s => `<button ${s.id === shopId ? 'class="primary"' : ''}
@@ -151,12 +167,9 @@ function drawBoard() {
     : `<h2 style="margin-bottom:12px">${esc(data.shop.name)}</h2>`;
 
   $('body').innerHTML = head
-    + block('Qabul qilish', data.inbox, false, 'oldingi tsex topshirishga tayyorladi')
+    + block('Qabul qilish', data.inbox, false, 'oldingi tsex topshirishga tayyorladi', true)
     + data.sections.map(sc => block(sc.name, sc.units, true,
-        sc.is_exit ? 'chiqish nuqtasi' : '')).join('')
-    + (!total && !data.inbox.length
-        ? `<div class="card"><h2>Bo'sh</h2><p class="muted" style="margin-top:8px">
-           Bu tsexda hozir birlik yo'q.</p></div>` : '');
+        sc.is_exit ? 'chiqish nuqtasi' : '', false)).join('');
 }
 
 function pick(id, on) { on ? picked.add(id) : picked.delete(id); drawBoard(); }

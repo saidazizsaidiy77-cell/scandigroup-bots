@@ -57,6 +57,7 @@ ON CONFLICT (code) DO NOTHING;
 INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'admin', code FROM permissions ON CONFLICT DO NOTHING;
 
+
 -- Direktor — hamma narsani ko'radi, kassani tasdiqlaydi
 INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'direktor', code FROM permissions WHERE code LIKE '%.view'
@@ -74,7 +75,11 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('kirituvchi',   'production.view'), ('kirituvchi', 'production.entry'),
   ('kirituvchi',   'production.units'),
 
-  ('tsex_usta',    'production.view'), ('tsex_usta',    'production.entry'),
+  -- Tsex ustasida FAQAT o'tkazish huquqi. production.view jurnal, zavod
+  -- ko'rinishi va panelni ochadi — ustaga bularning hammasi ortiqcha
+  -- ma'lumot: u kuniga bitta ekranga qaraydi va bitta tugma bosadi.
+  -- Ortiqcha sahifa foyda bermaydi, faqat chalkashtiradi.
+  ('tsex_usta',    'production.entry'),
   ('operator',     'production.entry'),
 
   ('omborchi',     'warehouse.view'), ('omborchi', 'warehouse.move'),
@@ -95,3 +100,10 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
 
   ('hr',           'payroll.view'), ('hr', 'admin.users')
 ON CONFLICT DO NOTHING;
+
+-- Ustadan ortiqcha huquqni olib tashlaymiz: rol oldin jurnalni ham
+-- ochardi. Rol huquqlari saytdan tahrirlanmaydi, shuning uchun bu yerda
+-- e'lon qilingan ro'yxat yagona haqiqat — qo'lda berilgan huquq bilan
+-- to'qnashmaydi.
+DELETE FROM role_permissions
+ WHERE role_code = 'tsex_usta' AND permission_code = 'production.view';
