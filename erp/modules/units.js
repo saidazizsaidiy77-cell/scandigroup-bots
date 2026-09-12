@@ -437,13 +437,15 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   const { order_no, customer_id, unit_price, ship_on, next_shop_planned_on, note, status,
           color, fabric, lak_planned_on, pack_planned_on,
-          lak_on, pack_on, fg_on, conveyor_no } = req.body;
+          lak_on, pack_on, fg_on, conveyor_no, qty } = req.body;
 
   // ★ TARIXGA TEGADIGAN MAYDONLAR
   //
-  //  Bu ikkisi birlikning o'zini o'zgartiradi, boshqa maydonlar esa unga
+  //  Bular birlikning o'zini o'zgartiradi, boshqa maydonlar esa unga
   //  ma'lumot qo'shadi:
   //    · konveyer raqami — birlikning nomi, hamma hisobotda shu turadi;
+  //    · soni            — jamlanma hisobotlar va T/M ombor qoldig'i shundan
+  //                        hisoblanadi;
   //    · FAKT sanalar    — tizim birlik o'sha tsexga o'tganda yozgan,
   //                        ya'ni haqiqatan bo'lib o'tgan voqea.
   //
@@ -456,6 +458,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   //  so'rovni qo'lda ham yuborsa bo'ladi.
   const RESTRICTED = {
     conveyor_no: 'Konveyer raqami',
+    qty:         'Soni',
     lak_on:      'Lak tsexiga kirgan sana',
     pack_on:     'Qadoqlash tsexiga kirgan sana',
     fg_on:       'T/M omborga kirgan sana',
@@ -468,28 +471,66 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
     e.status = 403; throw e;
   }
 
-  // Raqam jamlanma yozuvning izohida ham turadi (flow_log.note) — o'sha
-  // yerda ham almashtiriladi, aks holda hisobotda eski raqam qolib ketadi
-  // va bog'lanish ustuni yo'q eski harakatlarni qaytarib bo'lmaydi.
-  if (conveyor_no != null && String(conveyor_no).trim()) {
-    const next = String(conveyor_no).trim();
+  const nextNo  = conveyor_no != null && String(conveyor_no).trim()
+    ? String(conveyor_no).trim() : null;
+  const nextQty = qty != null && String(qty).trim() !== '' ? Number(qty) : null;
+  if (nextQty != null && (!Number.isInteger(nextQty) || nextQty <= 0)) {
+    const e = new Error('Soni butun va noldan katta bo\'lishi kerak');
+    e.status = 400; throw e;
+  }
+
+  // Raqam va soni bitta tranzaksiyada: ikkalasi ham birlikning o'zidan
+  // tashqari JAMLANMA yozuvga ham tegadi, va yarim o'zgargan holat
+  // hisobotni jimgina buzardi.
+  //   · raqam — flow_log.note da turadi (hisobot va qaytarish shuni qidiradi)
+  //   · soni  — flow_log.qty_ok va T/M ombor qoldig'ida (fg_stock)
+  if (nextNo || nextQty != null) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      const old = (await client.query(
-        `SELECT conveyor_no FROM production_units WHERE id = $1 FOR UPDATE`,
-        [req.params.id])).rows[0];
-      if (!old) return res.status(404).json({ error: 'Birlik topilmadi' });
-      if (old.conveyor_no !== next) {
+      const u = (await client.query(
+        `SELECT conveyor_no, qty, product_id, status FROM production_units
+          WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+      if (!u) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Birlik topilmadi' }); }
+
+      if (nextNo && nextNo !== u.conveyor_no) {
         await client.query(
           `UPDATE production_units SET conveyor_no = $2 WHERE id = $1`,
-          [req.params.id, next]);
+          [req.params.id, nextNo]);
         await client.query(
           `UPDATE flow_log SET note = $2 || substring(note FROM length($1) + 1)
-            WHERE note = $1 OR note LIKE $1 || ' ·%'`, [old.conveyor_no, next]);
+            WHERE note = $1 OR note LIKE $1 || ' ·%'`, [u.conveyor_no, nextNo]);
         await audit(req, { module: 'production', action: 'rename', entity: 'unit',
                            entity_id: req.params.id,
-                           payload: { from: old.conveyor_no, to: next } }, client);
+                           payload: { from: u.conveyor_no, to: nextNo } }, client);
+      }
+
+      if (nextQty != null && nextQty !== u.qty) {
+        await client.query(
+          `UPDATE production_units SET qty = $2 WHERE id = $1`, [req.params.id, nextQty]);
+
+        // Birlikning har harakati jamlanma yozuv qoldirgan — hammasida
+        // o'sha paytdagi soni turibdi. Bog'lanish ustuni (flow_log_id)
+        // qo'shilishidan oldingi harakatlarda u yo'q, ular izoh bo'yicha
+        // topiladi — raqam yuqorida allaqachon yangilangani uchun izlash
+        // YANGI raqam bilan ketadi.
+        const no = nextNo || u.conveyor_no;
+        await client.query(
+          `UPDATE flow_log SET qty_ok = $2
+            WHERE id IN (SELECT flow_log_id FROM unit_moves
+                          WHERE unit_id = $1 AND flow_log_id IS NOT NULL)
+               OR note = $3 OR note LIKE $3 || ' ·%'`,
+          [req.params.id, nextQty, no]);
+
+        // T/M ombor qoldig'i: birlik omborga tushgan bo'lsa farqi qo'shiladi
+        if (u.status === 'fg') {
+          await client.query(
+            `UPDATE fg_stock SET qty = GREATEST(qty + $2, 0), updated_at = NOW()
+              WHERE product_id = $1`, [u.product_id, nextQty - u.qty]);
+        }
+        await audit(req, { module: 'production', action: 'qty', entity: 'unit',
+                           entity_id: req.params.id,
+                           payload: { from: u.qty, to: nextQty } }, client);
       }
       await client.query('COMMIT');
     } catch (e) {
