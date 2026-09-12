@@ -170,11 +170,14 @@ function registerQuery(q, limit, scope = null) {
         AND ($10::int  IS NULL OR fason_id = $10)
         -- Tsex doirasi: filtr emas, chegara. Klient uni o'chira olmaydi.
         AND ($11::int[] IS NULL OR shop_id = ANY($11))
+        -- "Qayerda" ustuni bo'yicha: tsex tanlangach bo'lim ham tanlanadi
+        AND ($12::int   IS NULL OR section_id = $12)
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no DESC
       LIMIT ${limit}`,
     params: [q.order_no || null, q.conveyor_no || null, q.customer_id || null,
              q.shop_id || null, q.status || null, q.from || null, q.to || null,
-             q.q || null, groupIds(q), q.fason_id || null, scope],
+             q.q || null, groupIds(q), q.fason_id || null, scope,
+             q.section_id || null],
   };
 }
 
@@ -433,7 +436,8 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 // tsex boshlig'i — hammasi bitta jurnal qatorida turadi.
 router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   const { order_no, customer_id, unit_price, ship_on, next_shop_planned_on, note, status,
-          color, fabric, lak_planned_on, pack_planned_on, lak_on, pack_on } = req.body;
+          color, fabric, lak_planned_on, pack_planned_on,
+          lak_on, pack_on, fg_on } = req.body;
   const { rows } = await db.query(
     `UPDATE production_units SET
        order_no             = COALESCE($2, order_no),
@@ -450,6 +454,12 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
        lak_on               = COALESCE($13::date, lak_on),
        pack_on              = COALESCE($14::date, pack_on),
        fg_planned_on        = COALESCE($15::date, fg_planned_on),
+       -- FAKT sanalarni ham tuzatish mumkin. Tizim ishga tushirilayotgan
+       -- paytda birlik allaqachon lak yoki qadoqlash tsexida turgan
+       -- bo'ladi va haqiqiy sana o'tmishda qolgan — uni kiritib bo'lmasa
+       -- jurnal birinchi kundanoq noto'g'ri bo'lib qoladi. Sahifada bu
+       -- faqat production.manage huquqiga ochiq.
+       fg_on                = COALESCE($17::date, fg_on),
        -- Zahira belgisi COALESCE bilan emas: uni O'CHIRISH ham kerak
        -- (buyurtma tushdi, endi zahira emas), COALESCE esa false ni
        -- "tegilmadi" deb o'qib, belgini hech qachon yechmasdi.
@@ -460,7 +470,8 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
      ship_on || null, next_shop_planned_on || null, note || null, status || null,
      trim(color), trim(fabric), lak_planned_on || null, pack_planned_on || null,
      lak_on || null, pack_on || null, req.body.fg_planned_on || null,
-     typeof req.body.is_stock === 'boolean' ? req.body.is_stock : null]);
+     typeof req.body.is_stock === 'boolean' ? req.body.is_stock : null,
+     fg_on || null]);
   if (!rows[0]) return res.status(404).json({ error: 'Birlik topilmadi' });
   await audit(req, { module: 'production', action: 'update', entity: 'unit',
                      entity_id: req.params.id, payload: req.body });

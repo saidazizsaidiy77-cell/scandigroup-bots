@@ -30,7 +30,11 @@
     <div style="flex:1;min-width:160px"><label>Maxsulot nomi</label>
       <select id="fFason" onchange="load()"></select></div>
     <div style="flex:1;min-width:160px"><label>Tsex</label>
-      <select id="fShop" onchange="load()"></select></div>
+      <select id="fShop" onchange="shopChanged()"></select></div>
+    <!-- "Qayerda" ustuni bo'yicha. Tsex tanlanmaguncha bo'sh: 24 ta bo'limni
+         bitta ro'yxatga tashlash izlashni osonlashtirmaydi. -->
+    <div style="flex:1;min-width:150px"><label>Bo'lim</label>
+      <select id="fSection" onchange="load()" disabled></select></div>
     <div style="flex:1;min-width:170px"><label>Mijoz nomi</label>
       <select id="fCust" onchange="load()"></select></div>
     <button onclick="clearFilters()">Filtrni tozalash</button>
@@ -167,7 +171,19 @@ async function boot(){
 // besh kesimda qidiradi. API boshqa kesimlarni ham qabul qiladi (holat,
 // sana oralig'i, erkin qidiruv), lekin ular sahifada ko'rsatilmaydi: kunda
 // ishlatilmaydigan katak faqat panelni og'irlashtiradi.
-const FILTERS = ['fOrder', 'fFason', 'fShop', 'fCust'];
+const FILTERS = ['fOrder', 'fFason', 'fShop', 'fSection', 'fCust'];
+
+// Bo'lim ro'yxati tanlangan tsexga bog'liq. Tsex almashtirilganda eski
+// bo'lim tanlovi qolib ketmasin — u boshqa tsexniki bo'lib, jadval bo'sh
+// chiqardi va sababi ko'rinmasdi.
+function shopChanged(){
+  const shop = Number($('fShop').value) || null;
+  const list = shop ? ref.sections.filter(sc => sc.shop_id === shop) : [];
+  $('fSection').innerHTML = '<option value="">Barchasi</option>' +
+    list.map(sc => `<option value="${sc.id}">${esc(sc.name)}</option>`).join('');
+  $('fSection').disabled = !list.length;
+  load();
+}
 
 // Guruhlar ochilma ro'yxat emas, yoqib-o'chiriladigan tugma: "stuldan
 // tashqari hammasi" degan savolga bittalik tanlov javob bermaydi.
@@ -205,6 +221,7 @@ function params(){
   if ($('fFason').value)         p.set('fason_id', $('fFason').value);
   if (groupSel.size)             p.set('group_ids', [...groupSel].join(','));
   if ($('fShop').value)          p.set('shop_id', $('fShop').value);
+  if ($('fSection').value)       p.set('section_id', $('fSection').value);
   if ($('fCust').value)          p.set('customer_id', $('fCust').value);
   p.set('sort', sort.col);
   p.set('dir', sort.dir);
@@ -213,6 +230,8 @@ function params(){
 
 function clearFilters(){
   for (const id of FILTERS) $(id).value = '';
+  $('fSection').innerHTML = '<option value="">Barchasi</option>';
+  $('fSection').disabled = true;
   groupSel.clear();
   drawGroups();
   load();
@@ -462,6 +481,32 @@ async function cancel_(id){
 }
 
 // Zakaz raqami, mijoz, narx, chiqish sanasi — savdo qo'yadi
+// ─────────────────────────────────────────────── TSEX SANASI KATAGI
+//
+//  Fakt tushgan sanani TUZATISH mumkin — lekin faqat production.manage
+//  huquqi bilan. Sabab: tizim ishga tushirilayotgan paytda birlik
+//  allaqachon lak yoki qadoqlash tsexida turgan bo'ladi va haqiqiy sana
+//  o'tmishda qolgan; uni kiritib bo'lmasa jurnal birinchi kundanoq
+//  noto'g'ri bo'lib qoladi.
+//
+//  Bu vaqtinchalik: qoldiq kiritilib, zavod bir tekis ishlay boshlagach
+//  faktni qo'lda o'zgartirish kerak bo'lmaydi. Yopish uchun shu bitta
+//  qatorni `false` qilish yetarli.
+const CAN_FIX_FACTS = () => App.can('production.manage');
+
+function dateField(id, label, r, kind){
+  const fact = r[kind + '_src'] === 'fakt';
+  const open = !fact || CAN_FIX_FACTS();
+  const val  = (fact ? r[kind + '_on'] : r[kind + '_planned_on']) || '';
+  return `<div style="flex:1">
+    <label>${label} ${fact ? '(fakt)' : '(reja)'}</label>
+    <input id="${id}" type="date" data-fact="${fact ? 1 : 0}"
+      value="${String(val).slice(0, 10)}" ${open ? '' : 'disabled'}>
+    ${fact ? `<p class="muted" style="font-size:12px;margin-top:6px">${
+      open ? "Tizim yozgan sana \u2014 tuzatish mumkin" : 'Kirgan: ' + d8(r[kind + '_on'])
+    }</p>` : ''}</div>`;
+}
+
 async function edit(id){
   const r = rows.find(x => x.id === id);
   const hist = await App.api(`/api/units/${id}/history`);
@@ -494,27 +539,14 @@ async function edit(id){
             <div style="flex:1"><label>Mato</label>
               <input id="eFabric" list="dlFabric" value="${esc(r.fabric || '')}"></div>
           </div>
-          <!-- Reja sanalari: tsex boshlig'i qo'yadi, topshirish shunga qarab
-               nazorat qilinadi. Fakt tizim tomonidan yoziladi va bu yerda
-               tahrirlanmaydi — shuning uchun faqat reja ko'rsatiladi. -->
+          <!-- Tsex sanalari. Reja — tsex boshlig'i qo'yadi. Fakt — birlik
+               o'sha tsexga o'tganda tizim o'zi yozadi. -->
           <div class="row" style="gap:12px">
-            <div style="flex:1"><label>Lak tsehiga (reja)</label>
-              <input id="eLak" type="date" value="${r.lak_planned_on || ''}"
-                ${r.lak_src === 'fakt' ? 'disabled' : ''}>
-              ${r.lak_src === 'fakt'
-                ? `<p class="muted" style="font-size:12px;margin-top:6px">Kirgan: ${d8(r.lak_on)}</p>` : ''}</div>
-            <div style="flex:1"><label>Qadoqlash tsehiga (reja)</label>
-              <input id="ePack" type="date" value="${r.pack_planned_on || ''}"
-                ${r.pack_src === 'fakt' ? 'disabled' : ''}>
-              ${r.pack_src === 'fakt'
-                ? `<p class="muted" style="font-size:12px;margin-top:6px">Kirgan: ${d8(r.pack_on)}</p>` : ''}</div>
+            ${dateField('eLak',  "Lak tsehiga",       r, 'lak')}
+            ${dateField('ePack', "Qadoqlash tsehiga", r, 'pack')}
           </div>
           <div class="row" style="gap:12px">
-            <div style="flex:1"><label>T/M omborga (reja)</label>
-              <input id="eFg" type="date" value="${r.fg_planned_on || ''}"
-                ${r.fg_src === 'fakt' ? 'disabled' : ''}>
-              ${r.fg_src === 'fakt'
-                ? `<p class="muted" style="font-size:12px;margin-top:6px">Kirgan: ${d8(r.fg_on)}</p>` : ''}</div>
+            ${dateField('eFg', "T/M omborga", r, 'fg')}
             <div style="flex:1"><label>Keyingi tsexga o'tkazish rejasi</label>
               <input id="eNext" type="date" value="${r.next_shop_src === 'reja' ? r.next_shop_on : ''}"></div>
           </div>
@@ -543,6 +575,12 @@ async function edit(id){
 }
 const close_ = () => { $('modalRoot').innerHTML = ''; };
 
+const dateVal = (id, kind) => {
+  const el = $(id);
+  if (el.disabled) return {};
+  return { [kind + (el.dataset.fact === '1' ? '_on' : '_planned_on')]: el.value || null };
+};
+
 async function saveEdit(id){
   try{
     let customer_id = $('eCust').value || null;
@@ -562,11 +600,12 @@ async function saveEdit(id){
       note: $('eNote').value.trim() || null,
       color:  $('eColor').value.trim() || null,
       fabric: $('eFabric').value.trim() || null,
-      // Fakt tushgan sana maydoni disabled — qiymat yuborilmaydi
       is_stock: $('eStock').checked,
-      lak_planned_on:  $('eLak').disabled  ? null : ($('eLak').value  || null),
-      pack_planned_on: $('ePack').disabled ? null : ($('ePack').value || null),
-      fg_planned_on:   $('eFg').disabled   ? null : ($('eFg').value   || null),
+      // Katak fakt ustida turgan bo'lsa fakt ustuniga, aks holda reja
+      // ustuniga yoziladi — sarlavhada qaysi biri ekani yozib qo'yilgan.
+      ...dateVal('eLak',  'lak'),
+      ...dateVal('ePack', 'pack'),
+      ...dateVal('eFg',   'fg'),
     })});
     close_(); load();
   }catch(e){ alert(e.message); }
