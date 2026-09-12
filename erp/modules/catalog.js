@@ -211,6 +211,16 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
           WHERE group_id = $1 AND size_label IS NOT NULL ORDER BY size_label`,
         [g.id])).rows.map((r) => r.size_label);
 
+      // SKU prefiksi guruh kodidan emas, SHU GURUHDAGI mavjud SKU lardan
+      // olinadi: guruh kodi PENAL, lekin mahsulotlar PEN-ALMAZ deb
+      // yuritiladi. Kod bo'yicha yasalsa katalogda PEN-ALMAZ yonida
+      // PENAL-LUXURY paydo bo'lardi — bir xil narsa ikki xil atalgan
+      // bo'lib ko'rinadi. Guruh bo'sh bo'lsa kodning o'zi ishlatiladi.
+      const prefix = (await client.query(
+        `SELECT split_part(sku, '-', 1) AS p FROM products
+          WHERE group_id = $1 AND sku LIKE '%-%'
+          GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1`, [g.id])).rows[0]?.p || g.code;
+
       // Mahsulot nomi — fason. Turi guruh ustunida alohida turadi, shuning
       // uchun nomga takrorlab yozilmaydi. O'lcham esa aksincha nomning bir
       // qismi: "Safia 3,5 m" — zavod uni shunday ataydi va alohida SKU deb
@@ -219,8 +229,8 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
         const name = size ? `${f.name} ${size}` : f.name;
         // O'lcham kodi SKU ga qo'shiladi: "4,5 m" → 45
         const sku = size
-          ? `${g.code}-${f.code}-${size.replace(/[^0-9]/g, '').padEnd(2, '0')}`
-          : `${g.code}-${f.code}`;
+          ? `${prefix}-${f.code}-${size.replace(/[^0-9]/g, '').padEnd(2, '0')}`
+          : `${prefix}-${f.code}`;
         const { rows } = await client.query(
           `INSERT INTO products (sku, name, group_id, fason_id, route_template_id, is_set, size_label)
            VALUES ($1,$2,$3,$4,$5,$6,$7)
