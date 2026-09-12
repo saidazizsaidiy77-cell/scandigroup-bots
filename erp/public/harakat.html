@@ -19,36 +19,39 @@
 <body>
 
 <div class="top">
-  <div class="brand"><span class="dot"></span><h1 id="ttl">Bo'limlar aro harakat</h1></div>
+  <div class="brand"><span class="dot"></span><h1>Bo'limlar aro harakat</h1></div>
   <div class="row" id="erpUser"></div>
 </div>
 
-<div class="row" id="shopBar" style="margin-bottom:16px;gap:8px;flex-wrap:wrap"></div>
-
+<div class="row" id="tabs" style="margin-bottom:16px;gap:8px;flex-wrap:wrap"></div>
 <div id="body"></div>
-<div id="modalRoot"></div>
 
 <script>
 // ============================================================================
 //  BO'LIM BOSHLIG'INING KUNLIK EKRANI
 //
-//  Jurnal — 16 ustunli hisobot, uni telefonda o'qib bo'lmaydi. Bu esa ish
-//  quroli: konverlar o'z bo'limlarida turadi, bitta bosishda keyingisiga
-//  o'tadi. Keyingi bo'lim nomi tugmaning o'zida yozilgan — marshrutni
-//  boshliq yodlab yurmaydi.
+//  Ikki ko'rinish, bitta sahifada — ikkalasi ham bir xil savolning ikki
+//  tomoni: "hozir nima qayerda" va "bugun nima qilindi".
+//
+//    Bo'limlar          — konverlar o'z bo'limlarida turadi, bitta bosishda
+//                         keyingisiga o'tadi. Keyingi bo'lim nomi tugmaning
+//                         o'zida yozilgan, marshrut yodlanmaydi.
+//    Bugungi harakatlar — kim, qachon, qaysi konverni, qayerdan qayerga.
+//                         Nazorat shu yerdan: jurnalni 500 qator bo'ylab
+//                         ko'zdan kechirish bilan nazorat qilib bo'lmaydi.
 //
 //  Tsexdan tsexga o'tkazishni QABUL QILUVCHI tomon bosadi (server qoidasi:
-//  modules/units.js, moveOne). Shuning uchun bu yerda ikki ro'yxat:
-//    · yuqorida — menga kelayotganlar, "Qabul qildim" tugmasi bilan;
-//    · pastda   — mening bo'limlarimdagilar.
-//  Tsexning oxirgi bo'limidagi birlikda tugma yo'q: u topshirishga tayyor,
-//  uni keyingi tsex o'ziga oladi.
+//  modules/units.js, moveOne). Shuning uchun bo'limlar ro'yxatida ikki
+//  bo'lak: yuqorida menga kelayotganlar, pastda mening bo'limlarimdagilar.
 // ============================================================================
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
-let data = null, shopId = null, canMove = false;
+let tab = 'board', canMove = false;
+let data = null, shopId = null;
 const picked = new Set();
 
 function toast(msg, bad) {
@@ -59,6 +62,20 @@ function toast(msg, bad) {
   setTimeout(() => el.remove(), bad ? 5000 : 2600);
 }
 
+const TABS = [['board', "Bo'limlar"], ['feed', 'Bugungi harakatlar']];
+function drawTabs() {
+  $('tabs').innerHTML = TABS.map(([k, t]) =>
+    `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}</button>`).join('');
+}
+
+async function go(k) {
+  tab = k; drawTabs();
+  $('body').innerHTML = `<p class="muted">Yuklanmoqda…</p>`;
+  k === 'board' ? await loadBoard() : await loadFeed();
+}
+
+// ═══════════════════════════════════════════════════════ 1. BO'LIMLAR
+//
 // Muddat. Reja — boshliq qo'ygan sana, taxmin — marshrut va bo'lim
 // tezligidan hisoblangan. Ikkalasi ham yo'q bo'lsa bo'sh: o'ylab topilgan
 // sana bo'sh katakdan yomonroq.
@@ -85,8 +102,8 @@ function row(u, mine) {
         : `<button class="primary" onclick="move(${u.id})">${
             mine ? '→ ' : 'Qabul qildim → '}${esc(u.next_section)}</button>`;
   const sel = canMove && (!mine || !leaves) && u.next_section_id
-    ? `<input type="checkbox" style="width:auto" data-pick="${u.id}"
-         ${picked.has(u.id) ? 'checked' : ''} onchange="pick(${u.id},this.checked)">` : '';
+    ? `<input type="checkbox" style="width:auto" ${picked.has(u.id) ? 'checked' : ''}
+         onchange="pick(${u.id},this.checked)">` : '';
   return `<tr>
     <td style="width:28px">${sel}</td>
     <td><b>${esc(u.conveyor_no)}</b>${u.order_no
@@ -119,23 +136,22 @@ function block(title, units, mine, note) {
   </div>`;
 }
 
-function draw() {
+function drawBoard() {
   if (!data.shop) {
     $('body').innerHTML = `<div class="card"><h2>Tsex biriktirilmagan</h2>
       <p class="muted" style="margin-top:8px">Sizning rolingizga tsex biriktirilmagan.
       Administrator Xodimlar bo'limidan biriktirib beradi.</p></div>`;
     return;
   }
-  $('ttl').textContent = data.shop.name;
-  document.title = data.shop.name + " · Bo'limlar aro harakat";
-
-  $('shopBar').innerHTML = data.shops.length > 1
-    ? data.shops.map(s => `<button ${s.id === shopId ? 'class="primary"' : ''}
-        onclick="go(${s.id})">${esc(s.name)}</button>`).join('') : '';
-
   const total = data.sections.reduce((n, s) => n + s.units.length, 0);
-  $('body').innerHTML =
-    block('Qabul qilish', data.inbox, false, 'oldingi tsex topshirishga tayyorladi')
+  const head = data.shops.length > 1
+    ? `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:16px">${
+        data.shops.map(s => `<button ${s.id === shopId ? 'class="primary"' : ''}
+          onclick="goShop(${s.id})">${esc(s.name)}</button>`).join('')}</div>`
+    : `<h2 style="margin-bottom:12px">${esc(data.shop.name)}</h2>`;
+
+  $('body').innerHTML = head
+    + block('Qabul qilish', data.inbox, false, 'oldingi tsex topshirishga tayyorladi')
     + data.sections.map(sc => block(sc.name, sc.units, true,
         sc.is_exit ? 'chiqish nuqtasi' : '')).join('')
     + (!total && !data.inbox.length
@@ -143,8 +159,8 @@ function draw() {
            Bu tsexda hozir birlik yo'q.</p></div>` : '');
 }
 
-function pick(id, on) { on ? picked.add(id) : picked.delete(id); draw(); }
-function go(id) { shopId = id; picked.clear(); load(); }
+function pick(id, on) { on ? picked.add(id) : picked.delete(id); drawBoard(); }
+function goShop(id) { shopId = id; picked.clear(); loadBoard(); }
 
 async function send(items) {
   try {
@@ -152,7 +168,7 @@ async function send(items) {
       method: 'POST', body: JSON.stringify({ items: items.map(id => ({ unit_id: id })) }) });
     toast(items.length === 1 ? "O'tkazildi" : `${items.length} ta birlik o'tkazildi`);
     picked.clear();
-    await load();
+    await loadBoard();
   } catch (e) { toast(e.message, true); }
 }
 
@@ -160,19 +176,156 @@ const move = id => send([id]);
 
 function bulk(ids) {
   const sel = ids.filter(id => picked.has(id));
-  if (!sel.length) { ids.forEach(id => picked.add(id)); return draw(); }
+  if (!sel.length) { ids.forEach(id => picked.add(id)); return drawBoard(); }
   send(sel);
 }
 
-async function load() {
+async function loadBoard() {
   data = await App.api('/api/units/board' + (shopId ? '?shop_id=' + shopId : ''));
   if (data.shop) shopId = data.shop.id;
-  draw();
+  drawBoard();
 }
 
-App.start(async (me) => {
+// ═══════════════════════════════════════════ 2. BUGUNGI HARAKATLAR
+//
+// Kun xronologik lenta bo'lib turadi va anomaliya ko'zga tashlanadi: kim
+// umuman kiritmagan, kim o'ttizta birlikni bir daqiqada "o'tkazgan", kim
+// ko'p qaytargan. Bo'lim boshlig'iga faqat o'z tsexi ko'rinadi.
+let feed = null, timer = null;
+const deb = () => { clearTimeout(timer); timer = setTimeout(loadFeed, 350); };
+
+function feedParams() {
+  const p = new URLSearchParams();
+  for (const [k, id] of [['from','fFrom'], ['to','fTo'],
+                         ['shop_id','fShop'], ['worker_id','fWorker']]) {
+    const v = $(id)?.value;
+    if (v) p.set(k, v);
+  }
+  const c = $('fConv')?.value.trim();
+  if (c) p.set('conveyor_no', c);
+  return p.toString();
+}
+
+const hhmm = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const WD = ['yakshanba','dushanba','seshanba','chorshanba','payshanba','juma','shanba'];
+const MO = ['yanvar','fevral','mart','aprel','may','iyun',
+            'iyul','avgust','sentabr','oktabr','noyabr','dekabr'];
+function dayTitle(iso) {
+  const d = new Date(iso);
+  if (isoDay(d) === isoDay(new Date())) return 'Bugun, ' + d.getDate() + '-' + MO[d.getMonth()];
+  return `${d.getDate()}-${MO[d.getMonth()]}, ${WD[d.getDay()]}`;
+}
+
+// Bitta qatorning ma'nosi: o'tkazishmi, qabul qilishmi yoki yangi yozuvmi.
+// Uchalasi bitta jadvalda saqlangani uchun farqni shu yerda ajratamiz.
+function what(m) {
+  if (!m.from_section)
+    return `<span class="tag">${m.is_opening ? "boshlang'ich qoldiq" : 'yangi konver'}</span>
+            <span class="arw">→</span> ${esc(m.section)}`;
+  const crossed = m.from_shop_id && m.from_shop_id !== m.shop_id;
+  return `${esc(m.from_section)} <span class="arw">→</span> ${esc(m.section)}` +
+    (crossed ? ` <span class="tag ok">qabul qildi · ${esc(m.from_shop)}dan</span>` : '');
+}
+
+function drawFeed() {
+  const d = feed;
+  const days = [...new Set(d.moves.map(m => String(m.moved_on).slice(0, 10)))];
+  const people = new Set(d.moves.map(m => m.worker));
+  const defects = d.moves.reduce((n, m) => n + (m.qty_defect || 0), 0);
+  const today = isoDay(new Date());
+
+  $('body').innerHTML = `
+    <div class="card">
+      <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <div><label>Sanadan</label>
+          <input id="fFrom" type="date" value="${d.from || today}" onchange="loadFeed()"></div>
+        <div><label>Sanagacha</label>
+          <input id="fTo" type="date" value="${d.to || today}" onchange="loadFeed()"></div>
+        <div style="flex:1;min-width:150px"><label>Tsex</label>
+          <select id="fShop" onchange="loadFeed()">
+            <option value="">Hammasi</option>
+            ${d.shops.map(s => `<option value="${s.id}"
+              ${String(d.shop_id) === String(s.id) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+          </select></div>
+        <div style="flex:1;min-width:150px"><label>Xodim</label>
+          <select id="fWorker" onchange="loadFeed()">
+            <option value="">Hammasi</option>
+            ${d.workers.map(w => `<option value="${w.id}"
+              ${String(d.worker_id) === String(w.id) ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+          </select></div>
+        <div style="flex:1;min-width:140px"><label>Konveyer &#8470;</label>
+          <input id="fConv" placeholder="K26-0041" value="${esc(d.conveyor_no || '')}"
+                 oninput="deb()"></div>
+        <button onclick="feedToday()">Bugun</button>
+        <button onclick="exportFeed()">Excelga yuklash</button>
+      </div>
+    </div>
+
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card"><h2>Harakatlar</h2><div class="kpi">${d.moves.length}</div></div>
+      <div class="card"><h2>Kiritgan xodimlar</h2><div class="kpi">${people.size}</div></div>
+      <div class="card"><h2>Brak</h2><div class="kpi">${defects}<small> dona</small></div></div>
+    </div>
+
+    ${!d.moves.length ? `<div class="card" style="margin-top:16px"><h2>Yozuv yo'q</h2>
+      <p class="muted" style="margin-top:8px">Tanlangan kunda hech kim ma'lumot
+      kiritmagan.</p></div>` : days.map(day => {
+      const rows = d.moves.filter(m => String(m.moved_on).slice(0, 10) === day);
+      return `<div class="card" style="margin-top:16px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <h2 style="margin:0">${esc(dayTitle(day))}</h2>
+          <span class="muted" style="font-size:13px">${rows.length} ta yozuv</span>
+        </div>
+        <table class="feed"><tbody>${rows.map(m => `
+          <tr>
+            <td>${hhmm(m.moved_at)}</td>
+            <td class="who">${esc(m.worker)}<div class="muted"
+                style="font-size:12px;font-weight:400">${esc(m.shop)}</div></td>
+            <td><b>${esc(m.conveyor_no)}</b>
+                <div class="muted" style="font-size:12px">${esc(m.product)}${
+                  m.qty > 1 ? ' · ' + m.qty + ' dona' : ''}</div></td>
+            <td>${what(m)}${m.qty_defect
+                ? ` <span class="tag bad">brak ${m.qty_defect}${
+                    m.defect_reason ? ' · ' + esc(m.defect_reason) : ''}</span>` : ''}</td>
+          </tr>`).join('')}</tbody></table>
+      </div>`;
+    }).join('')}`;
+}
+
+function feedToday() {
+  const t = isoDay(new Date());
+  $('fFrom').value = $('fTo').value = t;
+  loadFeed();
+}
+
+async function loadFeed() {
+  const q = feedParams();
+  const focus = document.activeElement?.id;
+  const caret = focus === 'fConv' ? $('fConv').selectionStart : null;
+  feed = await App.api('/api/units/feed' + (q ? '?' + q : ''));
+  // Filtr qiymatlari qayta chizilganda yo'qolmasin
+  const p = new URLSearchParams(q);
+  Object.assign(feed, {
+    from: p.get('from'), to: p.get('to'), shop_id: p.get('shop_id'),
+    worker_id: p.get('worker_id'), conveyor_no: p.get('conveyor_no'),
+  });
+  drawFeed();
+  if (focus && $(focus)) {
+    $(focus).focus();
+    if (caret != null) $(focus).setSelectionRange(caret, caret);
+  }
+}
+
+const exportFeed = () => {
+  const q = feedParams();
+  App.download('/api/units/feed/export' + (q ? '?' + q : ''),
+               `harakatlar-${$('fFrom').value || isoDay(new Date())}.csv`);
+};
+
+App.start(async () => {
   canMove = App.can('production.entry');
-  await load();
+  drawTabs();
+  await loadBoard();
 }, 'production.view', 'production.entry');
 </script>
 </body>

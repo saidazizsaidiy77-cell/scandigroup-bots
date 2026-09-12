@@ -179,7 +179,7 @@ tr.click:hover td{background:var(--surface-2)}
      · ustunlar mantiqiy bloklarga bo'linsin — blok boshida ingichka chiziq
    Zebra rangi qattiq qiymat: qotib turgan ustun ostidan qator ko'rinmasligi
    uchun shaffof bo'lmasligi kerak. */
-.log{min-width:1360px;font-size:13.5px}
+.log{min-width:1240px;font-size:13.5px}
 .log th,.log td{padding-left:11px;padding-right:11px}
 .log th:first-child,.log td:first-child{padding-left:0}
 .log th:last-child,.log td:last-child{padding-right:0}
