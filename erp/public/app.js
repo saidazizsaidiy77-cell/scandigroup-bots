@@ -39,6 +39,23 @@ const App = (() => {
     URL.revokeObjectURL(url);
   }
 
+  // Fayl yuborish. Xom bayt bilan ketadi — JSON ichida base64 qilish
+  // hajmni uchdan bir baravar oshiradi va hech qanday foyda bermaydi.
+  async function upload(path, file) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        ...(token() ? { Authorization: 'Bearer ' + token() } : {}),
+      },
+      body: file,
+    });
+    if (r.status === 401) { setToken(null); gate(); throw new Error('Sessiya tugadi'); }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Xato');
+    return j;
+  }
+
   const can = (...p) => !!me && p.some((x) => me.permissions.includes(x));
 
   async function logout() {
@@ -343,7 +360,7 @@ const App = (() => {
     onReady(me);
   }
 
-  return { api, download, can, start, logout, me: () => me, pages, inMod, hrefFor,
+  return { api, download, upload, can, start, logout, me: () => me, pages, inMod, hrefFor,
            modules: () => MODULES
              .filter((m) => !m.perm.length || can(...m.perm))
              .map((m) => ({ ...m,

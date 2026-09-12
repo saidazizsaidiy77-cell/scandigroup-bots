@@ -49,6 +49,12 @@
   <div class="row" style="justify-content:space-between;margin-bottom:14px">
     <h2 style="margin:0">Qatorlar</h2>
     <div class="row">
+      <!-- Excel'dan yuklash. Zavod qoldiqni allaqachon Excel'da yuritadi —
+           uni qo'lda ko'chirish yuzlab qator va yuzta xato imkoniyati. -->
+      <input type="file" id="fileIn" class="hide" accept=".xlsx,.csv,.txt"
+             onchange="pick(this)">
+      <button onclick="document.getElementById('fileIn').click()">Excel'dan yuklash</button>
+      <button onclick="template()">Namuna fayl</button>
       <button onclick="addRow()">+ Qator</button>
       <button onclick="addRow(5)">+ 5 qator</button>
       <button onclick="addRow(20)">+ 20 qator</button>
@@ -88,6 +94,8 @@
       <button class="primary" id="btnSave" onclick="save()">Saqlash</button></div>
   </div>
 </div>
+
+<div id="modalRoot"></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -314,6 +322,106 @@ async function save(){
     alert(`${r.created.length} ta birlik kiritildi. Jurnal sahifasida ko'rishingiz mumkin.`);
   }catch(e){ alert(e.message); }
   finally{ $('btnSave').disabled = false; }
+}
+
+// ══════════════════════════════════════════════ EXCEL / CSV DAN YUKLASH
+//
+//  Ikki bosqich: avval fayl KO'RSATILADI, keyin saqlanadi. Bazaga faqat
+//  barcha qator to'g'ri bo'lsa yoziladi — yarim yuklangan qoldiq eng yomon
+//  holat: nima kirgani noma'lum, qayta yuklasa konveyer raqamlari
+//  to'qnashadi.
+let picked = null;
+
+// Namuna fayl: qaysi ustunlar kerakligini tushuntirishdan ko'ra ko'rsatgan
+// oson. Ustun nomlari erkin — bu shunchaki ishlaydigan bitta variant.
+function template() {
+  const head = ["Konveyer \u2116", 'Maxsulot guruhi', 'Maxsulot nomi', 'Soni',
+                "Bo'lim", 'Rang', 'Mato', "Zakaz \u2116", 'Mijoz nomi', 'Narx',
+                'Bosh sana', 'Zahira'];
+  const rows = [
+    ['', 'Penal', 'Milano', '1', 'Arra', 'Oq', '', '', '', '', '', ''],
+    ['', 'Stul',  'Laura',  '6', 'Rang sepish', "Yong'oq", 'Velur', '', '', '', '', 'ha'],
+  ];
+  const csv = '\uFEFF' + [head, ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'),
+                          { href: url, download: 'qoldiq-namuna.csv' });
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function pick(input) {
+  const file = input.files[0];
+  input.value = '';                       // shu faylni qayta tanlash mumkin bo'lsin
+  if (!file) return;
+  picked = file;
+  try {
+    showImport(await App.upload('/api/import/units', file), file.name);
+  } catch (e) { alert(e.message); }
+}
+
+function showImport(r, filename) {
+  const bad = r.rows.filter(x => x.errors.length);
+  const newC = r.new_customers || [];
+
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeImport()">
+      <div class="modal" style="max-width:760px">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px">
+          <h2 style="margin:0;text-transform:none;letter-spacing:0;font-size:15px;
+            color:var(--text)">${esc(filename)}</h2>
+          <button onclick="closeImport()">Yopish</button>
+        </div>
+
+        <div class="grid g3" style="margin:14px 0">
+          <div class="card"><h2>Qatorlar</h2><div class="kpi">${r.total}</div></div>
+          <div class="card"><h2>Xato</h2><div class="kpi"
+            style="${bad.length ? 'color:var(--bad)' : ''}">${r.bad}</div></div>
+          <div class="card"><h2>Yangi mijoz</h2><div class="kpi">${newC.length}</div></div>
+        </div>
+
+        ${r.unknown.length ? `<p class="muted" style="font-size:13px;margin-bottom:12px">
+          Tanilmagan ustunlar (e'tiborga olinmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+
+        ${bad.length ? `
+          <h2>Tuzatish kerak</h2>
+          <div style="max-height:34vh;overflow:auto;margin-bottom:14px">
+            <table><tbody>${bad.map(x => `
+              <tr><td style="width:70px" class="muted">${x.line}-qator</td>
+                  <td>${esc(x.errors.join(' · '))}</td></tr>`).join('')}</tbody></table>
+          </div>
+          <p class="muted" style="font-size:13px">Faylni tuzatib, qaytadan tanlang.
+            Xato qator bo'lsa hech narsa saqlanmaydi.</p>`
+        : `
+          ${newC.length ? `
+            <div class="row" style="gap:10px;align-items:flex-start;margin-bottom:14px">
+              <input type="checkbox" id="impNewC" style="width:auto;margin-top:3px">
+              <span style="flex:1">Yangi mijozlarni qo'shish
+                <div class="muted" style="font-size:12px">${esc(newC.join(', '))}</div></span>
+            </div>` : ''}
+          <p class="muted" style="font-size:13px;margin-bottom:14px">
+            Hamma qator to'g'ri. Saqlangach jurnal sahifasida ko'rinadi.</p>
+          <button class="primary" id="impSave" onclick="saveImport()"
+            style="width:100%">${r.total} ta qatorni saqlash</button>`}
+      </div>
+    </div>`;
+}
+
+const closeImport = () => { $('modalRoot').innerHTML = ''; picked = null; };
+
+async function saveImport() {
+  const newC = $('impNewC')?.checked ? '&new_customers=1' : '';
+  $('impSave').disabled = true;
+  try {
+    const r = await App.upload('/api/import/units?save=1' + newC, picked);
+    closeImport();
+    alert(`${r.saved} ta birlik kiritildi.` +
+          (r.customers ? ` ${r.customers} ta yangi mijoz qo'shildi.` : ''));
+    nextNo = await App.api('/api/units/next-no');
+  } catch (e) {
+    alert(e.message);
+    const b = $('impSave'); if (b) b.disabled = false;
+  }
 }
 
 App.start(boot, 'production.units', 'production.manage');

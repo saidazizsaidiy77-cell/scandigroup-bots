@@ -309,6 +309,95 @@ router.get('/:id/history', need('production.view'), wrap(async (req, res) => {
 // ─────────────────────────────────────────────────── BIRLIK YARATISH / QOLDIQ
 // Bir nechta qatorni birdan qabul qiladi — boshlang'ich qoldiq shu bilan
 // kiritiladi: har qator o'z bo'limida turgan holda yaratiladi.
+// Bitta birlik yaratish. Sikl tanasi alohida funksiyaga chiqarilgan:
+// uni jurnal sahifasi ham, Excel'dan yuklash ham chaqiradi — ikkalasi
+// bir xil qoidalar bilan yozishi shart, aks holda yuklangan qator
+// qo'lda kiritilganidan boshqacha bo'lib qoladi.
+async function createOne(client, req, it) {
+  if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
+  // Raqam bo'sh qoldirilsa server o'zi beradi
+  if (!it.conveyor_no || !String(it.conveyor_no).trim()) {
+    it.conveyor_no = await nextConveyorNo(client);
+  }
+
+  // Bo'lim berilsa, u mahsulot marshrutida borligini tekshiramiz
+  if (it.section_id) {
+    const ok = (await client.query(
+      `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
+      [it.product_id, it.section_id])).rowCount;
+    if (!ok) throw new Error(
+      `${it.conveyor_no}: tanlangan bo'lim bu mahsulot marshrutida yo'q`);
+  }
+
+  const place = it.section_id ? (await client.query(
+    `SELECT s.is_exit, sh.milestone
+       FROM sections s JOIN shops sh ON sh.id = s.shop_id
+      WHERE s.id = $1`, [it.section_id])).rows[0] : null;
+  const isExit = place?.is_exit || false;
+
+  // Birlik allaqachon lak yoki qadoqlash tsexida turgan bo'lsa, o'sha
+  // tsexga kirish sanasi ma'lum: kiritilmagan bo'lsa bo'limga kirgan
+  // sanadan olinadi. Boshlang'ich qoldiqda buni qo'lda takrorlash
+  // shart bo'lmaydi.
+  const enteredOn = it.entered_section_on || it.started_on || null;
+  const lakOn  = it.lak_on  || (place?.milestone === 'lak'  ? enteredOn : null);
+  const packOn = it.pack_on || (place?.milestone === 'pack' ? enteredOn : null);
+
+  const u = (await client.query(
+    `INSERT INTO production_units
+       (conveyor_no, order_no, product_id, qty, started_on, current_section_id,
+        entered_section_on, customer_id, unit_price, ship_on, next_shop_planned_on,
+        status, is_opening, note, created_by,
+        color, fabric, lak_planned_on, lak_on, pack_planned_on, pack_on,
+        fg_planned_on, is_stock)
+     VALUES ($1,$2,$3,$4, COALESCE($5::date, CURRENT_DATE), $6,
+             COALESCE($7::date, CURRENT_DATE), $8,$9,$10,$11,
+             $12, $13, $14, $15,
+             $16,$17,$18,$19,$20,$21,$22,$23)
+     RETURNING id, conveyor_no`,
+    [String(it.conveyor_no).trim(), it.order_no || null, it.product_id,
+     Number(it.qty) || 1, it.started_on || null, it.section_id || null,
+     it.entered_section_on || null, it.customer_id || null,
+     it.unit_price || null, it.ship_on || null, it.next_shop_planned_on || null,
+     isExit ? 'fg' : 'production', !!it.is_opening, it.note || null, req.user.id,
+     trim(it.color), trim(it.fabric),
+     it.lak_planned_on || null, lakOn,
+     it.pack_planned_on || null, packOn,
+     it.fg_planned_on || null, !!it.is_stock])).rows[0];
+
+  if (it.section_id) {
+    await client.query(
+      `INSERT INTO unit_moves (unit_id, section_id, moved_on, worker_id, note)
+       VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4, $5)`,
+      [u.id, it.section_id, it.entered_section_on || null, req.user.id,
+       it.is_opening ? 'Boshlang\'ich qoldiq' : null]);
+
+    // Jamlanma hisobotlar (WIP, zavod ko'rinishi, panel) flow_log ga tayanadi —
+    // boshlang'ich qoldiq ham o'sha yerga yozilmasa, kiritilgan mahsulot
+    // hisobotlarda ko'rinmay qoladi.
+    const shiftId = await resolveShift(client, it.product_id, 1, req.user.id,
+                                       it.entered_section_on || null);
+    await client.query(
+      `INSERT INTO flow_log (shift_id, section_id, product_id, qty_ok, worker_id,
+                             note, is_opening)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [shiftId, it.section_id, it.product_id, Number(it.qty) || 1, req.user.id,
+       u.conveyor_no + (it.is_opening ? ' · boshlang\'ich qoldiq' : ''),
+       !!it.is_opening]);
+  }
+  if (isExit) {
+    await client.query(
+      `UPDATE production_units SET fg_on = COALESCE($2::date, CURRENT_DATE) WHERE id = $1`,
+      [u.id, it.entered_section_on || null]);
+    await client.query(
+      `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
+       ON CONFLICT (product_id) DO UPDATE
+         SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`,
+      [it.product_id, Number(it.qty) || 1]);
+  }
+  return u;
+}
+
 router.post('/', need(...UNITS), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   if (!items.length) return res.status(400).json({ error: 'Qator yo\'q' });
@@ -322,87 +411,7 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 
     const created = [];
     for (const it of items) {
-      if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
-      // Raqam bo'sh qoldirilsa server o'zi beradi
-      if (!it.conveyor_no || !String(it.conveyor_no).trim()) {
-        it.conveyor_no = await nextConveyorNo(client);
-      }
-
-      // Bo'lim berilsa, u mahsulot marshrutida borligini tekshiramiz
-      if (it.section_id) {
-        const ok = (await client.query(
-          `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
-          [it.product_id, it.section_id])).rowCount;
-        if (!ok) throw new Error(
-          `${it.conveyor_no}: tanlangan bo'lim bu mahsulot marshrutida yo'q`);
-      }
-
-      const place = it.section_id ? (await client.query(
-        `SELECT s.is_exit, sh.milestone
-           FROM sections s JOIN shops sh ON sh.id = s.shop_id
-          WHERE s.id = $1`, [it.section_id])).rows[0] : null;
-      const isExit = place?.is_exit || false;
-
-      // Birlik allaqachon lak yoki qadoqlash tsexida turgan bo'lsa, o'sha
-      // tsexga kirish sanasi ma'lum: kiritilmagan bo'lsa bo'limga kirgan
-      // sanadan olinadi. Boshlang'ich qoldiqda buni qo'lda takrorlash
-      // shart bo'lmaydi.
-      const enteredOn = it.entered_section_on || it.started_on || null;
-      const lakOn  = it.lak_on  || (place?.milestone === 'lak'  ? enteredOn : null);
-      const packOn = it.pack_on || (place?.milestone === 'pack' ? enteredOn : null);
-
-      const u = (await client.query(
-        `INSERT INTO production_units
-           (conveyor_no, order_no, product_id, qty, started_on, current_section_id,
-            entered_section_on, customer_id, unit_price, ship_on, next_shop_planned_on,
-            status, is_opening, note, created_by,
-            color, fabric, lak_planned_on, lak_on, pack_planned_on, pack_on,
-            fg_planned_on, is_stock)
-         VALUES ($1,$2,$3,$4, COALESCE($5::date, CURRENT_DATE), $6,
-                 COALESCE($7::date, CURRENT_DATE), $8,$9,$10,$11,
-                 $12, $13, $14, $15,
-                 $16,$17,$18,$19,$20,$21,$22,$23)
-         RETURNING id, conveyor_no`,
-        [String(it.conveyor_no).trim(), it.order_no || null, it.product_id,
-         Number(it.qty) || 1, it.started_on || null, it.section_id || null,
-         it.entered_section_on || null, it.customer_id || null,
-         it.unit_price || null, it.ship_on || null, it.next_shop_planned_on || null,
-         isExit ? 'fg' : 'production', !!it.is_opening, it.note || null, req.user.id,
-         trim(it.color), trim(it.fabric),
-         it.lak_planned_on || null, lakOn,
-         it.pack_planned_on || null, packOn,
-         it.fg_planned_on || null, !!it.is_stock])).rows[0];
-
-      if (it.section_id) {
-        await client.query(
-          `INSERT INTO unit_moves (unit_id, section_id, moved_on, worker_id, note)
-           VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4, $5)`,
-          [u.id, it.section_id, it.entered_section_on || null, req.user.id,
-           it.is_opening ? 'Boshlang\'ich qoldiq' : null]);
-
-        // Jamlanma hisobotlar (WIP, zavod ko'rinishi, panel) flow_log ga tayanadi —
-        // boshlang'ich qoldiq ham o'sha yerga yozilmasa, kiritilgan mahsulot
-        // hisobotlarda ko'rinmay qoladi.
-        const shiftId = await resolveShift(client, it.product_id, 1, req.user.id,
-                                           it.entered_section_on || null);
-        await client.query(
-          `INSERT INTO flow_log (shift_id, section_id, product_id, qty_ok, worker_id,
-                                 note, is_opening)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [shiftId, it.section_id, it.product_id, Number(it.qty) || 1, req.user.id,
-           u.conveyor_no + (it.is_opening ? ' · boshlang\'ich qoldiq' : ''),
-           !!it.is_opening]);
-      }
-      if (isExit) {
-        await client.query(
-          `UPDATE production_units SET fg_on = COALESCE($2::date, CURRENT_DATE) WHERE id = $1`,
-          [u.id, it.entered_section_on || null]);
-        await client.query(
-          `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
-           ON CONFLICT (product_id) DO UPDATE
-             SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`,
-          [it.product_id, Number(it.qty) || 1]);
-      }
+      const u = await createOne(client, req, it);
       created.push(u);
     }
     await audit(req, { module: 'production', action: 'create', entity: 'units',
@@ -861,3 +870,6 @@ router.get('/feed/export', need('production.view'), wrap(async (req, res) => {
 }));
 
 module.exports = router;
+// Excel'dan yuklash shu funksiyani chaqiradi (modules/import.js) — qo'lda
+// kiritilgan qator bilan yuklangan qator bir xil yo'ldan o'tsin.
+module.exports.createOne = createOne;
