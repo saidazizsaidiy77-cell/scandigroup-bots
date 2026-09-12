@@ -835,10 +835,23 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
 //                 marshruti bo'yicha keyingi qadami MENING tsexim
 //    · muddat   — keyingi tsexga topshirishga necha kun qolgani
 //
-//  Muddat v_unit_register dan keladi: qo'lda qo'yilgan reja bo'lsa u,
-//  aks holda marshrut va bo'lim tezligidan chiqqan taxmin. Tezlik oxirgi
-//  14 kunlik haqiqiy o'tkazishlardan o'lchanadi (v_section_rate), shuning
-//  uchun zavod ishlay boshlagach muddatlar o'z-o'zidan aniqlashadi.
+//  ★ MUDDAT AYNAN JURNALDAGI SANA
+//
+//  Zavodda oqim: Korpus → Lak (bo'yoqlash) → Qadoqlash → T/M ombor.
+//  Jurnalda har birlik uchun shu uch sana turibdi: «Lak tsehi»,
+//  «Qadoqlash tsehi», «T/M ombor». Usta telefonida ko'radigan muddat —
+//  o'sha sananing o'zi, boshqa hisob emas: aks holda jurnalda bir sana,
+//  telefonda boshqa sana chiqib, qaysi biriga ishonishni bilib bo'lmaydi.
+//
+//  Qaysi sana olinishi birlik HOZIR qaysi tsexda turganiga qarab hal
+//  bo'ladi — marshrutdagi keyingi BOSHQA tsex topiladi va o'sha tsexning
+//  bosqich belgisi (shops.milestone) sanani tanlaydi:
+//      korpusdagi birlik    → keyingi tsex lak      → «Lak tsehi» sanasi
+//      bo'yoqlashdagi birlik → keyingi tsex qadoqlash → «Qadoqlash» sanasi
+//      qadoqlashdagi birlik  → oldinda tsex yo'q      → «T/M ombor» sanasi
+//
+//  Jurnalda sana qo'yilmagan bo'lsa eski hisob (marshrut va bo'lim
+//  tezligidan chiqqan taxmin) zaxira bo'lib qoladi.
 router.get('/board', need('production.view', 'production.entry'), wrap(async (req, res) => {
   const scope = scopeOf(req);
 
@@ -856,13 +869,17 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
     `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.sku, r.qty,
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
             r.section, r.section_id, r.entered_section_on,
-            r.next_shop_on, r.next_shop_src, r.is_stock, r.waiting,
-            (CURRENT_DATE - r.entered_section_on)::int AS days_here,
-            (r.next_shop_on - CURRENT_DATE)::int       AS days_left,
+            r.is_stock, r.waiting,
             n.section_id AS next_section_id,
             ns.name      AS next_section,
             ns.shop_id   AS next_shop_id,
-            nsh.name     AS next_shop_name
+            nsh.name     AS next_shop_name,
+            -- Topshiriladigan tsex: marshrutda oldinda turgan birinchi
+            -- BOSHQA tsex. Qadoqlashda bunday tsex yo'q — oldinda ombor.
+            COALESCE(hs.name, 'T/M ombor') AS due_shop,
+            d.due_on,
+            (d.due_on - CURRENT_DATE)::int AS days_left,
+            d.due_src
        FROM v_unit_register r
        -- Marshrutdagi keyingi qadam. Bo'lim boshlig'i ro'yxatdan tanlab
        -- o'tirmasligi uchun tugmada aynan shu bo'lim nomi yoziladi.
@@ -872,11 +889,29 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
           ORDER BY pr.step_no LIMIT 1) n ON true
        LEFT JOIN sections ns  ON ns.id  = n.section_id
        LEFT JOIN shops    nsh ON nsh.id = ns.shop_id
+       -- Oldinda turgan birinchi boshqa tsex va uning bosqich belgisi
+       LEFT JOIN LATERAL (
+         SELECT sh.name, sh.milestone
+           FROM v_product_route pr
+           JOIN sections sc2 ON sc2.id = pr.section_id
+           JOIN shops    sh  ON sh.id  = sc2.shop_id
+          WHERE pr.product_id = r.product_id AND pr.step_no > r.step_no
+            AND sc2.shop_id <> r.shop_id
+          ORDER BY pr.step_no LIMIT 1) hs ON true
+       -- Jurnaldagi sana: qaysi tsexga topshiriladi — o'shaniki
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(j.dt, r.next_shop_on) AS due_on,
+                CASE WHEN j.dt IS NOT NULL THEN 'jurnal' ELSE r.next_shop_src END AS due_src
+           FROM (SELECT CASE hs.milestone
+                          WHEN 'lak'  THEN r.lak_on
+                          WHEN 'pack' THEN r.pack_on
+                          ELSE CASE WHEN hs.name IS NULL THEN r.fg_on END
+                        END AS dt) j) d ON true
       WHERE r.status = 'production' AND r.section_id IS NOT NULL
         AND (r.shop_id = $1 OR ns.shop_id = $1)
       -- Eng shoshilinchi yuqorida. Muddatsizlari oxirida: ular kutmayapti,
       -- ular haqida hali ma'lumot yo'q.
-      ORDER BY r.next_shop_on NULLS LAST, r.conveyor_no`, [shopId])).rows;
+      ORDER BY d.due_on NULLS LAST, r.conveyor_no`, [shopId])).rows;
 
   const sections = (await db.query(
     `SELECT id, name, sort, is_exit FROM sections

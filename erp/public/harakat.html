@@ -80,20 +80,23 @@ async function go(k) {
 
 // ═══════════════════════════════════════════════════════ 1. BO'LIMLAR
 //
-// Muddat. Reja — boshliq qo'ygan sana, taxmin — marshrut va bo'lim
-// tezligidan hisoblangan. Ikkalasi ham yo'q bo'lsa bo'sh: o'ylab topilgan
-// sana bo'sh katakdan yomonroq.
+// Muddat — faqat KUN SONI. Sananing o'zi ko'rsatilmaydi: usta "27-sentabr"
+// dan foyda ko'rmaydi, u "uch kun qoldi" deb o'ylaydi va ishini shunga
+// qarab tartiblaydi. Sana jurnalda turibdi, kerak bo'lsa o'sha yerda.
+//
+// Kechikkan birlik minus bilan va qizil: "-3 kun" — o'tib ketgan kun soni
+// darrov ko'rinadi va ro'yxatning boshiga chiqadi.
+//
+// Qaysi sana olinishi birlik turgan tsexga bog'liq (server: /board):
+// korpusdagiga «Lak tsehi», bo'yoqlashdagiga «Qadoqlash», qadoqlashdagiga
+// «T/M ombor» sanasi. Ya'ni jurnaldagi sana bilan bir xil, boshqa hisob emas.
 function due(u) {
   if (u.waiting) return `<span class="tag">zahira</span>`;
   if (u.days_left == null) return `<span class="muted">—</span>`;
   const d = u.days_left;
-  const cls = d < 0 ? 'bad' : d <= 2 ? 'warn' : 'ok';
-  const txt = d < 0 ? `${-d} kun kechikdi`
-            : d === 0 ? 'Bugun oxirgi kun'
-            : `${d} kun qoldi`;
-  // Sana reja yoki taxmindan kelgani ustaga farq qilmaydi — u kunlar
-  // sonini ko'rib navbatni belgilaydi, xolos. Manba jurnalda ko'rinadi.
-  return `<span class="tag ${cls}">${txt}</span>`;
+  if (d < 0)   return `<span class="tag bad">&minus;${-d} kun</span>`;
+  if (d === 0) return `<span class="tag warn">Bugun</span>`;
+  return `<span class="tag ${d <= 2 ? 'warn' : 'ok'}">${d} kun</span>`;
 }
 
 // Ustaning ekranida oltita ustundan boshqa hech narsa yo'q. Zakaz raqami,
@@ -126,7 +129,7 @@ const HEAD = `<thead><tr>
     <th class="c-sel"></th>
     <th class="c-no">Konveyer &#8470;</th><th class="c-name">Nomi</th>
     <th class="c-type">Turi</th><th class="c-qty num">Soni</th>
-    <th class="c-due">Berishga qolgan</th><th class="c-act"></th>
+    <th class="c-due">Topshirishga qolgan</th><th class="c-act"></th>
   </tr></thead>`;
 
 // Bo'sh bo'lim ham ko'rsatiladi: usta o'z tsexining hamma bo'limini bir
