@@ -437,7 +437,48 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   const { order_no, customer_id, unit_price, ship_on, next_shop_planned_on, note, status,
           color, fabric, lak_planned_on, pack_planned_on,
-          lak_on, pack_on, fg_on } = req.body;
+          lak_on, pack_on, fg_on, conveyor_no } = req.body;
+
+  // Konveyer raqamini o'zgartirish — birlikning O'ZINI qayta nomlash, boshqa
+  // maydonlardan farqli. Qog'oz jurnaldan ko'chirishda raqam xato yozilishi
+  // oddiy hol, shuning uchun imkon bor; lekin faqat production.manage bilan.
+  //
+  // Raqam jamlanma yozuvning izohida ham turadi (flow_log.note) — o'sha
+  // yerda ham almashtiriladi, aks holda hisobotda eski raqam qolib ketadi
+  // va bog'lanish ustuni yo'q eski harakatlarni qaytarib bo'lmaydi.
+  if (conveyor_no != null && String(conveyor_no).trim()) {
+    if (!req.user.permissions.includes('production.manage')) {
+      const e = new Error('Konveyer raqamini faqat ishlab chiqarish boshlig\'i o\'zgartiradi');
+      e.status = 403; throw e;
+    }
+    const next = String(conveyor_no).trim();
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const old = (await client.query(
+        `SELECT conveyor_no FROM production_units WHERE id = $1 FOR UPDATE`,
+        [req.params.id])).rows[0];
+      if (!old) return res.status(404).json({ error: 'Birlik topilmadi' });
+      if (old.conveyor_no !== next) {
+        await client.query(
+          `UPDATE production_units SET conveyor_no = $2 WHERE id = $1`,
+          [req.params.id, next]);
+        await client.query(
+          `UPDATE flow_log SET note = $2 || substring(note FROM length($1) + 1)
+            WHERE note = $1 OR note LIKE $1 || ' ·%'`, [old.conveyor_no, next]);
+        await audit(req, { module: 'production', action: 'rename', entity: 'unit',
+                           entity_id: req.params.id,
+                           payload: { from: old.conveyor_no, to: next } }, client);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (e.code === '23505') { e.status = 409; e.message = `«${conveyor_no}» band`; }
+      else if (!e.status) e.status = 400;
+      throw e;
+    } finally { client.release(); }
+  }
+
   const { rows } = await db.query(
     `UPDATE production_units SET
        order_no             = COALESCE($2, order_no),

@@ -518,6 +518,13 @@ async function edit(id){
         <p class="muted" style="margin-bottom:20px">${esc(r.product)} · ${esc(r.product_type)} ·
           ${r.qty} dona · <span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}</span></p>
         <div class="stack">
+          <!-- Konveyer raqami — birlikning O'ZI. Qog'oz jurnaldan ko'chirishda
+               xato yozilishi oddiy hol, shuning uchun tuzatish mumkin; lekin
+               faqat ishlab chiqarish boshlig'iga, chunki bu qayta nomlash. -->
+          ${App.can('production.manage') ? `<div><label>Konveyer raqami</label>
+            <input id="eConv" value="${esc(r.conveyor_no)}">
+            <p class="muted" style="font-size:12px;margin-top:6px">Raqam
+              jurnalda va hisobotlarda ham almashadi</p></div>` : ''}
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Zakaz raqami</label>
               <input id="eOrder" value="${esc(r.order_no || '')}" placeholder="zakaz tushganda"></div>
@@ -592,6 +599,8 @@ async function saveEdit(id){
       customers = (await App.api('/api/units/customers')).customers;
     }
     await App.api('/api/units/' + id, { method:'PATCH', body: JSON.stringify({
+      // Katak faqat ishlab chiqarish boshlig'ida bor; bo'lmasa yuborilmaydi
+      ...($('eConv') ? { conveyor_no: $('eConv').value.trim() } : {}),
       order_no: $('eOrder').value.trim() || null,
       customer_id,
       unit_price: $('ePrice').value === '' ? null : $('ePrice').value,
