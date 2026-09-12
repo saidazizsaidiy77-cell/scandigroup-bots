@@ -439,18 +439,39 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
           color, fabric, lak_planned_on, pack_planned_on,
           lak_on, pack_on, fg_on, conveyor_no } = req.body;
 
-  // Konveyer raqamini o'zgartirish — birlikning O'ZINI qayta nomlash, boshqa
-  // maydonlardan farqli. Qog'oz jurnaldan ko'chirishda raqam xato yozilishi
-  // oddiy hol, shuning uchun imkon bor; lekin faqat production.manage bilan.
+  // ★ TARIXGA TEGADIGAN MAYDONLAR
   //
+  //  Bu ikkisi birlikning o'zini o'zgartiradi, boshqa maydonlar esa unga
+  //  ma'lumot qo'shadi:
+  //    · konveyer raqami — birlikning nomi, hamma hisobotda shu turadi;
+  //    · FAKT sanalar    — tizim birlik o'sha tsexga o'tganda yozgan,
+  //                        ya'ni haqiqatan bo'lib o'tgan voqea.
+  //
+  //  Shuning uchun ularni faqat administrator va ishlab chiqarish
+  //  boshlig'i (production.manage) o'zgartiradi. Savdo menejeri va
+  //  ma'lumot kirituvchi o'sha oynada narx, mijoz va REJA sanalarini
+  //  qo'yaveradi — tarixga tegmaydi.
+  //
+  //  Tekshiruv shu yerda, sahifada emas: katakni yashirish himoya emas,
+  //  so'rovni qo'lda ham yuborsa bo'ladi.
+  const RESTRICTED = {
+    conveyor_no: 'Konveyer raqami',
+    lak_on:      'Lak tsexiga kirgan sana',
+    pack_on:     'Qadoqlash tsexiga kirgan sana',
+    fg_on:       'T/M omborga kirgan sana',
+  };
+  const touched = Object.keys(RESTRICTED)
+    .filter((k) => req.body[k] != null && String(req.body[k]).trim() !== '');
+  if (touched.length && !req.user.permissions.includes('production.manage')) {
+    const e = new Error(touched.map((k) => RESTRICTED[k]).join(', ') +
+      " \u2014 buni faqat administrator va ishlab chiqarish boshlig'i o'zgartiradi");
+    e.status = 403; throw e;
+  }
+
   // Raqam jamlanma yozuvning izohida ham turadi (flow_log.note) — o'sha
   // yerda ham almashtiriladi, aks holda hisobotda eski raqam qolib ketadi
   // va bog'lanish ustuni yo'q eski harakatlarni qaytarib bo'lmaydi.
   if (conveyor_no != null && String(conveyor_no).trim()) {
-    if (!req.user.permissions.includes('production.manage')) {
-      const e = new Error('Konveyer raqamini faqat ishlab chiqarish boshlig\'i o\'zgartiradi');
-      e.status = 403; throw e;
-    }
     const next = String(conveyor_no).trim();
     const client = await db.connect();
     try {
