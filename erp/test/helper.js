@@ -51,6 +51,7 @@ async function startServer() {
   app.use('/api/catalog', require('../modules/catalog'));
   app.use('/api/purchasing', require('../modules/purchasing'));
   app.use('/api/import', require('../modules/import'));
+  app.use('/api/warehouse', require('../modules/warehouse'));
 
   const server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));

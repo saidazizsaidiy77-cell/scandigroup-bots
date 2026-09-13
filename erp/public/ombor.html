@@ -44,17 +44,21 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-let rows = [], canAccept = false, tab = 'inbox';
+let rows = [], canAccept = false, tab = 'stock';
 const picked = new Set();
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
 const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
 
-const TABS = [['inbox', 'Qabul qilish'], ['stock', 'Qoldiq'], ['moves', 'Harakat']];
+// Kirganda qoldiq ochiladi — «nimadan nechta bor» kunlik savol.
+// Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
+// qoldiqni ochib, kutayotgan mahsulotni ko'rmay qolishi mumkin.
+const TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'], ['moves', 'Harakat']];
 function drawTabs() {
   $('tabs').innerHTML = TABS.map(([k, t]) =>
-    `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}</button>`).join('');
+    `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}${
+      k === 'inbox' && rows.length ? ` <b>${rows.length}</b>` : ''}</button>`).join('');
 }
 async function go(k) {
   tab = k; drawTabs();
@@ -143,16 +147,25 @@ function bulk() {
 
 async function load() {
   rows = await App.api('/api/units/stock/inbox');
+  drawTabs();          // qabul qilingach tabdagi raqam ham kamayadi
   draw();
 }
 
 // ═══════════════════════════════════════════════════════════ QOLDIQ
 //
-//  Ro'yxat BIRLIKLARDAN iborat, dona yig'indisidan emas. Zavod uchun
-//  konveyer raqami mezon: shikoyat kelganda, oylik hisoblashda va xom
-//  ashyoda javob shu raqamdan topiladi — demak omborda ham u ko'rinib
-//  turishi kerak.
+//  Ikki qavat, chunki ikki xil savol beriladi:
+//
+//    1. «Nimadan nechta bor?» — mahsulot turi, rangi, matosi bo'yicha
+//       jamlanma jadval. Ombor mudiri kunda shuni ochadi.
+//    2. «Qaysi biri?» — qatorni bosganda o'sha rang-matodagi KONVER
+//       raqamlari chiqadi. Shikoyat kelganda javob shu yerdan topiladi.
+//
+//  Sana oralig'i omborga QABUL QILINGAN kun bo'yicha: «shu oraliqda
+//  kirgan va hozir ham turganlari».
 let stock = null;
+const openRows = new Map();   // kalit → konverlar (bir marta yuklanadi)
+
+const rowKey = r => `${r.product_id}|${r.color || ''}|${r.fabric || ''}`;
 
 function stockParams() {
   const p = new URLSearchParams();
@@ -164,67 +177,106 @@ function stockParams() {
 
 function drawStock() {
   const d = stock;
-  const jami = d.groups.reduce((n, g) => n + g.qty, 0);
   $('body').innerHTML = `
     <div class="card">
       <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
         <div style="flex:1;min-width:180px"><label>Qidiruv</label>
-          <input id="sQ" placeholder="konveyer \u2116, maxsulot, zakaz" value="${esc(d.q || '')}"
-                 oninput="debStock()"></div>
+          <input id="sQ" placeholder="maxsulot, rang, mato, konveyer \u2116"
+                 value="${esc(d.q || '')}" oninput="debStock()"></div>
         <div><label>Omborga kirgan, dan</label>
           <input id="sFrom" type="date" value="${d.from || ''}" onchange="loadStock()"></div>
         <div><label>gacha</label>
           <input id="sTo" type="date" value="${d.to || ''}" onchange="loadStock()"></div>
+        <button onclick="period2(30)">30 kun</button>
         <button onclick="clearStock()">Tozalash</button>
         <button onclick="exportStock()">Excelga yuklash</button>
       </div>
     </div>
 
     <div class="grid g3" style="margin-top:16px">
-      <div class="card"><h2>Omborda</h2><div class="kpi">${d.rows.length}<small> konver</small></div></div>
-      <div class="card"><h2>Jami dona</h2><div class="kpi">${jami}</div></div>
-      <div class="card"><h2>Guruhlar</h2>
-        <div style="margin-top:6px">${d.groups.map(g =>
-          `<div class="row" style="justify-content:space-between;font-size:13px">
-             <span>${esc(g.product_type)}</span><b>${g.qty}</b></div>`).join('') ||
-          '<span class="muted">—</span>'}</div></div>
+      <div class="card"><h2>Omborda</h2>
+        <div class="kpi">${d.total.units}<small> konver</small></div></div>
+      <div class="card"><h2>Jami dona</h2><div class="kpi">${d.total.qty}</div></div>
+      <div class="card"><h2>Summa</h2>
+        <div class="kpi">${d.total.amount ? '$' + money(d.total.amount) : '\u2014'}</div></div>
     </div>
 
     ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
-      <p class="muted" style="margin-top:8px">Qabul qilingan mahsulot shu yerda turadi.</p></div>`
+      <p class="muted" style="margin-top:8px">${d.q || d.from || d.to
+        ? 'Tanlangan shart bo\'yicha mahsulot topilmadi.'
+        : 'Qabul qilingan mahsulot shu yerda turadi.'}</p></div>`
     : `<div class="card" style="margin-top:16px">
       <div style="overflow:auto;max-height:64vh">
-      <table class="board">
+      <table class="stock">
         <thead><tr>
-          <th class="c-no">Konveyer &#8470;</th><th class="c-name">Nomi</th>
-          <th class="c-type">Turi</th><th class="c-qty num">Soni</th>
-          <th>Rang</th><th>Kirgan</th><th class="num">Kun</th><th>Mijoz</th>
+          <th class="s-type">Turi</th><th class="s-name">Mahsulot</th>
+          <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
+          <th class="s-qty">Soni</th><th class="s-units">Konver</th>
+          <th class="s-days">Kun</th>
         </tr></thead>
-        <tbody>${d.rows.map(r => `
-          <tr>
-            <td class="c-no"><b>${esc(r.conveyor_no)}</b>${r.order_no
-              ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}</div>` : ''}</td>
-            <td class="c-name">${esc(r.product)}</td>
-            <td class="c-type muted">${esc(r.product_type || '')}</td>
-            <td class="c-qty num">${r.qty}</td>
-            <td class="muted">${esc(r.color || '—')}</td>
-            <td>${d8(r.fg_on)}</td>
-            <td class="num ${r.days_in_stock > 30 ? 'muted' : ''}">${r.days_in_stock ?? ''}</td>
-            <td class="muted">${esc(r.customer_name || 'T/M ombor')}</td>
-          </tr>`).join('')}</tbody>
+        <tbody>${d.rows.map(r => drawStockRow(r)).join('')}</tbody>
       </table></div></div>`}`;
+}
+
+//  Qator + (ochilgan bo'lsa) uning konverlari. Konverlar ostidagi qator
+//  jadvalning o'zida turadi — alohida oyna ochilsa mudir qaysi qatordan
+//  kelganini yo'qotadi.
+function drawStockRow(r) {
+  const k = rowKey(r);
+  const open = openRows.has(k);
+  const units = openRows.get(k);
+  return `
+    <tr onclick="toggleRow('${k}',${r.product_id})">
+      <td class="s-type muted">${esc(r.product_type || '')}</td>
+      <td class="s-name"><b>${esc(r.product)}</b></td>
+      <td class="s-color muted">${esc(r.color || '\u2014')}</td>
+      <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
+      <td class="s-qty"><b>${r.qty}</b></td>
+      <td class="s-units muted">${r.units}</td>
+      <td class="s-days ${r.oldest_days > 60 ? 'bad' : 'muted'}">${r.oldest_days ?? ''}</td>
+    </tr>
+    ${!open ? '' : `<tr class="more"><td colspan="7" style="background:var(--bg);padding:10px 14px">
+      ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
+      : !units.length ? `<span class="muted">\u2014</span>`
+      : units.map(u => `<span class="tag" style="margin:2px 6px 2px 0" title="${
+          esc(u.customer_name || 'T/M ombor')} \u00b7 ${d8(u.fg_on)} \u00b7 ${u.days_in_stock} kun"
+          >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}</span>`).join('')}
+    </td></tr>`}`;
+}
+
+async function toggleRow(k, productId) {
+  if (openRows.has(k)) { openRows.delete(k); return drawStock(); }
+  const r = stock.rows.find(x => rowKey(x) === k);
+  openRows.set(k, undefined);
+  drawStock();
+  const p = new URLSearchParams({ product_id: productId });
+  if (r.color)  p.set('color', r.color);
+  if (r.fabric) p.set('fabric', r.fabric);
+  if (stock.from) p.set('from', stock.from);
+  if (stock.to)   p.set('to', stock.to);
+  const d = await App.api('/api/warehouse/fg/units?' + p);
+  openRows.set(k, d.rows);
+  drawStock();
 }
 
 let t1 = null;
 const debStock = () => { clearTimeout(t1); t1 = setTimeout(loadStock, 350); };
 function clearStock() { ['sQ','sFrom','sTo'].forEach(i => { if ($(i)) $(i).value = ''; }); loadStock(); }
+function period2(days) {
+  $('sFrom').value = isoDay(new Date(Date.now() - days * 864e5));
+  $('sTo').value = isoDay(new Date());
+  loadStock();
+}
+//  Excelga konverlar ro'yxati tushadi, jamlanma emas: faylni ochgan odam
+//  uni o'zi istagancha yig'a oladi, ajrata olmaydi.
 const exportStock = () => App.download('/api/units/stock/export?' + stockParams(),
   `tm-ombor-${isoDay(new Date())}.csv`);
 
 async function loadStock() {
   const q = stockParams();
   const focus = document.activeElement?.id;
-  const d = await App.api('/api/units/stock' + (q ? '?' + q : ''));
+  openRows.clear();
+  const d = await App.api('/api/warehouse/fg/summary' + (q ? '?' + q : ''));
   const p = new URLSearchParams(q);
   stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to') };
   drawStock();
@@ -298,8 +350,11 @@ async function loadMoves() {
 
 App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
+  // Qabul qilish ro'yxati tabda raqam bo'lib turishi uchun oldindan
+  // o'qiladi — ochilmasa ham mudir kutayotgan borligini ko'radi.
+  rows = await App.api('/api/units/stock/inbox');
   drawTabs();
-  await load();
+  await loadStock();
 }, 'warehouse.view', 'production.view');
 </script>
 </body>

@@ -31,7 +31,7 @@ app.use('/api/purchasing', require('./modules/purchasing'));
 // Excel/CSV dan yuklash. Fayl xom bayt bo'lib keladi, shuning uchun yo'l
 // o'z body parser'ini o'zi qo'yadi (modules/import.js).
 app.use('/api/import', require('./modules/import'));
-// app.use('/api/warehouse',  require('./modules/warehouse'));   // xom ashyo + tayyor mahsulot
+app.use('/api/warehouse', require('./modules/warehouse'));
 // app.use('/api/sales',      require('./modules/sales'));       // mijozlar, sotuv
 // app.use('/api/cash',       require('./modules/cash'));        // kassa
 // app.use('/api/payroll',    require('./modules/payroll'));     // maosh

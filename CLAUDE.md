@@ -54,6 +54,13 @@ jo'natuvchi «jo'natdim» (`production_units.handover_*`) → qabul qiluvchi
 o'tkazadi. Jo'natilmagan konverni qabul qilib bo'lmaydi. Jo'natish —
 harakat EMAS, mahsulot joyidan qimirlamaydi.
 
+**Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: tayyor mahsulot,
+xom ashyo, listlar, furnitura, vitrina. Ro'yxat bazada, `sql/warehouse.sql`
+da. `kind='fg'` — qoldiq konver hisobida; `kind='material'` — xom ashyo
+(hali yozilmagan). `is_active=FALSE` ombor ro'yxatda «rejada» bo'lib
+turadi, ochilmaydi. Yangi ombor qo'shish — shu faylga bitta qator,
+sahifaga tegilmaydi.
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.
@@ -70,6 +77,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `tsex_usta` | `production.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi |
 | `kirituvchi` | + `production.units` | jurnal, boshlang'ich qoldiq |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
+| `omborchi` | `warehouse.*` | faqat «Omborlar», ishlab chiqarish jurnali yopiq |
 | `admin` | barchasi | hammasi |
 
 **Tsex doirasi** — `worker_roles.scope_shop_id`. Doira bo'sh = hamma tsex.
@@ -100,7 +108,7 @@ erp/
 
 `sql/` tartibi: core → core-seed → production → production-seed →
 catalog-groups → production-sku → units → register → catalog → purchasing →
-routes. Yangi fayl qo'shsangiz `migrate.js` ga ham yozing.
+routes → warehouse. Yangi fayl qo'shsangiz `migrate.js` ga ham yozing.
 
 **Menyuning yagona manbai** — `public/app.js` dagi `MODULES` va `PAGES`.
 Yangi sahifa faqat shu ro'yxatga qo'shiladi.

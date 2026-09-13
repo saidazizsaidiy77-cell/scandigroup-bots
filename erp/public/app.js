@@ -250,14 +250,19 @@ const App = (() => {
     { mod: 'purchasing', nav: 'Solishtirma dalolatnoma',           perm: ['purchasing.view'] },
     { mod: 'purchasing', nav: 'Qarzdorlik',                        perm: ['purchasing.view'] },
 
-    // Ombor
-    { href: '/ombor.html', mod: 'warehouse', nav: 'T/M ombor',
-      title: 'Tayyor mahsulot ombori', lead: 'Qabul qilish',
-      text: "Qadoqlash tsexi jo'natgan mahsulotni qabul qilish \u00b7 qabul qilingach jurnaldan chiqadi",
+    // Ombor. Zavodda bir nechta ombor bor (tayyor mahsulot, xom ashyo,
+    // listlar, furnitura, vitrina), shuning uchun bo'limga kirilganda
+    // avval omborlar ro'yxati chiqadi \u2014 shu qator birinchi turgani
+    // uchun yuqoridagi "Ombor" havolasi o'sha yerga olib boradi.
+    { href: '/omborlar.html', mod: 'warehouse', nav: 'Omborlar',
+      title: 'Omborlar', lead: 'Zavod omborlari',
+      text: "Har ombor alohida: tayyor mahsulot, xom ashyo, listlar, furnitura, vitrina \u00b7 qoldig'i yonida turadi",
       perm: ['warehouse.view', 'production.view'] },
-    { mod: 'warehouse', nav: 'Omborlar',                perm: ['warehouse.view'] },
+    { href: '/ombor.html', mod: 'warehouse', nav: 'T/M ombor',
+      title: 'Tayyor mahsulot ombori', lead: 'Qoldiq va qabul qilish',
+      text: "Turi, rangi, matosi bo'yicha qoldiq \u00b7 qatorni ochsa konver raqamlari \u00b7 qadoqlash tsexidan qabul qilish",
+      perm: ['warehouse.view', 'production.view'] },
     { mod: 'warehouse', nav: 'Omborga kirim',           perm: ['warehouse.move'] },
-    { mod: 'warehouse', nav: 'Qoldiqlar',               perm: ['warehouse.view'] },
     { mod: 'warehouse', nav: 'Hisobdan chiqarish',      perm: ['warehouse.manage'] },
     { mod: 'warehouse', nav: 'Omborlar aro harakatlar', perm: ['warehouse.move'] },
 

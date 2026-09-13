@@ -45,7 +45,7 @@ INSERT INTO roles (code, name, surface, sort) VALUES
   ('kirituvchi',   'Ma''lumot kirituvchi',    'web',     4),
   ('tsex_usta',    'Tsex ustasi',             'miniapp', 5),
   ('operator',     'Bo''lim operatori',       'miniapp', 6),
-  ('omborchi',     'Omborchi',                'miniapp', 7),
+  ('omborchi',     'Ombor mudiri',            'web',     7),
   ('taminotchi',   'Ta''minotchi',            'web',     8),
   ('sotuvchi',     'Sotuv menejeri',          'web',     9),
   ('kassir',       'Kassir',                  'web',    10),
@@ -82,8 +82,11 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('tsex_usta',    'production.entry'),
   ('operator',     'production.entry'),
 
+  -- Ombor mudiri: qabul qiladi, qoldiqni yuritadi, inventarizatsiya
+  -- qiladi. warehouse.manage hali kodda ishlatilmaydi — inventarizatsiya
+  -- moduli qo'shilganda rolni qayta ochish shart bo'lmasin.
   ('omborchi',     'warehouse.view'), ('omborchi', 'warehouse.move'),
-  ('omborchi',     'production.view'),
+  ('omborchi',     'warehouse.manage'),
 
   ('taminotchi',   'purchasing.view'), ('taminotchi', 'purchasing.manage'),
   ('taminotchi',   'warehouse.view'),
@@ -107,3 +110,16 @@ ON CONFLICT DO NOTHING;
 -- to'qnashmaydi.
 DELETE FROM role_permissions
  WHERE role_code = 'tsex_usta' AND permission_code = 'production.view';
+
+-- Ombor mudiridan ham xuddi shunday. production.view unga jurnal, zavod
+-- ko'rinishi, panel va mijozlarni ochardi — ular boshqa odamning ishi.
+-- Kerakli hamma narsa T/M ombor sahifasining o'zida: qabul qilish
+-- ro'yxati, qoldiq va kirim/chiqim. Konver qayerda turgani kerak bo'lsa,
+-- bu qatorni o'chirish kifoya.
+DELETE FROM role_permissions
+ WHERE role_code = 'omborchi' AND permission_code = 'production.view';
+
+-- Rol nomi va ko'rinishi ham kodda. ON CONFLICT DO NOTHING eski bazada
+-- nomni yangilamaydi, shuning uchun alohida yoziladi.
+UPDATE roles SET name = 'Ombor mudiri', surface = 'web'
+ WHERE code = 'omborchi';

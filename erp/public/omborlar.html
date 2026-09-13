@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Omborlar · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<!-- Telefonga o'rnatiladigan ilova: bosh ekranda ZELTA belgisi, brauzer
+     paneli ko'rinmaydi. Oddiy havola bo'lib ochilishi ham buzilmaydi. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f5f6f8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Omborlar</h1></div>
+  <div class="row" id="erpUser"></div>
+</div>
+
+<div id="body"></div>
+
+<script>
+// ============================================================================
+//  OMBORLAR RO'YXATI
+//
+//  Zavodda bitta ombor yo'q: tayyor mahsulot, xom ashyo, listlar,
+//  furnitura, vitrina — har birining o'z mudiri va o'z qoldig'i bor.
+//  Shuning uchun ombor bo'limiga kirilganda avval SHU ro'yxat chiqadi,
+//  ombor tanlangach uning ichi ochiladi.
+//
+//  Ro'yxat kodda emas, bazada (`warehouses`, sql/warehouse.sql): yangi
+//  ombor qo'shish uchun shu sahifaga tegilmaydi.
+//
+//  Hali ishlamaydigan ombor ro'yxatdan yashirilmaydi, «rejada» bo'lib
+//  turadi: mudir xom ashyo omborini qidirib sahifalarni kezmasin, u
+//  qayerda bo'lishini va hali tayyor emasligini birdan ko'rsin.
+// ============================================================================
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
+
+function draw(rows) {
+  $('body').innerHTML = `
+    <div class="grid g3" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${rows.map(w => w.href ? `
+      <a class="card" href="${w.href}" style="text-decoration:none;color:inherit;display:block">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <h2 style="margin:0">${esc(w.name)}</h2>
+          <span class="tag ok">ochiq</span>
+        </div>
+        <div class="kpi" style="margin-top:10px">${w.units}<small> konver</small></div>
+        <div class="muted" style="font-size:13px;margin-top:2px">
+          ${w.qty} dona${w.amount ? ` \u00b7 $${money(w.amount)}` : ''}</div>
+        ${w.note ? `<p class="muted" style="font-size:13px;margin-top:10px">${esc(w.note)}</p>` : ''}
+      </a>` : `
+      <div class="card" style="opacity:.62">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <h2 style="margin:0">${esc(w.name)}</h2>
+          <span class="tag">rejada</span>
+        </div>
+        <div class="kpi" style="margin-top:10px">\u2014</div>
+        ${w.note ? `<p class="muted" style="font-size:13px;margin-top:10px">${esc(w.note)}</p>` : ''}
+      </div>`).join('')}
+    </div>`;
+}
+
+App.start(async () => {
+  const d = await App.api('/api/warehouse/list');
+  draw(d.rows);
+}, 'warehouse.view', 'production.view');
+</script>
+</body>
+</html>

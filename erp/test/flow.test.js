@@ -246,6 +246,56 @@ test('Excel/CSV dan yuklash: xato qator bo\'lsa hech narsa saqlanmaydi', async (
     'bitta qator ham kirmaydi');
 });
 
+test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
+  // Haqiqiy rol bilan sinaladi, admin bilan emas: huquq to'g'ri
+  // berilganini faqat shu ko'rsatadi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Sinov ombor mudiri')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  SELECT id, 'omborchi' FROM workers WHERE name='Sinov ombor mudiri'
+                  ON CONFLICT DO NOTHING`);
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+
+  // Ishlab chiqarish jurnali unga yopiq — ombor mudirining ishi emas
+  assert.equal((await mudir('GET', '/api/units/')).status, 403);
+
+  const list = await mudir('GET', '/api/warehouse/list');
+  assert.equal(list.status, 200, list.text);
+  const tm = list.body.rows.find((w) => w.code === 'TM');
+  assert.ok(tm, 'T/M ombor ro\'yxatda');
+  assert.equal(tm.href, '/ombor.html', 'ochiq ombor havolaga ega');
+
+  // Konverni omborga kiritamiz: rang va mato bilan, chunki jamlanma
+  // aynan shular bo'yicha guruhlanadi.
+  const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
+  const u = await newUnit({ section_id: QADOYNA, color: 'Venge', fabric: 'Velvet-12' });
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  await qad('POST', '/api/units/handover', { items: [u.id] });
+  // Qabul qilish ham mudirning huquqi (warehouse.move)
+  assert.equal((await mudir('POST', '/api/units/stock/accept',
+    { items: [u.id] })).status, 200);
+
+  const sum = await mudir('GET', '/api/warehouse/fg/summary?q=Venge');
+  assert.equal(sum.status, 200, sum.text);
+  const row = sum.body.rows.find((r) => r.color === 'Venge' && r.fabric === 'Velvet-12');
+  assert.ok(row, 'rang va mato bo\'yicha qator bor');
+  assert.equal(row.units, 1);
+  assert.equal(row.qty, 1);
+
+  // Qatorni ochganda konver raqami chiqadi — shikoyat kelganda javob shu
+  const det = await mudir('GET', '/api/warehouse/fg/units?product_id=' + row.product_id +
+    '&color=Venge&fabric=Velvet-12');
+  assert.equal(det.status, 200, det.text);
+  assert.ok(det.body.rows.some((r) => r.conveyor_no === u.conveyor_no));
+
+  // Sana oralig'i: omborga kirgan kun bo'yicha. Kelajakdagi oraliqda bo'sh
+  const none = await mudir('GET', '/api/warehouse/fg/summary?from=2099-01-01');
+  assert.equal(none.body.rows.length, 0);
+  assert.equal(none.body.total.units, 0);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

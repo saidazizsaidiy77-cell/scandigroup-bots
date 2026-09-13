@@ -130,6 +130,37 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   .board .c-act .ic{flex:0 0 auto;margin-left:0}
 }
 
+/* ────────────────────────────── OMBOR QOLDIG'I
+   Yetti ustun telefonga sig'maydi, gorizontal aylantirish esa mudirni
+   har qatorda surib o'tirishga majbur qiladi. Tor ekranda qator
+   kartochkaga aylanadi: yuqorida mahsulot va soni, ostida rang, mato va
+   turi, o'ng chetda konver soni bilan omborda turgan kuni.
+   Ustun sarlavhalari yo'qolgani uchun raqamlarga o'lchov so'zi qo'shiladi
+   — aks holda "1" va "33" nimani anglatishi tushunarsiz bo'lardi. */
+.stock tbody tr{cursor:pointer}
+.stock .s-qty,.stock .s-units,.stock .s-days{text-align:right}
+@media (max-width:620px){
+  .stock thead{display:none}
+  .stock td{border:0;padding:0}
+  .stock tbody tr{display:grid;gap:3px 12px;
+    grid-template-columns:1fr auto;
+    grid-template-areas:"name qty" "color units" "fabric days" "type type";
+    padding:14px 0;border-bottom:1px solid var(--line)}
+  .stock tbody tr:last-child{border-bottom:0}
+  .stock .s-name  {grid-area:name;font-size:15px}
+  .stock .s-qty   {grid-area:qty;font-size:15px}
+  .stock .s-color {grid-area:color;font-size:13px}
+  .stock .s-fabric{grid-area:fabric;font-size:13px}
+  .stock .s-type  {grid-area:type;font-size:12px;margin-top:4px}
+  .stock .s-units {grid-area:units;font-size:13px}
+  .stock .s-days  {grid-area:days;font-size:13px}
+  .stock .s-units:not(:empty)::after{content:' konver'}
+  .stock .s-days:not(:empty)::after{content:' kun'}
+  /* Ochilgan qator — konver raqamlari: kartochka tarmog'iga kirmaydi */
+  .stock tr.more{display:block;border:0;padding:0 0 14px}
+  .stock tr.more td{display:block}
+}
+
 /* Bugungi harakatlar lentasi: vaqt chap ustunda, qator yupqa */
 .feed td{padding:9px 12px;vertical-align:top}
 .feed td:first-child{padding-left:0;white-space:nowrap;font-variant-numeric:tabular-nums;
