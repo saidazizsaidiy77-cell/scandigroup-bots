@@ -74,17 +74,58 @@ SELECT set_route('L1-STOL', ARRAY[
   'QAD-OYNA','QAD-QAD']);
 
 -- ───────────────────────────────────────────────────────────────── STUL
--- Stul tsexining tartibi zavod tomonidan hali berilmagan — boshlang'ich
--- sozlamadagicha qoladi.
+--
+--  Zavod bergan tartib (2026-09). Stul uchta xil yo'ldan yuradi, farqi
+--  faqat BOSHIDA: qaysi bo'limdan boshlanadi. Undan keyingisi bir xil.
+--
+--    8 ta fason : Rover → Zborka → Shkurka → ...
+--    Onix       :         Zborka → Shkurka → ...
+--    Owen       :                  Shkurka → ...
+--
+--  Lak tsexida stulning yo'li korpusnikidan ancha qisqa: astar sepiladi,
+--  shkurkalanadi va laklanadi. Aboy, Palirovka, grunt va rang sepish —
+--  hech qaysisi stulga tegishli emas.
+--
+--  Lakdan keyin stul O'Z TSEXIGA qaytadi: qoplanadi, qadoqlanadi va
+--  shu yerdan T/M omborga tushadi. Qadoqlash tsexiga umuman bormaydi.
+INSERT INTO route_templates (line_id, code, name) VALUES
+  ((SELECT id FROM lines WHERE code='L2'), 'L2-ONIX',  'Stul · Zborkadan boshlanadi'),
+  ((SELECT id FROM lines WHERE code='L2'), 'L2-SHKUR', 'Stul · Shkurkadan boshlanadi')
+ON CONFLICT (code) DO NOTHING;
+
 SELECT set_route('L2-FULL', ARRAY[
   'STU-ROVER','STU-ZBOR','STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK',
+  'BOY-AST1','BOY-ASTSH','BOY-LAK',
   'STU-QOPL','STU-QAD']);
 
-SELECT set_route('L2-NOQOP', ARRAY[
-  'STU-ROVER','STU-ZBOR','STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK',
-  'STU-QAD']);
+SELECT set_route('L2-ONIX', ARRAY[
+  'STU-ZBOR','STU-SHKUR',
+  'BOY-AST1','BOY-ASTSH','BOY-LAK',
+  'STU-QOPL','STU-QAD']);
+
+SELECT set_route('L2-SHKUR', ARRAY[
+  'STU-SHKUR',
+  'BOY-AST1','BOY-ASTSH','BOY-LAK',
+  'STU-QOPL','STU-QAD']);
+
+-- Qoplashsiz stul shabloni ishlatilmayapti va endi u eskirgan tartibni
+-- ko'rsatib turibdi. Hech qayerga biriktirilmagan bo'lsa — olib tashlanadi:
+-- noto'g'ri shablonning turgani o'zi xato manbai.
+DELETE FROM route_templates rt
+ WHERE rt.code = 'L2-NOQOP'
+   AND NOT EXISTS (SELECT 1 FROM products p       WHERE p.route_template_id = rt.id)
+   AND NOT EXISTS (SELECT 1 FROM product_groups g WHERE g.route_template_id = rt.id);
+
+-- ────────────────────────── STUL FASONLARINI O'Z SHABLONIGA BIRIKTIRISH
+-- Guruhning umumiy shabloni L2-FULL; quyidagi fasonlar undan chetga chiqadi.
+UPDATE products p SET route_template_id = (SELECT id FROM route_templates WHERE code = v.tpl)
+  FROM product_groups g,
+       fasons f,
+       (VALUES ('ONIX', 'L2-ONIX'),
+               ('OWEN', 'L2-SHKUR'),
+               ('ZERO', 'L2-SHKUR')) AS v(fason, tpl)
+ WHERE g.id = p.group_id AND g.code = 'STU'
+   AND f.id = p.fason_id AND f.code = v.fason;
 
 -- ─────────────────────────────────────── STOL GURUHINI YANGI SHABLONGA
 -- Faqat hali L1-FULL da turganlari ko'chiriladi: alohida mahsulotga qo'lda
