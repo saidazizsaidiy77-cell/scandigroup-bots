@@ -78,8 +78,8 @@ WHERE u.ship_on IS NOT NULL AND u.status = 'shipped';
 -- ============================================================================
 --  OMBORLAR RO'YXATI
 --
---  Zavodda bitta ombor yo'q: tayyor mahsulot, xom ashyo, listlar,
---  furnitura, vitrina — har biri alohida javobgar va alohida qoldiq.
+--  Zavodda bitta ombor yo'q — har birining alohida javobgari va alohida
+--  qoldig'i bor.
 --  Shuning uchun ro'yxat kodda emas, bazada: yangi ombor qo'shish uchun
 --  shu faylga bitta qator yoziladi, sahifa o'zi chizadi.
 --
@@ -101,17 +101,24 @@ CREATE TABLE IF NOT EXISTS warehouses (
   sort      INT NOT NULL DEFAULT 100
 );
 
--- Hozircha faqat tayyor mahsulot ombori ishlaydi. Qolganlari zavoddan
--- ro'yxat kelganda qo'shiladi (xom ashyo, listlar, furnitura, vitrina).
+-- Ikkita ombor: biri ishlayapti, biri ochilishini kutmoqda. Boshqa
+-- omborlar zavoddan ro'yxat kelganda qo'shiladi — bu yerga taxmin
+-- yozilmaydi: ro'yxatda turgan ombor zavodda bor degani.
 INSERT INTO warehouses (code, name, kind, note, is_active, sort) VALUES
   ('TM',   'Tayyor mahsulot ombori', 'fg',
    'Qadoqlash tsexidan qabul qilingan konverlar', TRUE,  1),
   ('XOM',  'Xom ashyo ombori',       'material',
-   'Spravochnik tayyor bo''lgach ochiladi',        FALSE, 2),
-  ('LIST', 'Listlar ombori',         'material',
-   'LDSP, MDF va boshqa listlar',                 FALSE, 3),
-  ('FURN', 'Furnitura ombori',       'material',
-   'Petlya, napravlyayushiy, dastak',             FALSE, 4),
-  ('VITR', 'Vitrina ombori',         'material',
-   'Oyna va vitrina qismlari',                    FALSE, 5)
+   'Spravochnik tayyor bo''lgach ochiladi',        FALSE, 2)
 ON CONFLICT (code) DO NOTHING;
+
+-- Listlar, furnitura va vitrina omborlari misol tariqasida aytilgan edi,
+-- men esa ularni ro'yxatga yozib qo'ygandim. O'chiriladi — bir marta,
+-- bayroq bilan: ertaga shu nom bilan haqiqiy ombor ochilsa, keyingi
+-- deploy uni jimgina o'chirib yubormasin.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'wh-misol-tozalash') THEN
+    DELETE FROM warehouses WHERE code IN ('LIST', 'FURN', 'VITR');
+    INSERT INTO migration_flags (key) VALUES ('wh-misol-tozalash');
+  END IF;
+END $$;

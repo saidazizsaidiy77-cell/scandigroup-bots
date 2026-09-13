@@ -55,7 +55,7 @@ o'tkazadi. Jo'natilmagan konverni qabul qilib bo'lmaydi. Jo'natish —
 harakat EMAS, mahsulot joyidan qimirlamaydi.
 
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: tayyor mahsulot,
-xom ashyo, listlar, furnitura, vitrina. Ro'yxat bazada, `sql/warehouse.sql`
+xom ashyo va zavod aytadigan boshqalari. Ro'yxat bazada, `sql/warehouse.sql`
 da. `kind='fg'` — qoldiq konver hisobida; `kind='material'` — xom ashyo
 (hali yozilmagan). `is_active=FALSE` ombor ro'yxatda «rejada» bo'lib
 turadi, ochilmaydi. Yangi ombor qo'shish — shu faylga bitta qator,

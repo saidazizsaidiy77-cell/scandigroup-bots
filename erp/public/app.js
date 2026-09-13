@@ -251,12 +251,12 @@ const App = (() => {
     { mod: 'purchasing', nav: 'Qarzdorlik',                        perm: ['purchasing.view'] },
 
     // Ombor. Zavodda bir nechta ombor bor (tayyor mahsulot, xom ashyo,
-    // listlar, furnitura, vitrina), shuning uchun bo'limga kirilganda
-    // avval omborlar ro'yxati chiqadi \u2014 shu qator birinchi turgani
+    // va zavod aytadigan boshqalari), shuning uchun bo'limga kirilganda
+    // avval omborlar ro'yxati chiqadi — shu qator birinchi turgani
     // uchun yuqoridagi "Ombor" havolasi o'sha yerga olib boradi.
     { href: '/omborlar.html', mod: 'warehouse', nav: 'Omborlar',
       title: 'Omborlar', lead: 'Zavod omborlari',
-      text: "Har ombor alohida: tayyor mahsulot, xom ashyo, listlar, furnitura, vitrina \u00b7 qoldig'i yonida turadi",
+      text: "Har ombor alohida: tayyor mahsulot, xom ashyo \u00b7 qoldig'i yonida turadi",
       perm: ['warehouse.view', 'production.view'] },
     { href: '/ombor.html', mod: 'warehouse', nav: 'T/M ombor',
       title: 'Tayyor mahsulot ombori', lead: 'Qoldiq va qabul qilish',

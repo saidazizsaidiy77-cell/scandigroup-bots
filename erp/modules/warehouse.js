@@ -1,9 +1,9 @@
 // ============================================================================
 //  OMBOR MODULI — omborlar ro'yxati va T/M ombor qoldig'i
 //
-//  Zavodda bitta emas, bir nechta ombor bor: tayyor mahsulot, xom ashyo,
-//  listlar, furnitura, vitrina. Shuning uchun modulga kirilganda avval
-//  OMBORLAR ro'yxati chiqadi, ombor tanlangach uning qoldig'i ochiladi.
+//  Zavodda bitta emas, bir nechta ombor bor. Shuning uchun modulga
+//  kirilganda avval OMBORLAR ro'yxati chiqadi, ombor tanlangach uning
+//  qoldig'i ochiladi.
 //
 //  Bu yerda faqat ro'yxat va JAMLANMA qoldiq. Konverning o'zi bilan
 //  bo'ladigan ish — qabul qilish, qaytarish, kirim/chiqim tarixi —
