@@ -108,8 +108,10 @@ function due(u) {
 //   2. qabul qiluvchi tsex uni o'ziga oladi.
 // Shunday qilinganda «men topshirgandim / menga kelmagan» degan bahs
 // o'rniga ikkita sana turadi, va oradagi farq — yotib qolgan vaqt.
-function row(u, mine) {
-  const leaves = u.next_shop_id && u.next_shop_id !== shopId;
+function row(u, mine, isExit) {
+  // Chiqish bo'limida oldinda tsex yo'q — oldinda T/M ombor turadi, va u
+  // ham xuddi tsexdek qabul qiladi. Shuning uchun bu yerda ham jo'natish.
+  const leaves = (u.next_shop_id && u.next_shop_id !== shopId) || (mine && isExit);
   const act = !canMove ? ''
     : !u.on_route
       ? `<span class="tag bad">marshrutda yo'q</span>`
@@ -118,13 +120,14 @@ function row(u, mine) {
           ? `<span class="tag warn">jo'natilgan</span>
              <button class="ic" title="Jo'natishni qaytarib olish"
                onclick="unsend(${u.id})">&#8629;</button>`
-          : `<button class="primary" onclick="send1(${u.id})"
-               >${esc(u.next_shop_name)}ga jo'natish</button>`)
-    : !u.next_section_id
+          : `<button class="primary" onclick="send1(${u.id})">${
+              isExit ? 'T/M omborga' : esc(u.next_shop_name) + 'ga'} jo'natish</button>`)
+    : !u.next_section_id && !isExit
       ? `<span class="muted" style="font-size:12px">marshrut tugadi</span>`
       : `<button class="primary" onclick="move(${u.id})">${
           mine ? '→ ' : 'Qabul qildim → '}${esc(u.next_section)}</button>`;
-  const sel = canMove && u.on_route && (u.next_section_id || (mine && leaves)) && !(mine && leaves && u.sent)
+  const sel = canMove && u.on_route && (u.next_section_id || (mine && leaves))
+    && !(mine && leaves && u.sent)
     ? `<input type="checkbox" style="width:auto" ${picked.has(u.id) ? 'checked' : ''}
          onchange="pick(${u.id},this.checked)">` : '';
   return `<tr>
@@ -148,11 +151,11 @@ const HEAD = `<thead><tr>
 // Bo'sh bo'lim ham ko'rsatiladi: usta o'z tsexining hamma bo'limini bir
 // ro'yxatda ko'rib tursin, va bo'shligi ham ma'lumot — u yerda ish yo'q.
 // Yashirilsa ro'yxat har kuni boshqacha bo'lib, o'rganish qiyinlashadi.
-function block(title, units, mine, note, hideEmpty) {
+function block(title, units, mine, note, hideEmpty, isExit) {
   if (!units.length && hideEmpty) return '';
-  const ids = units.filter(u => u.on_route &&
-      !(mine && u.next_shop_id !== shopId && u.sent) &&
-      (u.next_section_id || (mine && u.next_shop_id !== shopId)))
+  const leaves = (u) => (u.next_shop_id && u.next_shop_id !== shopId) || (mine && isExit);
+  const ids = units.filter(u => u.on_route && !(mine && leaves(u) && u.sent) &&
+      (u.next_section_id || (mine && leaves(u))))
     .map(u => u.id);
   const sel = ids.filter(id => picked.has(id)).length;
   return `<div class="card" style="margin-bottom:16px">
@@ -166,7 +169,8 @@ function block(title, units, mine, note, hideEmpty) {
         onclick="bulk([${ids}])">${sel ? `${sel} tasini o'tkazish` : 'Hammasini tanlash'}</button>` : ''}
     </div>
     ${units.length
-      ? `<table class="board">${HEAD}<tbody>${units.map(u => row(u, mine)).join('')}</tbody></table>`
+      ? `<table class="board">${HEAD}<tbody>${
+          units.map(u => row(u, mine, isExit)).join('')}</tbody></table>`
       : `<p class="muted" style="font-size:13px">Bo'sh — bu bo'limda mahsulot yo'q</p>`}
   </div>`;
 }
@@ -185,9 +189,10 @@ function drawBoard() {
     : `<h2 style="margin-bottom:12px">${esc(data.shop.name)}</h2>`;
 
   $('body').innerHTML = head
-    + block('Qabul qilish', data.inbox, false, 'oldingi tsex topshirishga tayyorladi', true)
+    + block('Qabul qilish', data.inbox, false,
+        'oldingi tsex topshirishga tayyorladi', true, false)
     + data.sections.map(sc => block(sc.name, sc.units, true,
-        sc.is_exit ? 'chiqish nuqtasi' : '', false)).join('');
+        sc.is_exit ? 'T/M omborga chiqish' : '', false, sc.is_exit)).join('');
 }
 
 function pick(id, on) { on ? picked.add(id) : picked.delete(id); drawBoard(); }
@@ -199,7 +204,8 @@ function goShop(id) { shopId = id; picked.clear(); loadBoard(); }
 function kindOf(id) {
   for (const sc of data.sections)
     for (const u of sc.units)
-      if (u.id === id) return (u.next_shop_id && u.next_shop_id !== shopId) ? 'send' : 'move';
+      if (u.id === id)
+        return ((u.next_shop_id && u.next_shop_id !== shopId) || sc.is_exit) ? 'send' : 'move';
   return 'move';                       // qabul qilish ro'yxatidagilar
 }
 

@@ -153,8 +153,11 @@ function registerQuery(q, limit, scope = null) {
 
   return {
     text: `SELECT * FROM v_unit_register
-      -- Bekor qilinganlar faqat maxsus so'ralganda ko'rinadi
-      WHERE ($5::text IS NOT NULL OR status <> 'cancelled')
+      -- Jurnal — ISHLAB CHIQARISH jurnali. Ombor qabul qilgan birlik
+      -- undan chiqadi: u endi ishlab chiqarishning ishi emas. Bekor
+      -- qilinganlar ham shunday. Ikkalasini ham status filtri bilan
+      -- ataylab so'rab ko'rish mumkin.
+      WHERE ($5::text IS NOT NULL OR status NOT IN ('cancelled', 'fg', 'shipped'))
         AND ($1::text IS NULL OR order_no ILIKE '%' || $1 || '%')
         AND ($2::text IS NULL OR conveyor_no ILIKE '%' || $2 || '%')
         AND ($3::int  IS NULL OR customer_id = $3)
@@ -638,9 +641,6 @@ async function relocate(client, req, unitId, sectionId) {
     e.status = 400; throw e;
   }
 
-  const from = u.current_section_id ? (await client.query(
-    `SELECT is_exit FROM sections WHERE id = $1`, [u.current_section_id])).rows[0] : null;
-
   const last = (await client.query(
     `SELECT id, flow_log_id, moved_on FROM unit_moves
       WHERE unit_id = $1 ORDER BY id DESC LIMIT 1`, [unitId])).rows[0];
@@ -666,23 +666,14 @@ async function relocate(client, req, unitId, sectionId) {
       [unitId, sectionId, on, req.user.id, 'Joyi tuzatildi', flow.id]);
   }
 
-  // Holat faqat chiqish bo'limiga kirganda yoki undan chiqqanda o'zgaradi.
-  // Ishlab chiqarish ichidagi ko'chirish holatga ham, T/M ombor sanasiga
-  // ham tegmaydi — aks holda qo'lda kiritilgan sana jimgina yo'qolardi.
-  const enters = to.is_exit && !from?.is_exit;
-  const leaves = !to.is_exit && from?.is_exit;
+  // Joyni tuzatish holatga tegmaydi: `fg` — ombor qabulining natijasi,
+  // joylashuvniki emas. Omborda turgan birlikning joyini tuzatish uni
+  // ombordan chiqarib yubormasligi kerak.
   await client.query(
     `UPDATE production_units SET
        current_section_id = $2,
-       entered_section_on = COALESCE(entered_section_on, CURRENT_DATE),
-       status = CASE WHEN status = 'cancelled' THEN status
-                     WHEN $3::boolean THEN 'fg'
-                     WHEN $4::boolean THEN 'production'
-                     ELSE status END,
-       fg_on  = CASE WHEN $3::boolean THEN COALESCE(fg_on, entered_section_on, CURRENT_DATE)
-                     WHEN $4::boolean THEN NULL
-                     ELSE fg_on END
-     WHERE id = $1`, [unitId, sectionId, enters, leaves]);
+       entered_section_on = COALESCE(entered_section_on, CURRENT_DATE)
+     WHERE id = $1`, [unitId, sectionId]);
 
   // Lak va qadoqlash FAKT sanalari harakatlardan qaytadan hisoblanadi: joy
   // o'zgargani bilan qaysi tsexga kirgani ham o'zgargan bo'lishi mumkin.
@@ -701,21 +692,6 @@ async function relocate(client, req, unitId, sectionId) {
                     JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'pack'
                    WHERE m.unit_id = u.id), u.pack_on)
      WHERE u.id = $1`, [unitId]);
-
-  // T/M ombor qoldig'i: chiqish bo'limiga kirgan bo'lsa qo'shiladi, undan
-  // chiqarilgan bo'lsa ayiriladi. Manfiyga tushmasin — qoldiq qo'lda ham
-  // tuzatilgan bo'lishi mumkin.
-  const delta = (to.is_exit ? 1 : 0) - (from?.is_exit ? 1 : 0);
-  if (delta > 0) {
-    await client.query(
-      `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
-       ON CONFLICT (product_id) DO UPDATE
-         SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`, [u.product_id, u.qty]);
-  } else if (delta < 0) {
-    await client.query(
-      `UPDATE fg_stock SET qty = GREATEST(qty - $2, 0), updated_at = NOW()
-        WHERE product_id = $1`, [u.product_id, u.qty]);
-  }
 
   await audit(req, { module: 'production', action: 'relocate', entity: 'unit',
                      entity_id: unitId,
@@ -792,11 +768,13 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
     `UPDATE production_units SET
        current_section_id   = $2,
        entered_section_on   = COALESCE($3::date, CURRENT_DATE),
-       next_shop_planned_on = CASE WHEN $5::boolean THEN NULL
-                                   ELSE next_shop_planned_on END,
-       status = CASE WHEN $4 THEN 'fg' ELSE status END,
-       fg_on  = CASE WHEN $4 THEN COALESCE($3::date, CURRENT_DATE) ELSE fg_on END
-     WHERE id = $1`, [unit_id, target, moved_on || null, sec.is_exit, shopChanged]);
+       -- Holat va T/M ombor sanasiga TEGILMAYDI. Chiqish bo'limiga
+       -- kirish mahsulotni omborga tushirmaydi: uni ombor mudiri qabul
+       -- qiladi (POST /stock/accept). Bu tsexlar orasidagi qoidaning
+       -- o'zi — topshirishda ikki tomon bo'ladi.
+       next_shop_planned_on = CASE WHEN $4::boolean THEN NULL
+                                   ELSE next_shop_planned_on END
+     WHERE id = $1`, [unit_id, target, moved_on || null, shopChanged]);
 
   // Lak va Qadoqlash tsexiga kirish sanasi jurnalda alohida ustun. Reja
   // sanasini tsex boshlig'i qo'yadi, faktni esa birlik o'sha tsexga
@@ -826,12 +804,6 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   // Qaytarishda aynan shu jamlanma yozuvni topish uchun bog'lab qo'yamiz
   await client.query(`UPDATE unit_moves SET flow_log_id = $2 WHERE id = $1`,
                      [move.id, flow.id]);
-  if (sec.is_exit) {
-    await client.query(
-      `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
-       ON CONFLICT (product_id) DO UPDATE
-         SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`, [u.product_id, u.qty]);
-  }
   return { unit_id, section_id: target, is_exit: sec.is_exit };
 }
 
@@ -858,6 +830,11 @@ async function undoLastMove(client, req, unit_id) {
   if (!u) throw new Error('Birlik topilmadi');
   if (u.status === 'shipped')
     throw new Error(`${u.conveyor_no}: mijozga jo'natilgan, avval jo'natmani bekor qiling`);
+  // T/M omborga qabul qilingan birlik ishlab chiqarishnikи emas — uni
+  // avval ombor qaytarishi kerak, aks holda qoldiq bilan jurnal ajralib
+  // ketadi: ombor mahsulot bor deb turadi, jurnal esa uni orqaga suradi.
+  if (u.status === 'fg')
+    throw new Error(`${u.conveyor_no}: T/M omborda — avval ombor qabulini qaytaring`);
 
   const last = (await client.query(
     `SELECT m.*, s.is_exit FROM unit_moves m
@@ -896,15 +873,13 @@ async function undoLastMove(client, req, unit_id) {
        JOIN sections s ON s.id = m.section_id
       WHERE m.unit_id = $1 ORDER BY m.id DESC LIMIT 1`, [unit_id])).rows[0];
 
+  // Holat o'zgarmaydi: `fg` faqat ombor qabulidan keladi, joylashuvdan emas.
   await client.query(
     `UPDATE production_units SET
        current_section_id = $2::int,
-       entered_section_on = $3::date,
-       status = CASE WHEN status = 'cancelled' THEN status
-                     WHEN $4::boolean THEN 'fg' ELSE 'production' END,
-       fg_on  = CASE WHEN $4::boolean THEN $3::date ELSE NULL END
+       entered_section_on = $3::date
      WHERE id = $1`,
-    [unit_id, prev?.section_id || null, prev?.moved_on || null, prev?.is_exit || false]);
+    [unit_id, prev?.section_id || null, prev?.moved_on || null]);
 
   // Lak va qadoqlash sanalari qolgan harakatlardan qaytadan olinadi
   await client.query(
@@ -919,13 +894,8 @@ async function undoLastMove(client, req, unit_id) {
                    WHERE m.unit_id = u.id)
      WHERE u.id = $1`, [unit_id]);
 
-  // T/M ombor qoldig'i: chiqish bo'limiga o'tkazilgan bo'lsa, qaytariladi.
-  // Manfiyga tushmasin — qoldiq qo'lda ham tuzatilgan bo'lishi mumkin.
-  if (last.is_exit) {
-    await client.query(
-      `UPDATE fg_stock SET qty = GREATEST(qty - $2, 0), updated_at = NOW()
-        WHERE product_id = $1`, [u.product_id, u.qty]);
-  }
+  // T/M ombor qoldig'iga tegilmaydi: chiqish bo'limiga o'tish uni
+  // oshirmagan edi, demak qaytarish ham kamaytirmaydi.
 
   return { unit_id, conveyor_no: u.conveyor_no,
            from_section_id: last.section_id, to_section_id: prev?.section_id || null };
@@ -1004,6 +974,90 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
     const done = [];
     for (const id of ids) done.push(await handoverOne(client, req, id, undo));
     await audit(req, { module: 'production', action: undo ? 'handover-undo' : 'handover',
+                       entity: 'unit', entity_id: done.length,
+                       payload: { units: done.map((x) => x.conveyor_no) } }, client);
+    await client.query('COMMIT');
+    res.json({ done });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+// ═════════════════════════════════ T/M OMBOR: QABUL QILISH VA QAYTARISH
+//
+//  Mahsulot chiqish bo'limiga (qadoqlash) yetgani — u omborda degani EMAS.
+//  Qadoqlash tsexi «T/M omborga jo'natdim» deydi, ombor mudiri esa
+//  «qabul qildim». Faqat shundan keyin birlik:
+//    · T/M ombor qoldig'iga tushadi (fg_stock)
+//    · holati `fg` bo'ladi
+//    · ishlab chiqarish jurnalidan chiqadi
+//
+//  Sabab tsexlar orasidagi bilan bir xil: topshirishda ikki tomon bo'lsa,
+//  «berdim / olmadim» degan bahs o'rniga ikkita sana turadi.
+async function acceptStock(client, req, unitId, undo) {
+  const u = (await client.query(
+    `SELECT u.*, sc.is_exit
+       FROM production_units u
+       LEFT JOIN sections sc ON sc.id = u.current_section_id
+      WHERE u.id = $1 FOR UPDATE OF u`, [unitId])).rows[0];
+  if (!u) throw new Error('Birlik topilmadi');
+
+  if (undo) {
+    if (u.status !== 'fg')
+      throw new Error(`${u.conveyor_no}: T/M omborda emas`);
+    await client.query(
+      `UPDATE production_units SET status = 'production', fg_on = NULL WHERE id = $1`, [unitId]);
+    await client.query(
+      `UPDATE fg_stock SET qty = GREATEST(qty - $2, 0), updated_at = NOW()
+        WHERE product_id = $1`, [u.product_id, u.qty]);
+    return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: false };
+  }
+
+  if (u.status === 'fg') throw new Error(`${u.conveyor_no}: allaqachon qabul qilingan`);
+  if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
+  if (!u.is_exit)
+    throw new Error(`${u.conveyor_no}: hali chiqish bo'limiga yetmagan`);
+  if (!u.handover_on)
+    throw new Error(`${u.conveyor_no}: hali jo'natilmagan — qadoqlash tsexi «jo'natdim» deyishi kerak`);
+
+  await client.query(
+    `UPDATE production_units
+        SET status = 'fg', fg_on = COALESCE(fg_on, CURRENT_DATE)
+      WHERE id = $1`, [unitId]);
+  await client.query(
+    `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
+     ON CONFLICT (product_id) DO UPDATE
+       SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`, [u.product_id, u.qty]);
+  return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: true };
+}
+
+// Omborga jo'natilgan, lekin hali qabul qilinmagan birliklar
+router.get('/stock/inbox', need('warehouse.view', 'production.view'), wrap(async (_req, res) => {
+  const { rows } = await db.query(
+    `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.qty,
+            r.color, r.fabric, r.customer_name, r.shop, r.section,
+            u.handover_on, w.name AS sent_by,
+            (CURRENT_DATE - u.handover_on)::int AS days_waiting
+       FROM v_unit_register r
+       JOIN production_units u ON u.id = r.id
+       JOIN sections sc        ON sc.id = u.current_section_id AND sc.is_exit
+       LEFT JOIN workers w     ON w.id = u.handover_by
+      WHERE r.status = 'production' AND u.handover_on IS NOT NULL
+      ORDER BY u.handover_on, r.conveyor_no`);
+  res.json(rows);
+}));
+
+router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
+  if (!ids.length) throw new Error('Birlik tanlanmagan');
+  const undo = !!req.body.undo;
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const done = [];
+    for (const id of ids) done.push(await acceptStock(client, req, id, undo));
+    await audit(req, { module: 'warehouse', action: undo ? 'fg-undo' : 'fg-accept',
                        entity: 'unit', entity_id: done.length,
                        payload: { units: done.map((x) => x.conveyor_no) } }, client);
     await client.query('COMMIT');

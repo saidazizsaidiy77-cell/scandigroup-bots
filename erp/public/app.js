@@ -251,6 +251,10 @@ const App = (() => {
     { mod: 'purchasing', nav: 'Qarzdorlik',                        perm: ['purchasing.view'] },
 
     // Ombor
+    { href: '/ombor.html', mod: 'warehouse', nav: 'T/M ombor',
+      title: 'Tayyor mahsulot ombori', lead: 'Qabul qilish',
+      text: "Qadoqlash tsexi jo'natgan mahsulotni qabul qilish \u00b7 qabul qilingach jurnaldan chiqadi",
+      perm: ['warehouse.view', 'production.view'] },
     { mod: 'warehouse', nav: 'Omborlar',                perm: ['warehouse.view'] },
     { mod: 'warehouse', nav: 'Omborga kirim',           perm: ['warehouse.move'] },
     { mod: 'warehouse', nav: 'Qoldiqlar',               perm: ['warehouse.view'] },

@@ -101,7 +101,7 @@ test('jo\'natish qaytarib olinadi', async () => {
   assert.equal((await H.id(`SELECT handover_on h FROM production_units WHERE id=$1`, [u.id])).h, null);
 });
 
-test('oxirgi o\'tkazish qaytariladi va ombor qoldig\'i tiklanadi', async () => {
+test('chiqish bo\'limiga o\'tish OMBORGA TUSHIRMAYDI', async () => {
   const u = await newUnit({ section_id: (await H.id(
     `SELECT id FROM sections WHERE code='QAD-OYNA'`)).id });
   const before = (await H.id(
@@ -109,14 +109,57 @@ test('oxirgi o\'tkazish qaytariladi va ombor qoldig\'i tiklanadi', async () => {
 
   const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
   assert.equal((await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] })).status, 200);
-  const row = await H.id(`SELECT status, fg_on FROM production_units WHERE id=$1`, [u.id]);
-  assert.equal(row.status, 'fg', 'chiqish bo\'limidan o\'tgach T/M omborda');
+
+  const row = await H.id(`SELECT status FROM production_units WHERE id=$1`, [u.id]);
+  assert.equal(row.status, 'production', 'ombor qabul qilmaguncha ishlab chiqarishda');
+  assert.equal((await H.id(
+    `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q, before);
+
+  // Qaytarish ham qoldiqqa tegmaydi — u oshmagan edi
+  assert.equal((await qad('POST', '/api/units/undo', { unit_id: u.id })).status, 200);
+  assert.equal((await H.id(
+    `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q, before);
+});
+
+test('T/M ombor: jo\'natdim → qabul qildim → jurnaldan chiqadi', async () => {
+  const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
+  const u = await newUnit({ section_id: QADOYNA });
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });   // → Qadoqlash
+
+  const omborchi = H.api(base, await H.sessionFor('Administrator'));
+  const before = (await H.id(
+    `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q;
+
+  // Jo'natilmaguncha qabul qilib bo'lmaydi
+  const early = await omborchi('POST', '/api/units/stock/accept', { items: [u.id] });
+  assert.equal(early.status, 400);
+  assert.match(early.body.error, /jo'natilmagan/);
+
+  assert.equal((await qad('POST', '/api/units/handover', { items: [u.id] })).status, 200);
+
+  const inbox = await omborchi('GET', '/api/units/stock/inbox');
+  assert.ok(inbox.body.some((x) => x.id === u.id), 'jo\'natilgach ombor ro\'yxatida');
+
+  assert.equal((await omborchi('POST', '/api/units/stock/accept', { items: [u.id] })).status, 200);
+  assert.equal((await H.id(`SELECT status FROM production_units WHERE id=$1`, [u.id])).status, 'fg');
   assert.equal((await H.id(`SELECT qty q FROM fg_stock WHERE product_id=$1`, [PENAL])).q,
     before + 1);
 
-  assert.equal((await qad('POST', '/api/units/undo', { unit_id: u.id })).status, 200);
-  const back = await H.id(`SELECT status FROM production_units WHERE id=$1`, [u.id]);
-  assert.equal(back.status, 'production');
+  // Ishlab chiqarish jurnalidan chiqadi
+  const j = await omborchi('GET', '/api/units/?conveyor_no=' + u.conveyor_no);
+  assert.equal(j.body.length, 0, 'qabul qilingach jurnalda ko\'rinmaydi');
+
+  // Ombordagi birlikni ishlab chiqarish orqaga sura olmaydi
+  const back = await qad('POST', '/api/units/undo', { unit_id: u.id });
+  assert.equal(back.status, 400);
+  assert.match(back.body.error, /ombor/);
+
+  // Ombor o'zi qaytarsa — jurnalga ham, ishlab chiqarishga ham qaytadi
+  assert.equal((await omborchi('POST', '/api/units/stock/accept',
+    { items: [u.id], undo: true })).status, 200);
+  assert.equal((await H.id(`SELECT status FROM production_units WHERE id=$1`,
+    [u.id])).status, 'production');
   assert.equal((await H.id(`SELECT qty q FROM fg_stock WHERE product_id=$1`, [PENAL])).q, before);
 });
 
