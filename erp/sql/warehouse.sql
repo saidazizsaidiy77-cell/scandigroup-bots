@@ -13,8 +13,8 @@
 --  javob shu yerdan chiqadi.
 -- ============================================================================
 
--- T/M omborda turgan birliklar. Ombor mudiri «qabul qildim» degandan
--- keyin birlik `fg` bo'ladi va shu ro'yxatga tushadi; mijozga chiqib
+-- T/M omborda turgan konverlar. Ombor mudiri «qabul qildim» degandan
+-- keyin konver `fg` bo'ladi va shu ro'yxatga tushadi; mijozga chiqib
 -- ketganda `shipped` bo'lib chiqadi.
 CREATE OR REPLACE VIEW v_fg_units AS
 SELECT u.id,

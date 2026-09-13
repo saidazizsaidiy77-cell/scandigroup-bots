@@ -5,7 +5,7 @@
 --  yoki guruhni boshqacha ataganda dasturchi kutib o'tirilmaydi. Seed'dagi
 --  17 fason va 5 guruh — boshlang'ich taklif, sayt orqali o'zgartiriladi.
 --
---  O'chirish emas, FAOLSIZLANTIRISH: kiritilgan birlik o'z mahsulotiga
+--  O'chirish emas, FAOLSIZLANTIRISH: kiritilgan konver o'z mahsulotiga
 --  bog'liq, uni o'chirish jurnal tarixini buzadi. Faolsizlantirilgan yozuv
 --  yangi kiritishda ro'yxatda ko'rinmaydi, eskisi joyida qoladi.
 -- ============================================================================
@@ -24,7 +24,7 @@ UPDATE product_groups g SET route_template_id = t.rt
          GROUP BY group_id, route_template_id) t
  WHERE t.group_id = g.id AND t.rn = 1 AND g.route_template_id IS NULL;
 
--- Katalog jadvali: qaysi fason qaysi guruhda mavjud, nechta birlik kiritilgan.
+-- Katalog jadvali: qaysi fason qaysi guruhda mavjud, nechta konver kiritilgan.
 -- Birligi bor mahsulotni faolsizlantirish mumkin, o'chirish esa mumkin emas —
 -- sahifa shu ustunga qarab qaror qiladi.
 --

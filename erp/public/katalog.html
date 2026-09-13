@@ -259,7 +259,7 @@ function drawGrid(){
           const sizes = list.filter(p => p.size_label).length;
           const title = list.length
             ? (sizes ? `${sizes} o'lcham` : esc(list[0].sku)) +
-              (units ? ` · ${units} birlik` : '')
+              (units ? ` · ${units} konver` : '')
             : 'yaratilmagan';
           return `<td><button class="cell ${on ? 'on' : ''} ${units > 0 ? 'used' : ''}"
             title="${title}"

@@ -37,19 +37,21 @@ saytdan boshqariladi.
 
 ## Asosiy tushunchalar
 
-**Konveyer birligi** (`production_units`) — kuzatuvning asosiy birligi.
-Har mahsulot o'z raqami bilan yuradi: `K26-0041`.
+**Konver** (`production_units`) — kuzatuvning asosiy birligi: bitta
+mahsulot, o'z raqami bilan (`K26-0041`). Zavod uni shunday ataydi.
+Sifat shikoyati, ishbay oylik va xom ashyo sarfi — hammasi shu raqamga
+bog'lanadi, shuning uchun ombor qoldig'i ham dona emas, konver hisobida.
 
 **Marshrut** — mahsulot qaysi bo'limlardan, qaysi tartibda o'tadi.
 `route_templates` + `route_steps`, mahsulotga `route_template_id` orqali
 biriktiriladi. Haqiqiy manba: **`sql/routes.sql`** — tartib faqat shu yerda.
 
-**Harakat** (`unit_moves`) — birlik bo'limdan bo'limga o'tdi. Har o'tkazish
+**Harakat** (`unit_moves`) — konver bo'limdan bo'limga o'tdi. Har o'tkazish
 jamlanma `flow_log` ga ham yoziladi (hisobotlar shundan hisoblanadi).
 
 **Topshirish ikki bosqich.** Tsexdan tsexga o'tish:
 jo'natuvchi «jo'natdim» (`production_units.handover_*`) → qabul qiluvchi
-o'tkazadi. Jo'natilmagan birlikni qabul qilib bo'lmaydi. Jo'natish —
+o'tkazadi. Jo'natilmagan konverni qabul qilib bo'lmaydi. Jo'natish —
 harakat EMAS, mahsulot joyidan qimirlamaydi.
 
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U

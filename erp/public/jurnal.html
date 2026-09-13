@@ -56,7 +56,7 @@
     </div>
     <div class="row" id="bulkBar"></div>
     <div class="row">
-      <button class="primary" id="btnNew" onclick="newUnit()">+ Yangi birlik</button>
+      <button class="primary" id="btnNew" onclick="newUnit()">+ Yangi konver</button>
       <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
     </div>
   </div>
@@ -134,7 +134,7 @@ async function boot(){
   document.getElementById('dlFabric').innerHTML =
     sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
   ref = r; customers = c.customers;
-  // Birlik yaratish huquqi yo'q xodimga tugma ko'rsatilmaydi
+  // Konver yaratish huquqi yo'q xodimga tugma ko'rsatilmaydi
   if (!App.can('production.units', 'production.manage')) $('btnNew').remove();
   $('fShop').innerHTML = '<option value="">Barchasi</option>' +
     ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
@@ -266,7 +266,7 @@ function render(){
   const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);
   const qty    = rows.reduce((s, r) => s + Number(r.qty || 0), 0);
   $('kpis').innerHTML = [
-    ['Jami birlik', rows.length, qty + ' dona'],
+    ['Jami konver', rows.length, qty + ' dona'],
     ['Ishlab chiqarishda', inProd, 'konveyerda'],
     ['T/M omborda', inFg, 'tayyor'],
     ['Jami summa', '$' + money(amount), 'USD'],
@@ -349,18 +349,18 @@ async function move(id){
       items: ids.map(unit_id => ({ unit_id, moved_on: on || null })) })});
     const toFg = r.moved.filter(m => m.is_exit).length;
     await load();
-    alert(`${r.moved.length} ta birlik o'tkazildi` +
+    alert(`${r.moved.length} ta konver o'tkazildi` +
       (toFg ? `, shundan ${toFg} tasi T/M omboriga kirdi.` : '.'));
   }catch(e){ alert(e.message); }
 }
 
 // ─────────────────────────────────────────────────────────── YANGI BIRLIK
 //
-//  Kundalik ish: yangi mahsulot konveyerga chiqdi. Ilgari birlik faqat
+//  Kundalik ish: yangi mahsulot konveyerga chiqdi. Ilgari konver faqat
 //  "Boshlang'ich qoldiq" sahifasidan yaratilardi, u esa bir martalik ish
 //  uchun — tizim ishga tushgan kundagi holatni kiritish uchun yozilgan.
 //
-//  Bo'lim majburiy emas: hali konveyerga qo'yilmagan birlik "boshlanmagan"
+//  Bo'lim majburiy emas: hali konveyerga qo'yilmagan konver "boshlanmagan"
 //  holatda yotadi va o'z vaqtida "O'tkazish" bilan liniyaga chiqadi.
 async function newUnit(){
   let no = '';
@@ -375,7 +375,7 @@ async function newUnit(){
     <div class="overlay" onclick="if(event.target===this)close_()">
       <div class="modal" style="max-width:560px">
         <div class="row" style="justify-content:space-between;margin-bottom:18px">
-          <h1>Yangi birlik</h1><button onclick="close_()">Yopish</button></div>
+          <h1>Yangi konver</h1><button onclick="close_()">Yopish</button></div>
         <div class="stack">
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Bosh sana</label>
@@ -414,7 +414,7 @@ async function newUnit(){
             <input id="nStock" type="checkbox" style="width:auto">
             <span style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--text)"
               >Zahira — qadoqlash va T/M ombor muddati hisoblanmaydi</span></label>
-          <p class="muted" style="font-size:13px">Birlik <strong>boshlanmagan</strong>
+          <p class="muted" style="font-size:13px">Konver <strong>boshlanmagan</strong>
             holatda yaratiladi. Konveyerga chiqqanda jurnaldan
             "O'tkazish" bilan birinchi bo'limga o'tkaziladi.</p>
           <button class="primary" onclick="saveNew()">Saqlash</button>
@@ -453,7 +453,7 @@ async function saveNew(){
 }
 
 // Oxirgi o'tkazishni qaytarish — "O'tkazish" bexosdan bosilganda.
-// Bekor qilish bunga yaramaydi: u birlikni jurnaldan butunlay chiqaradi.
+// Bekor qilish bunga yaramaydi: u konverni jurnaldan butunlay chiqaradi.
 async function undo(id){
   const r = rows.find(x => x.id === id);
   const joy = r.section ? `${r.section} (${r.shop})` : 'boshlanmagan';
@@ -469,7 +469,7 @@ async function undo(id){
   }catch(e){ alert(e.message); }
 }
 
-// Xato kiritilgan birlikni bekor qilish. O'chirilmaydi — tarix saqlanadi,
+// Xato kiritilgan konverni bekor qilish. O'chirilmaydi — tarix saqlanadi,
 // lekin jurnal va hisobotlardan chiqib ketadi.
 async function cancel_(id){
   const r = rows.find(x => x.id === id);
@@ -484,7 +484,7 @@ async function cancel_(id){
 // ─────────────────────────────────────────────── TSEX SANASI KATAGI
 //
 //  Fakt tushgan sanani TUZATISH mumkin — lekin faqat production.manage
-//  huquqi bilan. Sabab: tizim ishga tushirilayotgan paytda birlik
+//  huquqi bilan. Sabab: tizim ishga tushirilayotgan paytda konver
 //  allaqachon lak yoki qadoqlash tsexida turgan bo'ladi va haqiqiy sana
 //  o'tmishda qolgan; uni kiritib bo'lmasa jurnal birinchi kundanoq
 //  noto'g'ri bo'lib qoladi.
@@ -523,7 +523,7 @@ async function edit(id){
         <p class="muted" style="margin-bottom:20px">${esc(r.product)} · ${esc(r.product_type)} ·
           ${r.qty} dona · <span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}</span></p>
         <div class="stack">
-          <!-- Konveyer raqami va soni — birlikning O'ZI, qolgan maydonlar
+          <!-- Konveyer raqami va soni — konverning O'ZI, qolgan maydonlar
                unga ma'lumot qo'shadi. Qog'oz jurnaldan ko'chirishda xato
                yozilishi oddiy hol, shuning uchun tuzatish mumkin; lekin
                faqat ishlab chiqarish boshlig'iga. -->
@@ -568,7 +568,7 @@ async function edit(id){
             <div style="flex:1"><label>Mato</label>
               <input id="eFabric" list="dlFabric" value="${esc(r.fabric || '')}"></div>
           </div>
-          <!-- Tsex sanalari. Reja — tsex boshlig'i qo'yadi. Fakt — birlik
+          <!-- Tsex sanalari. Reja — tsex boshlig'i qo'yadi. Fakt — konver
                o'sha tsexga o'tganda tizim o'zi yozadi. -->
           <div class="row" style="gap:12px">
             ${dateField('eLak',  "Lak tsehiga",       r, 'lak')}

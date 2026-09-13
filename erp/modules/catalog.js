@@ -273,7 +273,7 @@ router.delete('/products/:id', need('production.manage'), wrap(async (req, res) 
     `SELECT COUNT(*)::int AS n FROM production_units WHERE product_id = $1`,
     [req.params.id])).rows[0].n;
   if (used) return res.status(409).json({
-    error: `Bu mahsulotda ${used} ta birlik bor — o'chirib bo'lmaydi, faolsizlantiring` });
+    error: `Bu mahsulotda ${used} ta konver bor — o'chirib bo'lmaydi, faolsizlantiring` });
   await db.query(`DELETE FROM products WHERE id = $1`, [req.params.id]);
   await audit(req, { module: 'production', action: 'delete', entity: 'product',
                      entity_id: req.params.id });

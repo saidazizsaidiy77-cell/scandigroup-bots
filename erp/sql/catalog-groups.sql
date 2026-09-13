@@ -17,7 +17,7 @@
 -- ─────────────────────────────────── 1 · ESKI BAZANI YANGISIGA KO'CHIRISH ───
 --
 --  Yotoqxona to'plami → Sp. Guruh o'sha guruh bo'lib qoladi: kiritilgan
---  birliklar va jurnal tarixi joyida turadi, faqat kodi va nomi o'zgaradi.
+--  konverlar va jurnal tarixi joyida turadi, faqat kodi va nomi o'zgaradi.
 --
 --  SKU ham ko'chiriladi. Keyingi fayl `SP-` prefiksi bilan kiritadi —
 --  eski `YOT-` qatorlar qolib ketsa bitta guruhda ikkita "Laura" bo'ladi.
@@ -29,7 +29,7 @@ UPDATE product_groups SET code = 'SP', name = 'Sp'
  WHERE code = 'YOT'
    AND NOT EXISTS (SELECT 1 FROM product_groups x WHERE x.code = 'SP');
 
---  Mehmonxona to'plami o'chirilmaydi, FAOLSIZLANTIRILADI: kiritilgan birlik
+--  Mehmonxona to'plami o'chirilmaydi, FAOLSIZLANTIRILADI: kiritilgan konver
 --  o'z mahsulotiga bog'liq, o'chirilsa jurnal tarixi buziladi. Faolsiz guruh
 --  yangi kiritishda ro'yxatda ko'rinmaydi, eski yozuvlar joyida qoladi.
 --

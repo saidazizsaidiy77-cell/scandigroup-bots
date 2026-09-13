@@ -29,10 +29,10 @@
   yotgan mahsulotlarni kiriting. Har qator — bitta konveyer raqami.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Mahsulot nomi tanlanmagan qator saqlanmaydi</strong> — ortiqcha
-    qatorni o'chirish shart emas. Tseh bo'sh qoldirilsa birlik
+    qatorni o'chirish shart emas. Tseh bo'sh qoldirilsa konver
     <strong>boshlanmagan</strong> holda qayd etiladi: jurnalda ko'rinadi,
     lekin hali hech bir bo'limda turmaydi — konveyerga chiqqanda jurnaldan
-    o'tkaziladi. Qadoqlash bo'limi tanlansa birlik darrov T/M omboriga tushadi.
+    o'tkaziladi. Qadoqlash bo'limi tanlansa konver darrov T/M omboriga tushadi.
     Zakaz, mijoz va narx keyin ham qo'yilishi mumkin — jurnal sahifasidan.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Zahira</strong> — belgilansa qadoqlash va T/M ombor kataklarida
@@ -41,7 +41,7 @@
     zahira mahsulot qanday ishlanayotganini aytadi.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Lak va Qadoqlash sanalari</strong> — reja: qaysi kunga topshirish
-    kelishilgan. Birlik o'sha tsexga o'tganda tizim faktni o'zi yozadi.
+    kelishilgan. Konver o'sha tsexga o'tganda tizim faktni o'zi yozadi.
     Mahsulot allaqachon o'sha tsexda bo'lsa, sanani kiritish shart emas.</p>
 </div>
 
@@ -214,8 +214,8 @@ function fillSec(sel){
 }
 
 // Zahira — mustaqil belgi: mahsulot qanday ishlanayotganini aytadi, kimga
-// ketishini emas. Mijozi bor birlik ham zahiradan olinishi mumkin, mijozsiz
-// birlik esa oddiy tartibda to'liq yasalishi mumkin.
+// ketishini emas. Mijozi bor konver ham zahiradan olinishi mumkin, mijozsiz
+// konver esa oddiy tartibda to'liq yasalishi mumkin.
 //
 // Belgilangach qadoqlash va T/M ombor kataklarida sana o'rniga "zahira"
 // so'zi turadi: sana maydoniga so'z yozib bo'lmaydi, shuning uchun maydonning
@@ -246,7 +246,7 @@ function collect(){
       section_id:  g('.c-sec') || null,
       started_on:  g('.c-start') || null,
       entered_section_on: g('.c-start') || null,
-      // Sanalar reja sifatida yoziladi; birlik o'sha tsexga o'tganda
+      // Sanalar reja sifatida yoziladi; konver o'sha tsexga o'tganda
       // tizim faktni o'zi qo'yadi va reja bilan solishtiriladi.
       lak_planned_on:  g('.c-lak')  || null,
       pack_planned_on: g('.c-pack') || null,
@@ -260,7 +260,7 @@ function collect(){
   })
   // Qator xodim mahsulot nomini tanlaganda hisobga olinadi. Konveyer raqami
   // va sana oldindan to'ldirilgani uchun bu bo'lmasa "+20 qator" bosgan xodim
-  // bexosdan bo'sh birlik yaratib qo'yardi.
+  // bexosdan bo'sh konver yaratib qo'yardi.
   //
   // Bo'lim majburiy emas: hali konveyerga chiqmagan mahsulot ham qayd
   // etiladi — u boshlanmagan holda turadi (current_section_id NULL).
@@ -281,7 +281,7 @@ function sum(){
   $('saveBar').classList.toggle('hide', !r.length);
   const total = document.querySelectorAll('#tB tr').length;
   const skipped = total - r.length;
-  $('sumText').textContent = `${r.length} birlik · ${qty} dona` +
+  $('sumText').textContent = `${r.length} konver · ${qty} dona` +
     (amt ? ` · $${money(amt)}` : '') +
     (skipped ? ` · ${skipped} qator mahsulot tanlanmagani uchun saqlanmaydi` : '');
 }
@@ -319,7 +319,7 @@ async function save(){
       App.api('/api/units/next-no'), App.api('/api/units/suggest')]);
     fillSuggest();
     seq = 0;
-    alert(`${r.created.length} ta birlik kiritildi. Jurnal sahifasida ko'rishingiz mumkin.`);
+    alert(`${r.created.length} ta konver kiritildi. Jurnal sahifasida ko'rishingiz mumkin.`);
   }catch(e){ alert(e.message); }
   finally{ $('btnSave').disabled = false; }
 }
@@ -415,7 +415,7 @@ async function saveImport() {
   try {
     const r = await App.upload('/api/import/units?save=1' + newC, picked);
     closeImport();
-    alert(`${r.saved} ta birlik kiritildi.` +
+    alert(`${r.saved} ta konver kiritildi.` +
           (r.customers ? ` ${r.customers} ta yangi mijoz qo'shildi.` : ''));
     nextNo = await App.api('/api/units/next-no');
   } catch (e) {

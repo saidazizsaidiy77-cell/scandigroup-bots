@@ -2,7 +2,7 @@
 --  ISHLAB CHIQARISH JURNALI — KONVEYER BIRLIGI
 --
 --  Oldingi model dona sanardi ("Freza bo'limida 30 dona"). Bu model har bir
---  mahsulotni RAQAMI BILAN kuzatadi: konveyer raqami — asosiy birlik, u
+--  mahsulotni RAQAMI BILAN kuzatadi: konveyer raqami — asosiy konver, u
 --  marshrut bo'ylab yuradi, zakaz raqami va mijoz unga biriktiriladi.
 --
 --  production.sql dan KEYIN ishga tushiriladi.
@@ -117,7 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_units_order    ON production_units(order_no);
 CREATE INDEX IF NOT EXISTS idx_units_customer ON production_units(customer_id);
 CREATE INDEX IF NOT EXISTS idx_units_status   ON production_units(status);
 
--- Birlikning harakat tarixi: qaysi bo'limga, qachon, kim o'tkazdi
+-- Konverning harakat tarixi: qaysi bo'limga, qachon, kim o'tkazdi
 CREATE TABLE IF NOT EXISTS unit_moves (
   id          BIGSERIAL PRIMARY KEY,
   unit_id     INT  NOT NULL REFERENCES production_units(id) ON DELETE CASCADE,
@@ -135,8 +135,8 @@ CREATE TABLE IF NOT EXISTS unit_moves (
 -- Buyurtma tushgach rang beriladi, lak sepiladi, qadoqlanadi.
 --
 -- Bu mijozdan mustaqil belgi: zahira mahsulotning qanday ishlanayotganini
--- aytadi, kimga ketishini emas. Mijozi bor birlik ham zahiradan olinishi,
--- mijozsiz birlik esa oddiy tartibda to'liq yasalishi mumkin — shuning
+-- aytadi, kimga ketishini emas. Mijozi bor konver ham zahiradan olinishi,
+-- mijozsiz konver esa oddiy tartibda to'liq yasalishi mumkin — shuning
 -- uchun uni mijozning bor-yo'qligidan chiqarib bo'lmaydi, alohida
 -- belgilanadi.
 --
@@ -152,11 +152,11 @@ ALTER TABLE production_units ADD COLUMN IF NOT EXISTS is_stock BOOLEAN NOT NULL 
 --  Oradagi farq — tsexlar orasida yotib qolgan vaqt; zavodda vaqt aynan
 --  shu yerda yo'qoladi, bo'lim ichida emas.
 --
---  Belgi birlikning o'zida turadi, harakat yozuvi sifatida emas: jo'natish
+--  Belgi konverning o'zida turadi, harakat yozuvi sifatida emas: jo'natish
 --  — bo'lim almashuvi emas, mahsulot joyidan qimirlamaydi. Uni unit_moves
 --  ga yozsak, joylashuv tarixi yolg'on bo'lib qolardi.
 --
---  handover_shop_id — QAYSI tsex jo'natgani. Busiz birlik keyingi tsexga
+--  handover_shop_id — QAYSI tsex jo'natgani. Busiz konver keyingi tsexga
 --  o'tgach eski belgi qolib ketardi va u yerda ham «jo'natilgan» bo'lib
 --  ko'rinardi.
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS handover_on      DATE;
@@ -180,7 +180,7 @@ CREATE INDEX IF NOT EXISTS idx_moves_unit ON unit_moves(unit_id, moved_at);
 
 -- ========================================================== HISOBOT VIEW'LARI
 
--- Birlikning marshrutdagi qadami va tsexi
+-- Konverning marshrutdagi qadami va tsexi
 CREATE OR REPLACE VIEW v_unit_place AS
 SELECT u.id AS unit_id, u.current_section_id AS section_id,
        sc.name AS section, sh.id AS shop_id, sh.name AS shop, sh.sort AS shop_sort,
@@ -192,7 +192,7 @@ LEFT JOIN shops sh         ON sh.id = sc.shop_id
 LEFT JOIN v_product_route r ON r.product_id = u.product_id
                            AND r.section_id = u.current_section_id;
 
--- Birlikdan oldinga qolgan marshrut (muddat hisobi uchun)
+-- Konverdan oldinga qolgan marshrut (muddat hisobi uchun)
 CREATE OR REPLACE VIEW v_unit_rem AS
 SELECT u.id AS unit_id, u.qty, pp.shop_id AS at_shop_id,
        r.step_no AS rem_step, sc.shop_id AS rem_shop_id, rt.rate_per_day

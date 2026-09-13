@@ -84,10 +84,10 @@ async function go(k) {
 // dan foyda ko'rmaydi, u "uch kun qoldi" deb o'ylaydi va ishini shunga
 // qarab tartiblaydi. Sana jurnalda turibdi, kerak bo'lsa o'sha yerda.
 //
-// Kechikkan birlik minus bilan va qizil: "-3 kun" — o'tib ketgan kun soni
+// Kechikkan konver minus bilan va qizil: "-3 kun" — o'tib ketgan kun soni
 // darrov ko'rinadi va ro'yxatning boshiga chiqadi.
 //
-// Qaysi sana olinishi birlik turgan tsexga bog'liq (server: /board):
+// Qaysi sana olinishi konver turgan tsexga bog'liq (server: /board):
 // korpusdagiga «Lak tsehi», bo'yoqlashdagiga «Qadoqlash», qadoqlashdagiga
 // «T/M ombor» sanasi. Ya'ni jurnaldagi sana bilan bir xil, boshqa hisob emas.
 function due(u) {
@@ -199,7 +199,7 @@ function pick(id, on) { on ? picked.add(id) : picked.delete(id); drawBoard(); }
 function goShop(id) { shopId = id; picked.clear(); loadBoard(); }
 
 // Bitta ro'yxatda ikki xil amal bo'lishi mumkin: o'z tsexidan chiqmaydigan
-// birlik O'TKAZILADI, chiqadigani esa JO'NATILADI. Tanlangan qatorlar shu
+// konver O'TKAZILADI, chiqadigani esa JO'NATILADI. Tanlangan qatorlar shu
 // ikkiga ajratilib, har biri o'z yo'liga yuboriladi.
 function kindOf(id) {
   for (const sc of data.sections)
@@ -221,7 +221,7 @@ async function apply(ids) {
         method: 'POST', body: JSON.stringify({ items: send }) });
     toast(ids.length === 1
       ? (send.length ? "Jo'natildi" : "O'tkazildi")
-      : `${ids.length} ta birlik yuborildi`);
+      : `${ids.length} ta konver yuborildi`);
     picked.clear();
     await loadBoard();
   } catch (e) { toast(e.message, true); }
@@ -254,7 +254,7 @@ async function loadBoard() {
 // ═══════════════════════════════════════════ 2. BUGUNGI HARAKATLAR
 //
 // Kun xronologik lenta bo'lib turadi va anomaliya ko'zga tashlanadi: kim
-// umuman kiritmagan, kim o'ttizta birlikni bir daqiqada "o'tkazgan", kim
+// umuman kiritmagan, kim o'ttizta konverni bir daqiqada "o'tkazgan", kim
 // ko'p qaytargan. Bo'lim boshlig'iga faqat o'z tsexi ko'rinadi.
 let feed = null, timer = null;
 const deb = () => { clearTimeout(timer); timer = setTimeout(loadFeed, 350); };

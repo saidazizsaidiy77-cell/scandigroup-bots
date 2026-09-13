@@ -1,10 +1,10 @@
 // ============================================================================
-//  ISHLAB CHIQARISH JURNALI — konveyer birliklari
+//  ISHLAB CHIQARISH JURNALI — konveyer konverlari
 //
 //  Huquqlar:
 //    production.view   — jurnalni ko'rish
-//    production.entry  — birlikni keyingi bo'limga o'tkazish
-//    production.manage — birlik yaratish, boshlang'ich qoldiq
+//    production.entry  — konverni keyingi bo'limga o'tkazish
+//    production.manage — konver yaratish, boshlang'ich qoldiq
 //    sales.manage      — zakaz raqami, mijoz, narx, chiqish sanasi
 // ============================================================================
 const express = require('express');
@@ -13,7 +13,7 @@ const { need } = require('../auth');
 const { resolveShift } = require('./shift');
 
 const router = express.Router();
-// Birlik yaratish/tahrirlash huquqi. production.manage — marshrut va quvvat
+// Konver yaratish/tahrirlash huquqi. production.manage — marshrut va quvvat
 // uchun; kunlik kiritish uchun production.units yetarli.
 const UNITS    = ['production.units', 'production.manage'];
 const COMMERCE = ['production.units', 'sales.manage', 'production.manage'];
@@ -136,13 +136,13 @@ function groupIds(q) {
   return ids.length ? ids : null;
 }
 
-// T/M ombor qoldig'ini birliklardan QAYTA HISOBLAYDI.
+// T/M ombor qoldig'ini konverlardan QAYTA HISOBLAYDI.
 //
 //  Oldin qoldiq qo'shib-ayirish bilan yuritilardi (+1 kirganda, −1
 //  chiqqanda). Har qo'shish bir joyda unutilsa yoki ikki marta bajarilsa,
-//  qoldiq birliklardan jimgina ajralib ketardi va buni hech kim sezmasdi.
+//  qoldiq konverlardan jimgina ajralib ketardi va buni hech kim sezmasdi.
 //
-//  Endi birliklar yagona haqiqat: qoldiq ularning yig'indisi. Konveyer
+//  Endi konverlar yagona haqiqat: qoldiq ularning yig'indisi. Konveyer
 //  raqami zavodning mezoni — qoldiq ham o'sha raqamlardan chiqishi kerak.
 async function refreshStock(client, productId) {
   await client.query(
@@ -154,7 +154,7 @@ async function refreshStock(client, productId) {
 }
 
 // Tsex doirasi. Bo'lim boshlig'ida `scope_shop_id` bor — u faqat o'z
-// tsexidagi birlikni ko'radi va o'tkazadi. Admin va ishlab chiqarish
+// tsexidagi konverni ko'radi va o'tkazadi. Admin va ishlab chiqarish
 // boshlig'ida doira yo'q, ya'ni ro'yxat bo'sh — ular hammasini ko'radi.
 // Shu sababli tekshiruv har doim "doira bor bo'lsa" shartidan boshlanadi.
 const scopeOf = (req) => {
@@ -170,7 +170,7 @@ function registerQuery(q, limit, scope = null) {
 
   return {
     text: `SELECT * FROM v_unit_register
-      -- Jurnal — ISHLAB CHIQARISH jurnali. Ombor qabul qilgan birlik
+      -- Jurnal — ISHLAB CHIQARISH jurnali. Ombor qabul qilgan konver
       -- undan chiqadi: u endi ishlab chiqarishning ishi emas. Bekor
       -- qilinganlar ham shunday. Ikkalasini ham status filtri bilan
       -- ataylab so'rab ko'rish mumkin.
@@ -329,7 +329,7 @@ router.get('/:id/history', need('production.view'), wrap(async (req, res) => {
   res.json(rows);
 }));
 
-// Shu birlik yura oladigan bo'limlar — tahrirlash oynasidagi ro'yxat uchun.
+// Shu konver yura oladigan bo'limlar — tahrirlash oynasidagi ro'yxat uchun.
 // Hamma bo'limni ko'rsatib, keyin "marshrutda yo'q" deb rad etish yomon:
 // xodim nega bo'lmasligini bilmaydi va taxmin qilib o'tiradi.
 router.get('/:id/route', need('production.view', 'production.entry'), wrap(async (req, res) => {
@@ -346,7 +346,7 @@ router.get('/:id/route', need('production.view', 'production.entry'), wrap(async
 // ─────────────────────────────────────────────────── BIRLIK YARATISH / QOLDIQ
 // Bir nechta qatorni birdan qabul qiladi — boshlang'ich qoldiq shu bilan
 // kiritiladi: har qator o'z bo'limida turgan holda yaratiladi.
-// Bitta birlik yaratish. Sikl tanasi alohida funksiyaga chiqarilgan:
+// Bitta konver yaratish. Sikl tanasi alohida funksiyaga chiqarilgan:
 // uni jurnal sahifasi ham, Excel'dan yuklash ham chaqiradi — ikkalasi
 // bir xil qoidalar bilan yozishi shart, aks holda yuklangan qator
 // qo'lda kiritilganidan boshqacha bo'lib qoladi.
@@ -372,7 +372,7 @@ async function createOne(client, req, it) {
       WHERE s.id = $1`, [it.section_id])).rows[0] : null;
   const isExit = place?.is_exit || false;
 
-  // Birlik allaqachon lak yoki qadoqlash tsexida turgan bo'lsa, o'sha
+  // Konver allaqachon lak yoki qadoqlash tsexida turgan bo'lsa, o'sha
   // tsexga kirish sanasi ma'lum: kiritilmagan bo'lsa bo'limga kirgan
   // sanadan olinadi. Boshlang'ich qoldiqda buni qo'lda takrorlash
   // shart bo'lmaydi.
@@ -471,14 +471,14 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
 
   // ★ TARIXGA TEGADIGAN MAYDONLAR
   //
-  //  Bular birlikning o'zini o'zgartiradi, boshqa maydonlar esa unga
+  //  Bular konverning o'zini o'zgartiradi, boshqa maydonlar esa unga
   //  ma'lumot qo'shadi:
-  //    · konveyer raqami — birlikning nomi, hamma hisobotda shu turadi;
+  //    · konveyer raqami — konverning nomi, hamma hisobotda shu turadi;
   //    · soni            — jamlanma hisobotlar va T/M ombor qoldig'i shundan
   //                        hisoblanadi;
-  //    · turgan joyi     — birlikning zavoddagi o'rni; uni tuzatish tarixdagi
+  //    · turgan joyi     — konverning zavoddagi o'rni; uni tuzatish tarixdagi
   //                        oxirgi yozuvni to'g'rilash demak;
-  //    · FAKT sanalar    — tizim birlik o'sha tsexga o'tganda yozgan,
+  //    · FAKT sanalar    — tizim konver o'sha tsexga o'tganda yozgan,
   //                        ya'ni haqiqatan bo'lib o'tgan voqea.
   //
   //  Shuning uchun ularni faqat administrator va ishlab chiqarish
@@ -515,7 +515,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   const nextSection = section_id != null && String(section_id).trim() !== ''
     ? Number(section_id) : null;
 
-  // Uchalasi bitta tranzaksiyada: har biri birlikning o'zidan tashqari
+  // Uchalasi bitta tranzaksiyada: har biri konverning o'zidan tashqari
   // JAMLANMA yozuvga ham tegadi, va yarim o'zgargan holat hisobotni
   // jimgina buzardi.
   //   · raqam — flow_log.note da turadi (hisobot va qaytarish shuni qidiradi)
@@ -528,7 +528,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
       const u = (await client.query(
         `SELECT conveyor_no, qty, product_id, status FROM production_units
           WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
-      if (!u) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Birlik topilmadi' }); }
+      if (!u) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Konver topilmadi' }); }
 
       if (nextNo && nextNo !== u.conveyor_no) {
         await client.query(
@@ -546,7 +546,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
         await client.query(
           `UPDATE production_units SET qty = $2 WHERE id = $1`, [req.params.id, nextQty]);
 
-        // Birlikning har harakati jamlanma yozuv qoldirgan — hammasida
+        // Konverning har harakati jamlanma yozuv qoldirgan — hammasida
         // o'sha paytdagi soni turibdi. Bog'lanish ustuni (flow_log_id)
         // qo'shilishidan oldingi harakatlarda u yo'q, ular izoh bo'yicha
         // topiladi — raqam yuqorida allaqachon yangilangani uchun izlash
@@ -559,7 +559,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
                OR note = $3 OR note LIKE $3 || ' ·%'`,
           [req.params.id, nextQty, no]);
 
-        // Soni o'zgargani qoldiqni ham o'zgartiradi — birliklardan qayta hisoblanadi
+        // Soni o'zgargani qoldiqni ham o'zgartiradi — konverlardan qayta hisoblanadi
         if (u.status === 'fg') await refreshStock(client, u.product_id);
         await audit(req, { module: 'production', action: 'qty', entity: 'unit',
                            entity_id: req.params.id,
@@ -596,7 +596,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
        pack_on              = COALESCE($14::date, pack_on),
        fg_planned_on        = COALESCE($15::date, fg_planned_on),
        -- FAKT sanalarni ham tuzatish mumkin. Tizim ishga tushirilayotgan
-       -- paytda birlik allaqachon lak yoki qadoqlash tsexida turgan
+       -- paytda konver allaqachon lak yoki qadoqlash tsexida turgan
        -- bo'ladi va haqiqiy sana o'tmishda qolgan — uni kiritib bo'lmasa
        -- jurnal birinchi kundanoq noto'g'ri bo'lib qoladi. Sahifada bu
        -- faqat production.manage huquqiga ochiq.
@@ -613,7 +613,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
      lak_on || null, pack_on || null, req.body.fg_planned_on || null,
      typeof req.body.is_stock === 'boolean' ? req.body.is_stock : null,
      fg_on || null]);
-  if (!rows[0]) return res.status(404).json({ error: 'Birlik topilmadi' });
+  if (!rows[0]) return res.status(404).json({ error: 'Konver topilmadi' });
   await audit(req, { module: 'production', action: 'update', entity: 'unit',
                      entity_id: req.params.id, payload: req.body });
   res.json({ ok: true });
@@ -622,16 +622,16 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
 // ─────────────────────────────────── BIRLIK QAYERDA TURGANINI TUZATISH
 //
 //  Bu O'TKAZISH EMAS. O'tkazish — zavodda bo'lib o'tgan voqea, unga yangi
-//  yozuv qo'shiladi. Bu esa yozuvdagi XATO: birlik aslida Frezada turgan,
+//  yozuv qo'shiladi. Bu esa yozuvdagi XATO: konver aslida Frezada turgan,
 //  jurnalda Arra deb yozilgan. Shuning uchun yangi harakat qo'shilmaydi —
 //  oxirgi harakat to'g'rilanadi, va u bilan birga jamlanma yozuv ham
-//  (flow_log), aks holda hisobot birlikni bir vaqtda ikki bo'limda
+//  (flow_log), aks holda hisobot konverni bir vaqtda ikki bo'limda
 //  ko'rsatib turadi.
 async function relocate(client, req, unitId, sectionId) {
   const u = (await client.query(
     `SELECT id, conveyor_no, product_id, qty, current_section_id, status, entered_section_on
        FROM production_units WHERE id = $1 FOR UPDATE`, [unitId])).rows[0];
-  if (!u) { const e = new Error('Birlik topilmadi'); e.status = 404; throw e; }
+  if (!u) { const e = new Error('Konver topilmadi'); e.status = 404; throw e; }
   if (Number(sectionId) === u.current_section_id) return null;
 
   const to = (await client.query(
@@ -661,7 +661,7 @@ async function relocate(client, req, unitId, sectionId) {
       await client.query(`UPDATE flow_log SET section_id = $2 WHERE id = $1`,
                          [last.flow_log_id, sectionId]);
   } else {
-    // Birlik hali hech bir bo'limga qo'yilmagan edi — bu uning birinchi
+    // Konver hali hech bir bo'limga qo'yilmagan edi — bu uning birinchi
     // joylashuvi, demak yozuv yangidan yaratiladi.
     const on = u.entered_section_on || null;
     const shiftId = await resolveShift(client, u.product_id, 1, req.user.id, on);
@@ -676,7 +676,7 @@ async function relocate(client, req, unitId, sectionId) {
   }
 
   // Joyni tuzatish holatga tegmaydi: `fg` — ombor qabulining natijasi,
-  // joylashuvniki emas. Omborda turgan birlikning joyini tuzatish uni
+  // joylashuvniki emas. Omborda turgan konverning joyini tuzatish uni
   // ombordan chiqarib yubormasligi kerak.
   await client.query(
     `UPDATE production_units SET
@@ -688,7 +688,7 @@ async function relocate(client, req, unitId, sectionId) {
   // o'zgargani bilan qaysi tsexga kirgani ham o'zgargan bo'lishi mumkin.
   //
   // Hisob natija bermasa eski qiymat QOLADI. Sabab: boshlang'ich qoldiqqa
-  // kiritilgan birlikda haqiqiy sana qo'lda yozilgan va harakat yozuvlarida
+  // kiritilgan konverda haqiqiy sana qo'lda yozilgan va harakat yozuvlarida
   // yo'q — uni nolga aylantirsak, qaytarib bo'lmaydigan ma'lumot yo'qoladi.
   await client.query(
     `UPDATE production_units u SET
@@ -712,7 +712,7 @@ async function relocate(client, req, unitId, sectionId) {
 async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect, defect_reason, note }) {
   const u = (await client.query(
     `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`, [unit_id])).rows[0];
-  if (!u) throw new Error('Birlik topilmadi');
+  if (!u) throw new Error('Konver topilmadi');
   if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
 
   const route = (await client.query(
@@ -737,21 +737,21 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
       WHERE s.id = $1`, [target])).rows[0];
 
   // ★ QABUL QILISH QOIDASI
-  //   Birlikni X tsexining bo'limiga o'tkazish uchun X tsexi doirasida
+  //   Konverni X tsexining bo'limiga o'tkazish uchun X tsexi doirasida
   //   bo'lish kerak. Bundan ikki narsa o'z-o'zidan kelib chiqadi:
   //     · tsex ichidagi harakatni o'sha tsex boshlig'i qiladi;
   //     · tsexdan tsexga o'tkazishni QABUL QILUVCHI tomon bosadi.
   //   Ya'ni "topshirdim" degan alohida tugma va alohida holat kerak emas —
-  //   birlik oldingi tsexning oxirgi bo'limida turibdi degani "topshirishga
+  //   konver oldingi tsexning oxirgi bo'limida turibdi degani "topshirishga
   //   tayyor" degani, va uni faqat keyingi tsex o'ziga ola oladi. Kim qabul
   //   qilgani va qachon — unit_moves da allaqachon yoziladi.
   const scope = scopeOf(req);
   if (scope && !scope.includes(sec.shop_id))
     throw new Error(
       `${u.conveyor_no}: «${sec.shop}» sizning doirangizda emas — ` +
-      `birlikni o'sha tsex boshlig'i qabul qiladi`);
+      `konverni o'sha tsex boshlig'i qabul qiladi`);
 
-  // Keyingi tsexga topshirish rejasi faqat birlik HAQIQATAN boshqa tsexga
+  // Keyingi tsexga topshirish rejasi faqat konver HAQIQATAN boshqa tsexga
   // o'tganda tozalanadi. Tsex ichidagi harakat (arra → freza) rejaga
   // tegmasligi kerak: aks holda boshliq qo'ygan muddat birinchi
   // o'tkazishdayoq yo'qoladi.
@@ -786,7 +786,7 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
      WHERE id = $1`, [unit_id, target, moved_on || null, shopChanged]);
 
   // Lak va Qadoqlash tsexiga kirish sanasi jurnalda alohida ustun. Reja
-  // sanasini tsex boshlig'i qo'yadi, faktni esa birlik o'sha tsexga
+  // sanasini tsex boshlig'i qo'yadi, faktni esa konver o'sha tsexga
   // o'tganda tizim o'zi yozadi — qo'lda ikkinchi marta kiritilmaydi.
   // Stul oqimi bo'yoqlashdan keyin qaytadi, shuning uchun BIRINCHI kirish
   // sanasi saqlanadi: ustun bo'sh bo'lgandagina yoziladi.
@@ -818,28 +818,28 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
 
 // ────────────────────────────────────────── OXIRGI O'TKAZISHNI QAYTARISH
 //
-//  "O'tkazish" bexosdan bosilishi oddiy hol — ayniqsa birlik shu bilan T/M
-//  omboriga tushib ketsa. Bekor qilish bunga yaramaydi: u birlikni
+//  "O'tkazish" bexosdan bosilishi oddiy hol — ayniqsa konver shu bilan T/M
+//  omboriga tushib ketsa. Bekor qilish bunga yaramaydi: u konverni
 //  jurnaldan butunlay chiqaradi. Shuning uchun bitta qadam orqaga
 //  qaytariladi.
 //
 //  FAQAT OXIRGI harakat qaytariladi. O'rtadagisini olib tashlash tarixni
-//  yolg'on qiladi: birlik o'tmagan bo'limdan o'tgan bo'lib ko'rinadi.
+//  yolg'on qiladi: konver o'tmagan bo'limdan o'tgan bo'lib ko'rinadi.
 //
 //  Qaytariladigan narsalar — o'tkazish nimani yozgan bo'lsa, o'shalar:
 //    · harakat yozuvi (unit_moves)
 //    · jamlanma yozuv (flow_log) va undagi brak (defects · CASCADE)
-//    · birlikning joyi, holati va T/M omborga kirish sanasi
+//    · konverning joyi, holati va T/M omborga kirish sanasi
 //    · lak va qadoqlash tsexiga kirish sanasi — qolgan harakatlardan
 //      qaytadan hisoblanadi, chunki birinchi kirish sanasi saqlanadi
 //    · T/M ombor qoldig'i (fg_stock)
 async function undoLastMove(client, req, unit_id) {
   const u = (await client.query(
     `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`, [unit_id])).rows[0];
-  if (!u) throw new Error('Birlik topilmadi');
+  if (!u) throw new Error('Konver topilmadi');
   if (u.status === 'shipped')
     throw new Error(`${u.conveyor_no}: mijozga jo'natilgan, avval jo'natmani bekor qiling`);
-  // T/M omborga qabul qilingan birlik ishlab chiqarishnikи emas — uni
+  // T/M omborga qabul qilingan konver ishlab chiqarishnikи emas — uni
   // avval ombor qaytarishi kerak, aks holda qoldiq bilan jurnal ajralib
   // ketadi: ombor mahsulot bor deb turadi, jurnal esa uni orqaga suradi.
   if (u.status === 'fg')
@@ -851,7 +851,7 @@ async function undoLastMove(client, req, unit_id) {
       WHERE m.unit_id = $1 ORDER BY m.id DESC LIMIT 1`, [unit_id])).rows[0];
   if (!last) throw new Error(`${u.conveyor_no}: qaytariladigan o'tkazish yo'q`);
 
-  // Qaytarish — o'tkazishning teskarisi, demak qoida ham o'sha: birlik
+  // Qaytarish — o'tkazishning teskarisi, demak qoida ham o'sha: konver
   // hozir turgan tsex doirangizda bo'lsagina orqaga ola olasiz.
   const scope = scopeOf(req);
   if (scope) {
@@ -859,7 +859,7 @@ async function undoLastMove(client, req, unit_id) {
       `SELECT sh.id, sh.name FROM sections s JOIN shops sh ON sh.id = s.shop_id
         WHERE s.id = $1`, [last.section_id])).rows[0];
     if (at && !scope.includes(at.id))
-      throw new Error(`${u.conveyor_no}: birlik «${at.name}» tsexida — qaytarishni o'sha tsex qiladi`);
+      throw new Error(`${u.conveyor_no}: konver «${at.name}» tsexida — qaytarishni o'sha tsex qiladi`);
   }
 
   // Jamlanma yozuv. Bog'lanish ustuni qo'shilishidan oldingi harakatlarda
@@ -875,8 +875,8 @@ async function undoLastMove(client, req, unit_id) {
 
   await client.query(`DELETE FROM unit_moves WHERE id = $1`, [last.id]);
 
-  // Oldingi harakat — birlik shu yerga qaytadi. Umuman harakat qolmasa,
-  // birlik "boshlanmagan" holatga tushadi.
+  // Oldingi harakat — konver shu yerga qaytadi. Umuman harakat qolmasa,
+  // konver "boshlanmagan" holatga tushadi.
   const prev = (await client.query(
     `SELECT m.*, s.is_exit FROM unit_moves m
        JOIN sections s ON s.id = m.section_id
@@ -910,10 +910,10 @@ async function undoLastMove(client, req, unit_id) {
            from_section_id: last.section_id, to_section_id: prev?.section_id || null };
 }
 
-// Oxirgi o'tkazishni qaytarish. Bir nechta birlikni birdan ham qabul qiladi.
+// Oxirgi o'tkazishni qaytarish. Bir nechta konverni birdan ham qabul qiladi.
 router.post('/undo', need('production.entry'), wrap(async (req, res) => {
   const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
-  if (!ids.length) throw new Error('Birlik tanlanmagan');
+  if (!ids.length) throw new Error('Konver tanlanmagan');
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -940,7 +940,7 @@ router.post('/undo', need('production.entry'), wrap(async (req, res) => {
 //  turibdi va uning javobgarligida; faqat belgi qo'yiladi.
 //
 //  Ikkinchi bosqichni (qabul qilish) keyingi tsex bajaradi — o'tkazish
-//  tugmasi bilan, va u faqat shu belgi turgan birlikka ishlaydi.
+//  tugmasi bilan, va u faqat shu belgi turgan konverka ishlaydi.
 async function handoverOne(client, req, unitId, undo) {
   const u = (await client.query(
     `SELECT u.id, u.conveyor_no, u.status, sc.shop_id, sh.name AS shop
@@ -948,7 +948,7 @@ async function handoverOne(client, req, unitId, undo) {
        LEFT JOIN sections sc ON sc.id = u.current_section_id
        LEFT JOIN shops sh    ON sh.id = sc.shop_id
       WHERE u.id = $1 FOR UPDATE OF u`, [unitId])).rows[0];
-  if (!u) throw new Error('Birlik topilmadi');
+  if (!u) throw new Error('Konver topilmadi');
   if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
   if (!u.shop_id) throw new Error(`${u.conveyor_no}: hech bir bo'limda turmagan`);
 
@@ -975,7 +975,7 @@ async function handoverOne(client, req, unitId, undo) {
 
 router.post('/handover', need('production.entry'), wrap(async (req, res) => {
   const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
-  if (!ids.length) throw new Error('Birlik tanlanmagan');
+  if (!ids.length) throw new Error('Konver tanlanmagan');
   const undo = !!req.body.undo;
   const client = await db.connect();
   try {
@@ -997,7 +997,7 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
 //
 //  Mahsulot chiqish bo'limiga (qadoqlash) yetgani — u omborda degani EMAS.
 //  Qadoqlash tsexi «T/M omborga jo'natdim» deydi, ombor mudiri esa
-//  «qabul qildim». Faqat shundan keyin birlik:
+//  «qabul qildim». Faqat shundan keyin konver:
 //    · T/M ombor qoldig'iga tushadi (fg_stock)
 //    · holati `fg` bo'ladi
 //    · ishlab chiqarish jurnalidan chiqadi
@@ -1010,7 +1010,7 @@ async function acceptStock(client, req, unitId, undo) {
        FROM production_units u
        LEFT JOIN sections sc ON sc.id = u.current_section_id
       WHERE u.id = $1 FOR UPDATE OF u`, [unitId])).rows[0];
-  if (!u) throw new Error('Birlik topilmadi');
+  if (!u) throw new Error('Konver topilmadi');
 
   if (undo) {
     if (u.status !== 'fg')
@@ -1036,7 +1036,7 @@ async function acceptStock(client, req, unitId, undo) {
   return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: true };
 }
 
-// Omborga jo'natilgan, lekin hali qabul qilinmagan birliklar
+// Omborga jo'natilgan, lekin hali qabul qilinmagan konverlar
 router.get('/stock/inbox', need('warehouse.view', 'production.view'), wrap(async (_req, res) => {
   const { rows } = await db.query(
     `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.qty,
@@ -1056,7 +1056,7 @@ router.get('/stock/inbox', need('warehouse.view', 'production.view'), wrap(async
 //
 //  «12 dona Milano» degan qoldiq savolga javob bermaydi: mijoz shikoyat
 //  qilganda qaysi konver ekani kerak bo'ladi. Shuning uchun ro'yxat
-//  birliklardan iborat, yig'indi esa ularning ostida turadi.
+//  konverlardan iborat, yig'indi esa ularning ostida turadi.
 const STOCK_SORT = {
   conveyor_no: 'conveyor_no', product: 'product', product_type: 'product_type',
   qty: 'qty', fg_on: 'fg_on', customer_name: 'customer_name',
@@ -1138,7 +1138,7 @@ router.get('/stock/moves', need('warehouse.view', 'production.view'), wrap(async
 
 router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(async (req, res) => {
   const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
-  if (!ids.length) throw new Error('Birlik tanlanmagan');
+  if (!ids.length) throw new Error('Konver tanlanmagan');
   const undo = !!req.body.undo;
   const client = await db.connect();
   try {
@@ -1180,7 +1180,7 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
 //  bitta bosishda keyingi bo'limga o'tadi.
 //
 //  Uch qism bir so'rovdan chiqadi:
-//    · sections — o'z tsexining bo'limlari va ularda turgan birliklar
+//    · sections — o'z tsexining bo'limlari va ularda turgan konverlar
 //    · inbox    — oldingi tsexda "topshirishga tayyor" turganlar, ya'ni
 //                 marshruti bo'yicha keyingi qadami MENING tsexim
 //    · muddat   — keyingi tsexga topshirishga necha kun qolgani
@@ -1188,17 +1188,17 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
 //  ★ MUDDAT AYNAN JURNALDAGI SANA
 //
 //  Zavodda oqim: Korpus → Lak (bo'yoqlash) → Qadoqlash → T/M ombor.
-//  Jurnalda har birlik uchun shu uch sana turibdi: «Lak tsehi»,
+//  Jurnalda har konver uchun shu uch sana turibdi: «Lak tsehi»,
 //  «Qadoqlash tsehi», «T/M ombor». Usta telefonida ko'radigan muddat —
 //  o'sha sananing o'zi, boshqa hisob emas: aks holda jurnalda bir sana,
 //  telefonda boshqa sana chiqib, qaysi biriga ishonishni bilib bo'lmaydi.
 //
-//  Qaysi sana olinishi birlik HOZIR qaysi tsexda turganiga qarab hal
+//  Qaysi sana olinishi konver HOZIR qaysi tsexda turganiga qarab hal
 //  bo'ladi — marshrutdagi keyingi BOSHQA tsex topiladi va o'sha tsexning
 //  bosqich belgisi (shops.milestone) sanani tanlaydi:
-//      korpusdagi birlik    → keyingi tsex lak      → «Lak tsehi» sanasi
-//      bo'yoqlashdagi birlik → keyingi tsex qadoqlash → «Qadoqlash» sanasi
-//      qadoqlashdagi birlik  → oldinda tsex yo'q      → «T/M ombor» sanasi
+//      korpusdagi konver    → keyingi tsex lak      → «Lak tsehi» sanasi
+//      bo'yoqlashdagi konver → keyingi tsex qadoqlash → «Qadoqlash» sanasi
+//      qadoqlashdagi konver  → oldinda tsex yo'q      → «T/M ombor» sanasi
 //
 //  Jurnalda sana qo'yilmagan bo'lsa eski hisob (marshrut va bo'lim
 //  tezligidan chiqqan taxmin) zaxira bo'lib qoladi.
@@ -1220,8 +1220,8 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
             r.section, r.section_id, r.entered_section_on,
             r.is_stock, r.waiting,
-            -- Birlik marshrutida YO'Q bo'limda turibdimi. Marshrut
-            -- o'zgartirilganda shunday birlik qolib ketishi mumkin, va
+            -- Konver marshrutida YO'Q bo'limda turibdimi. Marshrut
+            -- o'zgartirilganda shunday konver qolib ketishi mumkin, va
             -- unga keyingi qadamni hisoblab bo'lmaydi: "marshrut tugadi"
             -- deb ko'rsatish esa yolg'on bo'lardi.
             (r.step_no IS NOT NULL) AS on_route,
@@ -1323,7 +1323,7 @@ function feedQuery(q, scope, limit) {
         JOIN sections sc        ON sc.id = m.section_id
         JOIN shops sh           ON sh.id = sc.shop_id
         LEFT JOIN workers w     ON w.id = m.worker_id
-        -- Oldingi harakat: "qayerdan" shundan chiqadi. Bo'lmasa — birlik
+        -- Oldingi harakat: "qayerdan" shundan chiqadi. Bo'lmasa — konver
         -- endi kiritilgan (boshlang'ich qoldiq yoki yangi konver).
         LEFT JOIN LATERAL (
           SELECT m2.section_id FROM unit_moves m2

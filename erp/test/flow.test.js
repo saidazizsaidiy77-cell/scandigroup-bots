@@ -1,7 +1,7 @@
 // ============================================================================
 //  ASOSIY YO'LLAR
 //
-//  Bu yerda faqat SINGANDA ZAVOD TO'XTAYDIGAN narsalar sinaladi: birlikni
+//  Bu yerda faqat SINGANDA ZAVOD TO'XTAYDIGAN narsalar sinaladi: konverni
 //  o'tkazish, tsexdan tsexga topshirish, qaytarish, ombor qoldig'i, tsex
 //  doirasi va tarixga tegadigan tahrirlar.
 //
@@ -44,7 +44,7 @@ const newUnit = async (extra = {}) => {
   return r.body.created[0];
 };
 
-test('birlik yaratiladi va jurnalda ko\'rinadi', async () => {
+test('konver yaratiladi va jurnalda ko\'rinadi', async () => {
   const u = await newUnit();
   const j = await admin('GET', '/api/units/?conveyor_no=' + u.conveyor_no);
   assert.equal(j.status, 200);
@@ -70,7 +70,7 @@ test('tsex ichida o\'tkaziladi, marshrutdan tashqariga emas', async () => {
   assert.match(bad.body.error, /marshrutda yo'q/);
 });
 
-test('jo\'natilmagan birlikni keyingi tsex qabul qila olmaydi', async () => {
+test('jo\'natilmagan konverni keyingi tsex qabul qila olmaydi', async () => {
   const u = await newUnit({ section_id: SHKUR });
 
   const early = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
@@ -150,7 +150,7 @@ test('T/M ombor: jo\'natdim → qabul qildim → jurnaldan chiqadi', async () =>
   const j = await omborchi('GET', '/api/units/?conveyor_no=' + u.conveyor_no);
   assert.equal(j.body.length, 0, 'qabul qilingach jurnalda ko\'rinmaydi');
 
-  // Ombordagi birlikni ishlab chiqarish orqaga sura olmaydi
+  // Ombordagi konverni ishlab chiqarish orqaga sura olmaydi
   const back = await qad('POST', '/api/units/undo', { unit_id: u.id });
   assert.equal(back.status, 400);
   assert.match(back.body.error, /ombor/);

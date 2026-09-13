@@ -122,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_products_group ON products(group_id);
 -- paydo bo'ladi. `route_template_id` shu yerda turadi, chunki
 -- `route_templates` product_groups dan keyin yaratiladi.
 --
---   active  — o'chirilmaydi, faolsizlantiriladi: kiritilgan birlik o'z
+--   active  — o'chirilmaydi, faolsizlantiriladi: kiritilgan konver o'z
 --             mahsulotiga bog'liq, o'chirilsa jurnal tarixi buziladi
 --   sort    — jadvaldagi ko'rinish tartibi
 --   is_set  — to'plammi yoki yakka mahsulot. To'plam bitta konveyer raqami
@@ -142,7 +142,7 @@ ALTER TABLE fasons ADD COLUMN IF NOT EXISTS sort INT NOT NULL DEFAULT 0;
 -- ularning har biri ALOHIDA mahsulot — narxi boshqa, omborda alohida
 -- turadi, "3 dona stol bor" degan gap uzunliksiz ma'no bermaydi.
 --
--- Rang va matodan farqi shu: ular birlikning belgisi (bitta fason har xil
+-- Rang va matodan farqi shu: ular konverning belgisi (bitta fason har xil
 -- rangda chiqaveradi), o'lcham esa mahsulotning o'zini o'zgartiradi.
 --
 -- O'lchami yo'q guruhlarda (penal, kamod, sp, stul) NULL bo'lib qoladi.
@@ -152,9 +152,9 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS size_label TEXT;
 -- turadi: rang sepishgacha hammasi bir xil, rang esa buyurtma tushgandan
 -- keyin beriladi. Shunda mijozga yetkazish muddati qisqaradi.
 --
--- Muddat hisobiga ta'siri bor: shu bo'limda buyurtmasiz turgan birlik
+-- Muddat hisobiga ta'siri bor: shu bo'limda buyurtmasiz turgan konver
 -- qachon keyingi bo'limga o'tishi NOMA'LUM — u buyurtma kutadi, quvvat
--- kutmaydi. Bunday birlikka taxmin chiqarilmaydi.
+-- kutmaydi. Bunday konverka taxmin chiqarilmaydi.
 ALTER TABLE sections ADD COLUMN IF NOT EXISTS is_hold BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS set_items (

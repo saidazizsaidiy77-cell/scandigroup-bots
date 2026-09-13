@@ -121,7 +121,7 @@ UPDATE products p SET name = f.name || ' ' || p.size_label
    AND p.name <> f.name || ' ' || p.size_label;
 
 --  O'lchamsiz eski stol mahsulotlari (STL-SAFIA va h.k.) o'rnini shular
---  egalladi. O'chirilmaydi — ularda kiritilgan birlik bo'lishi mumkin,
+--  egalladi. O'chirilmaydi — ularda kiritilgan konver bo'lishi mumkin,
 --  o'chirilsa jurnal tarixi buziladi. Faolsizlantiriladi: yangi kiritishda
 --  ro'yxatda ko'rinmaydi, eski yozuvlar joyida qoladi.
 --

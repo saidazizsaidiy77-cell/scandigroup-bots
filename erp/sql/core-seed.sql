@@ -10,7 +10,7 @@ INSERT INTO permissions (code, module, name) VALUES
   -- Ishlab chiqarish (ishlayapti)
   ('production.view',   'production', 'Ishlab chiqarishni ko''rish'),
   ('production.entry',  'production', 'Bo''limdan dona o''tkazish, brak, to''xtash'),
-  ('production.units',  'production', 'Konveyer birligi: yaratish, zakaz/mijoz/narx qo''yish'),
+  ('production.units',  'production', 'Konver: yaratish, zakaz/mijoz/narx qo''yish'),
   ('production.manage', 'production', 'Marshrut, reja, bo''lim quvvati, spravochnik'),
   -- Xom ashyo va tayyor mahsulot ombori (rejada)
   ('warehouse.view',    'warehouse',  'Ombor qoldiqlarini ko''rish'),

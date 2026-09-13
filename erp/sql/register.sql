@@ -6,14 +6,14 @@
 --    Soni · Tseh · Bo'lim · Lak tsehi · Qadoqlash tsehi · T/M ombor ·
 --    Mijoz nomi · Narx · Summa
 --
---  Rang va mato birlikning o'zida turadi: bitta fason har xil rangda va
---  har xil matoda chiqadi, ya'ni bu SKU emas, o'sha konkret birlikning
+--  Rang va mato konverning o'zida turadi: bitta fason har xil rangda va
+--  har xil matoda chiqadi, ya'ni bu SKU emas, o'sha konkret konverning
 --  xususiyati.
 --
 --  Lak va Qadoqlash sanalari — REJA va FAKT juftligi:
 --    reja  — korpus tsexi boshlig'i qo'yadi, topshirish shunga qarab
 --            nazorat qilinadi;
---    fakt  — birlik o'sha tsexga o'tganda tizim o'zi qo'yadi;
+--    fakt  — konver o'sha tsexga o'tganda tizim o'zi qo'yadi;
 --    taxmin — ikkalasi ham yo'q bo'lsa marshrut va quvvatdan hisoblanadi.
 --  Savdo bo'limi qadoqlash sanasiga qarab mijozga muddat aytadi: mahsulot
 --  T/M omborida bo'lmasa, javob aynan shu ustundan chiqadi.
@@ -26,7 +26,7 @@ ALTER TABLE production_units ADD COLUMN IF NOT EXISTS lak_planned_on  DATE;
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS lak_on          DATE;
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS pack_planned_on DATE;
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS pack_on         DATE;
--- T/M omboriga kirish rejasi. Fakt (fg_on) allaqachon bor — birlik chiqish
+-- T/M omboriga kirish rejasi. Fakt (fg_on) allaqachon bor — konver chiqish
 -- bo'limiga yetganda tizim qo'yadi. Reja esa uch bosqichni bir xil qiladi:
 -- lak, qadoqlash va ombor ustunlari bir mantiq bilan ishlaydi.
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS fg_planned_on   DATE;
@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_units_fabric ON production_units(fabric)
   WHERE fabric IS NOT NULL;
 
 -- ------------------------------------------------------- TSEXGACHA MUDDAT
--- Birlik oldida turgan HAR BIR tsexga necha kunda yetishi. v_unit_eta faqat
+-- Konver oldida turgan HAR BIR tsexga necha kunda yetishi. v_unit_eta faqat
 -- keyingi tsex va T/M omborini bilardi; lak va qadoqlash sanalari uchun
 -- oradagi tsexlar ham kerak.
 --
@@ -191,7 +191,7 @@ SELECT
 FROM production_units u
 JOIN products p        ON p.id = u.product_id
 JOIN product_groups g  ON g.id = p.group_id
--- Birlik hozir turgan bo'lim: kutish nuqtasimi yoki yo'q
+-- Konver hozir turgan bo'lim: kutish nuqtasimi yoki yo'q
 LEFT JOIN sections cur ON cur.id = u.current_section_id
 LEFT JOIN v_unit_place pp ON pp.unit_id = u.id
 LEFT JOIN v_unit_eta e    ON e.unit_id = u.id
