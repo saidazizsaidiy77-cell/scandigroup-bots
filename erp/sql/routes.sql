@@ -118,12 +118,16 @@ DELETE FROM route_templates rt
 
 -- ────────────────────────── STUL FASONLARINI O'Z SHABLONIGA BIRIKTIRISH
 -- Guruhning umumiy shabloni L2-FULL; quyidagi fasonlar undan chetga chiqadi.
+--
+-- Zero va Palazzo stullari ataylab YO'Q: Zero stuli katalogda umuman
+-- mavjud emas, Palazzo esa zavod tomonidan aytilmagan. Ularni bu yerga
+-- oldindan yozib qo'yish — so'ralmagan qarorni kodga kiritish bo'lardi,
+-- va u yaratilgan kunda jimgina kuchga kirardi.
 UPDATE products p SET route_template_id = (SELECT id FROM route_templates WHERE code = v.tpl)
   FROM product_groups g,
        fasons f,
        (VALUES ('ONIX', 'L2-ONIX'),
-               ('OWEN', 'L2-SHKUR'),
-               ('ZERO', 'L2-SHKUR')) AS v(fason, tpl)
+               ('OWEN', 'L2-SHKUR')) AS v(fason, tpl)
  WHERE g.id = p.group_id AND g.code = 'STU'
    AND f.id = p.fason_id AND f.code = v.fason;
 
