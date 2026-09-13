@@ -1,9 +1,17 @@
 /* ZELTA ERP · Scandi Group ishlab chiqarish monitoringi — minimalist yorug' UI
  *
- * Fon ochiq kulrang, kartochka esa toza oq: jadval fondan bir pog'ona
- * ajralib tursin. Ranglar neytral — sariqqa ham, ko'kka ham og'maydi,
- * shunda jadvaldagi yashil "fakt" va qizil "kechikdi" belgilari aniq
- * ko'rinadi.
+ * KO'ZGA QULAY: fon ham, kartochka ham TOZA OQ EMAS. Zavodda ekranga
+ * kun bo'yi qaraladi, toza oq (#fff) esa eng yorqin yuza — uzoq
+ * qarashda ko'z shuni qiynaydi. Shuning uchun yuzalar bir pog'ona
+ * pasaytirilgan va iliq tomonga siljitilgan: qog'ozga o'xshaydi,
+ * ko'k-kulrang sovuqlik yo'q.
+ *
+ * Kartochka fondan baribir ajralib turadi — ikkisi orasidagi farq
+ * saqlangan, faqat ikkalasi ham pasaygan.
+ *
+ * Matn qora emas (#212227): toza qora toza oq bilan yonma-yon turganda
+ * harflar chetida soyalanish hosil qiladi. Kulrang matn esa aksincha
+ * to'qlashtirildi — eski qiymat kichik shriftda o'qilmasdi.
  *
  * Oltin ikki xil: `--accent` yuza va chegara uchun, `--accent-ink` esa
  * MATN uchun. Yorug' fonda ochiq oltin harf o'qilmaydi, shuning uchun
@@ -11,19 +19,19 @@
  */
 :root{
   color-scheme:light;
-  --bg:#f5f6f8; --surface:#ffffff; --surface-2:#edeff2; --line:#e0e3e7;
+  --bg:#f3f2ef; --surface:#fbfaf7; --surface-2:#eceae4; --line:#e3e0d8;
   /* Jadvalning bir qatordan fon soyasi. Qotib turgan ustun ostidan qator
      ko'rinmasligi uchun shaffof emas, qattiq qiymat. */
-  --row-alt:#fafbfc;
+  --row-alt:#f7f6f2;
   /* Yozilmagan bo'lim: ko'rinadi, lekin ko'z tortmaydi */
-  --faint:#c2c7ce;
-  --text:#1a1c1f; --muted:#6e757d;
-  --accent:#b8901f; --accent-ink:#8a6813;
-  --ok:#2e7d51; --warn:#a7701a; --bad:#b23c3c; --radius:14px;
+  --faint:#b9b7af;
+  --text:#212227; --muted:#61646a;
+  --accent:#a8821c; --accent-ink:#775a10;
+  --ok:#2c7148; --warn:#96661a; --bad:#a63c3c; --radius:14px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;padding:24px;max-width:1280px;margin:0 auto}
 /* Ko'p ustunli jadval sahifasi ekranni to'liq ishlatsin — 1280px da jurnal
    gorizontal aylantirishsiz sig'maydi. */
@@ -43,7 +51,8 @@ h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
   border-radius:var(--radius);padding:20px}
 .kpi{font-size:32px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
 .kpi small{font-size:13px;font-weight:400;color:var(--muted);letter-spacing:0}
-table{width:100%;border-collapse:collapse;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:14px;
+  font-variant-numeric:tabular-nums}
 /* Ustunlar orasida bo'shliq bo'lmasa sarlavhalar bir-biriga yopishib
    o'qilmay qoladi ("Guruh" + "Rang" = "Guruhirang"). Chetki kataklar
    kartochka chetiga tekis tursin. */
