@@ -78,12 +78,29 @@ INSERT INTO chambers (shop_id, code, name) VALUES
   ((SELECT id FROM shops WHERE code='BOYOQ'), 'KAM-2', 'Kamera 2')
 ON CONFLICT (code) DO NOTHING;
 
--- Zahira shu bo'limda kutadi: rang sepishgacha mahsulot bir xil, rang
--- buyurtmadan keyin beriladi. Bir marta belgilanadi — saytdan boshqa
--- bo'lim tanlansa, keyingi deploy uni qaytarib qo'ymaydi.
-UPDATE sections SET is_hold = true
- WHERE code = 'BOY-RANG'
-   AND NOT EXISTS (SELECT 1 FROM sections WHERE is_hold);
+-- ★ ZAHIRA QAYERDA KUTADI
+--
+--  Zavod buyurtmani kutmasdan mahsulot tayyorlaydi va uni oxirigacha
+--  yetkazmay ushlab turadi — rang mijoz tanlagandan keyin beriladi.
+--  Ushlash nuqtasi ikki xil, chunki yo'llar boshqacha:
+--
+--    korpus mebel : «Rang sepish» — undan keyin rang qaytmaydi
+--    stul         : «Lak»         — stul rang sepishdan umuman o'tmaydi
+--
+--  Har biri BIR MARTA belgilanadi: saytdan boshqa bo'lim tanlangan
+--  bo'lsa, keyingi deploy uni qaytarib qo'ymasligi kerak.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'hold-rang') THEN
+    UPDATE sections SET is_hold = true WHERE code = 'BOY-RANG';
+    INSERT INTO migration_flags (key) VALUES ('hold-rang');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'hold-lak') THEN
+    UPDATE sections SET is_hold = true WHERE code = 'BOY-LAK';
+    INSERT INTO migration_flags (key) VALUES ('hold-lak');
+  END IF;
+END $$;
 
 -- Mahsulot guruhlari `catalog-groups.sql` da: u eski guruhlarni yangisiga
 -- ko'chirishi ham kerak, shuning uchun marshrut shablonlaridan keyin,
