@@ -7,7 +7,7 @@
 <!-- Telefonga o'rnatiladigan ilova: bosh ekranda ZELTA belgisi, brauzer
      paneli ko'rinmaydi. Oddiy havola bo'lib ochilishi ham buzilmaydi. -->
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#f5f6f8">
+<meta name="theme-color" content="#f3f2ef">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -193,8 +193,20 @@ function openImport(){
       <div class="modal" style="max-width:680px">
         <div class="row" style="justify-content:space-between;margin-bottom:12px">
           <h1>Ro'yxatni import qilish</h1><button onclick="close_()">Yopish</button></div>
-        <p class="muted" style="margin-bottom:14px">Har qator bitta mijoz, maydonlar
-          nuqtali vergul bilan ajratiladi:<br>
+        <p class="muted" style="margin-bottom:8px">Zavod ro'yxatini Excel yoki CSV
+          faylda bering — ustunlar tartibi muhim emas, sarlavhasiga qarab
+          o'qiladi: <code>Mijoz</code>, <code>Tel</code>, <code>Region</code>,
+          <code>Kanal</code>, <code>Menejer</code>.</p>
+        <div class="row" style="gap:10px;margin-bottom:16px">
+          <button class="primary" onclick="$('impFile').click()">Fayl tanlash</button>
+          <button onclick="ctemplate()">Namuna fayl</button>
+          <input id="impFile" type="file" accept=".xlsx,.csv,.txt" style="display:none"
+                 onchange="cpick(this)">
+        </div>
+        <div id="impOut"></div>
+
+        <p class="muted" style="margin:18px 0 14px;font-size:13px">Yoki qo'lda:
+          har qator bitta mijoz, maydonlar nuqtali vergul bilan ajratiladi:<br>
           <code>Mijoz nomi ; Respublika ; Region ; Tel raqami ; Kanal ; Savdo menejeri</code></p>
         <p class="muted" style="margin-bottom:14px;font-size:13px">Respublika bo'sh
           qoldirilsa O'zbekiston deb olinadi.</p>
@@ -210,6 +222,82 @@ function openImport(){
 Mebel Savdo MCHJ ; Qozog'iston ; Almati ; +77015554433 ; EXPORT ; Jomonqulov Shamshod"></textarea>
         <button class="primary" style="width:100%;margin-top:14px" onclick="runImport()">Import qilish</button>
       </div></div>`;
+}
+
+// ────────────────────────────────────────────────── FAYLDAN
+//  Qo'lda kiritish ustunlar TARTIBIGA bog'liq: zavodning Excel'i esa o'z
+//  tartibida keladi va uni qayta chizish 200 qatorda bir soat. Fayl esa
+//  sarlavhasiga qarab o'qiladi.
+//
+//  Ikki bosqich, qoldiq yuklash bilan bir xil sababdan: avval nima
+//  kirishini ko'rsatadi, xato bo'lsa hech narsa saqlanmaydi.
+let cpicked = null;
+
+function ctemplate() {
+  const head = ['Mijoz nomi', 'Tel raqami', 'Davlat', 'Region', 'Kanal',
+                'Savdo menejeri', 'Izoh'];
+  const rows = [
+    ['Sardor Alimov', '+998901112233', "O'zbekiston", 'Toshkent shahri', 'B2C', '', ''],
+    ['Mebel Savdo MCHJ', '+77015554433', 'Qozog\'iston', 'Almati', 'EXPORT', '', ''],
+  ];
+  const csv = '\uFEFF' + [head, ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'),
+                          { href: url, download: 'mijozlar-namuna.csv' });
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function cpick(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  cpicked = file;
+  $('impOut').innerHTML = `<p class="muted">Tekshirilmoqda\u2026</p>`;
+  try { cshow(await App.upload('/api/import/customers', file), file.name); }
+  catch (e) { $('impOut').innerHTML =
+    `<p class="tag bad" style="display:block">${esc(e.message)}</p>`; }
+}
+
+function cshow(r, filename) {
+  const bad = r.rows.filter(x => x.errors.length);
+  $('impOut').innerHTML = `
+    <div class="card" style="padding:14px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <b>${esc(filename)}</b>
+        <span class="muted" style="font-size:13px">${r.total} qator \u00b7
+          ${r.updates} tasi mavjud mijoz</span>
+      </div>
+      ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
+        Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+      ${bad.length ? `
+        <div style="max-height:30vh;overflow:auto;margin-bottom:10px">
+          <table><tbody>${bad.map(x => `
+            <tr><td style="width:70px" class="muted">${x.line}-qator</td>
+                <td>${esc(x.errors.join(' \u00b7 '))}</td></tr>`).join('')}</tbody></table>
+        </div>
+        <p class="muted" style="font-size:13px">${r.bad} ta qatorda xato bor.
+          Faylni tuzatib qaytadan tanlang \u2014 xato qator bo'lsa hech narsa
+          saqlanmaydi.</p>`
+      : `<p class="muted" style="font-size:13px;margin-bottom:12px">Hamma qator to'g'ri.${
+          r.updates ? ` Mavjud ${r.updates} ta mijozning faqat bo'sh maydonlari
+          to'ldiriladi \u2014 yozilgani o'chmaydi.` : ''}</p>
+        <button class="primary" id="cSave" onclick="csave()" style="width:100%"
+          >${r.total} ta mijozni saqlash</button>`}
+    </div>`;
+}
+
+async function csave() {
+  $('cSave').disabled = true;
+  try {
+    const r = await App.upload('/api/import/customers?save=1', cpicked);
+    close_(); await load();
+    alert(`${r.saved} ta mijoz kiritildi.` +
+          (r.updated ? ` Shundan ${r.updated} tasi yangilandi.` : ''));
+  } catch (e) {
+    alert(e.message);
+    const b = $('cSave'); if (b) b.disabled = false;
+  }
 }
 
 async function runImport(){

@@ -19,7 +19,7 @@ const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
 const { readSheet } = require('../xlsx');
-const { createOne } = require('./units');
+const { createOne, refreshStock } = require('./units');
 
 const router = express.Router();
 const UNITS = ['production.units', 'production.manage'];
@@ -51,6 +51,12 @@ const FIELDS = {
   unit_price:  ['narx', 'narxi', 'price', 'цена'],
   started_on:  ['boshsana', 'sana', 'boshlanishsanasi', 'дата', 'датаначала'],
   is_stock:    ['zahira', 'zaxira', 'запас', 'резерв'],
+  // Omborga kirgan sana bo'lsa, konver ishlab chiqarishda emas, T/M
+  // omborda turibdi degani: qoldiqqa tushadi va jurnalda ko'rinmaydi.
+  fg_on:       ['omborgakirgan', 'omborgakirgansana', 'omborgakirgansanasi',
+                'omborsana', 'omborsanasi', 'tmombor', 'tmomborsana',
+                'tmomborsanasi', 'qabulqilingansana', 'qabulsana',
+                'датаприемки', 'приемка', 'наскладе', 'складсана'],
   note:        ['izoh', 'izohi', 'примечание', 'комментарий'],
 };
 
@@ -228,6 +234,14 @@ function buildRow(cells, map, ref, seen) {
     else { it.started_on = d; it.entered_section_on = d; }
   }
 
+  // Omborga kirgan sana: shu qator ishlab chiqarishda emas, omborda.
+  const fg = at('fg_on');
+  if (fg) {
+    const d = toDate(fg);
+    if (d === undefined) errors.push(`Omborga kirgan sanani tanib bo'lmadi: «${fg}»`);
+    else it.fg_on = d;
+  }
+
   const cust = at('customer');
   if (cust) {
     const id = ref.byCustomer.get(norm(cust));
@@ -297,6 +311,7 @@ router.post('/units', need(...UNITS),
         unknown,
         total: rows.length,
         bad: bad.length,
+        to_stock: rows.filter((r) => r.it.fg_on).length,
         new_customers: newCustomers,
         rows: rows.slice(0, 200),
       });
@@ -330,17 +345,32 @@ router.post('/units', need(...UNITS),
       }
 
       const created = [];
+      // Omborga tushgan konverlar qoldig'i har mahsulot uchun bir marta,
+      // hammasi kiritilgach qayta sanaladi.
+      const stockProducts = new Set();
       for (const r of rows) {
         if (r.it.new_customer) r.it.customer_id = added.get(r.it.new_customer);
-        created.push(await createOne(client, req, r.it));
+        const u = await createOne(client, req, r.it);
+        created.push(u);
+        if (r.it.fg_on) {
+          // Boshlang'ich qoldiqda topshirish-qabul qilish bo'lmaydi: mahsulot
+          // tizim ishga tushgunga qadar omborga kirgan, uni qayta «jo'natdim →
+          // qabul qildim» qilish kerak emas.
+          await client.query(
+            `UPDATE production_units SET status = 'fg', fg_on = $2 WHERE id = $1`,
+            [u.id, r.it.fg_on]);
+          stockProducts.add(r.it.product_id);
+        }
       }
+      for (const pid of stockProducts) await refreshStock(client, pid);
 
       await audit(req, { module: 'production', action: 'import', entity: 'units',
                          entity_id: created.length,
                          payload: { count: created.length, customers: newCustomers.length } },
                   client);
       await client.query('COMMIT');
-      res.json({ saved: created.length, customers: newCustomers.length, created });
+      res.json({ saved: created.length, customers: newCustomers.length,
+                 to_stock: rows.filter((r) => r.it.fg_on).length, created });
     } catch (e) {
       await client.query('ROLLBACK');
       if (e.code === '23505') {
@@ -351,6 +381,152 @@ router.post('/units', need(...UNITS),
     } finally {
       client.release();
     }
+  }));
+
+// ════════════════════════════════════════════════ MIJOZLAR RO'YXATI FAYLDAN
+//
+//  Mijozlar sahifasidagi qo'lda kiritish ustunlar TARTIBIGA bog'liq edi:
+//  zavodning Excel'i esa o'z tartibida. Shuning uchun bu yerda ham ustun
+//  nomiga qarab moslashadi va xuddi qoldiq kabi ikki bosqichda ishlaydi:
+//  avval ko'rib chiqish, keyin — hammasi to'g'ri bo'lsa — saqlash.
+//
+//  Takror nom xato emas: mavjud mijozning bo'sh maydonlari to'ldiriladi
+//  (qo'lda kiritish ham shunday ishlaydi). Aks holda ro'yxatni ikkinchi
+//  marta yuklab bo'lmasdi.
+const CFIELDS = {
+  name:    ['mijoz', 'mijoznomi', 'nomi', 'nom', 'klient', 'xaridor', 'firma',
+            'tashkilot', 'клиент', 'покупатель', 'наименование', 'фио'],
+  phone:   ['tel', 'telefon', 'telraqami', 'telefonraqami', 'raqam', 'nomer',
+            'телефон', 'номертелефона'],
+  country: ['davlat', 'respublika', 'mamlakat', 'страна', 'республика'],
+  region:  ['region', 'viloyat', 'shahar', 'hudud', 'регион', 'область', 'город'],
+  channel: ['kanal', 'manba', 'mijozturi', 'tur', 'канал', 'источник', 'тип'],
+  manager: ['menejer', 'savdomenejeri', 'masul', 'masuli', 'менеджер'],
+  note:    ['izoh', 'izohi', 'примечание', 'комментарий'],
+};
+
+router.post('/customers', need('production.units', 'sales.manage', 'production.manage'),
+  express.raw({ type: '*/*', limit: '10mb' }),
+  wrap(async (req, res) => {
+    const buf = req.body;
+    if (!buf || !buf.length) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    let table;
+    try {
+      table = isXlsx(buf) ? readSheet(buf) : parseCsv(buf.toString('utf8'));
+    } catch (e) {
+      e.status = 400; e.message = 'Faylni o\'qib bo\'lmadi: ' + e.message; throw e;
+    }
+
+    const headIdx = table.findIndex((r) => r.some((c) => String(c).trim()));
+    if (headIdx < 0) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    const map = {}, unknown = [];
+    table[headIdx].forEach((h, i) => {
+      const n = norm(h);
+      if (!n) return;
+      const f = Object.keys(CFIELDS).find((k) => CFIELDS[k].includes(n));
+      if (f) { if (map[f] == null) map[f] = i; } else unknown.push(String(h).trim());
+    });
+    if (map.name == null) {
+      const e = new Error(
+        'Mijoz nomi ustuni topilmadi. Sarlavhada «Mijoz» yoki «Nomi» bo\'lishi kerak. ' +
+        'Topilgan ustunlar: ' + table[headIdx].filter(Boolean).join(', '));
+      e.status = 400; throw e;
+    }
+
+    const [ch, wk, cur] = await Promise.all([
+      db.query(`SELECT code, name FROM customer_channels`),
+      db.query(`SELECT id, name FROM workers WHERE active`),
+      db.query(`SELECT name FROM customers`),
+    ]);
+    // Kanal kodi bilan ham, nomi bilan ham yozilishi mumkin: zavod
+    // faylida «Instagram» deb turadi, kodda esa INSTAGRAM.
+    const byChannel = new Map();
+    for (const c of ch.rows) { byChannel.set(norm(c.code), c.code); byChannel.set(norm(c.name), c.code); }
+    const byWorker = new Map(wk.rows.map((w) => [norm(w.name), w.id]));
+    const existing = new Set(cur.rows.map((c) => norm(c.name)));
+
+    const seen = new Set();
+    const rows = [];
+    for (let i = headIdx + 1; i < table.length; i++) {
+      const cells = table[i];
+      if (!cells.some((c) => String(c).trim())) continue;
+      const at = (f) => (map[f] == null ? '' : String(cells[map[f]] ?? '').trim());
+      const errors = [];
+      const it = {};
+
+      const name = at('name');
+      if (!name) errors.push('Mijoz nomi bo\'sh');
+      else if (seen.has(norm(name))) errors.push(`Faylda takrorlangan: «${name}»`);
+      else seen.add(norm(name));
+      it.name = name;
+
+      const chn = at('channel');
+      if (chn) {
+        const code = byChannel.get(norm(chn));
+        if (!code) errors.push(`Bunday kanal yo'q: «${chn}». Bor: ` +
+          ch.rows.map((c) => c.code).join(', '));
+        else it.channel = code;
+      }
+
+      const mgr = at('manager');
+      if (mgr) {
+        const id = byWorker.get(norm(mgr));
+        if (id == null) errors.push(`Bunday xodim yo'q: «${mgr}». ` +
+          'Avval Xodimlar sahifasida qo\'shing');
+        else it.manager_id = id;
+      }
+
+      it.phone   = at('phone')   || null;
+      it.country = at('country') || null;
+      it.region  = at('region')  || null;
+      it.note    = at('note')    || null;
+      rows.push({ line: i + 1, it, errors, exists: existing.has(norm(name)) });
+    }
+    if (!rows.length) { const e = new Error('Faylda qator yo\'q'); e.status = 400; throw e; }
+
+    const bad = rows.filter((r) => r.errors.length);
+
+    if (req.query.save !== '1') {
+      return res.json({
+        preview: true, columns: Object.keys(map), unknown,
+        total: rows.length, bad: bad.length,
+        updates: rows.filter((r) => r.exists).length,
+        rows: rows.slice(0, 200),
+      });
+    }
+    if (bad.length) {
+      const e = new Error(`${bad.length} ta qatorda xato bor — saqlanmadi`);
+      e.status = 400; throw e;
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      for (const r of rows) {
+        await client.query(
+          `INSERT INTO customers (name, phone, country, region, channel, manager_id, note)
+           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7)
+           ON CONFLICT (lower(name)) DO UPDATE SET
+             phone      = COALESCE(EXCLUDED.phone,      customers.phone),
+             country    = COALESCE(EXCLUDED.country,    customers.country),
+             region     = COALESCE(EXCLUDED.region,     customers.region),
+             channel    = COALESCE(EXCLUDED.channel,    customers.channel),
+             manager_id = COALESCE(EXCLUDED.manager_id, customers.manager_id),
+             note       = COALESCE(EXCLUDED.note,       customers.note)`,
+          [r.it.name, r.it.phone, r.it.country, r.it.region,
+           r.it.channel || null, r.it.manager_id || null, r.it.note]);
+      }
+      await audit(req, { module: 'sales', action: 'import', entity: 'customers',
+                         entity_id: rows.length, payload: { count: rows.length } }, client);
+      await client.query('COMMIT');
+      res.json({ saved: rows.length, updated: rows.filter((r) => r.exists).length });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (!e.status) e.status = 400;
+      throw e;
+    } finally { client.release(); }
   }));
 
 module.exports = router;

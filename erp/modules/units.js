@@ -1417,3 +1417,7 @@ module.exports = router;
 // Excel'dan yuklash shu funksiyani chaqiradi (modules/import.js) — qo'lda
 // kiritilgan qator bilan yuklangan qator bir xil yo'ldan o'tsin.
 module.exports.createOne = createOne;
+// Boshlang'ich qoldiqni fayldan yuklashda T/M omborga tushgan konver
+// uchun kerak (modules/import.js). Qoldiq ± bilan emas, har safar
+// konverlardan qayta sanaladi — shu sabab bitta funksiya.
+module.exports.refreshStock = refreshStock;

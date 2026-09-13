@@ -7,7 +7,7 @@
 <!-- Telefonga o'rnatiladigan ilova: bosh ekranda ZELTA belgisi, brauzer
      paneli ko'rinmaydi. Oddiy havola bo'lib ochilishi ham buzilmaydi. -->
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#f5f6f8">
+<meta name="theme-color" content="#f3f2ef">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -34,6 +34,12 @@
     lekin hali hech bir bo'limda turmaydi — konveyerga chiqqanda jurnaldan
     o'tkaziladi. Qadoqlash bo'limi tanlansa konver darrov T/M omboriga tushadi.
     Zakaz, mijoz va narx keyin ham qo'yilishi mumkin — jurnal sahifasidan.</p>
+  <p class="muted" style="margin-top:8px;font-size:13px">
+    <strong>T/M omborda turgan mahsulot</strong> fayldan yuklanadi:
+    <strong>Omborga kirgan</strong> ustuniga sana qo'yiladi va bo'lim bo'sh
+    qoldiriladi. Bunday konver ishlab chiqarish jurnalida emas, ombor
+    qoldig'ida turadi — u yerdan sotiladi. Namuna faylda uchinchi qator
+    shunday.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Zahira</strong> — belgilansa qadoqlash va T/M ombor kataklarida
     sana o'rniga <strong>zahira</strong> so'zi turadi: mahsulot rang sepishda
@@ -337,10 +343,14 @@ let picked = null;
 function template() {
   const head = ["Konveyer \u2116", 'Maxsulot guruhi', 'Maxsulot nomi', 'Soni',
                 "Bo'lim", 'Rang', 'Mato', "Zakaz \u2116", 'Mijoz nomi', 'Narx',
-                'Bosh sana', 'Zahira'];
+                'Bosh sana', 'Zahira', 'Omborga kirgan'];
+  // Uchinchi qator — T/M omborda turgan mahsulot: bo'lim emas, omborga
+  // kirgan sana yoziladi. Shu ustun to'ldirilsa konver ishlab chiqarish
+  // jurnalida emas, ombor qoldig'ida paydo bo'ladi.
   const rows = [
-    ['', 'Penal', 'Milano', '1', 'Arra', 'Oq', '', '', '', '', '', ''],
-    ['', 'Stul',  'Laura',  '6', 'Rang sepish', "Yong'oq", 'Velur', '', '', '', '', 'ha'],
+    ['', 'Penal', 'Milano', '1', 'Arra', 'Oq', '', '', '', '', '', '', ''],
+    ['', 'Stul',  'Laura',  '6', 'Rang sepish', "Yong'oq", 'Velur', '', '', '', '', 'ha', ''],
+    ['', 'Penal', 'Almaz',  '1', '', 'Venge', '', '', '', '320', '', '', '2026-09-01'],
   ];
   const csv = '\uFEFF' + [head, ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -378,6 +388,8 @@ function showImport(r, filename) {
           <div class="card"><h2>Xato</h2><div class="kpi"
             style="${bad.length ? 'color:var(--bad)' : ''}">${r.bad}</div></div>
           <div class="card"><h2>Yangi mijoz</h2><div class="kpi">${newC.length}</div></div>
+          ${r.to_stock ? `<div class="card"><h2>T/M omborga</h2>
+            <div class="kpi">${r.to_stock}</div></div>` : ''}
         </div>
 
         ${r.unknown.length ? `<p class="muted" style="font-size:13px;margin-bottom:12px">
@@ -400,7 +412,9 @@ function showImport(r, filename) {
                 <div class="muted" style="font-size:12px">${esc(newC.join(', '))}</div></span>
             </div>` : ''}
           <p class="muted" style="font-size:13px;margin-bottom:14px">
-            Hamma qator to'g'ri. Saqlangach jurnal sahifasida ko'rinadi.</p>
+            Hamma qator to'g'ri. Saqlangach jurnal sahifasida ko'rinadi${
+              r.to_stock ? `, «Omborga kirgan» sanasi qo'yilgan ${r.to_stock} tasi esa
+              T/M ombor qoldig'ida` : ''}.</p>
           <button class="primary" id="impSave" onclick="saveImport()"
             style="width:100%">${r.total} ta qatorni saqlash</button>`}
       </div>
@@ -416,6 +430,7 @@ async function saveImport() {
     const r = await App.upload('/api/import/units?save=1' + newC, picked);
     closeImport();
     alert(`${r.saved} ta konver kiritildi.` +
+          (r.to_stock ? ` Shundan ${r.to_stock} tasi T/M omborda.` : '') +
           (r.customers ? ` ${r.customers} ta yangi mijoz qo'shildi.` : ''));
     nextNo = await App.api('/api/units/next-no');
   } catch (e) {

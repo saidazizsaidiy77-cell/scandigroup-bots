@@ -296,6 +296,89 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   assert.equal(none.body.total.units, 0);
 });
 
+const post = (path, csv) => fetch(base + path, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/octet-stream',
+             Authorization: 'Bearer ' + tokenAdmin },
+  body: Buffer.from('\uFEFF' + csv.join('\r\n'), 'utf8'),
+});
+
+test('fayldan yuklash: «Omborga kirgan» sanasi konverni T/M omborga qo\'yadi', async () => {
+  const csv = [
+    "Maxsulot guruhi;Maxsulot nomi;Soni;Bo'lim;Konveyer \u2116;Rang;Omborga kirgan",
+    'Penal;Milano;1;Arra;IMP-W1;Oq;',                 // ishlab chiqarishda
+    'Penal;Milano;2;;IMP-W2;Venge;2026-09-01',        // omborda
+  ];
+  const pre = await (await post('/api/import/units', csv)).json();
+  assert.equal(pre.bad, 0, JSON.stringify(pre.rows));
+  assert.equal(pre.to_stock, 1, 'ko\'rib chiqishda nechtasi omborga tushishi ko\'rinadi');
+
+  const saved = await (await post('/api/import/units?save=1', csv)).json();
+  assert.equal(saved.saved, 2);
+  assert.equal(saved.to_stock, 1);
+
+  const w1 = await H.id(`SELECT status, fg_on FROM production_units WHERE conveyor_no='IMP-W1'`);
+  const w2 = await H.id(`SELECT status, to_char(fg_on, 'YYYY-MM-DD') AS fg_on,
+                                current_section_id
+                           FROM production_units WHERE conveyor_no='IMP-W2'`);
+  assert.equal(w1.status, 'production');
+  assert.equal(w2.status, 'fg', 'sana qo\'yilgan qator omborga tushadi');
+  assert.equal(w2.fg_on, '2026-09-01');
+  assert.equal(w2.current_section_id, null, 'omborda bo\'lim bo\'lmaydi');
+
+  // Jurnalda ko'rinmaydi, ombor qoldig'ida ko'rinadi
+  assert.equal((await admin('GET', '/api/units/?conveyor_no=IMP-W2')).body.length, 0);
+  const sum = await admin('GET', '/api/warehouse/fg/summary?q=IMP-W2');
+  assert.equal(sum.body.total.units, 1);
+  assert.equal(sum.body.total.qty, 2);
+
+  // fg_stock ham qayta sanalgan
+  assert.ok((await H.id(`SELECT qty FROM fg_stock WHERE product_id=$1`, [PENAL])).qty >= 2);
+});
+
+test('mijozlarni fayldan yuklash: notanish kanal butun faylni to\'xtatadi', async () => {
+  const bad = [
+    'Mijoz nomi;Tel raqami;Region;Kanal',
+    'Sinov Mijoz Bir;+998901112233;Toshkent;B2C',
+    'Sinov Mijoz Ikki;+998901112244;Samarqand;YO\'QKANAL',
+  ];
+  const pre = await (await post('/api/import/customers', bad)).json();
+  assert.equal(pre.total, 2);
+  assert.equal(pre.bad, 1);
+  assert.match(pre.rows[1].errors[0], /kanal yo'q/);
+
+  assert.equal((await post('/api/import/customers?save=1', bad)).status, 400);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM customers WHERE name LIKE 'Sinov Mijoz%'`)).n, 0,
+    'xato bo\'lsa bitta mijoz ham kirmaydi');
+
+  // Tuzatilgach kiradi, ustunlar tartibi boshqacha bo'lsa ham
+  const ok = [
+    'Kanal;Mijoz nomi;Region;Tel raqami',
+    'B2C;Sinov Mijoz Bir;Toshkent;+998901112233',
+    'Instagram;Sinov Mijoz Ikki;Samarqand;',
+  ];
+  const done = await (await post('/api/import/customers?save=1', ok)).json();
+  assert.equal(done.saved, 2);
+  const c = await H.id(`SELECT channel, region, phone FROM customers WHERE name='Sinov Mijoz Bir'`);
+  assert.equal(c.channel, 'B2C');
+  assert.equal(c.region, 'Toshkent');
+
+  // Qayta yuklash: mavjud mijozning yozilgani o'chmaydi, bo'sh maydon to'ladi
+  const again = [
+    'Mijoz nomi;Tel raqami;Izoh',
+    'Sinov Mijoz Ikki;+998901112255;Ikkinchi yuklash',
+  ];
+  const r2 = await (await post('/api/import/customers?save=1', again)).json();
+  assert.equal(r2.updated, 1);
+  const c2 = await H.id(`SELECT channel, region, phone, note FROM customers
+                          WHERE name='Sinov Mijoz Ikki'`);
+  assert.equal(c2.channel, 'INSTAGRAM', 'oldingi kanal saqlanadi');
+  assert.equal(c2.region, 'Samarqand');
+  assert.equal(c2.phone, '+998901112255', 'bo\'sh maydon to\'ldiriladi');
+  assert.equal(c2.note, 'Ikkinchi yuklash');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

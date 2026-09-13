@@ -7,7 +7,7 @@
 <!-- Telefonga o'rnatiladigan ilova: bosh ekranda ZELTA belgisi, brauzer
      paneli ko'rinmaydi. Oddiy havola bo'lib ochilishi ham buzilmaydi. -->
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#f5f6f8">
+<meta name="theme-color" content="#f3f2ef">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -190,6 +190,8 @@ function drawStock() {
         <button onclick="period2(30)">30 kun</button>
         <button onclick="clearStock()">Tozalash</button>
         <button onclick="exportStock()">Excelga yuklash</button>
+        ${App.can('production.units', 'production.manage')
+          ? `<button onclick="location.href='/qoldiq.html'">Fayldan kiritish</button>` : ''}
       </div>
     </div>
 
