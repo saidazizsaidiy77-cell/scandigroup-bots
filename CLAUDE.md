@@ -152,6 +152,19 @@ npm run erp:migrate && npm run erp:migrate && npm run erp:migrate
 
 ---
 
+## Keyingi qadamlar
+
+Tartib muhim: modul ma'lumotsiz ishga tushmaydi, ma'lumot esa zavoddan
+keladi. Shuning uchun avval kiritish, keyin modul.
+
+1. **T/M ombor qoldig'i** — omborda hozir turgan mahsulotlar: konveyer
+   raqami, mahsulot, soni, rangi, matosi, omborga kirgan sanasi.
+2. **Mijozlar bazasi** — nomi, telefoni, regioni, kanali.
+   (Ikkalasi ham Excel'da bo'lsa yuklash yoziladi, qo'lda terilmaydi.)
+3. **Savdo** — buyurtma va jo'natma. 1-2 siz boshlanmaydi: sotuvchi
+   buyurtmani mijozsiz ham, ombordagi mahsulotsiz ham yoza olmaydi.
+4. **Kassa** — kirim hujjatlari. Mahsulot narxi `$`, harajat `so'm` ham.
+
 ## Ochiq savollar — zavoddan javob kutilmoqda
 
 Bular hal bo'lmaguncha tegishli kod YOZILMAYDI: javobsiz taxmin qilib
@@ -169,11 +182,19 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
   bo'lmaydi.
 
+**Omborlar ro'yxati**
+- Zavodda yana qanday omborlar bor? Hozir ikkitasi: tayyor mahsulot
+  (ishlayapti) va xom ashyo (rejada).
+
 **Savdo moduli**
 - Buyurtma qabul qilishda nima yoziladi?
 - Buyurtma qanday bajariladi — T/M ombordan olinadimi yoki yangi konver
   ochiladimi? Bitta buyurtmada bir nechta mahsulot bo'ladimi?
 - Jo'natishda nima yoziladi (mashina, hujjat, kim olib ketdi)?
+
+**Kassa**
+- Kirim hujjatida nima bo'ladi — kimdan, qaysi buyurtma uchun, valyuta,
+  kurs, to'lov turi (naqd / plastik / o'tkazma)?
 
 ---
 
