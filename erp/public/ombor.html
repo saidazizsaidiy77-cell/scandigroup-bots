@@ -23,6 +23,7 @@
   <div class="row" id="erpUser"></div>
 </div>
 
+<div class="row" id="tabs" style="margin-bottom:16px;gap:8px;flex-wrap:wrap"></div>
 <div id="body"></div>
 
 <script>
@@ -43,8 +44,25 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-let rows = [], canAccept = false;
+let rows = [], canAccept = false, tab = 'inbox';
 const picked = new Set();
+const pad = n => String(n).padStart(2, '0');
+const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
+
+const TABS = [['inbox', 'Qabul qilish'], ['stock', 'Qoldiq'], ['moves', 'Harakat']];
+function drawTabs() {
+  $('tabs').innerHTML = TABS.map(([k, t]) =>
+    `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}</button>`).join('');
+}
+async function go(k) {
+  tab = k; drawTabs();
+  $('body').innerHTML = `<p class="muted">Yuklanmoqda…</p>`;
+  if (k === 'inbox') return load();
+  if (k === 'stock') return loadStock();
+  return loadMoves();
+}
 
 function toast(msg, bad) {
   const el = document.createElement('div');
@@ -128,8 +146,159 @@ async function load() {
   draw();
 }
 
+// ═══════════════════════════════════════════════════════════ QOLDIQ
+//
+//  Ro'yxat BIRLIKLARDAN iborat, dona yig'indisidan emas. Zavod uchun
+//  konveyer raqami mezon: shikoyat kelganda, oylik hisoblashda va xom
+//  ashyoda javob shu raqamdan topiladi — demak omborda ham u ko'rinib
+//  turishi kerak.
+let stock = null;
+
+function stockParams() {
+  const p = new URLSearchParams();
+  const q = $('sQ')?.value.trim();     if (q) p.set('q', q);
+  const f = $('sFrom')?.value;         if (f) p.set('from', f);
+  const t = $('sTo')?.value;           if (t) p.set('to', t);
+  return p.toString();
+}
+
+function drawStock() {
+  const d = stock;
+  const jami = d.groups.reduce((n, g) => n + g.qty, 0);
+  $('body').innerHTML = `
+    <div class="card">
+      <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <div style="flex:1;min-width:180px"><label>Qidiruv</label>
+          <input id="sQ" placeholder="konveyer \u2116, maxsulot, zakaz" value="${esc(d.q || '')}"
+                 oninput="debStock()"></div>
+        <div><label>Omborga kirgan, dan</label>
+          <input id="sFrom" type="date" value="${d.from || ''}" onchange="loadStock()"></div>
+        <div><label>gacha</label>
+          <input id="sTo" type="date" value="${d.to || ''}" onchange="loadStock()"></div>
+        <button onclick="clearStock()">Tozalash</button>
+        <button onclick="exportStock()">Excelga yuklash</button>
+      </div>
+    </div>
+
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card"><h2>Omborda</h2><div class="kpi">${d.rows.length}<small> birlik</small></div></div>
+      <div class="card"><h2>Jami dona</h2><div class="kpi">${jami}</div></div>
+      <div class="card"><h2>Guruhlar</h2>
+        <div style="margin-top:6px">${d.groups.map(g =>
+          `<div class="row" style="justify-content:space-between;font-size:13px">
+             <span>${esc(g.product_type)}</span><b>${g.qty}</b></div>`).join('') ||
+          '<span class="muted">—</span>'}</div></div>
+    </div>
+
+    ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
+      <p class="muted" style="margin-top:8px">Qabul qilingan mahsulot shu yerda turadi.</p></div>`
+    : `<div class="card" style="margin-top:16px">
+      <div style="overflow:auto;max-height:64vh">
+      <table class="board">
+        <thead><tr>
+          <th class="c-no">Konveyer &#8470;</th><th class="c-name">Nomi</th>
+          <th class="c-type">Turi</th><th class="c-qty num">Soni</th>
+          <th>Rang</th><th>Kirgan</th><th class="num">Kun</th><th>Mijoz</th>
+        </tr></thead>
+        <tbody>${d.rows.map(r => `
+          <tr>
+            <td class="c-no"><b>${esc(r.conveyor_no)}</b>${r.order_no
+              ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}</div>` : ''}</td>
+            <td class="c-name">${esc(r.product)}</td>
+            <td class="c-type muted">${esc(r.product_type || '')}</td>
+            <td class="c-qty num">${r.qty}</td>
+            <td class="muted">${esc(r.color || '—')}</td>
+            <td>${d8(r.fg_on)}</td>
+            <td class="num ${r.days_in_stock > 30 ? 'muted' : ''}">${r.days_in_stock ?? ''}</td>
+            <td class="muted">${esc(r.customer_name || 'T/M ombor')}</td>
+          </tr>`).join('')}</tbody>
+      </table></div></div>`}`;
+}
+
+let t1 = null;
+const debStock = () => { clearTimeout(t1); t1 = setTimeout(loadStock, 350); };
+function clearStock() { ['sQ','sFrom','sTo'].forEach(i => { if ($(i)) $(i).value = ''; }); loadStock(); }
+const exportStock = () => App.download('/api/units/stock/export?' + stockParams(),
+  `tm-ombor-${isoDay(new Date())}.csv`);
+
+async function loadStock() {
+  const q = stockParams();
+  const focus = document.activeElement?.id;
+  const d = await App.api('/api/units/stock' + (q ? '?' + q : ''));
+  const p = new URLSearchParams(q);
+  stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to') };
+  drawStock();
+  if (focus && $(focus)) { $(focus).focus(); if ($(focus).setSelectionRange)
+    $(focus).setSelectionRange(9999, 9999); }
+}
+
+// ═══════════════════════════════════════════════════════════ HARAKAT
+//
+//  Kirim — ombor qabul qilgani, chiqim — mijozga chiqqani. Chiqim savdo
+//  moduli ulanmaguncha bo'sh keladi; ko'rinish shundan qat'i nazar tayyor
+//  turadi, savdo ulanganda o'zi to'ladi.
+let moves = null;
+
+function drawMoves() {
+  const d = moves;
+  $('body').innerHTML = `
+    <div class="card">
+      <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <div><label>Sanadan</label>
+          <input id="mFrom" type="date" value="${d.from}" onchange="loadMoves()"></div>
+        <div><label>Sanagacha</label>
+          <input id="mTo" type="date" value="${d.to}" onchange="loadMoves()"></div>
+        <button onclick="period(0)">Bugun</button>
+        <button onclick="period(7)">7 kun</button>
+        <button onclick="period(30)">30 kun</button>
+      </div>
+    </div>
+
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card"><h2>Kirim</h2><div class="kpi" style="color:var(--ok)">${d.kirim}<small> dona</small></div></div>
+      <div class="card"><h2>Chiqim</h2><div class="kpi">${d.chiqim}<small> dona</small></div></div>
+      <div class="card"><h2>Farqi</h2><div class="kpi">${d.kirim - d.chiqim}<small> dona</small></div></div>
+    </div>
+
+    ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Harakat yo'q</h2>
+      <p class="muted" style="margin-top:8px">Tanlangan oraliqda omborga kirim ham,
+      undan chiqim ham bo'lmagan.</p></div>`
+    : `<div class="card" style="margin-top:16px">
+      <table class="board"><thead><tr>
+        <th>Sana</th><th>Amal</th><th class="c-no">Konveyer &#8470;</th>
+        <th class="c-name">Nomi</th><th class="c-qty num">Soni</th><th>Mijoz</th>
+      </tr></thead>
+      <tbody>${d.rows.map(r => `
+        <tr>
+          <td>${d8(r.on_date)}</td>
+          <td><span class="tag ${r.kind === 'kirim' ? 'ok' : ''}">${r.kind}</span></td>
+          <td class="c-no"><b>${esc(r.conveyor_no)}</b></td>
+          <td class="c-name">${esc(r.product)}<div class="muted"
+            style="font-size:12px">${esc(r.product_type || '')}</div></td>
+          <td class="c-qty num">${r.qty}</td>
+          <td class="muted">${esc(r.customer_name)}</td>
+        </tr>`).join('')}</tbody></table></div>`}`;
+}
+
+function period(days) {
+  const to = new Date();
+  const from = new Date(Date.now() - days * 864e5);
+  $('mFrom').value = isoDay(from);
+  $('mTo').value = isoDay(to);
+  loadMoves();
+}
+
+async function loadMoves() {
+  const p = new URLSearchParams();
+  p.set('from', $('mFrom')?.value || isoDay(new Date(Date.now() - 7 * 864e5)));
+  p.set('to', $('mTo')?.value || isoDay(new Date()));
+  moves = await App.api('/api/units/stock/moves?' + p);
+  drawMoves();
+}
+
 App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
+  drawTabs();
   await load();
 }, 'warehouse.view', 'production.view');
 </script>

@@ -136,6 +136,23 @@ function groupIds(q) {
   return ids.length ? ids : null;
 }
 
+// T/M ombor qoldig'ini birliklardan QAYTA HISOBLAYDI.
+//
+//  Oldin qoldiq qo'shib-ayirish bilan yuritilardi (+1 kirganda, −1
+//  chiqqanda). Har qo'shish bir joyda unutilsa yoki ikki marta bajarilsa,
+//  qoldiq birliklardan jimgina ajralib ketardi va buni hech kim sezmasdi.
+//
+//  Endi birliklar yagona haqiqat: qoldiq ularning yig'indisi. Konveyer
+//  raqami zavodning mezoni — qoldiq ham o'sha raqamlardan chiqishi kerak.
+async function refreshStock(client, productId) {
+  await client.query(
+    `INSERT INTO fg_stock (product_id, qty, updated_at)
+     SELECT $1, COALESCE(SUM(qty), 0), NOW()
+       FROM production_units WHERE product_id = $1 AND status = 'fg'
+     ON CONFLICT (product_id) DO UPDATE
+       SET qty = EXCLUDED.qty, updated_at = NOW()`, [productId]);
+}
+
 // Tsex doirasi. Bo'lim boshlig'ida `scope_shop_id` bor — u faqat o'z
 // tsexidagi birlikni ko'radi va o'tkazadi. Admin va ishlab chiqarish
 // boshlig'ida doira yo'q, ya'ni ro'yxat bo'sh — ular hammasini ko'radi.
@@ -409,11 +426,7 @@ async function createOne(client, req, it) {
     await client.query(
       `UPDATE production_units SET fg_on = COALESCE($2::date, CURRENT_DATE) WHERE id = $1`,
       [u.id, it.entered_section_on || null]);
-    await client.query(
-      `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
-       ON CONFLICT (product_id) DO UPDATE
-         SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`,
-      [it.product_id, Number(it.qty) || 1]);
+    await refreshStock(client, it.product_id);
   }
   return u;
 }
@@ -546,12 +559,8 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
                OR note = $3 OR note LIKE $3 || ' ·%'`,
           [req.params.id, nextQty, no]);
 
-        // T/M ombor qoldig'i: birlik omborga tushgan bo'lsa farqi qo'shiladi
-        if (u.status === 'fg') {
-          await client.query(
-            `UPDATE fg_stock SET qty = GREATEST(qty + $2, 0), updated_at = NOW()
-              WHERE product_id = $1`, [u.product_id, nextQty - u.qty]);
-        }
+        // Soni o'zgargani qoldiqni ham o'zgartiradi — birliklardan qayta hisoblanadi
+        if (u.status === 'fg') await refreshStock(client, u.product_id);
         await audit(req, { module: 'production', action: 'qty', entity: 'unit',
                            entity_id: req.params.id,
                            payload: { from: u.qty, to: nextQty } }, client);
@@ -1008,9 +1017,7 @@ async function acceptStock(client, req, unitId, undo) {
       throw new Error(`${u.conveyor_no}: T/M omborda emas`);
     await client.query(
       `UPDATE production_units SET status = 'production', fg_on = NULL WHERE id = $1`, [unitId]);
-    await client.query(
-      `UPDATE fg_stock SET qty = GREATEST(qty - $2, 0), updated_at = NOW()
-        WHERE product_id = $1`, [u.product_id, u.qty]);
+    await refreshStock(client, u.product_id);
     return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: false };
   }
 
@@ -1025,10 +1032,7 @@ async function acceptStock(client, req, unitId, undo) {
     `UPDATE production_units
         SET status = 'fg', fg_on = COALESCE(fg_on, CURRENT_DATE)
       WHERE id = $1`, [unitId]);
-  await client.query(
-    `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
-     ON CONFLICT (product_id) DO UPDATE
-       SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`, [u.product_id, u.qty]);
+  await refreshStock(client, u.product_id);
   return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: true };
 }
 
@@ -1046,6 +1050,90 @@ router.get('/stock/inbox', need('warehouse.view', 'production.view'), wrap(async
       WHERE r.status = 'production' AND u.handover_on IS NOT NULL
       ORDER BY u.handover_on, r.conveyor_no`);
   res.json(rows);
+}));
+
+// ─────────────────────────────────── T/M OMBOR QOLDIG'I — BIRLIK BO'YICHA
+//
+//  «12 dona Milano» degan qoldiq savolga javob bermaydi: mijoz shikoyat
+//  qilganda qaysi konver ekani kerak bo'ladi. Shuning uchun ro'yxat
+//  birliklardan iborat, yig'indi esa ularning ostida turadi.
+const STOCK_SORT = {
+  conveyor_no: 'conveyor_no', product: 'product', product_type: 'product_type',
+  qty: 'qty', fg_on: 'fg_on', customer_name: 'customer_name',
+  days_in_stock: 'days_in_stock', total_amount: 'total_amount',
+};
+
+function stockQuery(q, limit) {
+  const col = STOCK_SORT[q.sort] || 'fg_on';
+  const way = String(q.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  return {
+    text: `SELECT * FROM v_fg_units
+      WHERE ($1::int[] IS NULL OR group_id = ANY($1))
+        AND ($2::int  IS NULL OR customer_id = $2)
+        AND ($3::date IS NULL OR fg_on >= $3)
+        AND ($4::date IS NULL OR fg_on <= $4)
+        AND ($5::text IS NULL OR conveyor_no ILIKE '%' || $5 || '%'
+             OR product ILIKE '%' || $5 || '%' OR sku ILIKE '%' || $5 || '%'
+             OR order_no ILIKE '%' || $5 || '%')
+      ORDER BY ${col} ${way} NULLS LAST, conveyor_no
+      LIMIT ${limit}`,
+    params: [groupIds(q), q.customer_id || null, q.from || null, q.to || null,
+             q.q || null],
+  };
+}
+
+router.get('/stock', need('warehouse.view', 'production.view'), wrap(async (req, res) => {
+  const { text, params } = stockQuery(req.query, 1000);
+  const [rows, groups] = await Promise.all([
+    db.query(text, params),
+    // Guruh bo'yicha yig'indi — ro'yxat uzun bo'lsa ham umumiy manzara
+    db.query(
+      `SELECT product_type, COUNT(*)::int AS units, SUM(qty)::int AS qty
+         FROM v_fg_units GROUP BY product_type ORDER BY product_type`),
+  ]);
+  res.json({ rows: rows.rows, groups: groups.rows });
+}));
+
+router.get('/stock/export', need('warehouse.view', 'production.view'), wrap(async (req, res) => {
+  const { text, params } = stockQuery(req.query, 20000);
+  const { rows } = await db.query(text, params);
+  const cols = [
+    ['Konveyer raqami', (r) => r.conveyor_no],
+    ['Zakaz raqami',    (r) => r.order_no],
+    ['Maxsulot',        (r) => r.product],
+    ['Guruhi',          (r) => r.product_type],
+    ['Rang',            (r) => r.color],
+    ['Mato',            (r) => r.fabric],
+    ['Soni',            (r) => r.qty],
+    ['Omborga kirgan',  (r) => csvDate(r.fg_on)],
+    ['Omborda, kun',    (r) => r.days_in_stock],
+    ['Mijoz',           (r) => r.customer_name],
+    ['Summa, $',        (r) => csvNum(r.total_amount)],
+  ];
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="tm-ombor-${today()}.csv"`);
+  res.send('\uFEFF' + [
+    cols.map(([n]) => csvCell(n)).join(';'),
+    ...rows.map((r) => cols.map(([, get]) => csvCell(get(r))).join(';')),
+  ].join('\r\n') + '\r\n');
+}));
+
+// Kirim va chiqim: sana oralig'i bo'yicha. Chiqim savdo moduli
+// ulanmaguncha bo'sh keladi — ko'rinish tayyor turadi.
+router.get('/stock/moves', need('warehouse.view', 'production.view'), wrap(async (req, res) => {
+  const from = req.query.from || today();
+  const to   = req.query.to || from;
+  const { rows } = await db.query(
+    `SELECT * FROM v_fg_moves
+      WHERE on_date BETWEEN $1::date AND $2::date
+        AND ($3::text IS NULL OR kind = $3)
+      ORDER BY on_date DESC, kind, conveyor_no
+      LIMIT 2000`, [from, to, req.query.kind || null]);
+  res.json({
+    from, to, rows,
+    kirim:  rows.filter((r) => r.kind === 'kirim').reduce((n, r) => n + r.qty, 0),
+    chiqim: rows.filter((r) => r.kind === 'chiqim').reduce((n, r) => n + r.qty, 0),
+  });
 }));
 
 router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(async (req, res) => {
