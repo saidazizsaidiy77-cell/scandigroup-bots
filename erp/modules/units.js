@@ -1012,6 +1012,11 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
             r.section, r.section_id, r.entered_section_on,
             r.is_stock, r.waiting,
+            -- Birlik marshrutida YO'Q bo'limda turibdimi. Marshrut
+            -- o'zgartirilganda shunday birlik qolib ketishi mumkin, va
+            -- unga keyingi qadamni hisoblab bo'lmaydi: "marshrut tugadi"
+            -- deb ko'rsatish esa yolg'on bo'lardi.
+            (r.step_no IS NOT NULL) AS on_route,
             n.section_id AS next_section_id,
             ns.name      AS next_section,
             ns.shop_id   AS next_shop_id,

@@ -91,17 +91,6 @@ UPDATE sections SET is_hold = true
 
 -- ------------------------------------------------------- MARSHRUT SHABLONLARI
 
--- Yordamchi: shablonga bo'limlarni tartib bilan qo'shadi.
--- Yangi fason varianti = shu funksiyaga bitta chaqiruv, kod o'zgarmaydi.
-CREATE OR REPLACE FUNCTION add_route(p_template TEXT, p_sections TEXT[])
-RETURNS void LANGUAGE sql AS $$
-  INSERT INTO route_steps (template_id, section_id, sort)
-  SELECT (SELECT id FROM route_templates WHERE code = p_template), s.id, u.ord
-  FROM unnest(p_sections) WITH ORDINALITY AS u(code, ord)
-  JOIN sections s ON s.code = u.code
-  ON CONFLICT DO NOTHING;
-$$;
-
 INSERT INTO route_templates (line_id, code, name) VALUES
   ((SELECT id FROM lines WHERE code='L1'), 'L1-FULL',   'Korpus mebel · to''liq'),
   ((SELECT id FROM lines WHERE code='L1'), 'L1-NOPAL',  'Korpus mebel · palirovkasiz'),
@@ -111,37 +100,10 @@ INSERT INTO route_templates (line_id, code, name) VALUES
   ((SELECT id FROM lines WHERE code='L2'), 'L2-NOQOP',  'Stul · qoplashsiz')
 ON CONFLICT (code) DO NOTHING;
 
--- Korpus mebel: KORPUS tsexi → UMUMIY BO'YOQLASH → QADOQLASH tsexi
-SELECT add_route('L1-FULL', ARRAY[
-  'KOR-ARRA','KOR-ROVER','KOR-PRESS','KOR-FREZA','KOR-ZBOR','KOR-SHKUR','KOR-KROMK','KOR-PRIS',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-ABOY','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK','BOY-PALIR',
-  'QAD-OYNA','QAD-QAD']);
-
-SELECT add_route('L1-NOPAL', ARRAY[
-  'KOR-ARRA','KOR-ROVER','KOR-PRESS','KOR-FREZA','KOR-ZBOR','KOR-SHKUR','KOR-KROMK','KOR-PRIS',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-ABOY','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK',
-  'QAD-OYNA','QAD-QAD']);
-
-SELECT add_route('L1-NOGLAS', ARRAY[
-  'KOR-ARRA','KOR-ROVER','KOR-PRESS','KOR-FREZA','KOR-ZBOR','KOR-SHKUR','KOR-KROMK','KOR-PRIS',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-ABOY','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK','BOY-PALIR',
-  'QAD-QAD']);
-
-SELECT add_route('L1-BASE', ARRAY[
-  'KOR-ARRA','KOR-ROVER','KOR-PRESS','KOR-FREZA','KOR-ZBOR','KOR-SHKUR','KOR-KROMK','KOR-PRIS',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK',
-  'QAD-QAD']);
-
--- Stul: STUL tsexi → UMUMIY BO'YOQLASH (Aboy/Palirovkasiz) → STUL tsexiga qaytadi
-SELECT add_route('L2-FULL', ARRAY[
-  'STU-ROVER','STU-ZBOR','STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK',
-  'STU-QOPL','STU-QAD']);
-
-SELECT add_route('L2-NOQOP', ARRAY[
-  'STU-ROVER','STU-ZBOR','STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-AST2','BOY-GRUNT','BOY-GRSH','BOY-RANG','BOY-LAK',
-  'STU-QAD']);
+-- Marshrut QADAMLARI shu yerda emas — sql/routes.sql da. Sabab: qadamlar
+-- tartibga bog'liq va bir joyda turishi kerak. Shablonlarning o'zi esa shu
+-- yerda qoladi, chunki mahsulot guruhlari (catalog-groups.sql) ularga
+-- havola qiladi va bu fayl undan oldin ishga tushadi.
 
 -- ----------------------------------------------------------- BRAK SABABLARI
 -- 8-12 tadan oshirmang: uzun ro'yxatdan operator birinchi qatorni tanlaydi.

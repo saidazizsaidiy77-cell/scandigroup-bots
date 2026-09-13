@@ -107,6 +107,8 @@ function row(u, mine) {
   const act = !canMove ? ''
     : mine && leaves
       ? `<span class="muted" style="font-size:12px">${esc(u.next_shop_name)} qabul qiladi</span>`
+      : !u.on_route
+        ? `<span class="tag bad">marshrutda yo'q</span>`
       : !u.next_section_id
         ? `<span class="muted" style="font-size:12px">marshrut tugadi</span>`
         : `<button class="primary" onclick="move(${u.id})">${
