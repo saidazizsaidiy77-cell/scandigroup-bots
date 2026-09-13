@@ -258,7 +258,12 @@ const App = (() => {
       title: 'Omborlar', lead: 'Zavod omborlari',
       text: "Har ombor alohida: tayyor mahsulot, xom ashyo \u00b7 qoldig'i yonida turadi",
       perm: ['warehouse.view', 'production.view'] },
-    { href: '/ombor.html', mod: 'warehouse', nav: 'T/M ombor',
+    // Menyuda ko'rinmaydi: omborga faqat omborlar ro'yxati orqali
+    // kiriladi. Ikki yo'l bo'lsa, ertaga omborlar ko'payganda biri
+    // ikkinchisidan orqada qolardi — menyuda bitta ombor, ro'yxatda
+    // beshta. Sahifa ro'yxatda qoladi: shusiz uning ustida turganda
+    // yuqoridagi "Ombor" bo'limi yonib turmaydi.
+    { href: '/ombor.html', mod: 'warehouse', nav: 'T/M ombor', hidden: true,
       title: 'Tayyor mahsulot ombori', lead: 'Qoldiq va qabul qilish',
       text: "Turi, rangi, matosi bo'yicha qoldiq \u00b7 qatorni ochsa konver raqamlari \u00b7 qadoqlash tsexidan qabul qilish",
       perm: ['warehouse.view', 'production.view'] },
@@ -282,7 +287,10 @@ const App = (() => {
   const hrefFor = (p, code) => Array.isArray(p.mod) ? `${p.href}?m=${code}` : p.href;
 
   // Xodimga ochiq sahifalar
-  const pages = () => PAGES.filter((p) => !p.perm.length || can(...p.perm));
+  // `hidden` — sahifa boshqa sahifa orqali ochiladi, menyuda ham, bosh
+  // sahifadagi kartochkalar orasida ham turmaydi.
+  const pages = () => PAGES.filter((p) =>
+    !p.hidden && (!p.perm.length || can(...p.perm)));
 
   // Har sahifada bir xil navigatsiya: yuqorida asosiy bo'limlar, ostida
   // shu bo'limning sahifalari. Ilgari sahifalar bir-biriga bog'lanmagan edi
