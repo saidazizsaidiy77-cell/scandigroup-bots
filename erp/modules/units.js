@@ -774,6 +774,12 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
     `SELECT shop_id FROM sections WHERE id = $1`, [u.current_section_id])).rows[0] : null;
   const shopChanged = !from || from.shop_id !== sec.shop_id;
 
+  // Tsexdan tsexga o'tish — ikki bosqich. Jo'natuvchi «jo'natdim» demaguncha
+  // qabul qilib bo'lmaydi: aks holda ikkinchi bosqichning ma'nosi qolmaydi
+  // va «men topshirmagandim» degan bahs qaytadan paydo bo'ladi.
+  if (shopChanged && from && !(u.handover_on && u.handover_shop_id === from.shop_id))
+    throw new Error(`${u.conveyor_no}: hali jo'natilmagan — oldingi tsex «jo'natdim» deyishi kerak`);
+
   const defect = Number(qty_defect) || 0;
   if (defect > 0 && !defect_reason) throw new Error('Brak uchun sabab kodi majburiy');
 
@@ -948,6 +954,66 @@ router.post('/undo', need('production.entry'), wrap(async (req, res) => {
   }
 }));
 
+// ═══════════════════════════════════════════ KEYINGI TSEXGA JO'NATISH
+//
+//  Birinchi bosqich: ish tugadi, mahsulot keyingi tsexga topshirishga
+//  tayyor. Mahsulot joyidan qimirlamaydi — u hali jo'natuvchi tsexda
+//  turibdi va uning javobgarligida; faqat belgi qo'yiladi.
+//
+//  Ikkinchi bosqichni (qabul qilish) keyingi tsex bajaradi — o'tkazish
+//  tugmasi bilan, va u faqat shu belgi turgan birlikka ishlaydi.
+async function handoverOne(client, req, unitId, undo) {
+  const u = (await client.query(
+    `SELECT u.id, u.conveyor_no, u.status, sc.shop_id, sh.name AS shop
+       FROM production_units u
+       LEFT JOIN sections sc ON sc.id = u.current_section_id
+       LEFT JOIN shops sh    ON sh.id = sc.shop_id
+      WHERE u.id = $1 FOR UPDATE OF u`, [unitId])).rows[0];
+  if (!u) throw new Error('Birlik topilmadi');
+  if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
+  if (!u.shop_id) throw new Error(`${u.conveyor_no}: hech bir bo'limda turmagan`);
+
+  const scope = scopeOf(req);
+  if (scope && !scope.includes(u.shop_id))
+    throw new Error(`${u.conveyor_no}: «${u.shop}» sizning doirangizda emas`);
+
+  if (undo) {
+    await client.query(
+      `UPDATE production_units
+          SET handover_on = NULL, handover_at = NULL,
+              handover_by = NULL, handover_shop_id = NULL
+        WHERE id = $1`, [unitId]);
+    return { unit_id: unitId, conveyor_no: u.conveyor_no, sent: false };
+  }
+
+  await client.query(
+    `UPDATE production_units
+        SET handover_on = CURRENT_DATE, handover_at = NOW(),
+            handover_by = $2, handover_shop_id = $3
+      WHERE id = $1`, [unitId, req.user.id, u.shop_id]);
+  return { unit_id: unitId, conveyor_no: u.conveyor_no, sent: true };
+}
+
+router.post('/handover', need('production.entry'), wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
+  if (!ids.length) throw new Error('Birlik tanlanmagan');
+  const undo = !!req.body.undo;
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const done = [];
+    for (const id of ids) done.push(await handoverOne(client, req, id, undo));
+    await audit(req, { module: 'production', action: undo ? 'handover-undo' : 'handover',
+                       entity: 'unit', entity_id: done.length,
+                       payload: { units: done.map((x) => x.conveyor_no) } }, client);
+    await client.query('COMMIT');
+    res.json({ done });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 router.post('/move', need('production.entry'), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   const client = await db.connect();
@@ -1017,6 +1083,12 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             -- unga keyingi qadamni hisoblab bo'lmaydi: "marshrut tugadi"
             -- deb ko'rsatish esa yolg'on bo'lardi.
             (r.step_no IS NOT NULL) AS on_route,
+            -- Shu tsexdan jo'natilganmi. Belgi tsex bilan birga saqlanadi,
+            -- shuning uchun keyingi tsexda eski belgi «jo'natilgan» bo'lib
+            -- ko'rinmaydi.
+            (pu.handover_on IS NOT NULL AND pu.handover_shop_id = r.shop_id) AS sent,
+            pu.handover_on,
+            hw.name AS sent_by,
             n.section_id AS next_section_id,
             ns.name      AS next_section,
             ns.shop_id   AS next_shop_id,
@@ -1028,6 +1100,8 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             (d.due_on - CURRENT_DATE)::int AS days_left,
             d.due_src
        FROM v_unit_register r
+       JOIN production_units pu ON pu.id = r.id
+       LEFT JOIN workers hw     ON hw.id = pu.handover_by
        -- Marshrutdagi keyingi qadam. Bo'lim boshlig'i ro'yxatdan tanlab
        -- o'tirmasligi uchun tugmada aynan shu bo'lim nomi yoziladi.
        LEFT JOIN LATERAL (
@@ -1055,7 +1129,12 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
                           ELSE CASE WHEN hs.name IS NULL THEN r.fg_on END
                         END AS dt) j) d ON true
       WHERE r.status = 'production' AND r.section_id IS NOT NULL
-        AND (r.shop_id = $1 OR ns.shop_id = $1)
+        -- O'z tsexim, va menga JO'NATILGANLAR. Jo'natilmagani hali oldingi
+        -- tsexning ishi — uni qabul qilish ro'yxatida ko'rsatish "olib
+        -- qo'ying" degan taklif bo'lardi.
+        AND (r.shop_id = $1
+             OR (ns.shop_id = $1 AND pu.handover_on IS NOT NULL
+                 AND pu.handover_shop_id = r.shop_id))
       -- Eng shoshilinchi yuqorida. Muddatsizlari oxirida: ular kutmayapti,
       -- ular haqida hali ma'lumot yo'q.
       ORDER BY d.due_on NULLS LAST, r.conveyor_no`, [shopId])).rows;
@@ -1083,34 +1162,57 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
 //  kun xronologik lenta bo'lib turadi: kim, qachon, qaysi konverni,
 //  qayerdan qayerga.
 function feedQuery(q, scope, limit) {
+  // Ikki manba bitta lentada: bo'lim almashuvi (unit_moves) va keyingi
+  // tsexga jo'natish belgisi (production_units.handover_*). Jo'natish
+  // harakat emas — mahsulot joyidan qimirlamaydi — lekin nazorat uchun u
+  // ham kun voqeasi: kim, qachon, qaysi konverni topshirishga qo'ydi.
   return {
-    text: `SELECT m.id, m.moved_on, m.moved_at, m.qty_defect, m.defect_reason, m.note,
-            u.conveyor_no, u.order_no, u.qty, u.is_opening,
-            p.name AS product,
-            sc.name AS section, sh.id AS shop_id, sh.name AS shop,
-            w.id AS worker_id, COALESCE(w.name, '—') AS worker,
-            pr.name AS from_section, psh.name AS from_shop, psh.id AS from_shop_id
-       FROM unit_moves m
-       JOIN production_units u ON u.id = m.unit_id
-       JOIN products p         ON p.id = u.product_id
-       JOIN sections sc        ON sc.id = m.section_id
-       JOIN shops sh           ON sh.id = sc.shop_id
-       LEFT JOIN workers w     ON w.id = m.worker_id
-       -- Oldingi harakat: "qayerdan" shundan chiqadi. Bo'lmasa — birlik
-       -- endi kiritilgan (boshlang'ich qoldiq yoki yangi konver).
-       LEFT JOIN LATERAL (
-         SELECT m2.section_id FROM unit_moves m2
-          WHERE m2.unit_id = m.unit_id AND m2.id < m.id
-          ORDER BY m2.id DESC LIMIT 1) pm ON true
-       LEFT JOIN sections pr ON pr.id = pm.section_id
-       LEFT JOIN shops    psh ON psh.id = pr.shop_id
-      WHERE m.moved_on BETWEEN $1::date AND $2::date
-        AND ($3::int[] IS NULL OR sh.id = ANY($3))
-        AND ($4::int   IS NULL OR sh.id = $4)
-        AND ($5::int   IS NULL OR w.id  = $5)
-        AND ($6::text  IS NULL OR u.conveyor_no ILIKE '%' || $6 || '%')
-      ORDER BY m.moved_at DESC, m.id DESC
-      LIMIT ${limit}`,
+    text: `SELECT * FROM (
+      SELECT m.moved_on, m.moved_at, m.qty_defect, m.defect_reason, m.note,
+             u.conveyor_no, u.order_no, u.qty, u.is_opening,
+             p.name AS product,
+             sc.name AS section, sh.id AS shop_id, sh.name AS shop,
+             w.id AS worker_id, COALESCE(w.name, '—') AS worker,
+             pr.name AS from_section, psh.name AS from_shop, psh.id AS from_shop_id,
+             'move' AS kind
+        FROM unit_moves m
+        JOIN production_units u ON u.id = m.unit_id
+        JOIN products p         ON p.id = u.product_id
+        JOIN sections sc        ON sc.id = m.section_id
+        JOIN shops sh           ON sh.id = sc.shop_id
+        LEFT JOIN workers w     ON w.id = m.worker_id
+        -- Oldingi harakat: "qayerdan" shundan chiqadi. Bo'lmasa — birlik
+        -- endi kiritilgan (boshlang'ich qoldiq yoki yangi konver).
+        LEFT JOIN LATERAL (
+          SELECT m2.section_id FROM unit_moves m2
+           WHERE m2.unit_id = m.unit_id AND m2.id < m.id
+           ORDER BY m2.id DESC LIMIT 1) pm ON true
+        LEFT JOIN sections pr  ON pr.id = pm.section_id
+        LEFT JOIN shops    psh ON psh.id = pr.shop_id
+       WHERE m.moved_on BETWEEN $1::date AND $2::date
+
+      UNION ALL
+
+      SELECT u.handover_on, u.handover_at, 0, NULL, NULL,
+             u.conveyor_no, u.order_no, u.qty, false,
+             p.name,
+             sc.name, sh.id, sh.name,
+             w.id, COALESCE(w.name, '—'),
+             NULL, NULL, NULL::int,
+             'handover'
+        FROM production_units u
+        JOIN products p      ON p.id = u.product_id
+        JOIN sections sc     ON sc.id = u.current_section_id
+        JOIN shops sh        ON sh.id = u.handover_shop_id
+        LEFT JOIN workers w  ON w.id = u.handover_by
+       WHERE u.handover_on BETWEEN $1::date AND $2::date
+    ) f
+     WHERE ($3::int[] IS NULL OR f.shop_id = ANY($3))
+       AND ($4::int   IS NULL OR f.shop_id = $4)
+       AND ($5::int   IS NULL OR f.worker_id = $5)
+       AND ($6::text  IS NULL OR f.conveyor_no ILIKE '%' || $6 || '%')
+     ORDER BY f.moved_at DESC
+     LIMIT ${limit}`,
     params: [q.from || today(), q.to || q.from || today(), scope,
              q.shop_id || null, q.worker_id || null, q.conveyor_no || null],
   };
@@ -1137,6 +1239,8 @@ router.get('/feed', need('production.view'), wrap(async (req, res) => {
   res.json({ moves: moves.rows, shops: shops.rows, workers: workers.rows });
 }));
 
+const KIND_UZ = { move: "o'tkazish", handover: "keyingi tsexga jo'natdi" };
+
 const FEED_COLUMNS = [
   ['Sana',            (r) => csvDate(r.moved_on)],
   ['Vaqt',            (r) => new Date(r.moved_at).toLocaleTimeString('ru-RU')],
@@ -1145,7 +1249,9 @@ const FEED_COLUMNS = [
   ['Zakaz raqami',    (r) => r.order_no],
   ['Maxsulot',        (r) => r.product],
   ['Soni',            (r) => r.qty],
-  ['Qayerdan',        (r) => r.from_section || (r.is_opening ? "boshlang'ich qoldiq" : 'yangi konver')],
+  ['Amal',            (r) => KIND_UZ[r.kind] || r.kind],
+  ['Qayerdan',        (r) => r.kind === 'handover' ? ''
+                       : r.from_section || (r.is_opening ? "boshlang'ich qoldiq" : 'yangi konver')],
   ['Qayerga',         (r) => r.section],
   ['Tsex',            (r) => r.shop],
   ['Tsexdan tsexga',  (r) => (r.from_shop_id && r.from_shop_id !== r.shop_id ? 'ha' : '')],

@@ -38,6 +38,14 @@ ALTER TABLE shops ADD COLUMN IF NOT EXISTS milestone TEXT
 
 -- Zavodda "lak tsexi" deb bo'yoqlash tsexi ataladi — jurnaldagi ustun ham
 -- shu nom bilan yuritiladi. Belgi qo'lda o'zgartirilgan bo'lsa tegilmaydi.
+-- Tsexning nomi ham zavod tilida bo'lsin: hamma «lak tsexi» deydi, va
+-- ustaning telefonidagi tugmada aynan shu yozilishi kerak — «Bo'yoqlash
+-- tsexi (umumiy)ga jo'natish» degan tugmani hech kim o'ziniki deb
+-- tanimaydi. Umumiyligi endi belgida turibdi (shops.is_shared), nomda
+-- takrorlanishi shart emas.
+UPDATE shops SET name = 'Lak tsexi'
+ WHERE code = 'BOYOQ' AND name = 'Bo''yoqlash tsexi (umumiy)';
+
 UPDATE shops SET milestone = 'lak'  WHERE code = 'BOYOQ' AND milestone IS NULL;
 UPDATE shops SET milestone = 'pack' WHERE code = 'QADOQ' AND milestone IS NULL;
 

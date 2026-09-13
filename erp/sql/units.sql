@@ -144,6 +144,28 @@ CREATE TABLE IF NOT EXISTS unit_moves (
 -- u buyurtma kutadi, quvvat kutmaydi.
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS is_stock BOOLEAN NOT NULL DEFAULT false;
 
+-- ★ TOPSHIRISH — tsexdan tsexga o'tish ikki bosqichda
+--
+--  Korpus ishni tugatdi va «Lak tsexiga jo'natdim» deydi; lak tsexi esa
+--  «Qabul qildim» deb o'ziga oladi. Ikki bosqich ikki xil savolga javob
+--  beradi: mahsulot QACHON tayyor bo'ldi va QACHON qabul qilindi.
+--  Oradagi farq — tsexlar orasida yotib qolgan vaqt; zavodda vaqt aynan
+--  shu yerda yo'qoladi, bo'lim ichida emas.
+--
+--  Belgi birlikning o'zida turadi, harakat yozuvi sifatida emas: jo'natish
+--  — bo'lim almashuvi emas, mahsulot joyidan qimirlamaydi. Uni unit_moves
+--  ga yozsak, joylashuv tarixi yolg'on bo'lib qolardi.
+--
+--  handover_shop_id — QAYSI tsex jo'natgani. Busiz birlik keyingi tsexga
+--  o'tgach eski belgi qolib ketardi va u yerda ham «jo'natilgan» bo'lib
+--  ko'rinardi.
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS handover_on      DATE;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS handover_at      TIMESTAMPTZ;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS handover_by      INT REFERENCES workers(id);
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS handover_shop_id INT REFERENCES shops(id);
+CREATE INDEX IF NOT EXISTS idx_units_handover ON production_units(handover_shop_id, handover_on)
+  WHERE handover_on IS NOT NULL;
+
 -- Har o'tkazish jamlanma `flow_log` ga ham yoziladi. O'tkazish qaytarilganda
 -- o'sha jamlanma yozuvni ham olib tashlash kerak, aks holda WIP va panel
 -- bo'lmagan ishni ko'rsatib qoladi. Qaysi yozuv ekanini topish uchun

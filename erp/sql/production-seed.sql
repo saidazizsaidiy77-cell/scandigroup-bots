@@ -13,7 +13,7 @@ ON CONFLICT (code) DO NOTHING;
 -- ---------------------------------------------------------------------- TSEX
 INSERT INTO shops (line_id, code, name, kind, is_shared, sort, track_sections) VALUES
   ((SELECT id FROM lines WHERE code='L1'), 'KORPUS', 'Korpus tsexi',    'flow',  false, 1, false),
-  (NULL,                                   'BOYOQ',  'Bo''yoqlash tsexi (umumiy)', 'batch', true, 2, false),
+  (NULL,                                   'BOYOQ',  'Lak tsexi', 'batch', true, 2, false),
   ((SELECT id FROM lines WHERE code='L1'), 'QADOQ',  'Qadoqlash tsexi', 'flow',  false, 3, false),
   ((SELECT id FROM lines WHERE code='L2'), 'STUL',   'Stul tsexi',      'flow',  false, 4, false)
 ON CONFLICT (code) DO NOTHING;

@@ -102,18 +102,29 @@ function due(u) {
 // Ustaning ekranida oltita ustundan boshqa hech narsa yo'q. Zakaz raqami,
 // rang, mijoz, qancha kun turgani — bularning hammasi ish uchun kerak emas
 // va faqat chalkashtiradi; kerak bo'lsa jurnalda turibdi.
+// Tsexdan tsexga o'tish ikki bosqich:
+//   1. jo'natuvchi «... tsexiga jo'natish» tugmasini bosadi — mahsulot
+//      joyidan qimirlamaydi, faqat topshirishga qo'yilgani belgilanadi;
+//   2. qabul qiluvchi tsex uni o'ziga oladi.
+// Shunday qilinganda «men topshirgandim / menga kelmagan» degan bahs
+// o'rniga ikkita sana turadi, va oradagi farq — yotib qolgan vaqt.
 function row(u, mine) {
   const leaves = u.next_shop_id && u.next_shop_id !== shopId;
   const act = !canMove ? ''
+    : !u.on_route
+      ? `<span class="tag bad">marshrutda yo'q</span>`
     : mine && leaves
-      ? `<span class="muted" style="font-size:12px">${esc(u.next_shop_name)} qabul qiladi</span>`
-      : !u.on_route
-        ? `<span class="tag bad">marshrutda yo'q</span>`
-      : !u.next_section_id
-        ? `<span class="muted" style="font-size:12px">marshrut tugadi</span>`
-        : `<button class="primary" onclick="move(${u.id})">${
-            mine ? '→ ' : 'Qabul qildim → '}${esc(u.next_section)}</button>`;
-  const sel = canMove && (!mine || !leaves) && u.next_section_id
+      ? (u.sent
+          ? `<span class="tag warn">jo'natilgan</span>
+             <button class="ic" title="Jo'natishni qaytarib olish"
+               onclick="unsend(${u.id})">&#8629;</button>`
+          : `<button class="primary" onclick="send1(${u.id})"
+               >${esc(u.next_shop_name)}ga jo'natish</button>`)
+    : !u.next_section_id
+      ? `<span class="muted" style="font-size:12px">marshrut tugadi</span>`
+      : `<button class="primary" onclick="move(${u.id})">${
+          mine ? '→ ' : 'Qabul qildim → '}${esc(u.next_section)}</button>`;
+  const sel = canMove && u.on_route && (u.next_section_id || (mine && leaves)) && !(mine && leaves && u.sent)
     ? `<input type="checkbox" style="width:auto" ${picked.has(u.id) ? 'checked' : ''}
          onchange="pick(${u.id},this.checked)">` : '';
   return `<tr>
@@ -139,8 +150,10 @@ const HEAD = `<thead><tr>
 // Yashirilsa ro'yxat har kuni boshqacha bo'lib, o'rganish qiyinlashadi.
 function block(title, units, mine, note, hideEmpty) {
   if (!units.length && hideEmpty) return '';
-  const ids = units.filter(u => u.next_section_id && !(mine && u.next_shop_id !== shopId))
-                   .map(u => u.id);
+  const ids = units.filter(u => u.on_route &&
+      !(mine && u.next_shop_id !== shopId && u.sent) &&
+      (u.next_section_id || (mine && u.next_shop_id !== shopId)))
+    .map(u => u.id);
   const sel = ids.filter(id => picked.has(id)).length;
   return `<div class="card" style="margin-bottom:16px">
     <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -180,22 +193,50 @@ function drawBoard() {
 function pick(id, on) { on ? picked.add(id) : picked.delete(id); drawBoard(); }
 function goShop(id) { shopId = id; picked.clear(); loadBoard(); }
 
-async function send(items) {
+// Bitta ro'yxatda ikki xil amal bo'lishi mumkin: o'z tsexidan chiqmaydigan
+// birlik O'TKAZILADI, chiqadigani esa JO'NATILADI. Tanlangan qatorlar shu
+// ikkiga ajratilib, har biri o'z yo'liga yuboriladi.
+function kindOf(id) {
+  for (const sc of data.sections)
+    for (const u of sc.units)
+      if (u.id === id) return (u.next_shop_id && u.next_shop_id !== shopId) ? 'send' : 'move';
+  return 'move';                       // qabul qilish ro'yxatidagilar
+}
+
+async function apply(ids) {
+  const send = ids.filter(id => kindOf(id) === 'send');
+  const move = ids.filter(id => kindOf(id) !== 'send');
   try {
-    await App.api('/api/units/move', {
-      method: 'POST', body: JSON.stringify({ items: items.map(id => ({ unit_id: id })) }) });
-    toast(items.length === 1 ? "O'tkazildi" : `${items.length} ta birlik o'tkazildi`);
+    if (move.length)
+      await App.api('/api/units/move', {
+        method: 'POST', body: JSON.stringify({ items: move.map(id => ({ unit_id: id })) }) });
+    if (send.length)
+      await App.api('/api/units/handover', {
+        method: 'POST', body: JSON.stringify({ items: send }) });
+    toast(ids.length === 1
+      ? (send.length ? "Jo'natildi" : "O'tkazildi")
+      : `${ids.length} ta birlik yuborildi`);
     picked.clear();
     await loadBoard();
   } catch (e) { toast(e.message, true); }
 }
 
-const move = id => send([id]);
+const move  = id => apply([id]);
+const send1 = id => apply([id]);
+
+async function unsend(id) {
+  try {
+    await App.api('/api/units/handover', {
+      method: 'POST', body: JSON.stringify({ items: [id], undo: true }) });
+    toast('Jo\'natish qaytarib olindi');
+    await loadBoard();
+  } catch (e) { toast(e.message, true); }
+}
 
 function bulk(ids) {
   const sel = ids.filter(id => picked.has(id));
   if (!sel.length) { ids.forEach(id => picked.add(id)); return drawBoard(); }
-  send(sel);
+  apply(sel);
 }
 
 async function loadBoard() {
@@ -237,6 +278,9 @@ function dayTitle(iso) {
 // Bitta qatorning ma'nosi: o'tkazishmi, qabul qilishmi yoki yangi yozuvmi.
 // Uchalasi bitta jadvalda saqlangani uchun farqni shu yerda ajratamiz.
 function what(m) {
+  if (m.kind === 'handover')
+    return `<span class="tag warn">keyingi tsexga jo'natdi</span>
+            <span class="muted" style="font-size:12px">${esc(m.section)}dan</span>`;
   if (!m.from_section)
     return `<span class="tag">${m.is_opening ? "boshlang'ich qoldiq" : 'yangi konver'}</span>
             <span class="arw">→</span> ${esc(m.section)}`;
