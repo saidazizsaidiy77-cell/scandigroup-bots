@@ -509,7 +509,12 @@ function dateField(id, label, r, kind){
 
 async function edit(id){
   const r = rows.find(x => x.id === id);
-  const hist = await App.api(`/api/units/${id}/history`);
+  const manage = App.can('production.manage');
+  const [hist, route] = await Promise.all([
+    App.api(`/api/units/${id}/history`),
+    // Marshrut faqat joyni tuzata oladiganga kerak
+    manage ? App.api(`/api/units/${id}/route`) : Promise.resolve([]),
+  ]);
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
       <div class="modal">
@@ -522,14 +527,26 @@ async function edit(id){
                unga ma'lumot qo'shadi. Qog'oz jurnaldan ko'chirishda xato
                yozilishi oddiy hol, shuning uchun tuzatish mumkin; lekin
                faqat ishlab chiqarish boshlig'iga. -->
-          ${App.can('production.manage') ? `<div class="row" style="gap:12px">
+          ${manage ? `<div class="row" style="gap:12px">
             <div style="flex:2"><label>Konveyer raqami</label>
               <input id="eConv" value="${esc(r.conveyor_no)}"></div>
             <div style="flex:1"><label>Soni</label>
               <input id="eQty" type="number" min="1" step="1" value="${r.qty}"></div>
           </div>
-          <p class="muted" style="font-size:12px;margin-top:-8px">Ikkalasi ham
-            jurnalda, hisobotlarda va T/M ombor qoldig'ida almashadi</p>` : ''}
+          <!-- Mahsulot qayerda turgani. Ro'yxatda faqat shu mahsulotning
+               marshrutidagi bo'limlar — boshqasini tanlab bo'lmaydi, chunki
+               marshrutdan tashqarida "keyingi bo'lim" hisoblanmaydi va usta
+               ekranida o'tkazish tugmasi yo'qoladi. -->
+          <div><label>Qayerda turibdi</label>
+            <select id="eSection">
+              ${r.section_id ? '' : '<option value="">— boshlanmagan —</option>'}
+              ${route.map(x => `<option value="${x.id}"
+                ${x.id === r.section_id ? 'selected' : ''}>${esc(x.shop)} · ${esc(x.name)}</option>`).join('')}
+            </select></div>
+          <p class="muted" style="font-size:12px;margin-top:-8px">Uchalasi ham
+            jurnalda, hisobotlarda va T/M ombor qoldig'ida almashadi. Joyni
+            tuzatish yangi harakat qo'shmaydi — tarixdagi oxirgi yozuv
+            to'g'rilanadi.</p>` : ''}
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Zakaz raqami</label>
               <input id="eOrder" value="${esc(r.order_no || '')}" placeholder="zakaz tushganda"></div>
@@ -607,6 +624,7 @@ async function saveEdit(id){
       // Katak faqat ishlab chiqarish boshlig'ida bor; bo'lmasa yuborilmaydi
       ...($('eConv') ? { conveyor_no: $('eConv').value.trim() } : {}),
       ...($('eQty')  ? { qty: $('eQty').value.trim() } : {}),
+      ...($('eSection') ? { section_id: $('eSection').value } : {}),
       order_no: $('eOrder').value.trim() || null,
       customer_id,
       unit_price: $('ePrice').value === '' ? null : $('ePrice').value,

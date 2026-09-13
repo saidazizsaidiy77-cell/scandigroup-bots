@@ -309,6 +309,20 @@ router.get('/:id/history', need('production.view'), wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// Shu birlik yura oladigan bo'limlar — tahrirlash oynasidagi ro'yxat uchun.
+// Hamma bo'limni ko'rsatib, keyin "marshrutda yo'q" deb rad etish yomon:
+// xodim nega bo'lmasligini bilmaydi va taxmin qilib o'tiradi.
+router.get('/:id/route', need('production.view', 'production.entry'), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT r.step_no, sc.id, sc.name, sc.is_exit, sh.name AS shop
+       FROM production_units u
+       JOIN v_product_route r ON r.product_id = u.product_id
+       JOIN sections sc ON sc.id = r.section_id
+       JOIN shops sh    ON sh.id = sc.shop_id
+      WHERE u.id = $1 ORDER BY r.step_no`, [req.params.id]);
+  res.json(rows);
+}));
+
 // ─────────────────────────────────────────────────── BIRLIK YARATISH / QOLDIQ
 // Bir nechta qatorni birdan qabul qiladi — boshlang'ich qoldiq shu bilan
 // kiritiladi: har qator o'z bo'limida turgan holda yaratiladi.
@@ -437,7 +451,7 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   const { order_no, customer_id, unit_price, ship_on, next_shop_planned_on, note, status,
           color, fabric, lak_planned_on, pack_planned_on,
-          lak_on, pack_on, fg_on, conveyor_no, qty } = req.body;
+          lak_on, pack_on, fg_on, conveyor_no, qty, section_id } = req.body;
 
   // ★ TARIXGA TEGADIGAN MAYDONLAR
   //
@@ -446,6 +460,8 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   //    · konveyer raqami — birlikning nomi, hamma hisobotda shu turadi;
   //    · soni            — jamlanma hisobotlar va T/M ombor qoldig'i shundan
   //                        hisoblanadi;
+  //    · turgan joyi     — birlikning zavoddagi o'rni; uni tuzatish tarixdagi
+  //                        oxirgi yozuvni to'g'rilash demak;
   //    · FAKT sanalar    — tizim birlik o'sha tsexga o'tganda yozgan,
   //                        ya'ni haqiqatan bo'lib o'tgan voqea.
   //
@@ -459,6 +475,7 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
   const RESTRICTED = {
     conveyor_no: 'Konveyer raqami',
     qty:         'Soni',
+    section_id:  'Mahsulot turgan joy',
     lak_on:      'Lak tsexiga kirgan sana',
     pack_on:     'Qadoqlash tsexiga kirgan sana',
     fg_on:       'T/M omborga kirgan sana',
@@ -479,12 +496,16 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
     e.status = 400; throw e;
   }
 
-  // Raqam va soni bitta tranzaksiyada: ikkalasi ham birlikning o'zidan
-  // tashqari JAMLANMA yozuvga ham tegadi, va yarim o'zgargan holat
-  // hisobotni jimgina buzardi.
+  const nextSection = section_id != null && String(section_id).trim() !== ''
+    ? Number(section_id) : null;
+
+  // Uchalasi bitta tranzaksiyada: har biri birlikning o'zidan tashqari
+  // JAMLANMA yozuvga ham tegadi, va yarim o'zgargan holat hisobotni
+  // jimgina buzardi.
   //   · raqam — flow_log.note da turadi (hisobot va qaytarish shuni qidiradi)
   //   · soni  — flow_log.qty_ok va T/M ombor qoldig'ida (fg_stock)
-  if (nextNo || nextQty != null) {
+  //   · joyi  — unit_moves va flow_log dagi oxirgi yozuvning bo'limi
+  if (nextNo || nextQty != null || nextSection != null) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -532,6 +553,11 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
                            entity_id: req.params.id,
                            payload: { from: u.qty, to: nextQty } }, client);
       }
+
+      // Joyi oxirida: soni o'zgargan bo'lsa, T/M ombor hisobi yangi soni
+      // bilan ketishi kerak.
+      if (nextSection != null) await relocate(client, req, Number(req.params.id), nextSection);
+
       await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -580,6 +606,122 @@ router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
                      entity_id: req.params.id, payload: req.body });
   res.json({ ok: true });
 }));
+
+// ─────────────────────────────────── BIRLIK QAYERDA TURGANINI TUZATISH
+//
+//  Bu O'TKAZISH EMAS. O'tkazish — zavodda bo'lib o'tgan voqea, unga yangi
+//  yozuv qo'shiladi. Bu esa yozuvdagi XATO: birlik aslida Frezada turgan,
+//  jurnalda Arra deb yozilgan. Shuning uchun yangi harakat qo'shilmaydi —
+//  oxirgi harakat to'g'rilanadi, va u bilan birga jamlanma yozuv ham
+//  (flow_log), aks holda hisobot birlikni bir vaqtda ikki bo'limda
+//  ko'rsatib turadi.
+async function relocate(client, req, unitId, sectionId) {
+  const u = (await client.query(
+    `SELECT id, conveyor_no, product_id, qty, current_section_id, status, entered_section_on
+       FROM production_units WHERE id = $1 FOR UPDATE`, [unitId])).rows[0];
+  if (!u) { const e = new Error('Birlik topilmadi'); e.status = 404; throw e; }
+  if (Number(sectionId) === u.current_section_id) return null;
+
+  const to = (await client.query(
+    `SELECT sc.id, sc.name, sc.is_exit, sh.name AS shop
+       FROM sections sc JOIN shops sh ON sh.id = sc.shop_id
+      WHERE sc.id = $1`, [sectionId])).rows[0];
+  if (!to) { const e = new Error("Bunday bo'lim yo'q"); e.status = 400; throw e; }
+
+  // Marshrutdan tashqari bo'lim tanlansa keyingi qadamni hisoblab bo'lmaydi
+  // va usta ekranida tugma yo'qoladi — shuning uchun oldindan rad etamiz.
+  const onRoute = (await client.query(
+    `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
+    [u.product_id, sectionId])).rowCount;
+  if (!onRoute) {
+    const e = new Error(`«${to.name}» bu mahsulotning marshrutida yo'q`);
+    e.status = 400; throw e;
+  }
+
+  const from = u.current_section_id ? (await client.query(
+    `SELECT is_exit FROM sections WHERE id = $1`, [u.current_section_id])).rows[0] : null;
+
+  const last = (await client.query(
+    `SELECT id, flow_log_id, moved_on FROM unit_moves
+      WHERE unit_id = $1 ORDER BY id DESC LIMIT 1`, [unitId])).rows[0];
+
+  if (last) {
+    await client.query(`UPDATE unit_moves SET section_id = $2 WHERE id = $1`,
+                       [last.id, sectionId]);
+    if (last.flow_log_id)
+      await client.query(`UPDATE flow_log SET section_id = $2 WHERE id = $1`,
+                         [last.flow_log_id, sectionId]);
+  } else {
+    // Birlik hali hech bir bo'limga qo'yilmagan edi — bu uning birinchi
+    // joylashuvi, demak yozuv yangidan yaratiladi.
+    const on = u.entered_section_on || null;
+    const shiftId = await resolveShift(client, u.product_id, 1, req.user.id, on);
+    const flow = (await client.query(
+      `INSERT INTO flow_log (shift_id, section_id, product_id, qty_ok, worker_id, note)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [shiftId, sectionId, u.product_id, u.qty, req.user.id, u.conveyor_no])).rows[0];
+    await client.query(
+      `INSERT INTO unit_moves (unit_id, section_id, moved_on, worker_id, note, flow_log_id)
+       VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4, $5, $6)`,
+      [unitId, sectionId, on, req.user.id, 'Joyi tuzatildi', flow.id]);
+  }
+
+  // Holat faqat chiqish bo'limiga kirganda yoki undan chiqqanda o'zgaradi.
+  // Ishlab chiqarish ichidagi ko'chirish holatga ham, T/M ombor sanasiga
+  // ham tegmaydi — aks holda qo'lda kiritilgan sana jimgina yo'qolardi.
+  const enters = to.is_exit && !from?.is_exit;
+  const leaves = !to.is_exit && from?.is_exit;
+  await client.query(
+    `UPDATE production_units SET
+       current_section_id = $2,
+       entered_section_on = COALESCE(entered_section_on, CURRENT_DATE),
+       status = CASE WHEN status = 'cancelled' THEN status
+                     WHEN $3::boolean THEN 'fg'
+                     WHEN $4::boolean THEN 'production'
+                     ELSE status END,
+       fg_on  = CASE WHEN $3::boolean THEN COALESCE(fg_on, entered_section_on, CURRENT_DATE)
+                     WHEN $4::boolean THEN NULL
+                     ELSE fg_on END
+     WHERE id = $1`, [unitId, sectionId, enters, leaves]);
+
+  // Lak va qadoqlash FAKT sanalari harakatlardan qaytadan hisoblanadi: joy
+  // o'zgargani bilan qaysi tsexga kirgani ham o'zgargan bo'lishi mumkin.
+  //
+  // Hisob natija bermasa eski qiymat QOLADI. Sabab: boshlang'ich qoldiqqa
+  // kiritilgan birlikda haqiqiy sana qo'lda yozilgan va harakat yozuvlarida
+  // yo'q — uni nolga aylantirsak, qaytarib bo'lmaydigan ma'lumot yo'qoladi.
+  await client.query(
+    `UPDATE production_units u SET
+       lak_on  = COALESCE((SELECT MIN(m.moved_on) FROM unit_moves m
+                    JOIN sections s ON s.id = m.section_id
+                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'lak'
+                   WHERE m.unit_id = u.id), u.lak_on),
+       pack_on = COALESCE((SELECT MIN(m.moved_on) FROM unit_moves m
+                    JOIN sections s ON s.id = m.section_id
+                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'pack'
+                   WHERE m.unit_id = u.id), u.pack_on)
+     WHERE u.id = $1`, [unitId]);
+
+  // T/M ombor qoldig'i: chiqish bo'limiga kirgan bo'lsa qo'shiladi, undan
+  // chiqarilgan bo'lsa ayiriladi. Manfiyga tushmasin — qoldiq qo'lda ham
+  // tuzatilgan bo'lishi mumkin.
+  const delta = (to.is_exit ? 1 : 0) - (from?.is_exit ? 1 : 0);
+  if (delta > 0) {
+    await client.query(
+      `INSERT INTO fg_stock (product_id, qty, updated_at) VALUES ($1,$2,NOW())
+       ON CONFLICT (product_id) DO UPDATE
+         SET qty = fg_stock.qty + EXCLUDED.qty, updated_at = NOW()`, [u.product_id, u.qty]);
+  } else if (delta < 0) {
+    await client.query(
+      `UPDATE fg_stock SET qty = GREATEST(qty - $2, 0), updated_at = NOW()
+        WHERE product_id = $1`, [u.product_id, u.qty]);
+  }
+
+  await audit(req, { module: 'production', action: 'relocate', entity: 'unit',
+                     entity_id: unitId,
+                     payload: { from: u.current_section_id, to: sectionId } }, client);
+  return { from: u.current_section_id, to: sectionId, section: to.name, shop: to.shop };
+}
 
 // ──────────────────────────────────────────── BIRLIKNI KEYINGI BO'LIMGA O'TKAZISH
 async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect, defect_reason, note }) {
