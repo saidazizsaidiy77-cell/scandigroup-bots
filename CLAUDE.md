@@ -144,6 +144,31 @@ npm run erp:migrate && npm run erp:migrate && npm run erp:migrate
 
 ---
 
+## Ochiq savollar — zavoddan javob kutilmoqda
+
+Bular hal bo'lmaguncha tegishli kod YOZILMAYDI: javobsiz taxmin qilib
+qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
+
+**Stul marshruti**
+- `Zero` stuli katalogda yo'q. Yaratilsinmi? Marshruti qaysi (Rover /
+  Zborka / Shkurkadan boshlanadimi)?
+- `Palazzo` stuli hozir `L2-FULL` da (Roverdan). To'g'rimi?
+
+**Xom ashyo spravochnigi** (ombor moduli shundan boshlanadi)
+- Ro'yxat Excel'da bormi? Bo'lsa ustunlariga moslab yuklash yoziladi.
+- Bitta material bir nechta rangda bo'ladimi — `LDSP 16mm` oq, yong'oq,
+  venge? Har rang alohida materialmi, yoki bitta material + rang ustunimi?
+  Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
+  bo'lmaydi.
+
+**Savdo moduli**
+- Buyurtma qabul qilishda nima yoziladi?
+- Buyurtma qanday bajariladi — T/M ombordan olinadimi yoki yangi konver
+  ochiladimi? Bitta buyurtmada bir nechta mahsulot bo'ladimi?
+- Jo'natishda nima yoziladi (mashina, hujjat, kim olib ketdi)?
+
+---
+
 ## Hali yo'q
 
 Ombor (xom ashyo), savdo, kassa, ishbay oylik, sifat nazorati (brakda
