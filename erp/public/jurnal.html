@@ -23,6 +23,9 @@
   <div class="row" id="erpUser"></div>
 </div>
 
+<!-- Faqat qog'ozda ko'rinadi: nima chop etilgani va qaysi filtr bilan -->
+<div id="printHead" class="print-only print-head"></div>
+
 <div class="card">
   <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div style="flex:1;min-width:160px"><label>Zakaz raqami</label>
@@ -58,9 +61,10 @@
     <div class="row">
       <button class="primary" id="btnNew" onclick="newUnit()">+ Yangi konver</button>
       <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+      <button onclick="printJournal()">Chop etish</button>
     </div>
   </div>
-  <div style="overflow:auto;max-height:72vh">
+  <div class="sheet" style="overflow:auto;max-height:72vh">
     <table id="tbl" class="log">
       <thead><tr>
         <th class="k"><input type="checkbox" id="chAll" style="width:auto" onchange="checkAll()">
@@ -235,6 +239,47 @@ function clearFilters(){
   groupSel.clear();
   drawGroups();
   load();
+}
+
+// ─────────────────────────────────────────────── QOG'OZGA CHIQARISH
+//
+//  Ekrandagi jadval o'zi bosiladi: alohida ko'rinish yasalmaydi, chunki
+//  u ikkinchi haqiqat manbai bo'lardi va filtr mantig'i ikki joyda
+//  turardi. Chop etishda ortiqchasi CSS bilan yashiriladi (style.css,
+//  @media print).
+//
+//  Brauzerning chop etish oynasida «PDF qilib saqlash» ham bor —
+//  printerdan chiqarish ham, faylga olish ham shu bitta tugmadan.
+function filterText(){
+  const bits = [];
+  const sel = (id, nom) => {
+    const e = $(id);
+    if (e && e.value && e.selectedOptions[0]) bits.push(`${nom}: ${e.selectedOptions[0].text}`);
+  };
+  if ($('fOrder').value.trim()) bits.push(`Zakaz: ${$('fOrder').value.trim()}`);
+  sel('fFason', 'Maxsulot');
+  sel('fShop',  'Tsex');
+  sel('fSection', "Bo'lim");
+  sel('fCust',  'Mijoz');
+  // Guruh faqat ba'zilari o'chirilgan bo'lsa yoziladi: hammasi yoqiq
+  // turgani filtr emas, oddiy holat.
+  if (groupSel.size && groupSel.size < allGroups.length)
+    bits.push('Guruh: ' + allGroups.filter(([id]) => groupSel.has(id))
+      .map(([, nom]) => nom).join(', '));
+  return bits.length ? bits.join('  \u00b7  ') : 'Filtrsiz \u2014 butun jurnal';
+}
+
+function printJournal(){
+  const now = new Date();
+  const kun = `${String(now.getDate()).padStart(2,'0')}.${
+    String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
+  const soat = `${String(now.getHours()).padStart(2,'0')}:${
+    String(now.getMinutes()).padStart(2,'0')}`;
+  $('printHead').innerHTML = `
+    <h1>Ishlab chiqarish jurnali \u00b7 Scandi Group</h1>
+    <div class="meta">${esc(filterText())}</div>
+    <div class="meta">${rows.length} ta konver \u00b7 chop etildi ${kun} ${soat}</div>`;
+  window.print();
 }
 
 async function exportCsv(){

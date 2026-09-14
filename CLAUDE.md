@@ -177,11 +177,10 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
   bo'lmaydi.
 
-**Vitrinalar**
-- `Abu-Saxiy`, `Palma`, `Arca` — savdo nuqtasi deb belgilandi
-  (`kind='fg'`). To'g'rimi?
-- Ular ochilganda konver qaysi omborda turgani yozilishi kerak: hozir
-  butun tayyor mahsulot bitta omborda deb hisoblanadi, ustun yo'q.
+**Vitrinalar** (`Abu-Saxiy`, `Palma`, `Arca`) — showroom, tayyor
+mahsulot turadi (`kind='fg'`). Ular ochilganda konverga qaysi omborda
+turgani yozilishi kerak: hozir butun tayyor mahsulot bitta omborda deb
+hisoblanadi, bunday ustun yo'q. Savdo moduli bilan birga qilinadi.
 
 **Savdo moduli**
 - Buyurtma qabul qilishda nima yoziladi?

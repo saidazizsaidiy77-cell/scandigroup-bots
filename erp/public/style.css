@@ -306,3 +306,53 @@ tr.click:hover td{background:var(--surface-2)}
 .log .act{white-space:nowrap}
 .log .act button{padding:7px 11px;font-size:13px}
 .log .act .ic{padding:7px 10px;color:var(--muted)}
+
+
+/* ────────────────────────────── QOG'OZGA CHIQARISH
+   Brauzerning o'z chop etish oynasi ishlatiladi: u har platformada
+   «PDF qilib saqlash» ni ham beradi, ya'ni bitta tugma ikkala ishni
+   bajaradi va tizimga birorta kutubxona qo'shilmaydi.
+
+   Ekran va qog'oz — ikki xil vosita. Ekranda filtr, tugma va rang
+   kerak; qog'ozda ular siyoh sarfidan boshqa narsa emas. Shuning uchun
+   chop etishda faqat jadval va uning sarlavhasi qoladi.
+
+   Ustun ko'p bo'lgani uchun A4 ko'ndalang: tik holatda jadval qisilib,
+   raqamlar ustunlari bir-biriga yopishib ketadi. */
+.print-only{display:none}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  body{padding:0;max-width:none;background:#fff;color:#000;font-size:10px}
+  .top,.nav,button,input,select,label,.chip,.grid,.toast{display:none!important}
+  .print-only{display:block!important}
+  /* Kartochka qog'ozda ramka bo'lib turishi shart emas */
+  .card{border:0;padding:0;margin:0!important;background:#fff;border-radius:0}
+  /* Kartochka sarlavhalari: qog'ozdagi sarlavha yuqorida bir marta
+     yozilgan, uni jadval ustida takrorlash joy egallaydi. */
+  h2{display:none}
+  /* Ekranda jadval o'z oynasida siljiydi; qog'ozda esa to'liq chiqishi
+     va sahifalarga o'zi bo'linishi kerak. */
+  .sheet{overflow:visible!important;max-height:none!important}
+  table{font-size:9px;font-variant-numeric:tabular-nums}
+  /* Sarlavha har sahifada takrorlansin — ikkinchi varaqdagi ustun
+     nimaligini topish uchun birinchisiga qaytib qaralmasin. */
+  thead{display:table-header-group}
+  tr{break-inside:avoid}
+  th,td{padding:3px 6px!important;border-bottom:1px solid #ccc;color:#000}
+  th{font-size:8px;color:#000}
+  .log{min-width:0}
+  .log thead th,.log .k{position:static}
+  .log tbody td,.log tbody tr:nth-child(even) td{background:#fff}
+  /* Oxirgi ustun — tahrirlash tugmalari: qog'ozda bosib bo'lmaydi */
+  .log th:last-child,.log td:last-child{display:none}
+  .log .src{font-size:7.5px;color:#444}
+  .log .src.fakt,.log .src.late{color:#000;font-weight:600}
+  .tag{border:1px solid #999;color:#000;background:#fff}
+}
+
+/* Chop etish sarlavhasi: qaysi filtr bilan olinganini qog'ozning o'zi
+   aytib tursin — aks holda ikki hafta o'tib varaqda nima turgani
+   noma'lum bo'ladi. */
+.print-head{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:10px}
+.print-head h1{font-size:15px;margin-bottom:3px}
+.print-head .meta{font-size:9px;color:#333}
