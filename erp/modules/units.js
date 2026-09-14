@@ -320,9 +320,19 @@ router.get('/suggest', need('production.view'), wrap(async (_req, res) => {
      SELECT 'fabric', fabric, COUNT(*)
        FROM production_units WHERE fabric IS NOT NULL GROUP BY fabric
      ORDER BY n DESC, value`);
+  // Har mahsulotning OXIRGI narxi. Qoldiq kiritayotgan xodim yuzlab
+  // qatorga bir xil narxni qayta terib chiqmasin — katak o'zi to'ladi,
+  // lekin faqat BO'SH bo'lsa: qo'lda yozilgan narx hech qachon
+  // almashtirilmaydi, aks holda tuzatish saqlanmay qolardi.
+  const prices = await db.query(
+    `SELECT DISTINCT ON (product_id) product_id, unit_price
+       FROM production_units
+      WHERE unit_price IS NOT NULL AND unit_price > 0
+      ORDER BY product_id, id DESC`);
   res.json({
     colors:  rows.filter((r) => r.field === 'color').map((r) => r.value),
     fabrics: rows.filter((r) => r.field === 'fabric').map((r) => r.value),
+    prices:  Object.fromEntries(prices.rows.map((r) => [r.product_id, Number(r.unit_price)])),
   });
 }));
 

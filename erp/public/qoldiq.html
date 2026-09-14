@@ -72,6 +72,10 @@
       <button onclick="addRow()">+ Qator</button>
       <button onclick="addRow(5)">+ 5 qator</button>
       <button onclick="addRow(20)">+ 20 qator</button>
+      <!-- Saqlash pastdagi qatorda ham bor. Yigirmata qator kiritgan xodim
+           uni pastdan qidirib topa olmasligi mumkin, shuning uchun jadval
+           ustida ham turadi: bitta amal, ikkita ko'rinadigan joy. -->
+      <button class="primary hide" id="btnSaveTop" onclick="save()">Saqlash</button>
     </div>
   </div>
   <div class="scroll">
@@ -123,7 +127,7 @@ const nf = (v) => {
 };
 const money = n => n ? nf(n) : '';
 
-let ref = null, customers = [], seq = 0, nextNo = null, suggest = { colors: [], fabrics: [] };
+let ref = null, customers = [], seq = 0, nextNo = null, suggest = { colors: [], fabrics: [], prices: {} };
 
 // Fason → qaysi guruhlarda mavjud. Jadvalda mahsulot nomi va guruhi alohida
 // ustun — qog'oz jurnalda ham shunday. Ikkovi birga SKU ni beradi.
@@ -179,7 +183,7 @@ function addRow(k = 1){
           <option value="">— tanlang —</option>
           ${fasons.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}
         </select></td>
-        <td><select class="c-group" onchange="sum()"></select></td>
+        <td><select class="c-group" onchange="fillPrice(this.closest('tr'));sum()"></select></td>
         <td><input class="c-color" list="dlColor" placeholder="—"></td>
         <td><input class="c-fabric" list="dlFabric" placeholder="—"></td>
         <td><input class="c-qty" type="number" min="1" value="1" oninput="sum()"></td>
@@ -197,7 +201,8 @@ function addRow(k = 1){
         <td><select class="c-cust"><option value="">T/M ombor</option>
           ${customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
         </select></td>
-        <td><input class="c-price" type="number" min="0" placeholder="—" oninput="sum()"></td>
+        <td><input class="c-price" type="number" min="0" placeholder="—"
+          oninput="this.classList.remove('auto');sum()"></td>
         <td class="num"><input class="c-amount" readonly tabindex="-1"></td>
         <td class="num"><button class="del" onclick="this.closest('tr').remove();sum()">&times;</button></td>
       </tr>`);
@@ -217,7 +222,19 @@ function fillGroup(sel){
   tr.querySelector('.c-group').innerHTML = list.length
     ? list.map(p => `<option value="${p.id}">${esc(p.group_name)}</option>`).join('')
     : '<option value="">—</option>';
+  fillPrice(tr);
   sum();
+}
+
+// Narx oldingi kiritilgan konverlardan olinadi: o'sha mahsulotning eng
+// oxirgi narxi. Faqat BO'SH katak to'ldiriladi — xodim yozgan narx hech
+// qachon almashtirilmaydi. Narxi bo'lmagan mahsulotda katak bo'sh qoladi:
+// o'ylab topilgan raqamdan bo'sh katak halolroq.
+function fillPrice(tr){
+  const cell = tr.querySelector('.c-price');
+  if (!cell || cell.value !== '') return;
+  const p = suggest.prices?.[tr.querySelector('.c-group')?.value];
+  if (p) { cell.value = p; cell.classList.add('auto'); }
 }
 
 function fillSec(sel){
@@ -313,6 +330,8 @@ function sum(){
   const qty = r.reduce((s, x) => s + x.qty, 0);
   const amt = r.reduce((s, x) => s + (x.unit_price || 0) * x.qty, 0);
   $('saveBar').classList.toggle('hide', !r.length);
+  $('btnSaveTop').classList.toggle('hide', !r.length);
+  $('btnSaveTop').textContent = `Saqlash (${r.length})`;
   const total = document.querySelectorAll('#tB tr').length;
   const skipped = total - r.length;
   $('sumText').textContent = `${r.length} konver · ${qty} dona` +
@@ -322,14 +341,19 @@ function sum(){
 
 function reset_(){ $('tB').innerHTML = ''; sum(); }
 
+const saveButtons = () => [$('btnSave'), $('btnSaveTop')].filter(Boolean);
+
 async function save(){
   const rows = collect();
   if (!rows.length) return;
   const items = rows.map(({ _tr, customer_id_raw, ...it }) => it);
-  const dup = items.map(i => i.conveyor_no).filter((v, i, a) => a.indexOf(v) !== i);
+  // Bo'sh raqamlar tekshiruvga kirmaydi: ular takrorlanmaydi, ularga
+  // tizim o'zi raqam beradi (izoh: modules/units.js, nextConveyorNo).
+  const nos = items.map(i => i.conveyor_no).filter(Boolean);
+  const dup = nos.filter((v, i, a) => a.indexOf(v) !== i);
   if (dup.length) return alert('Konveyer raqami takrorlanmoqda: ' + dup.join(', '));
 
-  $('btnSave').disabled = true;
+  saveButtons().forEach(b => b.disabled = true);
   try{
     let r;
     try{
@@ -341,8 +365,12 @@ async function save(){
       nextNo = await App.api('/api/units/next-no');
       const start = (nextNo.conveyor_no.match(/(\d+)$/) || [0, 0])[1] | 0;
       const prefix = nextNo.conveyor_no.replace(/\d+$/, '');
+      // Faqat RAQAMI BOR qatorlar qayta raqamlanadi: bo'sh qoldirilgani
+      // ataylab bo'sh — unga tizim Q raqamini o'zi beradi.
+      let k = 0;
       items.forEach((it, i) => {
-        it.conveyor_no = prefix + String(start + i).padStart(4, '0');
+        if (!it.conveyor_no) return;
+        it.conveyor_no = prefix + String(start + k++).padStart(4, '0');
         const input = rows[i]._tr.querySelector('.c-no');
         if (input) input.value = it.conveyor_no;
       });
@@ -355,7 +383,7 @@ async function save(){
     seq = 0;
     alert(`${r.created.length} ta konver kiritildi. Jurnal sahifasida ko'rishingiz mumkin.`);
   }catch(e){ alert(e.message); }
-  finally{ $('btnSave').disabled = false; }
+  finally{ saveButtons().forEach(b => b.disabled = false); }
 }
 
 // ══════════════════════════════════════════════ EXCEL / CSV DAN YUKLASH

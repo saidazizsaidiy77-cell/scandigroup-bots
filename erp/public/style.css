@@ -361,3 +361,7 @@ tr.click:hover td{background:var(--surface-2)}
    hali yozilmagan: qizil rang xatoga atalgan, uni boshqa narsaga
    ishlatilsa haqiqiy xato ko'zga tashlanmay qoladi. */
 input.need, select.need{border-color:var(--accent);background:var(--surface)}
+
+/* Tizim o'zi to'ldirgan katak. Xodim ko'rib tursin: bu qiymat oldingi
+   kiritilganlardan olingan, uni tekshirish yoki o'zgartirish mumkin. */
+input.auto{color:var(--accent-ink)}
