@@ -61,6 +61,16 @@ da. `kind='fg'` — qoldiq konver hisobida; `kind='material'` — xom ashyo
 turadi, ochilmaydi. Yangi ombor qo'shish — shu faylga bitta qator,
 sahifaga tegilmaydi.
 
+**Javobgar tsex** (`product_groups.owner_shop_id`) — bo'lim konver
+QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini. Stul lak
+ishini lak tsexining kabinasida oladi, lekin boshidan oxirigacha stul
+tsexi boshlig'i yuritadi: lak ustasiga stul ko'rinmaydi, stul boshlig'i
+esa lak bo'limlarini o'z ekranida ustun sifatida ko'radi va o'zi
+o'tkazadi. Javobgar o'zgarmagani uchun topshirish ham so'ralmaydi.
+Bo'sh bo'lsa (penal, kamod, sp, stol) — eskicha: turgan joyining tsexi
+boshqaradi. Doira, topshirish va ekran — hammasi shu ustunga tayanadi
+(`v_unit_register.owner_shop_id`).
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.

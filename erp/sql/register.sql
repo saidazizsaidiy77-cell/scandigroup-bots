@@ -111,6 +111,11 @@ SELECT
   p.fason_id,
   u.qty,
   pp.shop, pp.shop_id, pp.section, pp.section_id, pp.step_no,
+  -- Konverni qaysi tsex BOSHQARADI. Odatda turgan joyining tsexi, lekin
+  -- guruhga javobgar tsex biriktirilgan bo'lsa — o'sha (izoh:
+  -- sql/catalog-groups.sql). Stul lak tsexining bo'limida tursa ham
+  -- stul tsexiniki bo'lib qoladi.
+  COALESCE(g.owner_shop_id, pp.shop_id) AS owner_shop_id,
   u.entered_section_on,
 
   -- Keyingi tsexga o'tkazish sanasi: qo'lda reja bo'lsa u, aks holda taxmin.

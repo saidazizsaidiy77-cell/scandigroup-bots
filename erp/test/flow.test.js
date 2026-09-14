@@ -420,6 +420,58 @@ test('mijozlarni fayldan yuklash: notanish kanal butun faylni to\'xtatadi', asyn
   assert.equal(c2.note, 'Ikkinchi yuklash');
 });
 
+test('stul lak tsexining bo\'limida tursa ham stul tsexiniki bo\'lib qoladi', async () => {
+  const STU_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='STU-SHKUR'`)).id;
+  const BOY_AST1  = (await H.id(`SELECT id FROM sections WHERE code='BOY-AST1'`)).id;
+  const STUL_ID   = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
+  const OWEN = (await H.id(`SELECT id FROM products WHERE sku='STU-OWEN'`)).id;
+
+  const r = await admin('POST', '/api/units/', {
+    items: [{ product_id: OWEN, qty: 1, section_id: STU_SHKUR }] });
+  assert.equal(r.status, 200, r.text);
+  const u = r.body.created[0];
+
+  const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  // Stul tsexi boshlig'i uni lak bo'limiga O'ZI o'tkazadi: topshirish
+  // so'ralmaydi, chunki konver boshqa odamning qo'liga o'tmayapti.
+  const mv = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  assert.equal(mv.status, 200, mv.text);
+  assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
+    [u.id])).s, BOY_AST1, 'lak tsexining bo\'limiga o\'tdi');
+
+  // Lak tsexi ustasining ekranida stul YO'Q
+  const lakBoard = await lak('GET', '/api/units/board');
+  assert.equal(lakBoard.status, 200, lakBoard.text);
+  const lakda = lakBoard.body.sections.flatMap((sc) => sc.units).map((x) => x.conveyor_no);
+  assert.ok(!lakda.includes(u.conveyor_no), 'lak ustasiga stul ko\'rinmaydi');
+  assert.ok(!lakBoard.body.inbox.some((x) => x.conveyor_no === u.conveyor_no),
+    'qabul qilish ro\'yxatida ham yo\'q');
+
+  // Stul tsexi boshlig'ida esa — aynan lak bo'limining ustunida
+  const stulBoard = await stul('GET', '/api/units/board');
+  assert.equal(stulBoard.body.shop.id, STUL_ID);
+  const kolonka = stulBoard.body.sections.find((sc) => sc.id === BOY_AST1);
+  assert.ok(kolonka, 'lak tsexining bo\'limi stul ekranida ustun bo\'lib turadi');
+  assert.ok(kolonka.units.some((x) => x.conveyor_no === u.conveyor_no));
+
+  // Lak ustasi uni qimirlata olmaydi
+  const urinish = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  assert.equal(urinish.status, 400, urinish.text);
+  assert.match(urinish.body.error, /doirangizda emas/);
+
+  // Stul boshlig'i esa oxirigacha o'zi olib boradi
+  for (let i = 0; i < 4; i++) {
+    const step = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+    assert.equal(step.status, 200, `${i + 1}-qadam: ${step.text}`);
+  }
+  const oxir = await H.id(
+    `SELECT sc.code, u.lak_on IS NOT NULL AS lak_yozildi
+       FROM production_units u JOIN sections sc ON sc.id = u.current_section_id
+      WHERE u.id = $1`, [u.id]);
+  assert.equal(oxir.code, 'STU-QAD', 'qadoqlashgacha bir o\'zi o\'tkazdi');
+  assert.ok(oxir.lak_yozildi, 'lak tsexiga kirish sanasi baribir yozildi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

@@ -189,7 +189,7 @@ function registerQuery(q, limit, scope = null) {
         AND ($9::int[] IS NULL OR group_id = ANY($9))
         AND ($10::int  IS NULL OR fason_id = $10)
         -- Tsex doirasi: filtr emas, chegara. Klient uni o'chira olmaydi.
-        AND ($11::int[] IS NULL OR shop_id = ANY($11))
+        AND ($11::int[] IS NULL OR owner_shop_id = ANY($11))
         -- "Qayerda" ustuni bo'yicha: tsex tanlangach bo'lim ham tanlanadi
         AND ($12::int   IS NULL OR section_id = $12)
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no DESC
@@ -741,6 +741,20 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
        FROM sections s JOIN shops sh ON sh.id = s.shop_id
       WHERE s.id = $1`, [target])).rows[0];
 
+  // ★ JAVOBGAR TSEX
+  //   Bo'lim konver QAYERDA ekanini aytadi, javobgar tsex esa KIM uni
+  //   boshqarayotganini. Stulning lak ishi lak tsexining kabinasida
+  //   bajariladi, lekin uni stul tsexi boshlig'i yuritadi — shuning uchun
+  //   quyidagi hamma qoida bo'limning tsexiga emas, JAVOBGARGA tayanadi.
+  //   Guruhga javobgar biriktirilmagan bo'lsa (penal, kamod, sp, stol)
+  //   javobgar — turgan joyining tsexi, ya'ni eskicha.
+  const owner = (await client.query(
+    `SELECT g.owner_shop_id FROM products p
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE p.id = $1`, [u.product_id])).rows[0]?.owner_shop_id || null;
+  const shopOf = (sectionShopId) => owner || sectionShopId;
+  const toShop = shopOf(sec.shop_id);
+
   // ★ QABUL QILISH QOIDASI
   //   Konverni X tsexining bo'limiga o'tkazish uchun X tsexi doirasida
   //   bo'lish kerak. Bundan ikki narsa o'z-o'zidan kelib chiqadi:
@@ -751,10 +765,14 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   //   tayyor" degani, va uni faqat keyingi tsex o'ziga ola oladi. Kim qabul
   //   qilgani va qachon — unit_moves da allaqachon yoziladi.
   const scope = scopeOf(req);
-  if (scope && !scope.includes(sec.shop_id))
+  if (scope && !scope.includes(toShop)) {
+    const kim = owner
+      ? (await client.query(`SELECT name FROM shops WHERE id = $1`, [owner])).rows[0].name
+      : sec.shop;
     throw new Error(
-      `${u.conveyor_no}: «${sec.shop}» sizning doirangizda emas — ` +
-      `konverni o'sha tsex boshlig'i qabul qiladi`);
+      `${u.conveyor_no}: «${kim}» sizning doirangizda emas — ` +
+      `konverni o'sha tsex boshlig'i boshqaradi`);
+  }
 
   // Keyingi tsexga topshirish rejasi faqat konver HAQIQATAN boshqa tsexga
   // o'tganda tozalanadi. Tsex ichidagi harakat (arra → freza) rejaga
@@ -762,12 +780,15 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   // o'tkazishdayoq yo'qoladi.
   const from = u.current_section_id ? (await client.query(
     `SELECT shop_id FROM sections WHERE id = $1`, [u.current_section_id])).rows[0] : null;
-  const shopChanged = !from || from.shop_id !== sec.shop_id;
+  // Javobgar o'zgardimi — bo'lim tsexi emas. Stul lak bo'limiga o'tganda
+  // javobgar o'zgarmaydi: topshirish ham, reja sanasini tozalash ham
+  // kerak emas, chunki konver boshqa odamning qo'liga o'tmadi.
+  const shopChanged = !from || shopOf(from.shop_id) !== toShop;
 
   // Tsexdan tsexga o'tish — ikki bosqich. Jo'natuvchi «jo'natdim» demaguncha
   // qabul qilib bo'lmaydi: aks holda ikkinchi bosqichning ma'nosi qolmaydi
   // va «men topshirmagandim» degan bahs qaytadan paydo bo'ladi.
-  if (shopChanged && from && !(u.handover_on && u.handover_shop_id === from.shop_id))
+  if (shopChanged && from && !(u.handover_on && u.handover_shop_id === shopOf(from.shop_id)))
     throw new Error(`${u.conveyor_no}: hali jo'natilmagan — oldingi tsex «jo'natdim» deyishi kerak`);
 
   const defect = Number(qty_defect) || 0;
@@ -947,11 +968,18 @@ router.post('/undo', need('production.entry'), wrap(async (req, res) => {
 //  Ikkinchi bosqichni (qabul qilish) keyingi tsex bajaradi — o'tkazish
 //  tugmasi bilan, va u faqat shu belgi turgan konverka ishlaydi.
 async function handoverOne(client, req, unitId, undo) {
+  // Jo'natuvchi — javobgar tsex, konver turgan bo'limning tsexi emas
+  // (izoh: sql/catalog-groups.sql, owner_shop_id).
   const u = (await client.query(
-    `SELECT u.id, u.conveyor_no, u.status, sc.shop_id, sh.name AS shop
+    `SELECT u.id, u.conveyor_no, u.status,
+            COALESCE(g.owner_shop_id, sc.shop_id) AS shop_id,
+            COALESCE(osh.name, sh.name)           AS shop
        FROM production_units u
-       LEFT JOIN sections sc ON sc.id = u.current_section_id
-       LEFT JOIN shops sh    ON sh.id = sc.shop_id
+       JOIN products pr       ON pr.id = u.product_id
+       JOIN product_groups g  ON g.id  = pr.group_id
+       LEFT JOIN sections sc  ON sc.id = u.current_section_id
+       LEFT JOIN shops sh     ON sh.id = sc.shop_id
+       LEFT JOIN shops osh    ON osh.id = g.owner_shop_id
       WHERE u.id = $1 FOR UPDATE OF u`, [unitId])).rows[0];
   if (!u) throw new Error('Konver topilmadi');
   if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
@@ -1228,6 +1256,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
   const rows = (await db.query(
     `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.sku, r.qty,
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
+            r.owner_shop_id,
             r.section, r.section_id, r.entered_section_on,
             r.is_stock, r.waiting,
             -- Konver marshrutida YO'Q bo'limda turibdimi. Marshrut
@@ -1238,13 +1267,18 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             -- Shu tsexdan jo'natilganmi. Belgi tsex bilan birga saqlanadi,
             -- shuning uchun keyingi tsexda eski belgi «jo'natilgan» bo'lib
             -- ko'rinmaydi.
-            (pu.handover_on IS NOT NULL AND pu.handover_shop_id = r.shop_id) AS sent,
+            (pu.handover_on IS NOT NULL AND pu.handover_shop_id = r.owner_shop_id) AS sent,
             pu.handover_on,
             hw.name AS sent_by,
             n.section_id AS next_section_id,
             ns.name      AS next_section,
-            ns.shop_id   AS next_shop_id,
-            nsh.name     AS next_shop_name,
+            -- Keyingi qadamning JAVOBGAR tsexi. Ekranda shu qiymat
+            -- «jo'natish» tugmasini chiqaradimi yoki oddiy «o'tkazish»
+            -- ni — shuning uchun bu yerda bo'limning tsexi emas,
+            -- javobgari turishi kerak: stul lak bo'limiga o'tganda ham
+            -- javobgar o'zgarmaydi, demak hech kimga topshirilmaydi.
+            COALESCE(g.owner_shop_id, ns.shop_id) AS next_shop_id,
+            COALESCE(osh.name, nsh.name)          AS next_shop_name,
             -- Topshiriladigan tsex: marshrutda oldinda turgan birinchi
             -- BOSHQA tsex. Qadoqlashda bunday tsex yo'q — oldinda ombor.
             COALESCE(hs.name, 'T/M ombor') AS due_shop,
@@ -1253,6 +1287,9 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             d.due_src
        FROM v_unit_register r
        JOIN production_units pu ON pu.id = r.id
+       -- Guruhga javobgar tsex: oldinda turgan bo'lim boshqa odamning
+       -- qo'liga o'tishini shu hal qiladi, bo'limning tsexi emas.
+       JOIN product_groups g    ON g.id = r.group_id
        LEFT JOIN workers hw     ON hw.id = pu.handover_by
        -- Marshrutdagi keyingi qadam. Bo'lim boshlig'i ro'yxatdan tanlab
        -- o'tirmasligi uchun tugmada aynan shu bo'lim nomi yoziladi.
@@ -1262,6 +1299,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
           ORDER BY pr.step_no LIMIT 1) n ON true
        LEFT JOIN sections ns  ON ns.id  = n.section_id
        LEFT JOIN shops    nsh ON nsh.id = ns.shop_id
+       LEFT JOIN shops    osh ON osh.id = g.owner_shop_id
        -- Oldinda turgan birinchi boshqa tsex va uning bosqich belgisi
        LEFT JOIN LATERAL (
          SELECT sh.name, sh.milestone
@@ -1269,7 +1307,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
            JOIN sections sc2 ON sc2.id = pr.section_id
            JOIN shops    sh  ON sh.id  = sc2.shop_id
           WHERE pr.product_id = r.product_id AND pr.step_no > r.step_no
-            AND sc2.shop_id <> r.shop_id
+            AND COALESCE(g.owner_shop_id, sc2.shop_id) <> r.owner_shop_id
           ORDER BY pr.step_no LIMIT 1) hs ON true
        -- Jurnaldagi sana: qaysi tsexga topshiriladi — o'shaniki
        LEFT JOIN LATERAL (
@@ -1284,25 +1322,42 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
         -- O'z tsexim, va menga JO'NATILGANLAR. Jo'natilmagani hali oldingi
         -- tsexning ishi — uni qabul qilish ro'yxatida ko'rsatish "olib
         -- qo'ying" degan taklif bo'lardi.
-        AND (r.shop_id = $1
-             OR (ns.shop_id = $1 AND pu.handover_on IS NOT NULL
-                 AND pu.handover_shop_id = r.shop_id))
+        AND (r.owner_shop_id = $1
+             OR (COALESCE(g.owner_shop_id, ns.shop_id) = $1
+                 AND pu.handover_on IS NOT NULL
+                 AND pu.handover_shop_id = r.owner_shop_id))
       -- Eng shoshilinchi yuqorida. Muddatsizlari oxirida: ular kutmayapti,
       -- ular haqida hali ma'lumot yo'q.
       ORDER BY d.due_on NULLS LAST, r.conveyor_no`, [shopId])).rows;
 
+  // Ekrandagi bo'limlar: o'z tsexining bo'limlari, USTIGA shu tsex
+  // boshqaradigan mahsulot marshrutidagi begona bo'limlar. Stul tsexi
+  // boshlig'i lak tsexidagi «Astar sepish», «Lak» bo'limlarini ham
+  // ko'radi — stul o'sha yerda turadi va uni o'zi o'tkazadi.
+  //
+  // Tartib marshrut bo'yicha: shunda ekrandagi ustunlar mahsulot
+  // yuradigan yo'l bilan bir xil o'qiladi. Marshrutda yo'q bo'lim
+  // (masalan, faqat korpusga tegishlisi) oxirida, o'z tartibida.
   const sections = (await db.query(
-    `SELECT id, name, sort, is_exit FROM sections
-      WHERE shop_id = $1 AND active ORDER BY sort, name`, [shopId])).rows;
+    `SELECT s.id, s.name, s.sort, s.is_exit, o.st
+       FROM sections s
+       LEFT JOIN LATERAL (
+         SELECT MIN(pr.step_no) AS st
+           FROM v_product_route pr
+           JOIN products p2      ON p2.id = pr.product_id
+           JOIN product_groups g2 ON g2.id = p2.group_id
+          WHERE pr.section_id = s.id AND g2.owner_shop_id = $1) o ON true
+      WHERE s.active AND (s.shop_id = $1 OR o.st IS NOT NULL)
+      ORDER BY o.st NULLS LAST, s.sort, s.name`, [shopId])).rows;
 
-  const mine = rows.filter((r) => r.shop_id === shopId);
+  const mine = rows.filter((r) => r.owner_shop_id === shopId);
   res.json({
     shops,
     shop: shops.find((s) => s.id === shopId),
     sections: sections.map((sc) => ({
       ...sc, units: mine.filter((u) => u.section_id === sc.id) })),
     // Qabul qilishni kutayotganlar: boshqa tsexda turibdi, keyingi qadami menda
-    inbox: rows.filter((r) => r.shop_id !== shopId),
+    inbox: rows.filter((r) => r.owner_shop_id !== shopId),
   });
 }));
 

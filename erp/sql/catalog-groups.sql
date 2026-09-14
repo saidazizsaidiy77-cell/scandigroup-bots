@@ -69,6 +69,25 @@ INSERT INTO product_groups (code, name, line_id, is_set, sort, route_template_id
                      (SELECT id FROM route_templates WHERE code='L2-FULL'))
 ON CONFLICT (code) DO NOTHING;
 
+-- ─────────────────────────────────────────── GURUHNI QAYSI TSEX BOSHQARADI
+--
+--  Bo'lim mahsulot QAYERDA ishlanayotganini aytadi, javobgar tsex esa
+--  KIM boshqarayotganini. Ikkisi har doim ham bir xil emas.
+--
+--  Stul lak ishini lak tsexining kabinasida oladi, lekin uni boshidan
+--  oxirigacha stul tsexi boshlig'i yuritadi: u har bo'limga o'zi
+--  o'tkazadi va o'zi javob beradi. Lak tsexi ustasiga stul ko'rinmaydi —
+--  uning ekranida faqat korpus oqimi turadi.
+--
+--  Bo'sh bo'lsa (penal, kamod, sp, stol) eskicha: konver qaysi tsexning
+--  bo'limida tursa, o'sha tsex boshlig'i boshqaradi va tsexdan tsexga
+--  o'tishda ikki bosqichli topshirish ishlaydi.
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS owner_shop_id INT REFERENCES shops(id);
+
+UPDATE product_groups SET owner_shop_id = (SELECT id FROM shops WHERE code = 'STUL')
+ WHERE code = 'STU' AND owner_shop_id IS DISTINCT FROM
+       (SELECT id FROM shops WHERE code = 'STUL');
+
 -- Yuqoridagi INSERT mavjud guruhlarga tegmaydi (ON CONFLICT DO NOTHING),
 -- shuning uchun tartib alohida qo'yiladi. Saytdan tartib berilgan guruh
 -- (sort <> 0) o'z joyida qoladi.
