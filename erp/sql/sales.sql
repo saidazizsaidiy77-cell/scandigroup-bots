@@ -85,7 +85,11 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        i.lines, i.qty, i.amount,
        COALESCE(a.qty, 0) AS assigned_qty,
        -- Qatorlar to'liq yopilganmi. Bo'sh buyurtma yopilgan hisoblanmaydi.
-       (i.qty > 0 AND COALESCE(a.qty, 0) >= i.qty) AS is_ready
+       (i.qty > 0 AND COALESCE(a.qty, 0) >= i.qty) AS is_ready,
+       -- Savdo yo'nalishi: menejerga chegara shu ustundan qo'yiladi
+       -- (`worker_roles.scope_channel`). Ustun OXIRIGA qo'shilgan —
+       -- CREATE OR REPLACE VIEW faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
+       c.channel
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id

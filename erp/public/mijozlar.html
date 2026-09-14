@@ -53,11 +53,16 @@
 </div>
 
 <div class="card" style="margin-top:16px">
+  <!-- Ro'yxat yopiq turadi: sahifa kesimlar bilan ochiladi, ismlar
+       ro'yxati kerak bo'lganda ochiladi. Qidiruvga yozilsa o'zi ochiladi. -->
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
-    <h2 style="margin:0">Ro'yxat</h2>
-    <input id="fQ" placeholder="ism, region yoki telefon" style="max-width:280px" oninput="render()">
+    <div class="row" style="gap:10px">
+      <h2 style="margin:0">Ro'yxat</h2>
+      <button id="btnList" onclick="toggleList()">Ko'rsatish</button>
+    </div>
+    <input id="fQ" placeholder="ism, region yoki telefon" style="max-width:280px" oninput="onSearch()">
   </div>
-  <div style="overflow-x:auto"><table>
+  <div id="listWrap" hidden style="overflow-x:auto"><table>
     <!-- Ustunlar soni qator bilan bir xil bo'lishi kerak: «Menejer»
          sarlavhasi yetishmasdi va jadval bir katakka siljib turardi. -->
     <thead><tr><th>Mijoz nomi</th><th>Respublika</th><th>Region</th><th>Tel raqami</th>
@@ -123,6 +128,18 @@ async function load(){
   render();
 }
 
+// Qidiruvga yozilsa ro'yxat o'zi ochiladi — yopiq ekranda qidirish
+// natijasiz ko'rinib qolmasin.
+function onSearch(){
+  if ($('fQ').value.trim()) $('listWrap').hidden = false;
+  render();
+}
+
+function toggleList(){
+  $('listWrap').hidden = !$('listWrap').hidden;
+  render();
+}
+
 function render(){
   const q = $('fQ').value.trim().toLowerCase();
   const rows = customers.filter(c => !q ||
@@ -143,6 +160,8 @@ function render(){
       <td class="num"><button onclick="openForm(${c.id})">✎</button></td>
     </tr>`).join('')
     : '<tr><td class="muted" colspan="11">Mijoz topilmadi</td></tr>';
+  $('btnList').textContent = $('listWrap').hidden
+    ? `Ko'rsatish (${rows.length})` : `Yashirish (${rows.length})`;
 }
 
 function openForm(id){

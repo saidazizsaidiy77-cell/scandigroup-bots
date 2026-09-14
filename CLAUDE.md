@@ -109,6 +109,22 @@ Mijoz kartochkasidan yoki fayldan («Boshlang'ich qarz» ustuni) kiritiladi.
 Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh bo'lsa to'ladi —
 kartochkadan esa tuzatish ham, tozalash ham mumkin.
 
+**Buyurtma** (`orders` + `order_items`) — mijoz nima so'ragani, qatorlari
+bilan: bitta buyurtmada bir nechta mahsulot bo'ladi. Raqamni tizim beradi
+(`Z26-0001`). Zavod uni IKKI manbadan bajaradi (zavod qarori): T/M omborda
+tayyor turgan konverdan yoki buyurtma kutayotgan **zahiradan**. Buyurtma
+uchun yangi konver OCHILMAYDI — ishlab chiqarish o'z rejasi bilan yuradi.
+
+Konver buyurtmaning aniq QATORIGA biriktiriladi
+(`production_units.order_item_id`), buyurtmaga emas: bir xil mahsulot ikki
+xil rangda bo'lishi mumkin. Biriktirilgan konver band bo'ladi va boshqa
+buyurtmaning ro'yxatida umuman chiqmaydi. Konverning BIR QISMI ham
+olinadi — 10 talikdan 4 tasi ketsa, qolgan 6 tasi o'sha joyda bo'sh
+turaveradi (`clonePart`, `units.js`); ajratilganda bo'laklar qayta
+qo'shiladi. «Bajarilgan» degan belgi saqlanmaydi, har safar konverlardan
+hisoblanadi (`v_sales_orders`): saqlangan belgi bir kun haqiqatdan
+ajralib qolardi.
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.
@@ -233,8 +249,10 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    raqami, mahsulot, soni, rangi, matosi, omborga kirgan sanasi.
 2. **Mijozlar bazasi** — nomi, telefoni, regioni, kanali.
    (Ikkalasi ham Excel'da bo'lsa yuklash yoziladi, qo'lda terilmaydi.)
-3. **Savdo** — buyurtma va jo'natma. 1-2 siz boshlanmaydi: sotuvchi
-   buyurtmani mijozsiz ham, ombordagi mahsulotsiz ham yoza olmaydi.
+3. **Savdo** — buyurtma YOZILDI (`sql/sales.sql`, `modules/sales.js`,
+   `public/buyurtmalar.html`): buyurtma qatorlari va T/M ombordan hamda
+   zahiradan konver biriktirish. Jo'natma hali yo'q — zavod nima
+   yozilishini aytmagan (quyida, ochiq savollar).
 4. **Kassa** — kirim hujjatlari. Mahsulot narxi `$`, harajat `so'm` ham.
 
 ## Ochiq savollar — zavoddan javob kutilmoqda
@@ -268,6 +286,6 @@ hisoblanadi, bunday ustun yo'q. Savdo moduli bilan birga qilinadi.
 
 ## Hali yo'q
 
-Ombor (xom ashyo), savdo, kassa, ishbay oylik, sifat nazorati (brakda
+Ombor (xom ashyo), jo'natma, kassa, ishbay oylik, sifat nazorati (brakda
 aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline rejim,
 PIN uchun urinishlar cheklovi (ataylab — zavod qarori).

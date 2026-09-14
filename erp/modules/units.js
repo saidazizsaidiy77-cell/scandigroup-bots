@@ -817,17 +817,32 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
     return u.id;
   }
 
+  return clonePart(client, req, u, n, { toSection, movedOn });
+}
+
+//  Konverdan n dona ajratib, yangi qator qiladi. Tarix (unit_moves) ESKI
+//  qatorda qoladi: konveyer raqami bitta, tarix ham shu raqamniki.
+//
+//  `keepPlace` — bo'lak joyidan qimirlamaydi. Savdo shundan foydalanadi:
+//  10 talik konverdan 4 tasi buyurtmaga biriktiriladi, qolgan 6 tasi
+//  o'sha omborda bo'sh turaveradi (modules/sales.js). Usiz `toSection`
+//  bo'sh bo'lgani "boshlanmagan holatga qaytar" degani — harakatni
+//  bekor qilish shunga tayanadi va ikkisi bir xil bo'lib qolmasligi kerak.
+async function clonePart(client, req, u, n, { toSection = null, movedOn = null,
+                                              keepPlace = false } = {}) {
   const row = (await client.query(
     `INSERT INTO production_units
        (conveyor_no, part, order_no, product_id, qty, started_on,
         current_section_id, entered_section_on, customer_id, unit_price,
         status, is_opening, note, created_by, color, fabric,
         lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on, fg_on,
-        next_shop_planned_on, is_stock)
+        next_shop_planned_on, is_stock, order_item_id)
      SELECT conveyor_no,
             (SELECT MAX(part) + 1 FROM production_units WHERE conveyor_no = u.conveyor_no),
             order_no, product_id, $2, started_on,
-            $3::int, $4::date, customer_id, unit_price,
+            CASE WHEN $6 THEN current_section_id ELSE $3::int END,
+            CASE WHEN $6 THEN entered_section_on ELSE $4::date END,
+            customer_id, unit_price,
             status, is_opening, note, $5, color, fabric,
             lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on,
             -- Omborga kirgan kun ham ko'chadi: bo'laklar bir kunda kirgan,
@@ -835,10 +850,14 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
             fg_on,
             -- Topshirish belgisi KO'CHIRILMAYDI: yangi bo'lak boshqa
             -- bo'limda va uni qaytadan jo'natish kerak bo'ladi.
-            next_shop_planned_on, is_stock
+            next_shop_planned_on, is_stock,
+            -- Buyurtma bog'lami ham ko'chadi: biriktirilgan konver
+            -- bo'linsa, buyurtmada "biriktirilgan" soni kamayib
+            -- qolmasligi kerak.
+            order_item_id
        FROM production_units u WHERE id = $1
      RETURNING id`,
-    [u.id, n, toSection, movedOn || null, req.user.id])).rows[0].id;
+    [u.id, n, toSection, movedOn || null, req.user.id, keepPlace])).rows[0].id;
   await client.query(`UPDATE production_units SET qty = qty - $2 WHERE id = $1`, [u.id, n]);
   return row;
 }
@@ -1645,3 +1664,6 @@ module.exports.createOne = createOne;
 // uchun kerak (modules/import.js). Qoldiq ± bilan emas, har safar
 // konverlardan qayta sanaladi — shu sabab bitta funksiya.
 module.exports.refreshStock = refreshStock;
+// Savdo buyurtmaga konverning bir qismini biriktirganda ishlatadi
+// (modules/sales.js): bo'lish qoidasi bitta joyda tursin.
+module.exports.clonePart = clonePart;

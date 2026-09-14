@@ -195,6 +195,10 @@ const App = (() => {
       title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
       text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
       perm: ['production.view', 'sales.view'] },
+    { href: '/buyurtmalar.html', mod: 'sales', nav: 'Buyurtmalar',
+      title: 'Buyurtmalar', lead: 'Mijoz nima so\'ragan',
+      text: "Buyurtma qatorlari \u00b7 T/M ombordan va zahiradan konver biriktirish \u00b7 muddat va summa",
+      perm: ['sales.view', 'sales.manage'] },
     { href: '/taminotchilar.html', mod: ['purchasing', 'refs'], nav: "Ta'minotchilar",
       title: "Ta'minotchilar", lead: "Kimdan sotib olinadi",
       text: "Nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim \u00b7 kirim hujjati va qarzdorlik shunga tayanadi",
@@ -230,9 +234,9 @@ const App = (() => {
     //  Bo'lim yozilganda shu qatorga `href`, `title`, `lead` va `text`
     //  qo'shiladi, boshqa hech narsa o'zgartirilmaydi.
 
-    // Savdo
-    { mod: 'sales', nav: 'Buyurtmalar',                 perm: ['sales.view'] },
-    { mod: 'sales', nav: 'Buyurtma shakllantirish',     perm: ['sales.manage'] },
+    // Savdo. "Buyurtma shakllantirish" alohida sahifa emas: buyurtma shu
+    // yerdan yoziladi ham, ochiladi ham — ikki sahifa bo'lsa menejer yangi
+    // buyurtmani qayerdan boshlashni har safar o'ylab o'tirardi.
     { mod: 'sales', nav: 'Buyurtmalar arxivi',          perm: ['sales.view'] },
     { mod: 'sales', nav: "O'chirilgan buyurtmalar",     perm: ['sales.manage'] },
     { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },

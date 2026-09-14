@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buyurtmalar · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Buyurtmalar</h1></div>
+  <div class="row"><span id="btnNew"></span><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <!-- Telefonda ikkalasi bir qatorga sig'maydi: chiplar surilib ketadi,
+       qidiruv esa pastga tushadi. -->
+  <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap;
+       margin-bottom:12px">
+    <div class="row" id="chips" style="gap:6px;overflow-x:auto;max-width:100%"></div>
+    <input id="fQ" placeholder="Z№ yoki mijoz" style="max-width:240px" oninput="load()">
+  </div>
+  <div style="overflow-x:auto"><table>
+    <thead><tr><th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
+      <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
+      <th class="num">Biriktirilgan</th><th class="num">Summa, $</th>
+      <th>Holat</th><th></th></tr></thead>
+    <tbody id="tB"></tbody>
+  </table></div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = (v) => {
+  const x = Number(v) || 0;
+  const [i, f] = (Math.abs(x) < 1e15 ? x.toFixed(2) : String(x)).split('.');
+  const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return f && f !== '00' ? `${g}.${f}` : g;
+};
+
+// Holat nomlari bitta joyda: jadval ham, tahrir oynasi ham shundan oladi.
+const STATUS = { new: 'Yangi', reserved: 'Biriktirilgan',
+                 shipped: "Jo'natilgan", cancelled: 'Bekor qilingan' };
+const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['reserved', 'Biriktirilgan'],
+                 ['shipped', "Jo'natilgan"], ['cancelled', 'Bekor']];
+
+let rows = [], customers = [], managers = [], products = [];
+let status = '', canWrite = false;
+// Ochiq buyurtma: sarlavha, qatorlar va biriktirilgan konverlar.
+let cur = null;
+
+async function boot(){
+  canWrite = App.can('sales.manage');
+  $('btnNew').innerHTML = canWrite
+    ? `<button class="primary" onclick="openOrder(null)">Yangi buyurtma</button>` : '';
+  const [c, p] = await Promise.all([
+    App.api('/api/units/customers'), App.api('/api/sales/products')]);
+  customers = c.customers; managers = c.managers; products = p.rows;
+  drawChips();
+  await load();
+}
+
+function drawChips(){
+  $('chips').innerHTML = FILTERS.map(([k, name]) =>
+    `<button class="${k === status ? 'primary' : ''}" onclick="setStatus('${k}')"
+      >${esc(name)}</button>`).join('');
+}
+function setStatus(k){ status = k; drawChips(); load(); }
+
+async function load(){
+  const q = new URLSearchParams();
+  if (status) q.set('status', status);
+  if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
+  rows = (await App.api('/api/sales/orders?' + q)).rows;
+
+  $('tB').innerHTML = rows.length ? rows.map(o => {
+    // Muddat o'tgan va hali yopilmagan buyurtma qizarib turadi.
+    const late = o.days_left != null && o.days_left < 0
+      && o.status !== 'shipped' && o.status !== 'cancelled';
+    return `<tr>
+      <td><strong>${esc(o.order_no)}</strong></td>
+      <td>${esc(o.customer_name)}${o.region
+        ? `<div class="muted" style="font-size:12px">${esc(o.region)}</div>` : ''}</td>
+      <td class="muted">${o.manager_name ? esc(o.manager_name) : '—'}</td>
+      <td class="muted">${(o.ordered_on || '').slice(0, 10)}</td>
+      <td class="muted">${o.due_on
+        ? (late ? `<span class="tag bad">${(o.due_on).slice(0, 10)}</span>`
+                : (o.due_on).slice(0, 10))
+        : '—'}</td>
+      <td class="num">${o.lines}</td><td class="num">${o.qty}</td>
+      <td class="num">${o.assigned_qty}${o.is_ready
+        ? ' <span class="tag ok">to\'liq</span>' : ''}</td>
+      <td class="num">${money(o.amount)}</td>
+      <td><span class="tag${o.status === 'cancelled' ? ' warn' : ''}"
+        >${esc(STATUS[o.status] || o.status)}</span></td>
+      <td class="num"><button onclick="openOrder(${o.id})">${canWrite ? '✎' : '→'}</button></td>
+    </tr>`;
+  }).join('') : '<tr><td class="muted" colspan="11">Buyurtma yo\'q</td></tr>';
+}
+
+// ─────────────────────────────────────────────────────── BUYURTMA TAHRIRI
+//
+//  Yangi buyurtma avval saqlanadi, keyin konver biriktiriladi: konver
+//  buyurtmaning QATORIGA biriktiriladi va qator saqlanmaguncha mavjud
+//  emas. Shuning uchun saqlangandan keyin oyna shu buyurtma bilan
+//  qaytadan ochiladi.
+async function openOrder(id){
+  if (id) {
+    cur = await App.api('/api/sales/orders/' + id);
+  } else {
+    cur = { order: { status: 'new', ordered_on: new Date().toISOString().slice(0, 10) },
+            items: [], units: [] };
+  }
+  draw();
+}
+
+function draw(){
+  const o = cur.order, isNew = !o.id;
+  const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled';
+  const dis = ro ? 'disabled' : '';
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:940px">
+        <div class="row" style="justify-content:space-between;margin-bottom:16px">
+          <h1 style="margin:0">${isNew ? 'Yangi buyurtma' : esc(o.order_no)}</h1>
+          <div class="row" style="gap:8px">
+            ${!isNew ? `<span class="tag">${esc(STATUS[o.status] || o.status)}</span>` : ''}
+            <button onclick="close_()">Yopish</button></div>
+        </div>
+
+        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:2;min-width:220px"><label>Mijoz</label>
+            <select id="oCust" ${dis}>
+              <option value="">— tanlang —</option>
+              ${customers.map(c => `<option value="${c.id}"
+                ${o.customer_id === c.id ? 'selected' : ''}>${esc(c.name)}${
+                  c.region ? ' · ' + esc(c.region) : ''}</option>`).join('')}
+            </select></div>
+          <div style="flex:1;min-width:160px"><label>Menejer</label>
+            <select id="oMgr" ${dis}><option value="">— o'zim —</option>
+              ${managers.map(m => `<option value="${m.id}"
+                ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+            </select></div>
+          <div style="flex:1;min-width:130px"><label>Yozilgan</label>
+            <input id="oOn" type="date" ${dis}
+                   value="${(o.ordered_on || '').slice(0, 10)}"></div>
+          <div style="flex:1;min-width:130px"><label>Muddat</label>
+            <input id="oDue" type="date" ${dis}
+                   value="${(o.due_on || '').slice(0, 10)}"></div>
+        </div>
+
+        <div style="margin-top:14px"><label>Izoh</label>
+          <input id="oNote" ${dis} value="${esc(o.note || '')}"></div>
+
+        <h2 style="margin:22px 0 10px">Qatorlar</h2>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th style="min-width:200px">Mahsulot</th><th>Rang</th><th>Mato</th>
+            <th class="num" style="width:80px">Soni</th>
+            <th class="num" style="width:100px">Narx, $</th>
+            <th class="num">Biriktirilgan</th><th></th></tr></thead>
+          <tbody id="tI"></tbody>
+        </table></div>
+        ${ro ? '' : `<button style="margin-top:10px" onclick="addItem()">+ Qator qo'shish</button>`}
+
+        <div id="unitsBox" style="margin-top:20px"></div>
+
+        ${ro ? '' : `<div class="row" style="gap:10px;margin-top:22px">
+          <button class="primary" onclick="save()">Saqlash</button>
+          ${isNew ? '' : `<button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
+        </div>`}
+        ${isNew && canWrite ? `<p class="muted" style="margin-top:10px;font-size:13px">
+          Konver biriktirish buyurtma saqlangandan keyin ochiladi.</p>` : ''}
+      </div></div>`;
+  drawItems();
+  drawUnits();
+}
+
+function drawItems(){
+  const o = cur.order;
+  const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled';
+  const dis = ro ? 'disabled' : '';
+  $('tI').innerHTML = cur.items.length ? cur.items.map((it, i) => {
+    const p = products.find(x => x.id === Number(it.product_id));
+    const need = Number(it.qty) || 0, got = Number(it.assigned_qty) || 0;
+    return `<tr data-i="${i}">
+      <td><select class="p" ${dis} onchange="setField(${i},'product_id',this.value)">
+        <option value="">— tanlang —</option>
+        ${products.map(x => `<option value="${x.id}"
+          ${Number(it.product_id) === x.id ? 'selected' : ''}>${esc(x.name)} · ${
+            esc(x.product_type)}${x.free_fg || x.free_stock
+              ? ` (bo'sh: ${x.free_fg + x.free_stock})` : ''}</option>`).join('')}
+      </select></td>
+      <td><input value="${esc(it.color || '')}" ${dis} style="max-width:120px"
+                 oninput="setField(${i},'color',this.value)"></td>
+      <td><input value="${esc(it.fabric || '')}" ${dis} style="max-width:120px"
+                 oninput="setField(${i},'fabric',this.value)"></td>
+      <td class="num"><input type="number" min="1" value="${it.qty ?? 1}" ${dis}
+            style="max-width:70px;text-align:right"
+            oninput="setField(${i},'qty',this.value)">
+        ${p ? `<div class="muted" style="font-size:11px">${esc(p.uom || '')}</div>` : ''}</td>
+      <td class="num"><input type="number" step="0.01" value="${it.unit_price ?? ''}" ${dis}
+            style="max-width:90px;text-align:right"
+            oninput="setField(${i},'unit_price',this.value)"></td>
+      <td class="num">${it.id ? `${got} / ${need}` : '<span class="muted">—</span>'}</td>
+      <td class="num" style="white-space:nowrap">${it.id && !ro
+          ? `<button onclick="openPick(${it.id})">Konver</button> ` : ''}${
+        ro ? '' : `<button onclick="delItem(${i})">✕</button>`}</td>
+    </tr>`;
+  }).join('') : '<tr><td class="muted" colspan="7">Qator qo\'shilmagan</td></tr>';
+}
+
+// Biriktirilgan konverlar ro'yxati: qaysi qatorga, qaysi bo'limda turibdi.
+function drawUnits(){
+  const ro = !canWrite || cur.order.status === 'shipped'
+          || cur.order.status === 'cancelled';
+  if (!cur.units.length) { $('unitsBox').innerHTML = ''; return; }
+  $('unitsBox').innerHTML = `
+    <h2 style="margin:0 0 10px">Biriktirilgan konverlar</h2>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>K&#8470;</th><th>Mahsulot qatori</th><th>Rang</th><th>Mato</th>
+        <th class="num">Soni</th><th>Qayerda</th><th></th></tr></thead>
+      <tbody>${cur.units.map(u => {
+        const it = cur.items.find(x => x.id === u.order_item_id);
+        return `<tr>
+          <td><strong>${esc(u.conveyor_no)}</strong></td>
+          <td class="muted">${it ? esc(it.product) : '—'}</td>
+          <td class="muted">${u.color ? esc(u.color) : '—'}</td>
+          <td class="muted">${u.fabric ? esc(u.fabric) : '—'}</td>
+          <td class="num">${u.qty}</td>
+          <td>${u.status === 'fg' ? '<span class="tag ok">T/M ombor</span>'
+               : `<span class="tag">${esc(u.section || '—')}</span>${
+                   u.is_stock ? ' <span class="tag">zahira</span>' : ''}`}</td>
+          <td class="num">${ro ? ''
+            : `<button onclick="unassign(${u.id})">Ajratish</button>`}</td>
+        </tr>`; }).join('')}</tbody>
+    </table></div>`;
+}
+
+function setField(i, k, v){ cur.items[i][k] = v; }
+function addItem(){ cur.items.push({ qty: 1 }); drawItems(); }
+function delItem(i){
+  if (Number(cur.items[i].assigned_qty) > 0)
+    return alert("Avval konverni ajrating");
+  cur.items.splice(i, 1); drawItems();
+}
+
+const close_ = () => { $('modalRoot').innerHTML = ''; cur = null; };
+
+async function save(){
+  const body = {
+    customer_id: Number($('oCust').value) || null,
+    manager_id: Number($('oMgr').value) || null,
+    ordered_on: $('oOn').value || null,
+    due_on: $('oDue').value || null,
+    note: $('oNote').value.trim() || null,
+    items: cur.items.map(it => ({ id: it.id, product_id: Number(it.product_id) || null,
+      qty: Number(it.qty) || 1, color: it.color || null, fabric: it.fabric || null,
+      unit_price: it.unit_price === '' || it.unit_price == null ? null : Number(it.unit_price),
+      note: it.note || null })),
+  };
+  if (!body.customer_id) return alert('Mijoz tanlanmagan');
+  if (body.items.some(i => !i.product_id)) return alert('Qatorda mahsulot tanlanmagan');
+  try{
+    if (cur.order.id) {
+      await App.api('/api/sales/orders/' + cur.order.id,
+        { method: 'PATCH', body: JSON.stringify(body) });
+      await openOrder(cur.order.id);
+    } else {
+      const o = await App.api('/api/sales/orders',
+        { method: 'POST', body: JSON.stringify(body) });
+      await openOrder(o.id);
+    }
+    load();
+  }catch(e){ alert(e.message); }
+}
+
+async function cancelOrder(){
+  if (!confirm('Buyurtma bekor qilinsinmi?')) return;
+  try{
+    await App.api('/api/sales/orders/' + cur.order.id,
+      { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) });
+    close_(); load();
+  }catch(e){ alert(e.message); }
+}
+
+// ──────────────────────────────────────────────── KONVER BIRIKTIRISH OYNASI
+//
+//  Ro'yxatda faqat bo'sh konver turadi: boshqa buyurtmada bandi server
+//  javobiga umuman tushmaydi. Rang va matosi mos kelgani tepada.
+let pick = null;
+
+async function openPick(itemId){
+  pick = await App.api(`/api/sales/orders/${cur.order.id}/candidates?item_id=${itemId}`);
+  const it = cur.items.find(x => x.id === itemId);
+  const left = Math.max(0, (Number(it?.qty) || 0) - (Number(it?.assigned_qty) || 0));
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closePick()">
+      <div class="modal" style="max-width:760px">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px">
+          <h1 style="margin:0">Konver biriktirish</h1>
+          <button onclick="closePick()">Orqaga</button></div>
+        <p class="muted" style="margin-bottom:16px">${esc(it?.product || '')}${
+          it?.color ? ' · ' + esc(it.color) : ''}${it?.fabric ? ' · ' + esc(it.fabric) : ''}
+          · yopilmagani: <b>${left}</b> ${esc(it?.uom || '')}</p>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>K&#8470;</th><th>Qayerda</th><th>Rang</th><th>Mato</th>
+            <th class="num">Bor</th><th class="num" style="width:90px">Olinadi</th>
+            <th></th></tr></thead>
+          <tbody>${pick.rows.length ? pick.rows.map(u => `<tr>
+            <td><strong>${esc(u.conveyor_no)}</strong></td>
+            <td>${u.status === 'fg'
+              ? '<span class="tag ok">T/M ombor</span>'
+              : `<span class="tag">${esc(u.section || '—')}</span> <span class="tag">zahira</span>`}</td>
+            <td class="${u.color_ok ? '' : 'muted'}">${u.color ? esc(u.color) : '—'}</td>
+            <td class="${u.fabric_ok ? '' : 'muted'}">${u.fabric ? esc(u.fabric) : '—'}</td>
+            <td class="num">${u.qty}</td>
+            <td class="num"><input id="q${u.id}" type="number" min="1" max="${u.qty}"
+                  value="${Math.max(1, Math.min(u.qty, left || u.qty))}"
+                  style="max-width:80px;text-align:right"></td>
+            <td class="num"><button class="primary" onclick="assign(${u.id})">Olish</button></td>
+          </tr>`).join('')
+            : `<tr><td class="muted" colspan="7">Bo'sh konver yo'q —
+                 ombor ham, zahira ham bo'sh</td></tr>`}</tbody>
+        </table></div>
+      </div></div>`;
+}
+
+const closePick = () => { pick = null; draw(); };
+
+async function assign(unitId){
+  try{
+    await App.api(`/api/sales/orders/${cur.order.id}/assign`, { method: 'POST',
+      body: JSON.stringify({ item_id: pick.item.id, unit_id: unitId,
+                             qty: Number($('q' + unitId).value) || null }) });
+    cur = await App.api('/api/sales/orders/' + cur.order.id);
+    await openPick(pick.item.id);
+    load();
+  }catch(e){ alert(e.message); }
+}
+
+async function unassign(unitId){
+  try{
+    await App.api(`/api/sales/orders/${cur.order.id}/unassign`, { method: 'POST',
+      body: JSON.stringify({ unit_id: unitId }) });
+    await openOrder(cur.order.id);
+    load();
+  }catch(e){ alert(e.message); }
+}
+
+App.start(boot, 'sales.view', 'sales.manage');
+</script>
+</body>
+</html>
