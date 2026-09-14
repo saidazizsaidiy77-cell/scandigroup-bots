@@ -139,6 +139,12 @@ tayyor mahsulot turadi); `warehouse.material` — xom ashyo, MDF, furnitura
 huquq shu qatorga yoziladi, modulga tegilmaydi. Ko'rinadigan ombor bitta
 bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
 
+**Savdo yo'nalishi** — `worker_roles.scope_channel`. Menejerga kanal
+biriktirilsa (B2B, EXPORT...), u faqat o'sha kanaldagi mijozlarni ko'radi.
+Bo'sh = hamma kanal. Tsex doirasi bilan bir xil: filtr emas, **chegara**
+(`channelsOf(req)`). Xodimlar sahifasida savdo roli tanlanganda tsex
+o'rniga yo'nalish so'raladi.
+
 **Tsex doirasi** — `worker_roles.scope_shop_id`. Doira bo'sh = hamma tsex.
 Bu filtr emas, **chegara**: `scopeOf(req)` orqali so'rovga qo'shiladi,
 klient uni o'chira olmaydi.

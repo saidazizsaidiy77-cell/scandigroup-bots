@@ -13,25 +13,29 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     `SELECT w.id, w.name, w.phone, w.pin, w.tg_id, w.active,
             COALESCE(json_agg(json_build_object(
               'code', wr.role_code, 'name', r.name, 'surface', r.surface,
-              'scope_shop_id', wr.scope_shop_id, 'scope_shop', sh.name
+              'scope_shop_id', wr.scope_shop_id, 'scope_shop', sh.name,
+              'scope_channel', wr.scope_channel, 'scope_channel_name', ch.name
             ) ORDER BY r.sort) FILTER (WHERE wr.role_code IS NOT NULL), '[]') AS roles
        FROM workers w
        LEFT JOIN worker_roles wr ON wr.worker_id = w.id
        LEFT JOIN roles r         ON r.code = wr.role_code
        LEFT JOIN shops sh        ON sh.id = wr.scope_shop_id
+       LEFT JOIN customer_channels ch ON ch.code = wr.scope_channel
       GROUP BY w.id ORDER BY w.active DESC, w.name`);
   res.json(rows);
 }));
 
 router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
-  const [roles, shops] = await Promise.all([
+  const [roles, shops, channels] = await Promise.all([
     db.query(`SELECT r.code, r.name, r.surface,
                      COUNT(rp.permission_code) AS permission_count
                 FROM roles r LEFT JOIN role_permissions rp ON rp.role_code = r.code
                GROUP BY r.code, r.name, r.surface, r.sort ORDER BY r.sort`),
     db.query(`SELECT id, name FROM shops ORDER BY sort`),
+    // Savdo yo'nalishlari: xodimga biriktiriladi (izoh: sql/units.sql)
+    db.query(`SELECT code, name FROM customer_channels ORDER BY sort, name`),
   ]);
-  res.json({ roles: roles.rows, shops: shops.rows });
+  res.json({ roles: roles.rows, shops: shops.rows, channels: channels.rows });
 }));
 
 // Telegram ID — RAQAM, @nom emas (bazada bigint). Bot ichida /myid
@@ -70,8 +74,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
       [name.trim(), phone || null, pin ? String(pin) : null, tg])).rows[0];
     for (const r of roles) {
       await client.query(
-        `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id) VALUES ($1,$2,$3)`,
-        [w.id, r.code, r.scope_shop_id || null]);
+        `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel)
+         VALUES ($1,$2,$3,$4)`,
+        [w.id, r.code, r.scope_shop_id || null, r.scope_channel || null]);
     }
     await audit(req, { module: 'admin', action: 'create', entity: 'worker',
                        entity_id: w.id, payload: { name, roles } }, client);
@@ -110,8 +115,9 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
         await client.query(
-          `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id) VALUES ($1,$2,$3)`,
-          [id, r.code, r.scope_shop_id || null]);
+          `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel)
+           VALUES ($1,$2,$3,$4)`,
+          [id, r.code, r.scope_shop_id || null, r.scope_channel || null]);
       }
     }
     // Rol yoki holat o'zgarsa sessiyalar bekor qilinadi — huquq darhol kuchga kiradi

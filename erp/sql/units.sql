@@ -71,6 +71,20 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS channel TEXT REFERENCES customer_
 -- Mijozga biriktirilgan savdo menejeri
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS manager_id INT REFERENCES workers(id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_name ON customers(lower(name));
+
+-- ─────────────────────────────────────── SAVDO MENEJERINING YO'NALISHI
+--
+--  Zavodda savdo yo'nalishlarga bo'lingan: biri B2B bilan, boshqasi
+--  eksport bilan ishlaydi. Xodimga yo'nalish biriktirilsa, u faqat
+--  o'sha kanaldagi mijozlarni ko'radi — tsex ustasining o'z tsexini
+--  ko'rgani kabi.
+--
+--  Bo'sh qoldirilsa — hamma kanal. Rahbariyat va administrator uchun
+--  shunday: ular butun savdoni ko'radi.
+--
+--  Bu FILTR emas, CHEGARA: so'rovga serverda qo'shiladi (scopeChannels).
+ALTER TABLE worker_roles ADD COLUMN IF NOT EXISTS scope_channel TEXT
+  REFERENCES customer_channels(code);
 CREATE INDEX IF NOT EXISTS idx_customers_country ON customers(country);
 CREATE INDEX IF NOT EXISTS idx_customers_region  ON customers(region);
 CREATE INDEX IF NOT EXISTS idx_customers_channel ON customers(channel);

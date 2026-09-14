@@ -270,6 +270,9 @@ function cshow(r, filename) {
       </div>
       ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
         Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+      ${(r.matched_managers || []).length ? `
+        <p class="muted" style="font-size:12px;margin-bottom:10px">
+          Xodim to'liq ismi bo'yicha topildi: ${esc(r.matched_managers.join(' · '))}</p>` : ''}
       ${(r.missing_managers || []).length ? `
         <p class="tag bad" style="display:block;margin-bottom:10px">
           Bu savdo xodimlari ro'yxatda yo'q:

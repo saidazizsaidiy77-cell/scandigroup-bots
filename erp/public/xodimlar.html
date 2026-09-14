@@ -48,6 +48,10 @@
 
 <script>
 const $ = id => document.getElementById(id);
+
+// Bu rollar mijozlar bilan ishlaydi — ularga tsex emas, SAVDO YO'NALISHI
+// biriktiriladi: biri B2B bilan, boshqasi eksport bilan ishlaydi.
+const SALES_ROLES = new Set(['sotuvchi']);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SURFACE = { web:'Sayt', miniapp:'Telegram ilova', bot:'Bot xabari' };
@@ -80,6 +84,7 @@ function openForm(id){
   const w = id ? workers.find(x => x.id === id) : null;
   const checked = (code) => w?.roles.some(r => r.code === code);
   const scopeOf = (code) => w?.roles.find(r => r.code === code)?.scope_shop_id || '';
+  const chanOf  = (code) => w?.roles.find(r => r.code === code)?.scope_channel || '';
 
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
@@ -114,12 +119,21 @@ function openForm(id){
                          ${checked(r.code) ? 'checked' : ''}>
                   <span style="flex:1">${esc(r.name)}
                     <span class="muted" style="font-size:12px">· ${SURFACE[r.surface]}</span></span>
+                  <!-- Tsex doirasi ishlab chiqarish rollari uchun, savdo
+                       yo'nalishi esa savdo uchun: bittasi tanlanadi. -->
+                  ${SALES_ROLES.has(r.code) ? `
+                  <select class="chan" data-role="${r.code}" style="width:190px">
+                    <option value="">Barcha yo'nalish</option>
+                    ${meta.channels.map(c => `<option value="${esc(c.code)}"
+                      ${chanOf(r.code) === c.code ? 'selected' : ''}
+                      >${esc(c.name)}</option>`).join('')}
+                  </select>` : `
                   <select class="scope" data-role="${r.code}" style="width:190px">
                     <option value="">Barcha tsex</option>
                     ${meta.shops.map(s => `<option value="${s.id}"
                       ${String(scopeOf(r.code)) === String(s.id) ? 'selected' : ''}
                       >${esc(s.name)}</option>`).join('')}
-                  </select>
+                  </select>`}
                 </div>`).join('')}
             </div>
           </div>
@@ -138,7 +152,8 @@ const close_ = () => { $('modalRoot').innerHTML = ''; };
 async function save(id){
   const roles = [...document.querySelectorAll('.role:checked')].map(cb => ({
     code: cb.value,
-    scope_shop_id: document.querySelector(`.scope[data-role="${cb.value}"]`).value || null,
+    scope_shop_id: document.querySelector(`.scope[data-role="${cb.value}"]`)?.value || null,
+    scope_channel: document.querySelector(`.chan[data-role="${cb.value}"]`)?.value || null,
   }));
   const body = {
     name:  $('wName').value.trim(),

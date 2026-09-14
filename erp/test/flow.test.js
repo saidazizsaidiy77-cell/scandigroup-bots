@@ -718,6 +718,44 @@ test('raqami noma\'lum qoldiq ham qabul qilinadi — tizim Q raqami beradi', asy
   assert.ok(sum.body.total.units >= 3, JSON.stringify(sum.body.total));
 });
 
+test('savdo menejeriga faqat o\'z yo\'nalishidagi mijozlar ko\'rinadi', async () => {
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Eksport menejeri'), ('B2B menejeri')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code, scope_channel)
+                  SELECT id, 'sotuvchi', 'EXPORT' FROM workers WHERE name='Eksport menejeri'
+                  ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_channel='EXPORT'`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code, scope_channel)
+                  SELECT id, 'sotuvchi', 'B2B' FROM workers WHERE name='B2B menejeri'
+                  ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_channel='B2B'`);
+
+  assert.equal((await admin('POST', '/api/units/customers', { items: [
+    { name: 'Eksport mijozi', channel: 'EXPORT' },
+    { name: 'B2B mijozi',     channel: 'B2B' },
+    { name: 'Kanalsiz mijoz' },
+  ] })).status, 200);
+
+  const eks = H.api(base, await H.sessionFor('Eksport menejeri'));
+  const b2b = H.api(base, await H.sessionFor('B2B menejeri'));
+
+  const nomlar = async (api) =>
+    (await api('GET', '/api/units/customers')).body.customers.map((c) => c.name);
+
+  const e = await nomlar(eks);
+  assert.ok(e.includes('Eksport mijozi'));
+  assert.ok(!e.includes('B2B mijozi'), 'boshqa yo\'nalish ko\'rinmaydi');
+  assert.ok(!e.includes('Kanalsiz mijoz'), 'kanalsiz mijoz ham ko\'rinmaydi');
+
+  const b = await nomlar(b2b);
+  assert.ok(b.includes('B2B mijozi'));
+  assert.ok(!b.includes('Eksport mijozi'));
+
+  // Administratorda doira yo'q — hammasini ko'radi
+  const a = await nomlar(admin);
+  for (const n of ['Eksport mijozi', 'B2B mijozi', 'Kanalsiz mijoz'])
+    assert.ok(a.includes(n), n);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

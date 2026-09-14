@@ -26,9 +26,12 @@ const trim = (v) => {
 };
 
 // ───────────────────────────────────────────────────────────────── MIJOZLAR
-router.get('/customers', need('production.view', 'sales.view'), wrap(async (_req, res) => {
+router.get('/customers', need('production.view', 'sales.view'), wrap(async (req, res) => {
+  const chans = channelsOf(req);
   const [customers, channels, managers] = await Promise.all([
-    db.query(`SELECT * FROM v_customer_sales ORDER BY name`),
+    db.query(`SELECT * FROM v_customer_sales
+               WHERE $1::text[] IS NULL OR channel = ANY($1)
+               ORDER BY name`, [chans]),
     db.query(`SELECT * FROM customer_channels ORDER BY sort`),
     // Savdo menejeri sifatida biriktirish mumkin bo'lgan xodimlar:
     // savdo roli borlar birinchi turadi
@@ -160,6 +163,15 @@ async function refreshStock(client, productId) {
 const scopeOf = (req) => {
   const s = req.user?.scope_shop_ids || [];
   return s.length ? s : null;
+};
+
+// Savdo yo'nalishi doirasi. Menejerga kanal biriktirilgan bo'lsa — u
+// faqat o'sha kanaldagi mijozlarni ko'radi; biriktirilmagan bo'lsa
+// hammasini (rahbariyat, administrator). Tsex doirasi bilan bir xil
+// mantiq: bu filtr emas, klient o'chira olmaydigan CHEGARA.
+const channelsOf = (req) => {
+  const c = req.user?.scope_channels || [];
+  return c.length ? c : null;
 };
 
 function registerQuery(q, limit, scope = null) {

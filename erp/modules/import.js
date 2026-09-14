@@ -435,10 +435,25 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
     const byChannel = new Map();
     for (const c of ch.rows) { byChannel.set(norm(c.code), c.code); byChannel.set(norm(c.name), c.code); }
     const byWorker = new Map(wk.rows.map((w) => [norm(w.name), w.id]));
+
+    // Zavod faylida xodim qisqa yoziladi — «Pulatov Soyibjon», tizimda esa
+    // to'liq: «Pulatov Soyibjon Salim o'g'li». Aynan moslik topilmasa,
+    // fayldagi nom bilan BOSHLANADIGAN xodim qidiriladi va faqat BITTA
+    // bo'lsa qabul qilinadi. Ikkitasi chiqsa — xato: tizim o'zi tanlab,
+    // mijozni boshqa odamga yozib qo'ymasligi kerak.
+    const findWorker = (nom) => {
+      const n = norm(nom);
+      if (byWorker.has(n)) return { id: byWorker.get(n) };
+      const hits = wk.rows.filter((w) => norm(w.name).startsWith(n));
+      if (hits.length === 1) return { id: hits[0].id, as: hits[0].name };
+      if (hits.length > 1) return { many: hits.map((w) => w.name) };
+      return {};
+    };
     const existing = new Set(cur.rows.map((c) => norm(c.name)));
 
     const seen = new Set();
     const missing = new Set();        // ro'yxatda yo'q savdo menejerlari
+    const matched = new Map();        // qisqa nom → tizimdagi to'liq nom
     const rows = [];
     for (let i = headIdx + 1; i < table.length; i++) {
       const cells = table[i];
@@ -463,12 +478,14 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
 
       const mgr = at('manager');
       if (mgr) {
-        const id = byWorker.get(norm(mgr));
+        const hit = findWorker(mgr);
         // Bitta xodim yuzlab qatorda uchraydi: har qatorga bir xil xato
         // yozilsa ro'yxat o'qib bo'lmas bo'lib qoladi. Shuning uchun
         // nomlar alohida yig'iladi va bir marta ko'rsatiladi.
-        if (id == null) { errors.push(`Xodim topilmadi: «${mgr}»`); missing.add(mgr); }
-        else it.manager_id = id;
+        if (hit.many)
+          errors.push(`«${mgr}» bir nechta xodimga to'g'ri keladi: ${hit.many.join(', ')}`);
+        else if (hit.id == null) { errors.push(`Xodim topilmadi: «${mgr}»`); missing.add(mgr); }
+        else { it.manager_id = hit.id; if (hit.as) matched.set(mgr, hit.as); }
       }
 
       it.phone   = at('phone')   || null;
@@ -487,6 +504,8 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
         total: rows.length, bad: bad.length,
         updates: rows.filter((r) => r.exists).length,
         missing_managers: [...missing],
+        // Qisqa nom bilan topilganlar: xodim ko'rib tasdiqlasin
+        matched_managers: [...matched].map(([a, b]) => `${a} → ${b}`),
         rows: rows.slice(0, 200),
       });
     }
