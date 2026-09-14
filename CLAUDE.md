@@ -48,6 +48,17 @@ biriktiriladi. Haqiqiy manba: **`sql/routes.sql`** — tartib faqat shu yerda.
 
 **Harakat** (`unit_moves`) — konver bo'limdan bo'limga o'tdi. Har o'tkazish
 jamlanma `flow_log` ga ham yoziladi (hisobotlar shundan hisoblanadi).
+Harakatda `qty` (nechta dona ko'chdi) va `from_section_id` (qayerdan) bor.
+
+**Konver bo'linadi.** 10 ta stulning 3 tasi keyingi bo'limga o'tadi, 7 tasi
+joyida qoladi — ya'ni konver bir vaqtda bir nechta bo'limda turadi. Alohida
+"joylashuvlar" jadvali yo'q: har bo'lak O'ZI qator bo'ladi, raqami bir xil,
+`part` bilan farqlanadi. Shuning uchun ekran, jurnal, muddat va ombor
+eskicha ishlaydi — har qator baribir bitta joydagi bitta konver.
+Bo'laklar uchrashsa QO'SHILADI va bo'shab qolgan qator o'chadi (tarixi
+qo'shilgan qatorga ko'chadi), shuning uchun donama-dona o'tkazilsa ham
+qatorlar ko'paymaydi. Yagona joy: `placePieces()` — o'tkazish ham,
+qaytarish ham shundan o'tadi.
 
 **Topshirish ikki bosqich.** Tsexdan tsexga o'tish:
 jo'natuvchi «jo'natdim» (`production_units.handover_*`) → qabul qiluvchi

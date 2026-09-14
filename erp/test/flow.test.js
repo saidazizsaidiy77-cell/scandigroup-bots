@@ -550,6 +550,103 @@ test('boshlanmagan konver tsex ekranida turadi va bitta bosishda yo\'lga chiqadi
   assert.ok(!(korpusBoard.body.unstarted || []).some((x) => x.id === u.id));
 });
 
+test('konver bo\'lib o\'tkaziladi va uchrashganda qayta qo\'shiladi', async () => {
+  const u = await newUnit({ qty: 10 });          // Arrada 10 ta
+  const holat = () => require('../db').db.query(
+    `SELECT p.part, p.qty, s.code AS bolim
+       FROM production_units p LEFT JOIN sections s ON s.id = p.current_section_id
+      WHERE p.conveyor_no = $1 AND p.status = 'production'
+      ORDER BY p.part`, [u.conveyor_no]).then((r) => r.rows);
+
+  // 3 tasi Roverga, 7 tasi Arrada qoladi
+  const r1 = await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, qty: 3 }] });
+  assert.equal(r1.status, 200, r1.text);
+  assert.deepEqual(await holat(),
+    [{ part: 1, qty: 7, bolim: 'KOR-ARRA' }, { part: 2, qty: 3, bolim: 'KOR-ROVER' }]);
+
+  // Yana 2 tasi — Roverdagi bo'lakka QO'SHILADI, uchinchi qator ochilmaydi
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, qty: 2 }] })).status, 200);
+  assert.deepEqual(await holat(),
+    [{ part: 1, qty: 5, bolim: 'KOR-ARRA' }, { part: 2, qty: 5, bolim: 'KOR-ROVER' }]);
+
+  // Qolgan 5 tasi ham o'tdi — bitta 10 lik qator qoladi
+  assert.equal((await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id }] })).status, 200);
+  assert.deepEqual(await holat(), [{ part: 2, qty: 10, bolim: 'KOR-ROVER' }]);
+
+  // Tarix yo'qolmadi: hamma harakat o'sha konveyer raqamida turibdi
+  const tarix = await H.id(
+    `SELECT COUNT(*)::int n, SUM(m.qty)::int dona
+       FROM unit_moves m JOIN production_units p ON p.id = m.unit_id
+      WHERE p.conveyor_no = $1`, [u.conveyor_no]);
+  assert.equal(tarix.n, 4, 'boshlang\'ich qoldiq + uchta o\'tkazish');
+  assert.equal(tarix.dona, 10 + 3 + 2 + 5);
+});
+
+test('bo\'lib o\'tkazishni qaytarganda donalar o\'z joyiga qaytadi', async () => {
+  const u = await newUnit({ qty: 8 });
+  const holat = () => require('../db').db.query(
+    `SELECT p.qty, s.code AS bolim
+       FROM production_units p LEFT JOIN sections s ON s.id = p.current_section_id
+      WHERE p.conveyor_no = $1 AND p.status = 'production'
+      ORDER BY p.part`, [u.conveyor_no]).then((r) => r.rows);
+
+  const r = await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id, qty: 3 }] });
+  const yangi = r.body.moved[0].unit_id;
+  assert.notEqual(yangi, u.id, 'bo\'lak alohida qator bo\'ldi');
+  assert.deepEqual(await holat(),
+    [{ qty: 5, bolim: 'KOR-ARRA' }, { qty: 3, bolim: 'KOR-ROVER' }]);
+
+  // Qaytarish: 3 tasi Arraga qaytadi va 5 taga qo'shiladi
+  assert.equal((await korpus('POST', '/api/units/undo', { unit_id: yangi })).status, 200);
+  assert.deepEqual(await holat(), [{ qty: 8, bolim: 'KOR-ARRA' }],
+    'sakkiztasi yana bitta qator bo\'lib Arrada turibdi');
+});
+
+test('noto\'g\'ri son o\'tkazilmaydi', async () => {
+  const u = await newUnit({ qty: 4 });
+  for (const [qty, kutilgan] of [[0, /noldan katta/], [-2, /noldan katta/],
+                                 [5, /o'tkazib bo'lmaydi/], [1.5, /butun/]]) {
+    const r = await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id, qty }] });
+    assert.equal(r.status, 400, `${qty} → ${r.text}`);
+    assert.match(r.body.error, kutilgan);
+  }
+  // Hech narsa o'zgarmadi
+  assert.equal((await H.id(`SELECT qty FROM production_units WHERE id=$1`, [u.id])).qty, 4);
+});
+
+test('keyingi tsex konverning bir qismini qabul qila oladi', async () => {
+  const KOR_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='KOR-SHKUR'`)).id;
+  const u = await newUnit({ qty: 10, section_id: KOR_SHKUR });
+
+  // Korpus «Lak tsexiga jo'natdim» deydi — belgi butun qatorga qo'yiladi
+  assert.equal((await korpus('POST', '/api/units/handover', { items: [u.id] })).status, 200);
+
+  // Lak tsexi 4 tasini oladi, 6 tasi korpusda qoladi
+  const r = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id, qty: 4 }] });
+  assert.equal(r.status, 200, r.text);
+  const holat = async () => (await require('../db').db.query(
+    `SELECT p.qty, s.code AS bolim, p.handover_on IS NOT NULL AS jonatilgan
+       FROM production_units p LEFT JOIN sections s ON s.id = p.current_section_id
+      WHERE p.conveyor_no = $1 AND p.status = 'production' ORDER BY p.part`,
+    [u.conveyor_no])).rows;
+  assert.deepEqual(await holat(), [
+    { qty: 6, bolim: 'KOR-SHKUR', jonatilgan: true },
+    { qty: 4, bolim: 'BOY-AST1',  jonatilgan: false },
+  ], 'qolgani jo\'natilgan holida turadi, o\'tgani lak tsexida');
+
+  // Qolgan 6 tasi ham qabul qilinadi — belgi saqlangani uchun
+  assert.equal((await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] })).status, 200);
+  assert.deepEqual(await holat(), [{ qty: 10, bolim: 'BOY-AST1', jonatilgan: false }],
+    'hammasi lak tsexida bitta qator bo\'lib qo\'shildi');
+
+  // Lak tsexiga kirish sanasi yozilgan
+  assert.ok((await H.id(
+    `SELECT lak_on FROM production_units WHERE conveyor_no=$1 AND status='production'`,
+    [u.conveyor_no])).lak_on);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

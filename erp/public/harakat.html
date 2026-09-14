@@ -218,13 +218,14 @@ function kindOf(id) {
   return 'move';                       // qabul qilish ro'yxatidagilar
 }
 
-async function apply(ids) {
+async function apply(ids, qty) {
   const send = ids.filter(id => kindOf(id) === 'send');
   const move = ids.filter(id => kindOf(id) !== 'send');
   try {
     if (move.length)
       await App.api('/api/units/move', {
-        method: 'POST', body: JSON.stringify({ items: move.map(id => ({ unit_id: id })) }) });
+        method: 'POST', body: JSON.stringify({
+          items: move.map(id => qty == null ? { unit_id: id } : { unit_id: id, qty }) }) });
     if (send.length)
       await App.api('/api/units/handover', {
         method: 'POST', body: JSON.stringify({ items: send }) });
@@ -236,8 +237,73 @@ async function apply(ids) {
   } catch (e) { toast(e.message, true); }
 }
 
-const move  = id => apply([id]);
+const move  = id => askQty(id);
 const send1 = id => apply([id]);
+
+// ─────────────────────────────────────────── NECHTASI O'TADI
+//
+//  Konver — 10 ta stul emas, 10 ta stulning BIR PARTIYASI. Zavod uni
+//  butunligicha ko'chirmaydi: uchtasi zborkaga o'tadi, yettitasi shkurkada
+//  qoladi. Shuning uchun bitta konverni o'tkazayotganda soni so'raladi.
+//
+//  Bittalik konverda so'ralmaydi: tanlov yo'q joyda savol berish —
+//  ustaning kuniga o'nlab marta bosadigan tugmasini sekinlashtirish.
+//
+//  Ko'p tanlab bir yo'la o'tkazishda ham so'ralmaydi: u yerda har konver
+//  uchun alohida son kerak bo'lardi, ya'ni ro'yxatning o'zi. Guruh bilan
+//  o'tkazish — "hammasi o'tdi" degani.
+function unitById(id) {
+  for (const u of (data.unstarted || [])) if (u.id === id) return u;
+  for (const u of data.inbox) if (u.id === id) return u;
+  for (const sc of data.sections) for (const u of sc.units) if (u.id === id) return u;
+  return null;
+}
+
+function askQty(id) {
+  const u = unitById(id);
+  if (!u || u.qty <= 1) return apply([id]);
+  const max = u.qty;
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="qtyBox" onclick="if(event.target===this)closeQty()">
+      <div class="modal" style="max-width:360px">
+        <h2 style="margin-bottom:4px">${esc(u.conveyor_no)}</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">${esc(u.product)} ·
+          bu yerda <b>${max} ta</b> → ${esc(u.next_section || 'keyingi bosqich')}</p>
+        <label>Nechtasi o'tadi?</label>
+        <div class="row" style="gap:8px;margin-bottom:14px">
+          <button onclick="stepQty(-1)" style="width:52px;font-size:20px">−</button>
+          <input id="qtyVal" type="number" inputmode="numeric" min="1" max="${max}"
+                 value="${max}" style="text-align:center;font-size:22px;flex:1">
+          <button onclick="stepQty(1)" style="width:52px;font-size:20px">+</button>
+        </div>
+        <div class="row" style="gap:8px;margin-bottom:16px">
+          <button onclick="setQty(1)" style="flex:1">1 ta</button>
+          ${max > 3 ? `<button onclick="setQty(${Math.floor(max / 2)})"
+            style="flex:1">${Math.floor(max / 2)} ta</button>` : ''}
+          <button onclick="setQty(${max})" style="flex:1">Hammasi</button>
+        </div>
+        <button class="primary" style="width:100%" onclick="okQty(${id},${max})">O'tkazish</button>
+        <button style="width:100%;margin-top:8px" onclick="closeQty()">Bekor qilish</button>
+      </div>
+    </div>`);
+  setTimeout(() => $('qtyVal')?.select(), 50);
+}
+
+const closeQty = () => $('qtyBox')?.remove();
+function setQty(n) { $('qtyVal').value = n; }
+function stepQty(d) {
+  const el = $('qtyVal');
+  const n = Math.min(Number(el.max), Math.max(1, (Number(el.value) || 1) + d));
+  el.value = n;
+}
+function okQty(id, max) {
+  const n = Number($('qtyVal').value);
+  if (!Number.isInteger(n) || n < 1 || n > max)
+    return toast(`1 dan ${max} gacha son kiriting`, true);
+  closeQty();
+  // Hammasi bo'lsa son yuborilmaydi — eskicha, butun konver o'tadi
+  apply([id], n === max ? null : n);
+}
 
 async function unsend(id) {
   try {

@@ -321,8 +321,12 @@ function render(){
   const inFg   = rows.filter(r => r.status === 'fg').length;
   const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);
   const qty    = rows.reduce((s, r) => s + Number(r.qty || 0), 0);
+  // Bo'lingan konver jurnalda bir nechta qator bo'lib turadi (10 tadan
+  // 3 tasi keyingi bo'limda). Ko'rsatkichda u BITTA konver bo'lib
+  // sanalishi kerak, aks holda zavodda yo'q konverlar paydo bo'ladi.
+  const konverlar = new Set(rows.map(r => r.conveyor_no)).size;
   $('kpis').innerHTML = [
-    ['Jami konver', rows.length, qty + ' dona'],
+    ['Jami konver', konverlar, qty + ' dona'],
     ['Ishlab chiqarishda', inProd, 'konveyerda'],
     ['T/M omborda', inFg, 'tayyor'],
     ['Jami summa', '$' + money(amount), 'USD'],
@@ -397,12 +401,30 @@ function bulk(){
 async function move(id){
   const ids = id ? [id] : selected();
   if (!ids.length) return;
+
+  // Konverning bir qismi o'tishi mumkin: 10 ta stulning 3 tasi keyingi
+  // bo'limga, 7 tasi joyida qoladi. Bittalik konverda va guruh bilan
+  // o'tkazishda so'ralmaydi — u yerda tanlov yo'q.
+  let qty = null;
+  if (id) {
+    const r0 = rows.find(x => x.id === id);
+    if (r0 && r0.qty > 1) {
+      const javob = prompt(`Nechtasi o'tadi? (bu yerda ${r0.qty} ta)`, r0.qty);
+      if (javob === null) return;
+      const n = Number(javob);
+      if (!Number.isInteger(n) || n < 1 || n > r0.qty)
+        return alert(`1 dan ${r0.qty} gacha son kiriting`);
+      if (n < r0.qty) qty = n;
+    }
+  }
+
   const on = prompt("O'tkazish sanasi (bo'sh qoldirilsa bugun):",
                     new Date().toISOString().slice(0, 10));
   if (on === null) return;
   try{
     const r = await App.api('/api/units/move', { method:'POST', body: JSON.stringify({
-      items: ids.map(unit_id => ({ unit_id, moved_on: on || null })) })});
+      items: ids.map(unit_id => ({ unit_id, moved_on: on || null,
+                                   ...(qty ? { qty } : {}) })) })});
     const toFg = r.moved.filter(m => m.is_exit).length;
     await load();
     alert(`${r.moved.length} ta konver o'tkazildi` +

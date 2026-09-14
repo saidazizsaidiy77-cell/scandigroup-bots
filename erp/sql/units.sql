@@ -130,6 +130,55 @@ CREATE TABLE IF NOT EXISTS unit_moves (
   note        TEXT
 );
 
+-- ============================================================================
+--  KONVER BO'LINADI
+--
+--  Zavod konverni butunligicha ko'chirmaydi: 10 ta stulning 3 tasi
+--  keyingi bo'limga o'tadi, 7 tasi joyida qoladi. Ya'ni konver bir vaqtda
+--  bir nechta bo'limda turadi.
+--
+--  Buning uchun alohida "joylashuvlar" jadvali ochilmadi — konverning
+--  har bo'lagi O'ZI qator bo'lib turadi: bir xil konveyer raqami, har
+--  biri o'z bo'limida, o'z sonida. Shunda bo'lim ekrani, jurnal, muddat
+--  hisobi va ombor qabuli — hammasi eskicha ishlaydi, chunki har qator
+--  baribir bitta joyda turgan bitta konver.
+--
+--  Bo'laklar uchrashganda qo'shilib ketadi: 3 tasi Zborkaga o'tgan, keyin
+--  qolgan 7 tasi ham o'tsa, Zborkada bitta 10 lik qator qoladi. Shuning
+--  uchun qatorlar soni o'smaydi — konver nechta bo'limda tursa, shuncha.
+--
+--  `part` — bo'lak raqami. Raqamning o'zi takrorlanmasligi kerak edi,
+--  endi (raqam + bo'lak) juftligi takrorlanmaydi: yangi konver har doim
+--  1-bo'lak bo'lib kiradi, demak bir xil raqamli ikkinchi konver
+--  ochilmaydi — himoya o'z joyida qoladi.
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS part INT NOT NULL DEFAULT 1;
+ALTER TABLE production_units DROP CONSTRAINT IF EXISTS production_units_conveyor_no_key;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_units_no_part
+  ON production_units (conveyor_no, part);
+CREATE INDEX IF NOT EXISTS idx_units_no ON production_units (conveyor_no);
+
+-- Harakatda nechta dona ko'chgani va QAYERDAN kelgani. Qayerdan —
+-- qaytarish uchun: bo'lak orqaga qaytganda donalar aynan o'sha bo'limdagi
+-- qatorga qo'shilishi kerak, aks holda ular yo'qolib qoladi.
+ALTER TABLE unit_moves ADD COLUMN IF NOT EXISTS qty INT NOT NULL DEFAULT 1;
+ALTER TABLE unit_moves ADD COLUMN IF NOT EXISTS from_section_id INT REFERENCES sections(id);
+
+-- Eski harakatlarda bu ustunlar yo'q edi. Bir marta to'ldiriladi:
+-- soni — konverning hozirgi soni (u paytda bo'linish bo'lmagan),
+-- qayerdan — o'sha konverning bir oldingi harakati.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'moves-qty-from') THEN
+    UPDATE unit_moves m SET qty = u.qty
+      FROM production_units u WHERE u.id = m.unit_id;
+    UPDATE unit_moves m SET from_section_id = p.section_id
+      FROM (SELECT id, LAG(section_id) OVER (PARTITION BY unit_id ORDER BY id) AS section_id
+              FROM unit_moves) p
+     WHERE p.id = m.id;
+    INSERT INTO migration_flags (key) VALUES ('moves-qty-from');
+  END IF;
+END $$;
+
 -- ZAHIRA. Zavod mijozga yetkazishni qisqartirish uchun mahsulotni oldindan,
 -- rangsiz holda tayyorlab qo'yadi va rang sepish bo'limida ushlab turadi.
 -- Buyurtma tushgach rang beriladi, lak sepiladi, qadoqlanadi.

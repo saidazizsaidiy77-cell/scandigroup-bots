@@ -408,10 +408,10 @@ async function createOne(client, req, it) {
 
   if (it.section_id) {
     await client.query(
-      `INSERT INTO unit_moves (unit_id, section_id, moved_on, worker_id, note)
-       VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4, $5)`,
-      [u.id, it.section_id, it.entered_section_on || null, req.user.id,
-       it.is_opening ? 'Boshlang\'ich qoldiq' : null]);
+      `INSERT INTO unit_moves (unit_id, section_id, moved_on, qty, worker_id, note)
+       VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4,$5,$6)`,
+      [u.id, it.section_id, it.entered_section_on || null, Number(it.qty) || 1,
+       req.user.id, it.is_opening ? 'Boshlang\'ich qoldiq' : null]);
 
     // Jamlanma hisobotlar (WIP, zavod ko'rinishi, panel) flow_log ga tayanadi —
     // boshlang'ich qoldiq ham o'sha yerga yozilmasa, kiritilgan mahsulot
@@ -718,7 +718,87 @@ async function relocate(client, req, unitId, sectionId) {
 }
 
 // ──────────────────────────────────────────── BIRLIKNI KEYINGI BO'LIMGA O'TKAZISH
-async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect, defect_reason, note }) {
+//  n dona konverni boshqa bo'limga ko'chiradi. Uch holat bor va uchalasi
+//  ham bitta joyda turishi kerak: o'tkazish ham, qaytarish ham xuddi shu
+//  qoidaga bo'ysunadi, aks holda ikki tomonda ikki xil mantiq paydo
+//  bo'lardi va donalar yo'qolib qolardi.
+//
+//    1. Nishonda shu konverning bo'lagi bor  → donalar unga qo'shiladi
+//    2. Butun qator ko'chadi, nishonda bo'lak yo'q → qatorning o'zi ko'chadi
+//    3. Bir qismi ko'chadi, nishonda bo'lak yo'q → yangi bo'lak ochiladi
+//
+//  Qator bo'shab qolsa o'chiriladi, tarixi esa qo'shilgan qatorga
+//  ko'chiriladi: konveyer raqamining tarixi butun qolishi kerak.
+//
+//  `toSection` NULL bo'lishi mumkin — qaytarishda konver boshlanmagan
+//  holatiga tushadi.
+async function placePieces(client, req, u, toSection, n, movedOn) {
+  const sibling = toSection ? (await client.query(
+    `SELECT id FROM production_units
+      WHERE conveyor_no = $1 AND id <> $2 AND status = 'production'
+        AND current_section_id = $3
+      ORDER BY id LIMIT 1 FOR UPDATE`, [u.conveyor_no, u.id, toSection])).rows[0] : null;
+  const whole = n >= u.qty;
+
+  if (sibling) {
+    await client.query(
+      `UPDATE production_units SET qty = qty + $2,
+              entered_section_on = COALESCE($3::date, entered_section_on)
+        WHERE id = $1`, [sibling.id, n, movedOn || null]);
+    if (whole) {
+      await client.query(`UPDATE unit_moves SET unit_id = $2 WHERE unit_id = $1`,
+                         [u.id, sibling.id]);
+      await client.query(`DELETE FROM production_units WHERE id = $1`, [u.id]);
+    } else {
+      await client.query(`UPDATE production_units SET qty = qty - $2 WHERE id = $1`,
+                         [u.id, n]);
+    }
+    return sibling.id;
+  }
+
+  if (whole) {
+    await client.query(
+      `UPDATE production_units
+          SET current_section_id = $2::int,
+              entered_section_on = $3::date
+        WHERE id = $1`, [u.id, toSection, movedOn || null]);
+    return u.id;
+  }
+
+  const row = (await client.query(
+    `INSERT INTO production_units
+       (conveyor_no, part, order_no, product_id, qty, started_on,
+        current_section_id, entered_section_on, customer_id, unit_price,
+        status, is_opening, note, created_by, color, fabric,
+        lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on,
+        next_shop_planned_on, is_stock)
+     SELECT conveyor_no,
+            (SELECT MAX(part) + 1 FROM production_units WHERE conveyor_no = u.conveyor_no),
+            order_no, product_id, $2, started_on,
+            $3::int, $4::date, customer_id, unit_price,
+            status, is_opening, note, $5, color, fabric,
+            lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on,
+            -- Topshirish belgisi KO'CHIRILMAYDI: yangi bo'lak boshqa
+            -- bo'limda va uni qaytadan jo'natish kerak bo'ladi.
+            next_shop_planned_on, is_stock
+       FROM production_units u WHERE id = $1
+     RETURNING id`,
+    [u.id, n, toSection, movedOn || null, req.user.id])).rows[0].id;
+  await client.query(`UPDATE production_units SET qty = qty - $2 WHERE id = $1`, [u.id, n]);
+  return row;
+}
+
+//  ★ KONVER BO'LAKLARI
+//
+//  Bitta o'tkazishda konverning HAMMASI emas, bir qismi ketishi mumkin:
+//  10 ta stulning 3 tasi Zborkaga o'tadi, 7 tasi Shkurkada qoladi. Shunda
+//  konver ikkita qator bo'ladi — bir xil raqam, har biri o'z bo'limida.
+//
+//  Bo'laklar uchrashsa QO'SHILADI: keyin qolgan 7 tasi ham Zborkaga
+//  o'tsa, u yerda bitta 10 lik qator qoladi va bo'sh qolgan qator
+//  o'chiriladi (tarixi qo'shilgan qatorga ko'chiriladi). Shu sababdan
+//  ustalar donama-dona o'tkazsa ham qatorlar ko'payib ketmaydi.
+async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_defect, defect_reason, note }) {
   const u = (await client.query(
     `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`, [unit_id])).rows[0];
   if (!u) throw new Error('Konver topilmadi');
@@ -798,22 +878,31 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   const defect = Number(qty_defect) || 0;
   if (defect > 0 && !defect_reason) throw new Error('Brak uchun sabab kodi majburiy');
 
-  const move = (await client.query(
-    `INSERT INTO unit_moves (unit_id, section_id, moved_on, qty_defect, defect_reason, worker_id, note)
-     VALUES ($1,$2, COALESCE($3::date, CURRENT_DATE), $4,$5,$6,$7) RETURNING id`,
-    [unit_id, target, moved_on || null, defect, defect_reason || null, req.user.id, note || null])).rows[0];
+  // Nechta dona ketadi. Ko'rsatilmasa — hammasi (eskicha xulq).
+  const n = qty == null || qty === '' ? u.qty : Number(qty);
+  if (!Number.isInteger(n) || n <= 0)
+    throw new Error(`${u.conveyor_no}: soni butun va noldan katta bo'lishi kerak`);
+  if (n > u.qty)
+    throw new Error(`${u.conveyor_no}: bu yerda ${u.qty} ta bor, ${n} tasini o'tkazib bo'lmaydi`);
+  if (defect > n) throw new Error(`${u.conveyor_no}: brak soni o'tkazilayotgan sondan ko'p`);
 
-  await client.query(
-    `UPDATE production_units SET
-       current_section_id   = $2,
-       entered_section_on   = COALESCE($3::date, CURRENT_DATE),
-       -- Holat va T/M ombor sanasiga TEGILMAYDI. Chiqish bo'limiga
-       -- kirish mahsulotni omborga tushirmaydi: uni ombor mudiri qabul
-       -- qiladi (POST /stock/accept). Bu tsexlar orasidagi qoidaning
-       -- o'zi — topshirishda ikki tomon bo'ladi.
-       next_shop_planned_on = CASE WHEN $4::boolean THEN NULL
-                                   ELSE next_shop_planned_on END
-     WHERE id = $1`, [unit_id, target, moved_on || null, shopChanged]);
+  const row = await placePieces(client, req, u, target, n,
+                                moved_on || new Date().toISOString().slice(0, 10));
+
+  // Keyingi tsexga topshirish rejasi faqat konver HAQIQATAN boshqa tsexga
+  // o'tganda tozalanadi. Holat va T/M ombor sanasiga esa tegilmaydi:
+  // chiqish bo'limiga kirish mahsulotni omborga tushirmaydi, uni ombor
+  // mudiri qabul qiladi (POST /stock/accept).
+  if (shopChanged)
+    await client.query(
+      `UPDATE production_units SET next_shop_planned_on = NULL WHERE id = $1`, [row]);
+
+  const move = (await client.query(
+    `INSERT INTO unit_moves (unit_id, section_id, from_section_id, moved_on,
+                             qty, qty_defect, defect_reason, worker_id, note)
+     VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), $5,$6,$7,$8,$9) RETURNING id`,
+    [row, target, u.current_section_id || null, moved_on || null,
+     n, defect, defect_reason || null, req.user.id, note || null])).rows[0];
 
   // Lak va Qadoqlash tsexiga kirish sanasi jurnalda alohida ustun. Reja
   // sanasini tsex boshlig'i qo'yadi, faktni esa konver o'sha tsexga
@@ -824,7 +913,7 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
     const col = sec.milestone === 'lak' ? 'lak_on' : 'pack_on';
     await client.query(
       `UPDATE production_units SET ${col} = COALESCE($2::date, CURRENT_DATE)
-        WHERE id = $1 AND ${col} IS NULL`, [unit_id, moved_on || null]);
+        WHERE id = $1 AND ${col} IS NULL`, [row, moved_on || null]);
   }
 
   // Umumiy hisobotlar (WIP, panel, Pareto) o'zgarishsiz ishlashi uchun
@@ -833,7 +922,7 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   const flow = (await client.query(
     `INSERT INTO flow_log (shift_id, section_id, product_id, qty_ok, qty_defect, worker_id, note)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [shiftId, target, u.product_id, u.qty, defect, req.user.id, u.conveyor_no])).rows[0];
+    [shiftId, target, u.product_id, n, defect, req.user.id, u.conveyor_no])).rows[0];
   if (defect > 0) {
     await client.query(
       `INSERT INTO defects (flow_log_id, work_date, section_id, product_id, reason_code, qty)
@@ -843,7 +932,8 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty_defect,
   // Qaytarishda aynan shu jamlanma yozuvni topish uchun bog'lab qo'yamiz
   await client.query(`UPDATE unit_moves SET flow_log_id = $2 WHERE id = $1`,
                      [move.id, flow.id]);
-  return { unit_id, section_id: target, is_exit: sec.is_exit };
+  return { unit_id: row, conveyor_no: u.conveyor_no, qty: n,
+           section_id: target, is_exit: sec.is_exit };
 }
 
 // ────────────────────────────────────────── OXIRGI O'TKAZISHNI QAYTARISH
@@ -905,20 +995,12 @@ async function undoLastMove(client, req, unit_id) {
 
   await client.query(`DELETE FROM unit_moves WHERE id = $1`, [last.id]);
 
-  // Oldingi harakat — konver shu yerga qaytadi. Umuman harakat qolmasa,
-  // konver "boshlanmagan" holatga tushadi.
-  const prev = (await client.query(
-    `SELECT m.*, s.is_exit FROM unit_moves m
-       JOIN sections s ON s.id = m.section_id
-      WHERE m.unit_id = $1 ORDER BY m.id DESC LIMIT 1`, [unit_id])).rows[0];
-
-  // Holat o'zgarmaydi: `fg` faqat ombor qabulidan keladi, joylashuvdan emas.
-  await client.query(
-    `UPDATE production_units SET
-       current_section_id = $2::int,
-       entered_section_on = $3::date
-     WHERE id = $1`,
-    [unit_id, prev?.section_id || null, prev?.moved_on || null]);
+  // Donalar KELGAN joyiga qaytadi. Bir qismi ko'chgan bo'lsa faqat o'sha
+  // qism qaytadi, qolgani joyida turadi — o'tkazishning aynan teskarisi.
+  // Qaytgan joyda bo'lak turgan bo'lsa donalar unga qo'shiladi.
+  const back = Math.min(last.qty || u.qty, u.qty);
+  const row = await placePieces(client, req, u, last.from_section_id || null,
+                                back, last.moved_on);
 
   // Lak va qadoqlash sanalari qolgan harakatlardan qaytadan olinadi
   await client.query(
@@ -931,13 +1013,13 @@ async function undoLastMove(client, req, unit_id) {
                     JOIN sections s ON s.id = m.section_id
                     JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'pack'
                    WHERE m.unit_id = u.id)
-     WHERE u.id = $1`, [unit_id]);
+     WHERE u.id = $1`, [row]);
 
   // T/M ombor qoldig'iga tegilmaydi: chiqish bo'limiga o'tish uni
   // oshirmagan edi, demak qaytarish ham kamaytirmaydi.
 
-  return { unit_id, conveyor_no: u.conveyor_no,
-           from_section_id: last.section_id, to_section_id: prev?.section_id || null };
+  return { unit_id: row, conveyor_no: u.conveyor_no, qty: back,
+           from_section_id: last.section_id, to_section_id: last.from_section_id || null };
 }
 
 // Oxirgi o'tkazishni qaytarish. Bir nechta konverni birdan ham qabul qiladi.
@@ -1198,6 +1280,8 @@ router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(a
   } finally { client.release(); }
 }));
 
+// Har element: { unit_id, qty? } — soni ko'rsatilmasa konver butunligicha
+// o'tadi. Bir qismi ko'rsatilsa konver bo'linadi (izoh: placePieces).
 router.post('/move', need('production.entry'), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   const client = await db.connect();
