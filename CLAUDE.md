@@ -177,9 +177,11 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
   bo'lmaydi.
 
-**Omborlar ro'yxati**
-- Zavodda yana qanday omborlar bor? Hozir ikkitasi: tayyor mahsulot
-  (ishlayapti) va xom ashyo (rejada).
+**Vitrinalar**
+- `Abu-Saxiy`, `Palma`, `Arca` — savdo nuqtasi deb belgilandi
+  (`kind='fg'`). To'g'rimi?
+- Ular ochilganda konver qaysi omborda turgani yozilishi kerak: hozir
+  butun tayyor mahsulot bitta omborda deb hisoblanadi, ustun yo'q.
 
 **Savdo moduli**
 - Buyurtma qabul qilishda nima yoziladi?

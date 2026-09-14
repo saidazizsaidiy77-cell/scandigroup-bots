@@ -101,24 +101,46 @@ CREATE TABLE IF NOT EXISTS warehouses (
   sort      INT NOT NULL DEFAULT 100
 );
 
--- Ikkita ombor: biri ishlayapti, biri ochilishini kutmoqda. Boshqa
--- omborlar zavoddan ro'yxat kelganda qo'shiladi — bu yerga taxmin
--- yozilmaydi: ro'yxatda turgan ombor zavodda bor degani.
+-- Zavod aytgan omborlar. Faqat tayyor mahsulot ombori ishlayapti,
+-- qolganlari ro'yxatda «rejada» bo'lib turadi: ichi yozilgani sayin
+-- is_active = TRUE ga o'tkaziladi.
+--
+-- Vitrinalar — savdo nuqtalari, ularda TAYYOR mahsulot turadi, shuning
+-- uchun kind = 'fg'. Ular ochilganda konverga qaysi omborda turgani
+-- yozilishi kerak bo'ladi (hozir bunday ustun yo'q: butun tayyor
+-- mahsulot bitta omborda deb hisoblanadi).
 INSERT INTO warehouses (code, name, kind, note, is_active, sort) VALUES
-  ('TM',   'Tayyor mahsulot ombori', 'fg',
-   'Qadoqlash tsexidan qabul qilingan konverlar', TRUE,  1),
-  ('XOM',  'Xom ashyo ombori',       'material',
-   'Spravochnik tayyor bo''lgach ochiladi',        FALSE, 2)
+  ('TM',         'Tayyor mahsulot ombori', 'fg',
+   'Qadoqlash tsexidan qabul qilingan konverlar',  TRUE,  1),
+  ('XOM',        'Xom ashyo ombori',       'material',
+   'Spravochnik tayyor bo''lgach ochiladi',         FALSE, 2),
+  ('MDF',        'MDF ombori',             'material',
+   'MDF listlari',                                 FALSE, 3),
+  ('FURN',       'Furnitura ombori',       'material',
+   'Petlya, napravlyayushiy, dastak va boshqalar', FALSE, 4),
+  ('VITR-ABU',   'Abu-Saxiy vitrina',      'fg',
+   'Savdo nuqtasi',                                FALSE, 5),
+  ('VITR-PALMA', 'Palma vitrina',          'fg',
+   'Savdo nuqtasi',                                FALSE, 6),
+  ('VITR-ARCA',  'Arca vitrina',           'fg',
+   'Savdo nuqtasi',                                FALSE, 7)
 ON CONFLICT (code) DO NOTHING;
 
--- Listlar, furnitura va vitrina omborlari misol tariqasida aytilgan edi,
--- men esa ularni ro'yxatga yozib qo'ygandim. O'chiriladi — bir marta,
--- bayroq bilan: ertaga shu nom bilan haqiqiy ombor ochilsa, keyingi
--- deploy uni jimgina o'chirib yubormasin.
+-- Bir paytlar men bu yerga misol tariqasida aytilgan omborlarni
+-- ro'yxat deb yozib qo'ygandim. Ular o'chiriladi — bir marta, bayroq
+-- bilan: keyin shu nom bilan haqiqiy ombor ochilsa, navbatdagi deploy
+-- uni jimgina o'chirib yubormasin.
+--
+-- Ro'yxatda FURN yo'q, garchi u ham o'sha misollardan bo'lgan bo'lsa
+-- ham: Furnitura ombori endi zavod aytgan haqiqiy ombor va yuqorida
+-- qo'shiladi. Agar shu qatorda qolsa, TOZA bazada u qo'shilib, darrov
+-- o'chib ketardi — chunki bayroq ham o'sha ishga tushishda qo'yiladi.
+-- VITR ham shunday: endi uchta alohida vitrina bor (VITR-ABU va h.k.),
+-- eski umumiy VITR esa keraksiz.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'wh-misol-tozalash') THEN
-    DELETE FROM warehouses WHERE code IN ('LIST', 'FURN', 'VITR');
+    DELETE FROM warehouses WHERE code IN ('LIST', 'VITR');
     INSERT INTO migration_flags (key) VALUES ('wh-misol-tozalash');
   END IF;
 END $$;
