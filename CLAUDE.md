@@ -39,6 +39,9 @@ saytdan boshqariladi.
 
 **Konver** (`production_units`) — kuzatuvning asosiy birligi: bitta
 mahsulot, o'z raqami bilan (`K26-0041`). Zavod uni shunday ataydi.
+Boshlang'ich qoldiqda raqami noma'lum mahsulot bo'ladi — raqam katagi
+bo'sh qoldiriladi va tizim `Q26-0007` beradi: **Q** bosh harfi raqamni
+zavod emas, tizim qo'yganini aytadi.
 Sifat shikoyati, ishbay oylik va xom ashyo sarfi — hammasi shu raqamga
 bog'lanadi, shuning uchun ombor qoldig'i ham dona emas, konver hisobida.
 

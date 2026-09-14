@@ -43,6 +43,12 @@
     Fayldan yuklaganda xuddi shu ish <strong>«Omborga kirgan»</strong>
     ustuni bilan bo'ladi (namuna faylda uchinchi qator).</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
+    <strong>Konveyer raqami noma'lum bo'lsa</strong> — K№ katagini
+    bo'shating. Tizim raqamni o'zi beradi, lekin <strong>Q</strong> bilan
+    (<code>Q26-0007</code>): shunda raqam mahsulotning ustida yozilmagani,
+    uni tizim qo'ygani ko'rinib turadi. Keyin haqiqiy raqam topilsa,
+    jurnaldan tuzatiladi. Fayldan yuklashda ham ustun bo'sh qoldiriladi.</p>
+  <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Zahira</strong> — belgilansa qadoqlash va T/M ombor kataklarida
     sana o'rniga <strong>zahira</strong> so'zi turadi: mahsulot rang sepishda
     buyurtma kutadi, qachon qadoqlanishi hali noma'lum. Mijozga bog'liq emas —
@@ -166,7 +172,8 @@ function addRow(k = 1){
     $('tB').insertAdjacentHTML('beforeend', `
       <tr>
         <td><input class="c-start" type="date" value="${today}"></td>
-        <td class="fix"><input class="c-no" value="${n}"></td>
+        <td class="fix"><input class="c-no" value="${n}"
+          title="Raqam noma'lum bo'lsa katakni bo'shating — tizim Q raqami beradi"></td>
         <td><input class="c-order" placeholder="—"></td>
         <td><select class="c-fason" onchange="fillGroup(this)">
           <option value="">— tanlang —</option>
@@ -281,13 +288,17 @@ function collect(){
       _tr: tr,
     };
   })
-  // Qator xodim mahsulot nomini tanlaganda hisobga olinadi. Konveyer raqami
-  // va sana oldindan to'ldirilgani uchun bu bo'lmasa "+20 qator" bosgan xodim
+  // Qator xodim mahsulot nomini tanlaganda hisobga olinadi: sana va raqam
+  // oldindan to'ldirilgani uchun bu bo'lmasa "+20 qator" bosgan xodim
   // bexosdan bo'sh konver yaratib qo'yardi.
+  //
+  // Konveyer raqami esa MAJBURIY EMAS: qoldiqda raqami noma'lum mahsulot
+  // bo'ladi. Raqam katagi bo'sh qoldirilsa tizim o'zi beradi — Q bilan,
+  // ya'ni "raqamni zavod emas, tizim qo'ygan" degani.
   //
   // Bo'lim majburiy emas: hali konveyerga chiqmagan mahsulot ham qayd
   // etiladi — u boshlanmagan holda turadi (current_section_id NULL).
-  .filter(r => r.conveyor_no && r.product_id);
+  .filter(r => r.product_id);
 }
 
 function sum(){

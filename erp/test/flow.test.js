@@ -685,6 +685,39 @@ test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri T/M omborga kiritiladi', async
   assert.ok((await H.id(`SELECT qty FROM fg_stock WHERE product_id=$1`, [STUL])).qty >= 6);
 });
 
+test('raqami noma\'lum qoldiq ham qabul qilinadi — tizim Q raqami beradi', async () => {
+  // Qo'lda: raqamsiz ikkita qator
+  const r = await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, is_opening: true, fg_on: '2026-08-10' },
+    { product_id: PENAL, qty: 1, is_opening: true, section_id: ARRA },
+  ] });
+  assert.equal(r.status, 200, r.text);
+  for (const c of r.body.created)
+    assert.match(c.conveyor_no, /^Q\d\d-\d{4}$/, c.conveyor_no);
+  assert.notEqual(r.body.created[0].conveyor_no, r.body.created[1].conveyor_no,
+    'ketma-ket raqamlar, takrorlanmaydi');
+
+  // Oddiy konver esa K bilan qoladi
+  const k = await admin('POST', '/api/units/', { items: [{ product_id: PENAL, qty: 1 }] });
+  assert.match(k.body.created[0].conveyor_no, /^K\d\d-\d{4}$/);
+
+  // Fayldan: konveyer ustuni umuman yo'q
+  const csv = [
+    "Maxsulot guruhi;Maxsulot nomi;Soni;Rang;Omborga kirgan",
+    'Penal;Milano;4;Oq;2026-08-12',
+    'Penal;Laura;2;Venge;2026-08-12',
+  ];
+  const pre = await (await post('/api/import/units', csv)).json();
+  assert.equal(pre.bad, 0, JSON.stringify(pre.rows));
+  const saved = await (await post('/api/import/units?save=1', csv)).json();
+  assert.equal(saved.saved, 2);
+  for (const c of saved.created) assert.match(c.conveyor_no, /^Q\d\d-\d{4}$/);
+
+  // Hammasi ombor qoldig'ida turibdi
+  const sum = await admin('GET', '/api/warehouse/fg/summary?q=Q2');
+  assert.ok(sum.body.total.units >= 3, JSON.stringify(sum.body.total));
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

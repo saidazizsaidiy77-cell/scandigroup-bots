@@ -291,8 +291,17 @@ router.get('/orders', need('production.view'), wrap(async (_req, res) => {
 // Raqam ikki joyda beriladi (taklif va saqlash), shuning uchun format
 // shu yerda bir marta yozilgan: ikkisi ajralib ketmasin.
 // Tranzaksiya ichidan chaqirilsa o'sha tranzaksiyaning `client` ini uzating.
-async function nextConveyorNo(client = db) {
-  const prefix = `K${String(new Date().getFullYear()).slice(-2)}-`;
+//  Raqamni zavod beradi (`K26-0041`). Lekin boshlang'ich qoldiqda raqami
+//  BO'LMAGAN mahsulotlar bor: ular tizim ishga tushishidan oldin ishlangan
+//  va ustalar raqamini bilmaydi.
+//
+//  Bunday mahsulot raqamsiz qola olmaydi — sifat shikoyati, ishbay oylik
+//  va xom ashyo sarfi hammasi raqamga bog'lanadi. Tizim raqam beradi,
+//  lekin BOSHQA BOSH HARF bilan: `Q26-0007`. Shunda uni ko'rgan odam
+//  darrov biladi — bu raqam mahsulotning ustida yozilmagan, uni tizim
+//  qo'ygan. Keyin haqiqiy raqam topilsa, jurnaldan tuzatiladi.
+async function nextConveyorNo(client = db, letter = 'K') {
+  const prefix = `${letter}${String(new Date().getFullYear()).slice(-2)}-`;
   const { rows } = await client.query(
     `SELECT COALESCE(MAX(SUBSTRING(conveyor_no FROM '\\d+$')::int), 0) + 1 AS n
        FROM production_units WHERE conveyor_no LIKE $1`, [`${prefix}%`]);
@@ -356,9 +365,10 @@ router.get('/:id/route', need('production.view', 'production.entry'), wrap(async
 // qo'lda kiritilganidan boshqacha bo'lib qoladi.
 async function createOne(client, req, it) {
   if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
-  // Raqam bo'sh qoldirilsa server o'zi beradi
+  // Raqam bo'sh qoldirilsa server o'zi beradi. Boshlang'ich qoldiqda
+  // esa Q bilan — raqamni tizim qo'ygani ko'rinib tursin.
   if (!it.conveyor_no || !String(it.conveyor_no).trim()) {
-    it.conveyor_no = await nextConveyorNo(client);
+    it.conveyor_no = await nextConveyorNo(client, it.is_opening ? 'Q' : 'K');
   }
 
   // Bo'lim berilsa, u mahsulot marshrutida borligini tekshiramiz
