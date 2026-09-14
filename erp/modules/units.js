@@ -67,18 +67,24 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
       if (!name) throw new Error('Mijoz nomi majburiy');
       // Takror kiritilsa yangi qator yaratmaydi — bo'sh maydonlarni to'ldiradi
       const { rows } = await client.query(
-        `INSERT INTO customers (name, phone, country, region, channel, manager_id, note)
-         VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7)
+        `INSERT INTO customers (name, phone, country, region, channel, manager_id,
+                                note, opening_debt, opening_debt_on)
+         VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8,$9)
          ON CONFLICT (lower(name)) DO UPDATE SET
            phone      = COALESCE(EXCLUDED.phone,      customers.phone),
            country    = COALESCE(EXCLUDED.country,    customers.country),
            region     = COALESCE(EXCLUDED.region,     customers.region),
            channel    = COALESCE(EXCLUDED.channel,    customers.channel),
            manager_id = COALESCE(EXCLUDED.manager_id, customers.manager_id),
-           note       = COALESCE(EXCLUDED.note,       customers.note)
+           note       = COALESCE(EXCLUDED.note,       customers.note),
+           -- Boshlang'ich qarz bir marta kiritiladi. Qayta yuklashda
+           -- yozilgani o'chmaydi, faqat bo'sh bo'lsa to'ldiriladi.
+           opening_debt    = COALESCE(customers.opening_debt, EXCLUDED.opening_debt),
+           opening_debt_on = COALESCE(customers.opening_debt_on, EXCLUDED.opening_debt_on)
          RETURNING id, name, phone, country, region, channel, manager_id`,
         [name, it.phone || null, it.country || null, it.region || null,
-         it.channel || null, it.manager_id || null, it.note || null]);
+         it.channel || null, it.manager_id || null, it.note || null,
+         it.opening_debt ?? null, it.opening_debt_on || null]);
       saved.push(rows[0]);
     }
     await client.query('COMMIT');
@@ -92,7 +98,8 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
 }));
 
 router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
-  const { name, phone, country, region, channel, manager_id, note, active } = req.body;
+  const { name, phone, country, region, channel, manager_id, note, active,
+          opening_debt, opening_debt_on } = req.body;
   const { rows } = await db.query(
     `UPDATE customers SET
        name       = COALESCE($2, name),
@@ -102,11 +109,19 @@ router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
        channel    = COALESCE($6, channel),
        manager_id = COALESCE($7, manager_id),
        note       = COALESCE($8, note),
-       active     = COALESCE($9, active)
+       active     = COALESCE($9, active),
+       -- Qarz NULL bilan o'chirilishi ham kerak: noto'g'ri kiritilgan
+       -- raqamni tozalash imkoni bo'lsin. Shuning uchun COALESCE emas —
+       -- maydon yuborilgan bo'lsa nima yuborilgan bo'lsa shu yoziladi.
+       opening_debt    = CASE WHEN $10::boolean THEN $11::numeric ELSE opening_debt END,
+       opening_debt_on = CASE WHEN $10::boolean THEN $12::date    ELSE opening_debt_on END
      WHERE id = $1 RETURNING id`,
     [req.params.id, name || null, phone || null, country || null, region || null,
      channel || null, manager_id || null, note || null,
-     typeof active === 'boolean' ? active : null]);
+     typeof active === 'boolean' ? active : null,
+     opening_debt !== undefined,
+     opening_debt === '' || opening_debt == null ? null : Number(opening_debt),
+     opening_debt_on || null]);
   if (!rows[0]) return res.status(404).json({ error: 'Mijoz topilmadi' });
   res.json({ ok: true });
 }));
@@ -807,7 +822,7 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
        (conveyor_no, part, order_no, product_id, qty, started_on,
         current_section_id, entered_section_on, customer_id, unit_price,
         status, is_opening, note, created_by, color, fabric,
-        lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on,
+        lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on, fg_on,
         next_shop_planned_on, is_stock)
      SELECT conveyor_no,
             (SELECT MAX(part) + 1 FROM production_units WHERE conveyor_no = u.conveyor_no),
@@ -815,6 +830,9 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
             $3::int, $4::date, customer_id, unit_price,
             status, is_opening, note, $5, color, fabric,
             lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on,
+            -- Omborga kirgan kun ham ko'chadi: bo'laklar bir kunda kirgan,
+            -- va usiz bo'lak ombor qoldig'ida sanasiz turib qolardi.
+            fg_on,
             -- Topshirish belgisi KO'CHIRILMAYDI: yangi bo'lak boshqa
             -- bo'limda va uni qaytadan jo'natish kerak bo'ladi.
             next_shop_planned_on, is_stock

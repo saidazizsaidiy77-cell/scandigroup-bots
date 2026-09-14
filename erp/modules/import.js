@@ -393,6 +393,9 @@ const CFIELDS = {
   manager: ['menejer', 'savdomenejeri', 'masul', 'masuli', 'masulxodim',
             'masulsavdoxodimi', 'savdoxodimi', 'менеджер'],
   note:    ['izoh', 'izohi', 'примечание', 'комментарий'],
+  // Boshlang'ich qarzdorlik: tizim ishga tushgan kundagi qarz, $ da.
+  debt:    ['qarz', 'qarzi', 'qarzdorlik', 'boshlangichqarz', 'boshlangichqarzdorlik',
+            'долг', 'задолженность'],
 };
 
 router.post('/customers', need('production.units', 'sales.manage', 'production.manage'),
@@ -488,6 +491,13 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
         else { it.manager_id = hit.id; if (hit.as) matched.set(mgr, hit.as); }
       }
 
+      const debt = at('debt');
+      if (debt) {
+        const n = toNum(debt);
+        if (n === undefined) errors.push(`Qarz raqam emas: «${debt}»`);
+        else it.opening_debt = n;
+      }
+
       it.phone   = at('phone')   || null;
       it.country = at('country') || null;
       it.region  = at('region')  || null;
@@ -519,17 +529,21 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
       await client.query('BEGIN');
       for (const r of rows) {
         await client.query(
-          `INSERT INTO customers (name, phone, country, region, channel, manager_id, note)
-           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7)
+          `INSERT INTO customers (name, phone, country, region, channel, manager_id,
+                                  note, opening_debt)
+           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8)
            ON CONFLICT (lower(name)) DO UPDATE SET
              phone      = COALESCE(EXCLUDED.phone,      customers.phone),
              country    = COALESCE(EXCLUDED.country,    customers.country),
              region     = COALESCE(EXCLUDED.region,     customers.region),
              channel    = COALESCE(EXCLUDED.channel,    customers.channel),
              manager_id = COALESCE(EXCLUDED.manager_id, customers.manager_id),
-             note       = COALESCE(EXCLUDED.note,       customers.note)`,
+             note       = COALESCE(EXCLUDED.note,       customers.note),
+             -- Qarz bir marta: kiritilgani qayta yuklashda o'chmaydi
+             opening_debt = COALESCE(customers.opening_debt, EXCLUDED.opening_debt)`,
           [r.it.name, r.it.phone, r.it.country, r.it.region,
-           r.it.channel || null, r.it.manager_id || null, r.it.note]);
+           r.it.channel || null, r.it.manager_id || null, r.it.note,
+           r.it.opening_debt ?? null]);
       }
       await audit(req, { module: 'sales', action: 'import', entity: 'customers',
                          entity_id: rows.length, payload: { count: rows.length } }, client);

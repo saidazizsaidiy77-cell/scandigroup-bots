@@ -58,8 +58,12 @@
     <input id="fQ" placeholder="ism, region yoki telefon" style="max-width:280px" oninput="render()">
   </div>
   <div style="overflow-x:auto"><table>
-    <thead><tr><th>Mijoz nomi</th><th>Respublika</th><th>Region</th><th>Tel raqami</th><th>Kanali</th>
-      <th class="num">Zakaz</th><th class="num">Dona</th><th class="num">Summa, $</th><th></th></tr></thead>
+    <!-- Ustunlar soni qator bilan bir xil bo'lishi kerak: «Menejer»
+         sarlavhasi yetishmasdi va jadval bir katakka siljib turardi. -->
+    <thead><tr><th>Mijoz nomi</th><th>Respublika</th><th>Region</th><th>Tel raqami</th>
+      <th>Kanali</th><th>Menejer</th>
+      <th class="num">Zakaz</th><th class="num">Dona</th><th class="num">Summa, $</th>
+      <th class="num">Qarz, $</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
 </div>
@@ -132,9 +136,11 @@ function render(){
       <td class="muted">${c.manager_name ? esc(c.manager_name) : '<span class="tag warn">biriktirilmagan</span>'}</td>
       <td class="num">${c.orders}</td><td class="num">${c.qty}</td>
       <td class="num">${money(c.amount)}</td>
+      <td class="num">${c.opening_debt
+        ? `<b>${money(c.opening_debt)}</b>` : '<span class="muted">—</span>'}</td>
       <td class="num"><button onclick="openForm(${c.id})">✎</button></td>
     </tr>`).join('')
-    : '<tr><td class="muted" colspan="10">Mijoz topilmadi</td></tr>';
+    : '<tr><td class="muted" colspan="11">Mijoz topilmadi</td></tr>';
 }
 
 function openForm(id){
@@ -173,6 +179,16 @@ function openForm(id){
               ${channels.map(ch => `<option value="${ch.code}"
                 ${c?.channel === ch.code ? 'selected' : ''}>${esc(ch.name)}</option>`).join('')}
             </select></div>
+          <!-- Boshlang'ich qarzdorlik: tizim ishga tushgan kundagi qarz.
+               Bir marta kiritiladi, keyin kassa moduli undan davom etadi. -->
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Boshlang'ich qarz, $</label>
+              <input id="cDebt" type="number" step="0.01" placeholder="—"
+                     value="${c?.opening_debt ?? ''}"></div>
+            <div style="flex:1"><label>Qarz sanasi</label>
+              <input id="cDebtOn" type="date"
+                     value="${(c?.opening_debt_on || '').slice(0, 10)}"></div>
+          </div>
           <div><label>Izoh</label><input id="cNote"></div>
           <button class="primary" onclick="save(${id || 'null'})">Saqlash</button>
         </div>
@@ -235,10 +251,10 @@ let cpicked = null;
 
 function ctemplate() {
   const head = ['Mijoz nomi', 'Tel raqami', 'Davlat', 'Region', 'Kanal',
-                'Savdo menejeri', 'Izoh'];
+                'Savdo menejeri', 'Boshlang\'ich qarz', 'Izoh'];
   const rows = [
-    ['Sardor Alimov', '+998901112233', "O'zbekiston", 'Toshkent shahri', 'B2C', '', ''],
-    ['Mebel Savdo MCHJ', '+77015554433', 'Qozog\'iston', 'Almati', 'EXPORT', '', ''],
+    ['Sardor Alimov', '+998901112233', "O'zbekiston", 'Toshkent shahri', 'B2C', '', '', ''],
+    ['Mebel Savdo MCHJ', '+77015554433', 'Qozog\'iston', 'Almati', 'EXPORT', '', '1250', ''],
   ];
   const csv = '\uFEFF' + [head, ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -346,6 +362,8 @@ async function save(id){
     phone: $('cPhone').value.trim() || null,
     channel: $('cChannel').value || null,
     note: $('cNote').value.trim() || null,
+    opening_debt: $('cDebt').value === '' ? null : Number($('cDebt').value),
+    opening_debt_on: $('cDebtOn').value || null,
   };
   if (!body.name) return alert('Mijoz nomi majburiy');
   try{

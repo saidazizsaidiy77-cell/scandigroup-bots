@@ -72,6 +72,22 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS channel TEXT REFERENCES customer_
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS manager_id INT REFERENCES workers(id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_name ON customers(lower(name));
 
+-- ──────────────────────────────────────────── BOSHLANG'ICH QARZDORLIK
+--
+--  Tizim ishga tushgan kunda mijozning zavodga qarzi. U kassa moduligacha
+--  kerak: mijoz bilan gaplashayotgan sotuvchi qarzni bilishi shart.
+--
+--  Bu — BIR MARTALIK raqam, hisoblanmaydi. Kassa yozilganda qarz
+--  shundan boshlab yuritiladi:
+--
+--      qarz = boshlang'ich qarz + sotuvlar − to'lovlar
+--
+--  Valyuta $: mahsulot narxi ham shunda. So'mdagi qarz bo'lsa, kassa
+--  moduli bilan birga valyuta ustuni qo'shiladi — hozir taxmin qilib
+--  ikkita ustun ochish keyin ikkalasini ham tuzatish demakdir.
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS opening_debt NUMERIC(14,2);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS opening_debt_on DATE;
+
 -- ─────────────────────────────────────── SAVDO MENEJERINING YO'NALISHI
 --
 --  Zavodda savdo yo'nalishlarga bo'lingan: biri B2B bilan, boshqasi
@@ -326,10 +342,12 @@ WHERE u.order_no IS NOT NULL AND u.status <> 'cancelled'
 GROUP BY u.order_no, COALESCE(c.name, 'T/M ombor');
 
 -- Mijoz kesimi: nechta zakaz, qancha summa
-CREATE OR REPLACE VIEW v_customer_sales AS
+DROP VIEW IF EXISTS v_customer_sales CASCADE;
+CREATE VIEW v_customer_sales AS
 SELECT c.id, c.name, c.country, c.region, c.phone,
        ch.name AS channel_name, c.channel,
        c.manager_id, m.name AS manager_name,
+       c.opening_debt, c.opening_debt_on,
        COUNT(u.id)                            AS units,
        COALESCE(SUM(u.qty), 0)                AS qty,
        COALESCE(SUM(u.total_amount), 0)       AS amount,
@@ -341,7 +359,7 @@ LEFT JOIN workers m            ON m.id = c.manager_id
 LEFT JOIN production_units u   ON u.customer_id = c.id AND u.status <> 'cancelled'
 WHERE c.active
 GROUP BY c.id, c.name, c.country, c.region, c.phone, ch.name, c.channel,
-         c.manager_id, m.name;
+         c.manager_id, m.name, c.opening_debt, c.opening_debt_on;
 
 -- ★ Kanal kesimi: qaysi kanal qancha sotuv keltirdi.
 --   Reklama byudjetini taqsimlashda asosiy ko'rsatkich.

@@ -756,6 +756,43 @@ test('savdo menejeriga faqat o\'z yo\'nalishidagi mijozlar ko\'rinadi', async ()
     assert.ok(a.includes(n), n);
 });
 
+test('mijozning boshlang\'ich qarzi kiritiladi va qayta yuklashda o\'chmaydi', async () => {
+  const csv = [
+    'Mijoz nomi;Tel raqami;Kanal;Boshlang\'ich qarz',
+    'Qarzdor mijoz;+998901110000;B2B;1250,50',
+    'Qarzsiz mijoz;+998901110001;B2C;',
+  ];
+  assert.equal((await post('/api/import/customers?save=1', csv)).status, 200);
+  const qarz = async (nom) => (await H.id(
+    `SELECT opening_debt::float8 AS d FROM customers WHERE name = $1`, [nom])).d;
+  assert.equal(await qarz('Qarzdor mijoz'), 1250.5, 'vergul bilan yozilgan raqam o\'qildi');
+  assert.equal(await qarz('Qarzsiz mijoz'), null);
+
+  // Qayta yuklash: qarz yozilgani o'chmaydi, bo'sh bo'lgani to'ladi
+  const yana = [
+    'Mijoz nomi;Tel raqami;Boshlang\'ich qarz',
+    'Qarzdor mijoz;+998901110000;9999',
+    'Qarzsiz mijoz;+998901110001;300',
+  ];
+  assert.equal((await post('/api/import/customers?save=1', yana)).status, 200);
+  assert.equal(await qarz('Qarzdor mijoz'), 1250.5, 'yozilgan qarz almashtirilmaydi');
+  assert.equal(await qarz('Qarzsiz mijoz'), 300, 'bo\'sh qarz to\'ldiriladi');
+
+  // Kartochkadan tuzatish esa ishlaydi — shu jumladan tozalash
+  const id = (await H.id(`SELECT id FROM customers WHERE name='Qarzdor mijoz'`)).id;
+  assert.equal((await admin('PATCH', '/api/units/customers/' + id,
+    { opening_debt: 500, opening_debt_on: '2026-09-01' })).status, 200);
+  assert.equal(await qarz('Qarzdor mijoz'), 500);
+  assert.equal((await admin('PATCH', '/api/units/customers/' + id,
+    { opening_debt: null })).status, 200);
+  assert.equal(await qarz('Qarzdor mijoz'), null, 'noto\'g\'ri raqam tozalanadi');
+
+  // Ro'yxatda ko'rinadi
+  const c = (await admin('GET', '/api/units/customers')).body.customers
+    .find((x) => x.name === 'Qarzsiz mijoz');
+  assert.equal(Number(c.opening_debt), 300);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

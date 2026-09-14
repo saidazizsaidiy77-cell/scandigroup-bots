@@ -102,6 +102,13 @@ ustunidagi sana REJA emas, omborga kirgan FAKT kun bo'ladi: konver darrov
 ish «Omborga kirgan» ustuni bilan bo'ladi. Qoida `createOne()` da — ikkala
 yo'l ham shundan o'tadi.
 
+**Boshlang'ich qarzdorlik** (`customers.opening_debt`, `$`) — tizim ishga
+tushgan kundagi mijoz qarzi. Bir martalik raqam, hisoblanmaydi: kassa
+yozilganda qarz shundan davom etadi (`boshlang'ich + sotuvlar − to'lovlar`).
+Mijoz kartochkasidan yoki fayldan («Boshlang'ich qarz» ustuni) kiritiladi.
+Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh bo'lsa to'ladi —
+kartochkadan esa tuzatish ham, tozalash ham mumkin.
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.
