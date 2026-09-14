@@ -159,7 +159,8 @@ function block(title, units, mine, note, hideEmpty, isExit) {
     .map(u => u.id);
   const sel = ids.filter(id => picked.has(id)).length;
   return `<div class="card" style="margin-bottom:16px">
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;
+      flex-wrap:wrap;gap:8px">
       <div class="row" style="gap:10px">
         <h2 style="margin:0">${esc(title)}</h2>
         <span class="muted" style="font-size:13px">${units.length} ta${
@@ -189,6 +190,11 @@ function drawBoard() {
     : `<h2 style="margin-bottom:12px">${esc(data.shop.name)}</h2>`;
 
   $('body').innerHTML = head
+    // Kiritilgan, lekin hali konveyerga chiqmagan konverlar. Hech bir
+    // bo'limda turmagani uchun ustunlarga tushmaydi — ekranning
+    // tepasida turadi, aks holda boshliq uni umuman topa olmaydi.
+    + block('Boshlanmagan', data.unstarted || [], true,
+        'konveyerga chiqarish', true, false)
     + block('Qabul qilish', data.inbox, false,
         'oldingi tsex topshirishga tayyorladi', true, false)
     + data.sections.map(sc => block(sc.name, sc.units, true,
@@ -202,6 +208,9 @@ function goShop(id) { shopId = id; picked.clear(); loadBoard(); }
 // konver O'TKAZILADI, chiqadigani esa JO'NATILADI. Tanlangan qatorlar shu
 // ikkiga ajratilib, har biri o'z yo'liga yuboriladi.
 function kindOf(id) {
+  // Boshlanmagan konver har doim O'TKAZILADI: u marshrutning birinchi
+  // bo'limiga chiqadi, ya'ni hech qayerga topshirilmaydi.
+  if ((data.unstarted || []).some(u => u.id === id)) return 'move';
   for (const sc of data.sections)
     for (const u of sc.units)
       if (u.id === id)

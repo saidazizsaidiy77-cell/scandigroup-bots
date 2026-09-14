@@ -510,6 +510,46 @@ test('jurnaldagi tsex filtri ham javobgar tsex bo\'yicha', async () => {
     'lak bo\'limi stul tsexi ro\'yxatida ham tanlanadi');
 });
 
+test('boshlanmagan konver tsex ekranida turadi va bitta bosishda yo\'lga chiqadi', async () => {
+  const OWEN = (await H.id(`SELECT id FROM products WHERE sku='STU-OWEN'`)).id;
+  const STU_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='STU-SHKUR'`)).id;
+
+  // Bo'lim ko'rsatilmasdan kiritiladi — jurnalda «boshlanmagan» bo'lib turadi
+  const r = await admin('POST', '/api/units/', { items: [{ product_id: OWEN, qty: 1 }] });
+  assert.equal(r.status, 200, r.text);
+  const u = r.body.created[0];
+  assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
+    [u.id])).s, null);
+
+  const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  const board = await stul('GET', '/api/units/board');
+  assert.equal(board.status, 200, board.text);
+  const bosh = board.body.unstarted.find((x) => x.id === u.id);
+  assert.ok(bosh, 'boshlanmagan konver stul tsexi ekranida ko\'rinadi');
+  assert.ok(bosh.on_route, 'u marshrutdan tashqarida emas, hali boshlanmagan');
+  assert.equal(bosh.next_section, 'Shkurka', 'tugmada marshrutning birinchi bo\'limi');
+
+  // Bo'lim ustunlarida ham, qabul qilish ro'yxatida ham takrorlanmaydi
+  assert.ok(!board.body.sections.some((sc) => sc.units.some((x) => x.id === u.id)));
+  assert.ok(!board.body.inbox.some((x) => x.id === u.id));
+
+  // Bitta bosishda birinchi bo'limga chiqadi
+  assert.equal((await stul('POST', '/api/units/move',
+    { items: [{ unit_id: u.id }] })).status, 200);
+  assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
+    [u.id])).s, STU_SHKUR);
+
+  // Endi u bo'lim ustunida, boshlanmaganlar ro'yxati esa bo'shadi
+  const keyin = await stul('GET', '/api/units/board');
+  assert.ok(!keyin.body.unstarted.some((x) => x.id === u.id));
+  assert.ok(keyin.body.sections.find((sc) => sc.id === STU_SHKUR)
+    .units.some((x) => x.id === u.id));
+
+  // Boshqa tsex ustasiga ko'rinmaydi
+  const korpusBoard = await korpus('GET', '/api/units/board');
+  assert.ok(!(korpusBoard.body.unstarted || []).some((x) => x.id === u.id));
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

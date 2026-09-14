@@ -71,6 +71,11 @@ Bo'sh bo'lsa (penal, kamod, sp, stol) — eskicha: turgan joyining tsexi
 boshqaradi. Doira, topshirish va ekran — hammasi shu ustunga tayanadi
 (`v_unit_register.owner_shop_id`).
 
+**Boshlanmagan konver** — bo'limsiz kiritilgan. U marshrutining BIRINCHI
+qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
+stul tsexi. Tsex ekranining tepasida «Boshlanmagan» ro'yxati bo'lib
+turadi, tugmasi marshrutning birinchi bo'limini yozadi («→ Arra»).
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.

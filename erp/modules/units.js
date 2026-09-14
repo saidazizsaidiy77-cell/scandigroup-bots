@@ -1260,18 +1260,26 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
   const rows = (await db.query(
     `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.sku, r.qty,
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
-            r.owner_shop_id,
+            -- Hali hech bir bo'limda turmagan konverning egasi yo'q:
+            -- u marshrutining BIRINCHI qadamiga qarab aniqlanadi.
+            -- Aks holda kiritilgan konver hech kimning ekranida
+            -- ko'rinmay qolardi va uni boshlab bo'lmasdi.
+            COALESCE(r.owner_shop_id, ns.shop_id) AS owner_shop_id,
             r.section, r.section_id, r.entered_section_on,
             r.is_stock, r.waiting,
             -- Konver marshrutida YO'Q bo'limda turibdimi. Marshrut
             -- o'zgartirilganda shunday konver qolib ketishi mumkin, va
             -- unga keyingi qadamni hisoblab bo'lmaydi: "marshrut tugadi"
             -- deb ko'rsatish esa yolg'on bo'lardi.
-            (r.step_no IS NOT NULL) AS on_route,
+            -- Boshlanmagan konver marshrutdan tashqarida emas: u hali
+            -- yo'lga chiqmagan. Birinchi qadami topilgan bo'lsa — joyida.
+            (r.step_no IS NOT NULL OR
+             (r.section_id IS NULL AND n.section_id IS NOT NULL)) AS on_route,
             -- Shu tsexdan jo'natilganmi. Belgi tsex bilan birga saqlanadi,
             -- shuning uchun keyingi tsexda eski belgi «jo'natilgan» bo'lib
             -- ko'rinmaydi.
-            (pu.handover_on IS NOT NULL AND pu.handover_shop_id = r.owner_shop_id) AS sent,
+            (pu.handover_on IS NOT NULL
+             AND pu.handover_shop_id = COALESCE(r.owner_shop_id, ns.shop_id)) AS sent,
             pu.handover_on,
             hw.name AS sent_by,
             n.section_id AS next_section_id,
@@ -1299,7 +1307,8 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
        -- o'tirmasligi uchun tugmada aynan shu bo'lim nomi yoziladi.
        LEFT JOIN LATERAL (
          SELECT pr.section_id FROM v_product_route pr
-          WHERE pr.product_id = r.product_id AND pr.step_no > r.step_no
+          WHERE pr.product_id = r.product_id
+            AND (r.step_no IS NULL OR pr.step_no > r.step_no)
           ORDER BY pr.step_no LIMIT 1) n ON true
        LEFT JOIN sections ns  ON ns.id  = n.section_id
        LEFT JOIN shops    nsh ON nsh.id = ns.shop_id
@@ -1311,7 +1320,8 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
            JOIN sections sc2 ON sc2.id = pr.section_id
            JOIN shops    sh  ON sh.id  = sc2.shop_id
           WHERE pr.product_id = r.product_id AND pr.step_no > r.step_no
-            AND COALESCE(g.owner_shop_id, sc2.shop_id) <> r.owner_shop_id
+            AND COALESCE(g.owner_shop_id, sc2.shop_id)
+                <> COALESCE(r.owner_shop_id, ns.shop_id)
           ORDER BY pr.step_no LIMIT 1) hs ON true
        -- Jurnaldagi sana: qaysi tsexga topshiriladi — o'shaniki
        LEFT JOIN LATERAL (
@@ -1322,11 +1332,11 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
                           WHEN 'pack' THEN r.pack_on
                           ELSE CASE WHEN hs.name IS NULL THEN r.fg_on END
                         END AS dt) j) d ON true
-      WHERE r.status = 'production' AND r.section_id IS NOT NULL
+      WHERE r.status = 'production'
         -- O'z tsexim, va menga JO'NATILGANLAR. Jo'natilmagani hali oldingi
         -- tsexning ishi — uni qabul qilish ro'yxatida ko'rsatish "olib
         -- qo'ying" degan taklif bo'lardi.
-        AND (r.owner_shop_id = $1
+        AND (COALESCE(r.owner_shop_id, ns.shop_id) = $1
              OR (COALESCE(g.owner_shop_id, ns.shop_id) = $1
                  AND pu.handover_on IS NOT NULL
                  AND pu.handover_shop_id = r.owner_shop_id))
@@ -1355,13 +1365,18 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
       ORDER BY o.st NULLS LAST, s.sort, s.name`, [shopId])).rows;
 
   const mine = rows.filter((r) => r.owner_shop_id === shopId);
+  // Kiritilgan, lekin hali konveyerga chiqmagan konverlar. Ular hech bir
+  // bo'limda turmaydi, shuning uchun bo'lim ustunlariga tushmaydi —
+  // ekranning tepasida alohida ro'yxat bo'lib turadi.
+  const fresh = mine.filter((r) => !r.section_id);
   res.json({
     shops,
     shop: shops.find((s) => s.id === shopId),
+    unstarted: fresh,
     sections: sections.map((sc) => ({
       ...sc, units: mine.filter((u) => u.section_id === sc.id) })),
     // Qabul qilishni kutayotganlar: boshqa tsexda turibdi, keyingi qadami menda
-    inbox: rows.filter((r) => r.owner_shop_id !== shopId),
+    inbox: rows.filter((r) => r.owner_shop_id !== shopId && r.section_id),
   });
 }));
 
