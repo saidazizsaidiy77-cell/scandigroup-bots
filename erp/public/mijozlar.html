@@ -270,6 +270,12 @@ function cshow(r, filename) {
       </div>
       ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
         Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+      ${(r.missing_managers || []).length ? `
+        <p class="tag bad" style="display:block;margin-bottom:10px">
+          Bu savdo xodimlari ro'yxatda yo'q:
+          <b>${esc(r.missing_managers.join(', '))}</b><br>
+          Avval <b>Xodimlar</b> sahifasidan qo'shing, keyin faylni qayta tanlang.
+        </p>` : ''}
       ${bad.length ? `
         <div style="max-height:30vh;overflow:auto;margin-bottom:10px">
           <table><tbody>${bad.map(x => `

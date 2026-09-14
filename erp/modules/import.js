@@ -385,12 +385,13 @@ router.post('/units', need(...UNITS),
 const CFIELDS = {
   name:    ['mijoz', 'mijoznomi', 'nomi', 'nom', 'klient', 'xaridor', 'firma',
             'tashkilot', 'клиент', 'покупатель', 'наименование', 'фио'],
-  phone:   ['tel', 'telefon', 'telraqami', 'telefonraqami', 'raqam', 'nomer',
-            'телефон', 'номертелефона'],
+  phone:   ['tel', 'telefon', 'telraqam', 'telraqami', 'telefonraqam',
+            'telefonraqami', 'raqam', 'nomer', 'телефон', 'номертелефона'],
   country: ['davlat', 'respublika', 'mamlakat', 'страна', 'республика'],
   region:  ['region', 'viloyat', 'shahar', 'hudud', 'регион', 'область', 'город'],
   channel: ['kanal', 'manba', 'mijozturi', 'tur', 'канал', 'источник', 'тип'],
-  manager: ['menejer', 'savdomenejeri', 'masul', 'masuli', 'менеджер'],
+  manager: ['menejer', 'savdomenejeri', 'masul', 'masuli', 'masulxodim',
+            'masulsavdoxodimi', 'savdoxodimi', 'менеджер'],
   note:    ['izoh', 'izohi', 'примечание', 'комментарий'],
 };
 
@@ -437,6 +438,7 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
     const existing = new Set(cur.rows.map((c) => norm(c.name)));
 
     const seen = new Set();
+    const missing = new Set();        // ro'yxatda yo'q savdo menejerlari
     const rows = [];
     for (let i = headIdx + 1; i < table.length; i++) {
       const cells = table[i];
@@ -462,8 +464,10 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
       const mgr = at('manager');
       if (mgr) {
         const id = byWorker.get(norm(mgr));
-        if (id == null) errors.push(`Bunday xodim yo'q: «${mgr}». ` +
-          'Avval Xodimlar sahifasida qo\'shing');
+        // Bitta xodim yuzlab qatorda uchraydi: har qatorga bir xil xato
+        // yozilsa ro'yxat o'qib bo'lmas bo'lib qoladi. Shuning uchun
+        // nomlar alohida yig'iladi va bir marta ko'rsatiladi.
+        if (id == null) { errors.push(`Xodim topilmadi: «${mgr}»`); missing.add(mgr); }
         else it.manager_id = id;
       }
 
@@ -482,6 +486,7 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
         preview: true, columns: Object.keys(map), unknown,
         total: rows.length, bad: bad.length,
         updates: rows.filter((r) => r.exists).length,
+        missing_managers: [...missing],
         rows: rows.slice(0, 200),
       });
     }
