@@ -40,7 +40,7 @@
   </div>
   <div class="card">
     <h2>Region kesimi</h2>
-    <table><thead><tr><th>Respublika</th><th>Region</th><th class="num">Mijoz</th>
+    <table><thead><tr><th>Region</th><th>Respublika</th><th class="num">Mijoz</th>
       <th class="num">Dona</th><th class="num">Summa, $</th></tr></thead>
       <tbody id="tRg"></tbody></table>
   </div>
@@ -109,8 +109,10 @@ async function load(){
     `<tr><td>${esc(r.country)}</td><td class="num">${r.customers}</td>
       <td class="num">${r.qty}</td><td class="num">${money(r.amount)}</td></tr>`).join('')
     : '<tr><td class="muted" colspan="4">Mijoz kiritilmagan</td></tr>';
+  // Region bitta qator: qaysi davlatlardan ekani yonida kulrang yoziladi.
   $('tRg').innerHTML = s.byRegion.length ? s.byRegion.map(r =>
-    `<tr><td class="muted">${esc(r.country)}</td><td>${esc(r.region)}</td>
+    `<tr><td><b>${esc(r.region)}</b></td>
+      <td class="muted" style="font-size:12px">${esc(r.countries || '')}</td>
       <td class="num">${r.customers}</td><td class="num">${r.qty}</td>
       <td class="num">${money(r.amount)}</td></tr>`).join('')
     : '<tr><td class="muted" colspan="5">Mijoz kiritilmagan</td></tr>';

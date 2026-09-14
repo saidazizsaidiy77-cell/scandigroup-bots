@@ -387,16 +387,29 @@ WHERE c.active
 GROUP BY c.country;
 
 -- Region kesimi (respublika bilan birga)
-CREATE OR REPLACE VIEW v_region_sales AS
-SELECT COALESCE(c.country, 'Kiritilmagan') AS country,
-       COALESCE(c.region, 'Kiritilmagan')  AS region,
-       COUNT(DISTINCT c.id)                AS customers,
-       COALESCE(SUM(u.qty), 0)             AS qty,
-       COALESCE(SUM(u.total_amount), 0)    AS amount
+--  Region kesimi REGION bo'yicha, davlat bilan emas. Ilgari ikkalasi
+--  birga guruhlanardi va «Toshkent» uch marta chiqardi — O'zbekiston,
+--  Qozog'iston va Tojikiston mijozlari ostida. Savdoni region bo'yicha
+--  ko'rayotgan odam esa bitta Toshkentni ko'rishi kerak; davlat kesimi
+--  esa o'z jadvalida turibdi (v_country_sales).
+--
+--  Guruhlash kichik harf bo'yicha: «Toshkent» va «toshkent» bitta region.
+--  Imlo xatosi (Xorazm / Xorazim) bu bilan tuzalmaydi — uni mijoz
+--  kartochkasidan to'g'rilash kerak, tizim o'zi taxmin qilmaydi.
+DROP VIEW IF EXISTS v_region_sales;
+CREATE VIEW v_region_sales AS
+SELECT MIN(TRIM(COALESCE(NULLIF(TRIM(c.region), ''), 'Kiritilmagan'))) AS region,
+       -- Qaysi davlatlardan: ma'lumot yo'qolmasin
+       STRING_AGG(DISTINCT COALESCE(NULLIF(TRIM(c.country), ''), 'Kiritilmagan'),
+                  ', ' ORDER BY COALESCE(NULLIF(TRIM(c.country), ''), 'Kiritilmagan'))
+         AS countries,
+       COUNT(DISTINCT c.id)             AS customers,
+       COALESCE(SUM(u.qty), 0)          AS qty,
+       COALESCE(SUM(u.total_amount), 0) AS amount
 FROM customers c
 LEFT JOIN production_units u ON u.customer_id = c.id AND u.status <> 'cancelled'
 WHERE c.active
-GROUP BY c.country, c.region;
+GROUP BY LOWER(TRIM(COALESCE(NULLIF(TRIM(c.region), ''), 'Kiritilmagan')));
 
 -- ★ Savdo menejeri kesimi — sotuv jamoasining natijasi
 CREATE OR REPLACE VIEW v_manager_sales AS
