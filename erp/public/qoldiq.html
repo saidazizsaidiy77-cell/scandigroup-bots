@@ -104,8 +104,10 @@
   <datalist id="dlFabric"></datalist>
 </div>
 
+<!-- Jadvalning chapdagi qotib turgan ustuni ham sticky: z-index berilmasa
+     u saqlash qatorining ustidan chiziladi va yozuvni to'sib qo'yadi. -->
 <div class="card hide" id="saveBar" style="position:sticky;bottom:16px;margin-top:16px;
-     box-shadow:0 -8px 28px rgba(20,26,36,.11)">
+     z-index:5;box-shadow:0 -8px 28px rgba(20,26,36,.11)">
   <div class="row" style="justify-content:space-between">
     <strong id="sumText"></strong>
     <div class="row"><button onclick="reset_()">Tozalash</button>
@@ -329,14 +331,24 @@ function sum(){
   const r = collect();
   const qty = r.reduce((s, x) => s + x.qty, 0);
   const amt = r.reduce((s, x) => s + (x.unit_price || 0) * x.qty, 0);
-  $('saveBar').classList.toggle('hide', !r.length);
-  $('btnSaveTop').classList.toggle('hide', !r.length);
-  $('btnSaveTop').textContent = `Saqlash (${r.length})`;
+  // Tugma YASHIRILMAYDI, faqat o'chiriladi. Ilgari u saqlanadigan qator
+  // bo'lmaguncha umuman ko'rinmasdi: xodim yigirmata qator to'ldirib,
+  // saqlash tugmasini qidirib topa olmasdi va nega yo'qligini ham
+  // bilmasdi. Endi tugma joyida turadi va yonida sababi yozilgan.
   const total = document.querySelectorAll('#tB tr').length;
+  $('saveBar').classList.toggle('hide', !total);
+  $('btnSaveTop').classList.toggle('hide', !total);
+  const btns = [$('btnSave'), $('btnSaveTop')].filter(Boolean);
+  btns.forEach((b) => { b.disabled = !r.length; });
+  $('btnSaveTop').textContent = r.length ? `Saqlash (${r.length})` : 'Saqlash';
   const skipped = total - r.length;
-  $('sumText').textContent = `${r.length} konver · ${qty} dona` +
-    (amt ? ` · $${money(amt)}` : '') +
-    (skipped ? ` · ${skipped} qator mahsulot tanlanmagani uchun saqlanmaydi` : '');
+  $('sumText').innerHTML = r.length
+    ? esc(`${r.length} konver · ${qty} dona`) +
+      (amt ? ` · $${money(amt)}` : '') +
+      (skipped ? ` <span class="muted">· ${skipped} qator mahsulot tanlanmagani`
+                 + ` uchun saqlanmaydi</span>` : '')
+    : `<span class="muted">Saqlash uchun kamida bitta qatorda
+       <b>Maxsulot nomi</b> tanlang</span>`;
 }
 
 function reset_(){ $('tB').innerHTML = ''; sum(); }
@@ -383,7 +395,9 @@ async function save(){
     seq = 0;
     alert(`${r.created.length} ta konver kiritildi. Jurnal sahifasida ko'rishingiz mumkin.`);
   }catch(e){ alert(e.message); }
-  finally{ saveButtons().forEach(b => b.disabled = false); }
+  // Tugmalar holatini sum() belgilaydi: saqlangach jadval bo'shaydi va
+  // tugma o'z-o'zidan o'chadi, yarim saqlangan holatda yoqilib qolmaydi.
+  finally{ sum(); }
 }
 
 // ══════════════════════════════════════════════ EXCEL / CSV DAN YUKLASH
