@@ -78,12 +78,18 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `kirituvchi` | + `production.units`, `production.reports` | jurnal, boshlang'ich qoldiq, hisobotlar |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.view/move/manage` | faqat T/M ombor |
-| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, T/M ombor + vitrinalar, jurnal |
+| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, T/M ombor + vitrinalar qoldig'i, jurnal — **faqat o'qish** |
 | `admin` | barchasi | hammasi |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
 ko'rinishi va panelni.** Ikkisi alohida: sotuvchi o'z buyurtmasi qaysi
 bo'limda turganini bilishi kerak, zavod yuklamasi esa uning ishi emas.
+
+**Savdo jurnalni o'zgartira olmaydi.** Filtr ishlaydi, qolgani yo'q:
+konver yaratish, o'tkazish, tahrirlash va bekor qilish — hammasi ishlab
+chiqarishniki. Omborda esa faqat qoldiq: qabul qilish va kirim/chiqim
+tarixi ombor mudiriniki. Tekshiruv serverda, tugmani yashirish bilan
+chegaralanilmaydi.
 
 **Qaysi omborni kim ko'rishi — `warehouses.perm` ustunida**, kodda emas.
 `NULL` — `warehouse.view` yetarli (T/M ombor); `sales.view` — vitrinalar;

@@ -182,23 +182,29 @@ test('tsex ustasiga faqat o\'z tsexi ochiq', async () => {
   assert.ok([...new Set(j.body.map((r) => r.shop))].length >= 1);
 });
 
+const xodim = async (nom, rol) => {
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ($1) ON CONFLICT DO NOTHING`, [nom]);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  SELECT id, $2 FROM workers WHERE name = $1
+                  ON CONFLICT DO NOTHING`, [nom, rol]);
+  return H.api(base, await H.sessionFor(nom));
+};
+
 test('tarixga tegadigan maydonlar faqat boshqaruvchiga ochiq', async () => {
   const u = await newUnit();
-  await require('../db').db.query(
-    `INSERT INTO workers (name) VALUES ('Sinov sotuvchi') ON CONFLICT DO NOTHING`);
-  await require('../db').db.query(
-    `INSERT INTO worker_roles (worker_id, role_code)
-     SELECT id, 'sotuvchi' FROM workers WHERE name='Sinov sotuvchi'
-     ON CONFLICT DO NOTHING`);
-  sotuvchi = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  sotuvchi = await xodim('Sinov sotuvchi', 'sotuvchi');
+  // Ma'lumot kirituvchi: jurnalni to'ldiradi, lekin tarixga tegmaydi.
+  const kirituvchi = await xodim('Sinov kirituvchi', 'kirituvchi');
 
   for (const body of [{ conveyor_no: 'X-1' }, { qty: 5 }, { lak_on: '2026-01-01' },
                       { section_id: ROVER }]) {
-    const r = await sotuvchi('PATCH', '/api/units/' + u.id, body);
+    const r = await kirituvchi('PATCH', '/api/units/' + u.id, body);
     assert.equal(r.status, 403, JSON.stringify(body) + ' → ' + r.text);
   }
-  // Narx va reja sanasi esa savdoga ochiq qolishi kerak
-  assert.equal((await sotuvchi('PATCH', '/api/units/' + u.id, { unit_price: 100 })).status, 200);
+  // Narx, zakaz va mijoz esa uning ishi
+  assert.equal((await kirituvchi('PATCH', '/api/units/' + u.id,
+    { unit_price: 100 })).status, 200);
 });
 
 test('joyni tuzatish yangi harakat qo\'shmaydi', async () => {
@@ -282,8 +288,24 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   // Zavod ko'rinishi va panel ham savdoning ishi emas
   assert.equal((await savdo('GET', '/api/factory')).status, 403);
   assert.equal((await savdo('GET', '/api/dashboard')).status, 403);
-  // Jurnal esa ochiq: o'z buyurtmasi qayerda turganini bilishi kerak
+  // Jurnal esa ochiq: o'z buyurtmasi qayerda turganini bilishi kerak.
+  // Lekin faqat O'QISH uchun — konver yaratish ham, tahrirlash ham yo'q.
   assert.equal((await savdo('GET', '/api/units/')).status, 200);
+  const bor = (await savdo('GET', '/api/units/')).body[0];
+  assert.equal((await savdo('PATCH', '/api/units/' + bor.id,
+    { unit_price: 999 })).status, 403, 'savdo jurnalni tahrirlay olmaydi');
+  assert.equal((await savdo('POST', '/api/units/',
+    { items: [{ product_id: PENAL, qty: 1 }] })).status, 403);
+  assert.equal((await savdo('POST', '/api/units/move',
+    { items: [{ unit_id: bor.id }] })).status, 403);
+  // Omborda: qoldiq ochiq, qabul qilish va kirim/chiqim tarixi yopiq
+  assert.equal((await savdo('GET', '/api/warehouse/fg/summary')).status, 200);
+  assert.equal((await savdo('POST', '/api/units/stock/accept',
+    { items: [bor.id] })).status, 403, 'savdo omborga qabul qila olmaydi');
+  assert.equal((await savdo('GET', '/api/units/stock/moves')).status, 403);
+  // Mijozlar spravochnigi esa o'zining ishi — ochiq qoladi
+  assert.equal((await savdo('POST', '/api/units/customers',
+    { name: 'Savdo qo\'shgan mijoz' })).status, 200);
 
   // Konverni omborga kiritamiz: rang va mato bilan, chunki jamlanma
   // aynan shular bo'yicha guruhlanadi.

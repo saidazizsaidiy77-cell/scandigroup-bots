@@ -464,7 +464,12 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 // Zakaz raqami, mijoz, narx, chiqish sanasi — savdo qo'yadi.
 // Rang va matoni ishlab chiqarish qo'yadi, lak/qadoqlash rejasini esa
 // tsex boshlig'i — hammasi bitta jurnal qatorida turadi.
-router.patch('/:id', need(...COMMERCE), wrap(async (req, res) => {
+// Jurnaldagi konverni tahrirlash — ishlab chiqarishning ishi. Savdo
+// jurnalni FAQAT O'QIYDI: o'z buyurtmasi qayerda turganini ko'radi,
+// lekin unga tegmaydi. Zakaz, mijoz va narx savdo moduli orqali
+// qo'yiladi (u yozilgunga qadar — kirituvchi orqali). Mijozlar
+// spravochnigi esa savdoniki, u COMMERCE da qoladi.
+router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   const { order_no, customer_id, unit_price, ship_on, next_shop_planned_on, note, status,
           color, fabric, lak_planned_on, pack_planned_on,
           lak_on, pack_on, fg_on, conveyor_no, qty, section_id } = req.body;
@@ -1120,7 +1125,12 @@ router.get('/stock/export', need('warehouse.view', 'production.view'), wrap(asyn
 
 // Kirim va chiqim: sana oralig'i bo'yicha. Chiqim savdo moduli
 // ulanmaguncha bo'sh keladi — ko'rinish tayyor turadi.
-router.get('/stock/moves', need('warehouse.view', 'production.view'), wrap(async (req, res) => {
+// Kirim/chiqim — omborni yurituvchi va rahbariyatniki. Savdo qoldiqni
+// ko'radi, uning tarixini emas: sahifada tab yashirilgani yetarli emas,
+// tekshiruv shu yerda.
+router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
+                                'production.manage', 'production.reports'),
+  wrap(async (req, res) => {
   const from = req.query.from || today();
   const to   = req.query.to || from;
   const { rows } = await db.query(

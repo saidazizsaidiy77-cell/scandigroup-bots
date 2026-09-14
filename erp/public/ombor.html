@@ -49,7 +49,17 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
 // ekran «qabul qildim» tugmasi. Stol ustidagi kompyuterda esa u qoldiqni
 // ko'radi — nimadan nechta borligini.
 const isPhone = window.matchMedia('(max-width: 620px)').matches;
-let rows = [], canAccept = false, tab = isPhone ? 'inbox' : 'stock';
+//  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
+//  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
+//
+//  canAccept — qabul qilish ombor mudirining ishi; savdoda bu huquq
+//  yo'q, shuning uchun unga tab umuman ko'rsatilmaydi: tugmasi
+//  ishlamaydigan ro'yxat «nega bosilmayapti» degan savol tug'diradi.
+//
+//  canLedger — kirim/chiqim tarixi omborni yurituvchi va rahbariyat
+//  uchun. Savdoga qoldiq yetarli: unga nima sotishga tayyor turgani
+//  kerak, o'sha mahsulot omborga qachon kirgani emas.
+let rows = [], tab = 'stock', canAccept = false, canLedger = false;
 const picked = new Set();
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -59,9 +69,14 @@ const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
 // Kirganda qoldiq ochiladi — «nimadan nechta bor» kunlik savol.
 // Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
 // qoldiqni ochib, kutayotgan mahsulotni ko'rmay qolishi mumkin.
-const TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'], ['moves', 'Harakat']];
+const ALL_TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'], ['moves', 'Harakat']];
+const tabs = () => ALL_TABS.filter(([k]) => (k !== 'inbox' || canAccept)
+                                         && (k !== 'moves' || canLedger));
 function drawTabs() {
-  $('tabs').innerHTML = TABS.map(([k, t]) =>
+  // Bitta tab — tab emas: tanlash imkoni yo'q qator faqat joy egallaydi.
+  const T = tabs();
+  if (T.length < 2) { $('tabs').innerHTML = ''; return; }
+  $('tabs').innerHTML = T.map(([k, t]) =>
     `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}${
       k === 'inbox' && rows.length ? ` <b>${rows.length}</b>` : ''}</button>`).join('');
 }
@@ -357,9 +372,13 @@ async function loadMoves() {
 
 App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
+  canLedger = App.can('warehouse.move', 'warehouse.manage',
+                      'production.manage', 'production.reports');
+  // Telefonda mudir eshik oldida turadi — birinchi ekran qabul qilish
+  if (isPhone && canAccept) tab = 'inbox';
   // Qabul qilish ro'yxati tabda raqam bo'lib turishi uchun oldindan
   // o'qiladi — ochilmasa ham mudir kutayotgan borligini ko'radi.
-  rows = await App.api('/api/units/stock/inbox');
+  if (canAccept) rows = await App.api('/api/units/stock/inbox');
   drawTabs();
   await (tab === 'inbox' ? draw() : loadStock());
 }, 'warehouse.view', 'production.view');

@@ -140,6 +140,9 @@ async function boot(){
   ref = r; customers = c.customers;
   // Konver yaratish huquqi yo'q xodimga tugma ko'rsatilmaydi
   if (!App.can('production.units', 'production.manage')) $('btnNew').remove();
+  // "Hammasini tanlash" katakchasi ham: tanlashdan keyin bosiladigan
+  // yagona tugma — o'tkazish, u esa savdoda yo'q.
+  if (!App.can('production.entry')) $('chAll').remove();
   $('fShop').innerHTML = '<option value="">Barchasi</option>' +
     ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   $('fCust').innerHTML = '<option value="">Barchasi</option>' +
@@ -302,10 +305,14 @@ async function load(){
 }
 
 function render(){
-  // Zakaz, mijoz va narxni savdo qo'yadi — tsex ustasida bu huquq yo'q.
   // Tugmani ko'rsatib, keyin "ruxsat yo'q" deyish yomon: xodim nima
   // qilayotganini bilmay qoladi. Shuning uchun umuman ko'rsatilmaydi.
-  const canEdit = App.can('production.units', 'sales.manage', 'production.manage');
+  //
+  // Savdoda ikkalasi ham yo'q: ular uchun jurnal — o'qish uchun
+  // ro'yxat, filtr bilan. Konverni o'tkazish tsexniki, tahrirlash esa
+  // ishlab chiqarishniki.
+  const canEdit = App.can('production.units', 'production.manage');
+  const canMove = App.can('production.entry');
   const inProd = rows.filter(r => r.status === 'production').length;
   const inFg   = rows.filter(r => r.status === 'fg').length;
   const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);
@@ -320,7 +327,7 @@ function render(){
 
   $('tB').innerHTML = rows.length ? rows.map(r => `
     <tr>
-      <td class="k">${r.status === 'production'
+      <td class="k">${canMove && r.status === 'production'
         ? `<input type="checkbox" class="sel" value="${r.id}" style="width:auto" onchange="bulk()">`
         : '<span class="pad"></span>'}<strong>${esc(r.conveyor_no)}</strong></td>
       <td class="muted">${d8(r.started_on)}</td>
@@ -346,9 +353,9 @@ function render(){
         ? '<span class="muted">—</span>'
         : `<strong>${money(r.total_amount)}</strong>`}</td>
       <td class="act sep">
-        ${r.status === 'production'
+        ${canMove && r.status === 'production'
           ? `<button onclick="move(${r.id})">O'tkazish</button>` : ''}
-        ${r.section && r.status !== 'shipped'
+        ${canMove && r.section && r.status !== 'shipped'
           ? `<button class="ic" onclick="undo(${r.id})"
                title="Oxirgi o'tkazishni qaytarish">↩</button>` : ''}
         ${canEdit ? `<button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>` : ''}
