@@ -170,11 +170,6 @@ keladi. Shuning uchun avval kiritish, keyin modul.
 Bular hal bo'lmaguncha tegishli kod YOZILMAYDI: javobsiz taxmin qilib
 qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 
-**Stul marshruti**
-- `Zero` stuli katalogda yo'q. Yaratilsinmi? Marshruti qaysi (Rover /
-  Zborka / Shkurkadan boshlanadimi)?
-- `Palazzo` stuli hozir `L2-FULL` da (Roverdan). To'g'rimi?
-
 **Xom ashyo spravochnigi** (ombor moduli shundan boshlanadi)
 - Ro'yxat Excel'da bormi? Bo'lsa ustunlariga moslab yuklash yoziladi.
 - Bitta material bir nechta rangda bo'ladimi — `LDSP 16mm` oq, yong'oq,

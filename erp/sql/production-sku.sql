@@ -16,6 +16,33 @@ INSERT INTO fasons (code, name) VALUES
   ('ONIX','Onix'), ('PALAZZO','Palazzo')
 ON CONFLICT (code) DO NOTHING;
 
+-- ─────────────────────────────────────────── PALAZZO STULI ASLIDA ZERO
+--
+--  Zavod stulni «Palazzo» deb atab kelgan edi, keyin bu nom noto'g'ri
+--  ekani aniqlandi: mahsulot Zero. Ikkita alohida stul emas, bitta stul —
+--  shuning uchun yangisi ochilmaydi, borining fasoni ZERO ga ko'chiriladi.
+--  Konver raqamlari, harakatlar va qoldiq o'sha joyida qoladi: mahsulot
+--  bir xil, faqat nomi to'g'irlandi.
+--
+--  Quyidagi SKU ro'yxatidan OLDIN turadi: aks holda seed yangi
+--  «STU-ZERO» qatorini yaratib, zavodda bitta stul ikkita bo'lib qolardi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'stul-palazzo-zero') THEN
+    UPDATE products SET sku = 'STU-ZERO', name = 'Zero',
+                        fason_id = (SELECT id FROM fasons WHERE code = 'ZERO')
+     WHERE sku = 'STU-PALAZZO';
+    INSERT INTO migration_flags (key) VALUES ('stul-palazzo-zero');
+  END IF;
+END $$;
+
+-- Endi PALAZZO fasoni hech qayerda ishlatilmaydi. Ishlatilmagan bo'lsa
+-- olib tashlanadi: ro'yxatda turgan keraksiz nom keyin kimdir tanlab
+-- qo'yadigan xato manbai.
+DELETE FROM fasons f
+ WHERE f.code = 'PALAZZO'
+   AND NOT EXISTS (SELECT 1 FROM products p WHERE p.fason_id = f.id);
+
 -- ------------------------------------------------------------------- PENAL
 -- Mehmonxona penali. Yakka mahsulot: o'z konveyer raqami bilan yuradi,
 -- kamoddan alohida kuzatiladi.
@@ -153,7 +180,7 @@ FROM (VALUES
   ('STU-SHEIKH', 'SHEIKH'),
   ('STU-BAROCCO', 'BAROCCO'),
   ('STU-ONIX', 'ONIX'),
-  ('STU-PALAZZO', 'PALAZZO')
+  ('STU-ZERO', 'ZERO')
 ) AS v(sku, fason)
 JOIN fasons f ON f.code = v.fason
 ON CONFLICT (sku) DO NOTHING;
