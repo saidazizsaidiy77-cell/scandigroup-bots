@@ -218,7 +218,10 @@ function drawStock() {
     <div class="grid g3" style="margin-top:16px">
       <div class="card"><h2>Omborda</h2>
         <div class="kpi">${d.total.units}<small> konver</small></div></div>
-      <div class="card"><h2>Jami dona</h2><div class="kpi">${d.total.qty}</div></div>
+      <div class="card"><h2>Jami</h2>
+        <div class="kpi">${d.total.by_uom && d.total.by_uom.length
+          ? d.total.by_uom.map(x => `${x.qty}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
+          : d.total.qty}</div></div>
       <div class="card"><h2>Summa</h2>
         <div class="kpi">${d.total.amount ? '$' + money(d.total.amount) : '\u2014'}</div></div>
     </div>
@@ -253,7 +256,8 @@ function drawStockRow(r) {
       <td class="s-name"><b>${esc(r.product)}</b></td>
       <td class="s-color muted">${esc(r.color || '\u2014')}</td>
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
-      <td class="s-qty"><b>${r.qty}</b></td>
+      <td class="s-qty"><b>${r.qty}</b> <span class="muted"
+        style="font-size:11px">${esc(r.uom || '')}</span></td>
       <td class="s-units muted">${r.units}</td>
       <td class="s-days ${r.oldest_days > 60 ? 'bad' : 'muted'}">${r.oldest_days ?? ''}</td>
     </tr>

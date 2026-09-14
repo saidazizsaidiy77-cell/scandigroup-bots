@@ -35,11 +35,13 @@
     o'tkaziladi. Qadoqlash bo'limi tanlansa konver darrov T/M omboriga tushadi.
     Zakaz, mijoz va narx keyin ham qo'yilishi mumkin — jurnal sahifasidan.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
-    <strong>T/M omborda turgan mahsulot</strong> fayldan yuklanadi:
-    <strong>Omborga kirgan</strong> ustuniga sana qo'yiladi va bo'lim bo'sh
-    qoldiriladi. Bunday konver ishlab chiqarish jurnalida emas, ombor
-    qoldig'ida turadi — u yerdan sotiladi. Namuna faylda uchinchi qator
-    shunday.</p>
+    <strong>T/M omborda turgan mahsulot</strong> — <strong>Tseh</strong>
+    ustunidan <strong>«T/M ombor»</strong> tanlang: bo'lim katagi o'chadi,
+    <strong>«T/M ombor»</strong> ustunidagi sana esa reja emas, omborga
+    <strong>kirgan kun</strong> bo'lib yoziladi. Bunday konver ishlab
+    chiqarish jurnalida emas, ombor qoldig'ida turadi — u yerdan sotiladi.
+    Fayldan yuklaganda xuddi shu ish <strong>«Omborga kirgan»</strong>
+    ustuni bilan bo'ladi (namuna faylda uchinchi qator).</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
     <strong>Zahira</strong> — belgilansa qadoqlash va T/M ombor kataklarida
     sana o'rniga <strong>zahira</strong> so'zi turadi: mahsulot rang sepishda
@@ -177,6 +179,7 @@ function addRow(k = 1){
         <td><select class="c-shop" onchange="fillSec(this)">
           <option value="">— boshlanmagan —</option>
           ${ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+          <option value="fg">T/M ombor</option>
         </select></td>
         <td><select class="c-sec" onchange="sum()"><option value="">—</option></select></td>
         <td class="num"><input class="c-stock" type="checkbox" style="width:auto"
@@ -213,9 +216,17 @@ function fillGroup(sel){
 function fillSec(sel){
   const tr = sel.closest('tr');
   const sec = tr.querySelector('.c-sec');
-  sec.innerHTML = sel.value
+  const fg  = sel.value === 'fg';
+  // Omborda turgan mahsulotning bo'limi yo'q: u konveyerdan chiqib
+  // bo'lgan. Katak o'chiriladi va «T/M ombor» ustuni sana so'raydi —
+  // o'sha kun qoldiqqa kirgan kun bo'ladi.
+  sec.innerHTML = (sel.value && !fg)
     ? sectionsOfShop(sel.value).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')
     : '<option value="">—</option>';
+  sec.disabled = fg;
+  const f = tr.querySelector('.c-fg');
+  f.classList.toggle('need', fg);
+  if (fg && !f.value) f.value = tr.querySelector('.c-start').value || '';
   sum();
 }
 
@@ -254,9 +265,15 @@ function collect(){
       entered_section_on: g('.c-start') || null,
       // Sanalar reja sifatida yoziladi; konver o'sha tsexga o'tganda
       // tizim faktni o'zi qo'yadi va reja bilan solishtiriladi.
+      //
+      // Tseh o'rniga «T/M ombor» tanlangan bo'lsa — mahsulot allaqachon
+      // omborda turibdi: «T/M ombor» ustunidagi sana REJA emas, omborga
+      // kirgan FAKT kun bo'ladi va konver darrov qoldiqqa tushadi.
       lak_planned_on:  g('.c-lak')  || null,
       pack_planned_on: g('.c-pack') || null,
-      fg_planned_on:   g('.c-fg')   || null,
+      ...(g('.c-shop') === 'fg'
+            ? { fg_on: g('.c-fg') || g('.c-start') || null }
+            : { fg_planned_on: g('.c-fg') || null }),
       customer_id: g('.c-cust') || null,
       customer_id_raw: g('.c-cust'),
       is_stock:    tr.querySelector('.c-stock').checked,

@@ -647,6 +647,44 @@ test('keyingi tsex konverning bir qismini qabul qila oladi', async () => {
     [u.conveyor_no])).lak_on);
 });
 
+test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri T/M omborga kiritiladi', async () => {
+  const STUL = (await H.id(`SELECT id FROM products WHERE sku='STU-LAURA'`)).id;
+  const r = await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Venge', fabric: 'Velvet-12',
+      unit_price: 300, fg_on: '2026-08-20', is_opening: true },
+    { product_id: STUL,  qty: 6, color: 'Oq', fg_on: '2026-08-21', is_opening: true },
+  ] });
+  assert.equal(r.status, 200, r.text);
+
+  const [a, b] = r.body.created;
+  const holat = async (id) => await H.id(
+    `SELECT status, to_char(fg_on,'YYYY-MM-DD') AS fg_on, current_section_id
+       FROM production_units WHERE id = $1`, [id]);
+  assert.deepEqual(await holat(a.id),
+    { status: 'fg', fg_on: '2026-08-20', current_section_id: null });
+  assert.deepEqual(await holat(b.id),
+    { status: 'fg', fg_on: '2026-08-21', current_section_id: null });
+
+  // Jurnalda ko'rinmaydi — u ishlab chiqarishda emas
+  assert.equal((await admin('GET', '/api/units/?conveyor_no=' + a.conveyor_no)).body.length, 0);
+
+  // Ombor qoldig'ida esa turibdi, O'LCHOV BIRLIGI bilan
+  const sum = await admin('GET', '/api/warehouse/fg/summary?q=Venge');
+  const qator = sum.body.rows.find((x) => x.color === 'Venge');
+  assert.ok(qator, JSON.stringify(sum.body.rows));
+  assert.equal(qator.uom, 'komplekt', 'penal komplekt bilan sanaladi');
+  assert.equal(qator.qty, 2);
+
+  // Yig'indi birliklar bo'yicha ajratiladi — dona bilan komplekt qo'shilmaydi
+  const hammasi = await admin('GET', '/api/warehouse/fg/summary');
+  const uoms = Object.fromEntries(hammasi.body.total.by_uom.map((x) => [x.uom, x.qty]));
+  assert.ok(uoms.komplekt >= 2, JSON.stringify(uoms));
+  assert.ok(uoms.dona >= 6, JSON.stringify(uoms));
+
+  // fg_stock ham hisoblandi
+  assert.ok((await H.id(`SELECT qty FROM fg_stock WHERE product_id=$1`, [STUL])).qty >= 6);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

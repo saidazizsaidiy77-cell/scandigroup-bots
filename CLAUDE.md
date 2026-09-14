@@ -87,6 +87,18 @@ qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
 stul tsexi. Tsex ekranining tepasida «Boshlanmagan» ro'yxati bo'lib
 turadi, tugmasi marshrutning birinchi bo'limini yozadi («→ Arra»).
 
+**O'lchov birligi** (`product_groups.uom`) — stul DONA bilan, penal, kamod,
+sp va stol KOMPLEKT bilan sanaladi. Guruhga biriktiriladi, mahsulotga emas.
+Ombor yig'indisi shu sababdan bitta raqam emas: `by_uom` bo'lib chiqadi —
+dona bilan komplektni qo'shib bo'lmaydi.
+
+**Boshlang'ich qoldiqni omborga kiritish.** «Boshlang'ich qoldiq» sahifasida
+**Tseh** ustunidan «T/M ombor» tanlansa, bo'lim katagi o'chadi va «T/M ombor»
+ustunidagi sana REJA emas, omborga kirgan FAKT kun bo'ladi: konver darrov
+`fg` holatida yaratiladi va qoldiqqa tushadi. Fayldan yuklashda xuddi shu
+ish «Omborga kirgan» ustuni bilan bo'ladi. Qoida `createOne()` da — ikkala
+yo'l ham shundan o'tadi.
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.

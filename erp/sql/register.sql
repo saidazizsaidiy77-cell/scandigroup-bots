@@ -105,6 +105,7 @@ SELECT
   p.sku,
   p.id AS product_id,                               -- keyingi bo'limni marshrutdan topish uchun
   g.name  AS product_type,                        -- mahsulot turi (guruh)
+  g.uom,                                          -- dona / komplekt
   -- Jurnal guruh va fason bo'yicha filtrlanadi. Nom bo'yicha emas, id
   -- bo'yicha: saytdan nom o'zgartirilsa filtr buzilmasin.
   p.group_id,

@@ -88,6 +88,19 @@ UPDATE product_groups SET owner_shop_id = (SELECT id FROM shops WHERE code = 'ST
  WHERE code = 'STU' AND owner_shop_id IS DISTINCT FROM
        (SELECT id FROM shops WHERE code = 'STUL');
 
+-- ───────────────────────────────────────────────────── O'LCHOV BIRLIGI
+--
+--  Zavod stulni DONA bilan sanaydi, penal/kamod/sp/stolni esa KOMPLEKT
+--  bilan: penalning bir komplekti — bu bir necha panel, lekin ombor uchun
+--  u bitta narsa. Shuning uchun birlik guruhga biriktiriladi, mahsulotga
+--  emas: guruh ichida u har doim bir xil.
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS uom TEXT NOT NULL DEFAULT 'dona';
+
+UPDATE product_groups SET uom = 'komplekt'
+ WHERE code IN ('PENAL', 'KAMOD', 'SP', 'STL') AND uom IS DISTINCT FROM 'komplekt';
+UPDATE product_groups SET uom = 'dona'
+ WHERE code = 'STU' AND uom IS DISTINCT FROM 'dona';
+
 -- Yuqoridagi INSERT mavjud guruhlarga tegmaydi (ON CONFLICT DO NOTHING),
 -- shuning uchun tartib alohida qo'yiladi. Saytdan tartib berilgan guruh
 -- (sort <> 0) o'z joyida qoladi.

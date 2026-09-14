@@ -400,7 +400,8 @@ async function createOne(client, req, it) {
      Number(it.qty) || 1, it.started_on || null, it.section_id || null,
      it.entered_section_on || null, it.customer_id || null,
      it.unit_price || null, it.ship_on || null, it.next_shop_planned_on || null,
-     isExit ? 'fg' : 'production', !!it.is_opening, it.note || null, req.user.id,
+     (isExit || it.fg_on) ? 'fg' : 'production',
+     !!it.is_opening, it.note || null, req.user.id,
      trim(it.color), trim(it.fabric),
      it.lak_planned_on || null, lakOn,
      it.pack_planned_on || null, packOn,
@@ -426,10 +427,14 @@ async function createOne(client, req, it) {
        u.conveyor_no + (it.is_opening ? ' · boshlang\'ich qoldiq' : ''),
        !!it.is_opening]);
   }
-  if (isExit) {
+  // Boshlang'ich qoldiqda konver allaqachon omborda turgan bo'lishi mumkin:
+  // u yerga tizim ishga tushishidan oldin kirgan, ya'ni topshirish-qabul
+  // qilish bo'lmagan. `fg_on` berilsa — o'sha kun, aks holda chiqish
+  // bo'limiga qo'yilgan bo'lsa — o'sha bo'limga kirgan kun.
+  if (isExit || it.fg_on) {
     await client.query(
-      `UPDATE production_units SET fg_on = COALESCE($2::date, CURRENT_DATE) WHERE id = $1`,
-      [u.id, it.entered_section_on || null]);
+      `UPDATE production_units SET fg_on = COALESCE($2::date, $3::date, CURRENT_DATE)
+        WHERE id = $1`, [u.id, it.fg_on || null, it.entered_section_on || null]);
     await refreshStock(client, it.product_id);
   }
   return u;
@@ -1224,6 +1229,7 @@ router.get('/stock/export', need('warehouse.view', 'production.view'), wrap(asyn
     ['Rang',            (r) => r.color],
     ['Mato',            (r) => r.fabric],
     ['Soni',            (r) => r.qty],
+    ['Birligi',         (r) => r.uom],
     ['Omborga kirgan',  (r) => csvDate(r.fg_on)],
     ['Omborda, kun',    (r) => r.days_in_stock],
     ['Mijoz',           (r) => r.customer_name],

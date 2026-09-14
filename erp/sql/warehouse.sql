@@ -34,7 +34,10 @@ SELECT u.id,
        u.fg_on,                                  -- omborga qabul qilingan kun
        (CURRENT_DATE - u.fg_on)::int AS days_in_stock,
        u.unit_price,
-       u.total_amount
+       u.total_amount,
+       -- Birlik OXIRIDA: CREATE OR REPLACE VIEW ustunni faqat oxiriga
+       -- qo'sha oladi, o'rtaga qo'yilsa DROP kerak bo'lardi (CLAUDE.md, 2-qoida)
+       g.uom
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id

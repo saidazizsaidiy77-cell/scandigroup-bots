@@ -356,3 +356,8 @@ tr.click:hover td{background:var(--surface-2)}
 .print-head{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:10px}
 .print-head h1{font-size:15px;margin-bottom:3px}
 .print-head .meta{font-size:9px;color:#333}
+
+/* Shu qatorda to'ldirilishi kutilayotgan katak. Qizil emas — xato emas,
+   hali yozilmagan: qizil rang xatoga atalgan, uni boshqa narsaga
+   ishlatilsa haqiqiy xato ko'zga tashlanmay qoladi. */
+input.need, select.need{border-color:var(--accent);background:var(--surface)}

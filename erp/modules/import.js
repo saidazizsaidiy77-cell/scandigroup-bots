@@ -19,7 +19,7 @@ const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
 const { readSheet } = require('../xlsx');
-const { createOne, refreshStock } = require('./units');
+const { createOne } = require('./units');
 
 const router = express.Router();
 const UNITS = ['production.units', 'production.manage'];
@@ -345,24 +345,13 @@ router.post('/units', need(...UNITS),
       }
 
       const created = [];
-      // Omborga tushgan konverlar qoldig'i har mahsulot uchun bir marta,
-      // hammasi kiritilgach qayta sanaladi.
-      const stockProducts = new Set();
       for (const r of rows) {
         if (r.it.new_customer) r.it.customer_id = added.get(r.it.new_customer);
-        const u = await createOne(client, req, r.it);
-        created.push(u);
-        if (r.it.fg_on) {
-          // Boshlang'ich qoldiqda topshirish-qabul qilish bo'lmaydi: mahsulot
-          // tizim ishga tushgunga qadar omborga kirgan, uni qayta «jo'natdim →
-          // qabul qildim» qilish kerak emas.
-          await client.query(
-            `UPDATE production_units SET status = 'fg', fg_on = $2 WHERE id = $1`,
-            [u.id, r.it.fg_on]);
-          stockProducts.add(r.it.product_id);
-        }
+        // «Omborga kirgan» sanasi bo'lsa konverni to'g'ri omborga qo'yish
+        // — createOne ning ishi: qoida bitta joyda tursin, aks holda
+        // qo'lda kiritish bilan fayldan yuklash ikki xil ishlab ketadi.
+        created.push(await createOne(client, req, r.it));
       }
-      for (const pid of stockProducts) await refreshStock(client, pid);
 
       await audit(req, { module: 'production', action: 'import', entity: 'units',
                          entity_id: created.length,

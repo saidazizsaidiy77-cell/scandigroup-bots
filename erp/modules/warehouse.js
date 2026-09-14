@@ -80,9 +80,9 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
                    OR fabric ILIKE '%' || $3 || '%'
                    OR conveyor_no ILIKE '%' || $3 || '%')`;
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, byUom] = await Promise.all([
     db.query(
-      `SELECT product_type, product_id, product, sku,
+      `SELECT product_type, product_id, product, sku, uom,
               ${NORM('color')}  AS color,
               ${NORM('fabric')} AS fabric,
               COUNT(*)::int          AS units,
@@ -92,15 +92,24 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
               MAX(days_in_stock)::int AS oldest_days
          FROM v_fg_units
         WHERE ${FROM_TO} AND ${search}
-        GROUP BY product_type, product_id, product, sku, ${NORM('color')}, ${NORM('fabric')}
+        GROUP BY product_type, product_id, product, sku, uom,
+                 ${NORM('color')}, ${NORM('fabric')}
         ORDER BY product_type, product, color NULLS FIRST, fabric NULLS FIRST`,
       params),
     db.query(
       `SELECT COUNT(*)::int AS units, COALESCE(SUM(qty), 0)::int AS qty,
               COALESCE(SUM(total_amount), 0) AS amount
          FROM v_fg_units WHERE ${FROM_TO} AND ${search}`, params),
+    // Stul DONA bilan, penal/kamod/sp/stol KOMPLEKT bilan sanaladi —
+    // ularni bitta yig'indiga qo'shib bo'lmaydi: «22» degan raqam nimani
+    // anglatishi noma'lum bo'lib qolardi.
+    db.query(
+      `SELECT uom, COALESCE(SUM(qty), 0)::int AS qty
+         FROM v_fg_units WHERE ${FROM_TO} AND ${search}
+        GROUP BY uom ORDER BY uom`, params),
   ]);
-  res.json({ rows: rows.rows, total: total.rows[0] });
+  res.json({ rows: rows.rows,
+             total: { ...total.rows[0], by_uom: byUom.rows } });
 }));
 
 // Jamlanma qatorini ochish: aynan shu mahsulot + rang + mato bo'yicha
