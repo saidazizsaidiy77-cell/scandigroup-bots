@@ -185,7 +185,11 @@ const FILTERS = ['fOrder', 'fFason', 'fShop', 'fSection', 'fCust'];
 // chiqardi va sababi ko'rinmasdi.
 function shopChanged(){
   const shop = Number($('fShop').value) || null;
-  const list = shop ? ref.sections.filter(sc => sc.shop_id === shop) : [];
+  // O'z bo'limlari, ustiga shu tsex boshqaradigan begona bo'limlar:
+  // stul tsexi uchun lak tsexidagi Astar sepish, Astar shkurka, Lak.
+  const list = shop
+    ? ref.sections.filter(sc => sc.shop_id === shop || (sc.run_by || []).includes(shop))
+    : [];
   $('fSection').innerHTML = '<option value="">Barchasi</option>' +
     list.map(sc => `<option value="${sc.id}">${esc(sc.name)}</option>`).join('');
   $('fSection').disabled = !list.length;

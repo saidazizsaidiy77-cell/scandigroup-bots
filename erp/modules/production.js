@@ -20,7 +20,18 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
     await Promise.all([
       db.query(`SELECT * FROM lines WHERE active ORDER BY sort`),
       db.query(`SELECT * FROM shops ORDER BY sort, name`),
-      db.query(`SELECT sc.*, sh.line_id, sh.is_shared, sh.name AS shop
+      // run_by — shu bo'limdagi mahsulotni boshqaradigan begona tsexlar.
+      // Stul lak tsexining bo'limlarida turadi, shuning uchun «Stul tsexi»
+      // tanlanganda o'sha bo'limlar ham ro'yxatga tushishi kerak: aks
+      // holda «lak bo'limidagi stullar» degan so'rovni bera bo'lmaydi.
+      db.query(`SELECT sc.*, sh.line_id, sh.is_shared, sh.name AS shop,
+                       COALESCE((SELECT array_agg(DISTINCT g.owner_shop_id)
+                                   FROM v_product_route pr
+                                   JOIN products p        ON p.id = pr.product_id
+                                   JOIN product_groups g  ON g.id = p.group_id
+                                  WHERE pr.section_id = sc.id
+                                    AND g.owner_shop_id IS NOT NULL
+                                    AND g.owner_shop_id <> sc.shop_id), '{}') AS run_by
                   FROM sections sc JOIN shops sh ON sh.id = sc.shop_id
                  WHERE sc.active ORDER BY sh.sort, sc.sort`),
       db.query(`SELECT p.*, g.name AS group_name, g.line_id

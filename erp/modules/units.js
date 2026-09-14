@@ -178,7 +178,11 @@ function registerQuery(q, limit, scope = null) {
         AND ($1::text IS NULL OR order_no ILIKE '%' || $1 || '%')
         AND ($2::text IS NULL OR conveyor_no ILIKE '%' || $2 || '%')
         AND ($3::int  IS NULL OR customer_id = $3)
-        AND ($4::int  IS NULL OR shop_id = $4)
+        -- Tsex filtri ham JAVOBGAR bo'yicha: «Lak tsexi» tanlanganda
+        -- lak bo'limlarida turgan stul chiqmaydi (u stul tsexiniki),
+        -- «Stul tsexi» tanlanganda esa lak bo'limlarida turganlari ham
+        -- chiqadi. Ekranda kim nimani boshqarsa, jurnalda ham shu.
+        AND ($4::int  IS NULL OR owner_shop_id = $4)
         AND ($5::text IS NULL OR status = $5)
         AND ($6::date IS NULL OR started_on >= $6)
         AND ($7::date IS NULL OR started_on <= $7)

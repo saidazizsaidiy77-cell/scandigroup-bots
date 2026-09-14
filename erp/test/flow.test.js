@@ -472,6 +472,44 @@ test('stul lak tsexining bo\'limida tursa ham stul tsexiniki bo\'lib qoladi', as
   assert.ok(oxir.lak_yozildi, 'lak tsexiga kirish sanasi baribir yozildi');
 });
 
+test('jurnaldagi tsex filtri ham javobgar tsex bo\'yicha', async () => {
+  const STU_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='STU-SHKUR'`)).id;
+  const BOY_AST1  = (await H.id(`SELECT id FROM sections WHERE code='BOY-AST1'`)).id;
+  const STUL_ID   = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
+  const BOYOQ_ID  = (await H.id(`SELECT id FROM shops WHERE code='BOYOQ'`)).id;
+  const OWEN = (await H.id(`SELECT id FROM products WHERE sku='STU-OWEN'`)).id;
+
+  // Stul lak tsexining bo'limida turibdi
+  const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  const s = (await admin('POST', '/api/units/',
+    { items: [{ product_id: OWEN, qty: 1, section_id: STU_SHKUR }] })).body.created[0];
+  await stul('POST', '/api/units/move', { items: [{ unit_id: s.id }] });
+  assert.equal((await H.id(`SELECT current_section_id c FROM production_units WHERE id=$1`,
+    [s.id])).c, BOY_AST1);
+
+  // Penal ham lak tsexida
+  const pen = (await admin('POST', '/api/units/',
+    { items: [{ product_id: PENAL, qty: 1, section_id: BOY_AST1 }] })).body.created[0];
+
+  const kodlar = async (shopId) =>
+    (await admin('GET', '/api/units/?shop_id=' + shopId)).body.map((x) => x.conveyor_no);
+
+  const lakda = await kodlar(BOYOQ_ID);
+  assert.ok(lakda.includes(pen.conveyor_no), 'penal lak tsexi filtrida chiqadi');
+  assert.ok(!lakda.includes(s.conveyor_no), 'stul lak tsexi filtrida chiqmaydi');
+
+  const stulda = await kodlar(STUL_ID);
+  assert.ok(stulda.includes(s.conveyor_no),
+    'lak bo\'limida tursa ham stul tsexi filtrida chiqadi');
+  assert.ok(!stulda.includes(pen.conveyor_no));
+
+  // Bo'lim ro'yxatida lak bo'limlari stul tsexiga ham biriktirilgan
+  const ref = await admin('GET', '/api/ref');
+  const ast = ref.body.sections.find((x) => x.id === BOY_AST1);
+  assert.ok(ast.run_by.includes(STUL_ID),
+    'lak bo\'limi stul tsexi ro\'yxatida ham tanlanadi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
