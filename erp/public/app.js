@@ -139,7 +139,7 @@ const App = (() => {
     { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage'] },
     { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
     { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
-    { code: 'reports',    name: 'Hisobotlar',           perm: ['production.view'] },
+    { code: 'reports',    name: 'Hisobotlar',           perm: ['production.reports'] },
     { code: 'refs',       name: "Ma'lumotnomalar",      perm: ['production.manage'] },
   ];
 
@@ -155,7 +155,7 @@ const App = (() => {
     { href: '/harakat.html', mod: 'production', nav: "Bo'limlar aro harakat",
       title: "Bo'limlar aro harakat", lead: 'Tsex boshlig\'ining ekrani',
       text: "Konverlar bo'limlar bo'yicha \u00b7 bitta bosishda keyingi bo'limga \u00b7 keyingi tsexga topshirishga qancha qolgani \u00b7 bugungi harakatlar lentasi",
-      perm: ['production.view', 'production.entry'] },
+      perm: ['production.entry'] },
     { href: '/jurnal.html', mod: 'production', nav: 'Jurnal',
       title: 'Ishlab chiqarish jurnali', lead: 'Konveyer raqami bo\'yicha',
       text: "Har mahsulot: bosh sana, K\u2116, Z\u2116, rang, mato, tsex, bo'lim, mijoz, narx, muddatlar",
@@ -168,12 +168,12 @@ const App = (() => {
       group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',
       text: "Har mahsulot qaysi tsex va bo'limda \u00b7 qachon keyingi tsexga o'tadi \u00b7 qachon omborga kiradi",
-      perm: ['production.view'] },
+      perm: ['production.reports'] },
     { href: '/dashboard.html', mod: 'reports', nav: 'Panel',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",
       text: "Reja/fakt \u00b7 bottleneck \u00b7 komplektlilik \u00b7 umumiy tsex yuklamasi \u00b7 Pareto",
-      perm: ['production.view'] },
+      perm: ['production.reports'] },
     // Smena va Terminal menyudan olib tashlangan. Sahifalar va API joyida —
     // manzil bilan ochiladi, qaytarish uchun shu qatorlarni izohdan
     // chiqarish kifoya:

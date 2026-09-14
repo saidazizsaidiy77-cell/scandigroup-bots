@@ -71,6 +71,13 @@ function draw(rows) {
 
 App.start(async () => {
   const d = await App.api('/api/warehouse/list');
+  // Bitta omborga kirish huquqi bo'lsa, ro'yxat ortiqcha bosish bo'ladi:
+  // ombor mudiri har kuni bitta va o'sha sahifani ochadi. Ikkinchi ombor
+  // ochilgan kuni ro'yxat o'zi qaytadi.
+  if (d.rows.length === 1 && d.rows[0].href) {
+    location.replace(d.rows[0].href);
+    return;
+  }
   draw(d.rows);
 }, 'warehouse.view', 'production.view');
 </script>

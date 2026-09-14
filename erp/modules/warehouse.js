@@ -26,12 +26,17 @@ const READ = ['warehouse.view', 'production.view'];
 //  qaysi biriga kirish kerakligini shundan ko'radi. Hozircha faqat
 //  tayyor mahsulot ombori sanaladi; `material` omborlar ochilganda
 //  o'sha yerda o'z hisobi qo'shiladi.
-router.get('/list', need(...READ), wrap(async (_req, res) => {
+//  Har kim o'ziga tegishli omborlarni ko'radi: ombor mudiri — tayyor
+//  mahsulotni, savdo — tayyor mahsulot bilan vitrinalarni, ta'minot —
+//  xom ashyoni. Qoida ombor qatorida (`warehouses.perm`), shu yerda emas:
+//  yangi ombor qo'shilganda bu kod o'zgarmaydi.
+router.get('/list', need(...READ), wrap(async (req, res) => {
   const [houses, fg] = await Promise.all([
     db.query(`SELECT w.id, w.code, w.name, w.kind, w.note, w.is_active, s.name AS shop_name
                 FROM warehouses w
                 LEFT JOIN shops s ON s.id = w.shop_id
-               ORDER BY w.is_active DESC, w.sort, w.name`),
+               WHERE w.perm IS NULL OR w.perm = ANY($1::text[])
+               ORDER BY w.is_active DESC, w.sort, w.name`, [req.user.permissions]),
     db.query(`SELECT COUNT(*)::int AS units, COALESCE(SUM(qty), 0)::int AS qty,
                      COALESCE(SUM(total_amount), 0) AS amount
                 FROM v_fg_units`),

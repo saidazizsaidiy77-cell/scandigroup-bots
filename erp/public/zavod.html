@@ -209,7 +209,7 @@ async function openProduct(id){
 const closeModal = () => { $('modalRoot').innerHTML = ''; };
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-App.start(boot, 'production.view');
+App.start(boot, 'production.reports');
 setInterval(() => App.me() && load(), 60000);
 </script>
 </body>

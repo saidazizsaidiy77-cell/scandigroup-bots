@@ -216,7 +216,7 @@ router.post('/paint/:id/finish', need('production.entry'), wrap(async (req, res)
 }));
 
 // ─────────────────────────────────────────────────────────────────── HISOBOT
-router.get('/dashboard', need('production.view'), wrap(async (req, res) => {
+router.get('/dashboard', need('production.reports'), wrap(async (req, res) => {
   const date = req.query.date || today();
   // Brak va prostoy Pareto'si bir kun uchun ma'nosiz — davr bo'yicha olinadi.
   const from = req.query.from || daysAgo(30);
@@ -408,7 +408,7 @@ router.post('/flow/bulk', need('production.entry'), wrap(async (req, res) => {
 
 // ══════════════════════════════════════ ZAVOD KO'RINISHI
 // "Hozir nima qayerda, qachon keyingi tsexga o'tadi, qachon omborga kiradi"
-router.get('/factory', need('production.view'), wrap(async (req, res) => {
+router.get('/factory', need('production.reports'), wrap(async (req, res) => {
   const { line_id, group_id, q } = req.query;
 
   const [shopLoad, positions, movements, fgStock, rateHealth] = await Promise.all([
@@ -451,7 +451,7 @@ router.get('/factory', need('production.view'), wrap(async (req, res) => {
 }));
 
 // Bitta SKU: marshrut bo'ylab to'liq holat
-router.get('/product/:id/progress', need('production.view'), wrap(async (req, res) => {
+router.get('/product/:id/progress', need('production.reports'), wrap(async (req, res) => {
   const [product, progress] = await Promise.all([
     db.query(
       `SELECT p.id, p.sku, p.name, p.is_set, g.name AS group_name, pl.line_name,
@@ -468,7 +468,7 @@ router.get('/product/:id/progress', need('production.view'), wrap(async (req, re
   res.json({ product: product.rows[0], progress: progress.rows });
 }));
 
-router.get('/wip', need('production.view'), wrap(async (_req, res) => {
+router.get('/wip', need('production.reports'), wrap(async (_req, res) => {
   const { rows } = await db.query(
     `SELECT p.name AS product, pl.line_name, sc.name AS section, sh.name AS shop,
             w.step_no, w.queue_qty

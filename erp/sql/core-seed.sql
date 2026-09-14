@@ -12,10 +12,17 @@ INSERT INTO permissions (code, module, name) VALUES
   ('production.entry',  'production', 'Bo''limdan dona o''tkazish, brak, to''xtash'),
   ('production.units',  'production', 'Konver: yaratish, zakaz/mijoz/narx qo''yish'),
   ('production.manage', 'production', 'Marshrut, reja, bo''lim quvvati, spravochnik'),
+  -- Jamlanma hisobotlar: zavod ko'rinishi va boshqaruv paneli. Jurnaldan
+  -- alohida, chunki jurnalni sotuvchi ham ko'radi (o'z buyurtmasi qayerda
+  -- turganini biladi), zavod yuklamasi esa uning ishi emas.
+  ('production.reports','production', 'Zavod ko''rinishi va boshqaruv paneli'),
   -- Xom ashyo va tayyor mahsulot ombori (rejada)
   ('warehouse.view',    'warehouse',  'Ombor qoldiqlarini ko''rish'),
   ('warehouse.move',    'warehouse',  'Kirim / chiqim / ko''chirish'),
   ('warehouse.manage',  'warehouse',  'Inventarizatsiya, hisobdan chiqarish'),
+  -- Xom ashyo omborlarini ko'rish. T/M ombordan alohida: savdo tayyor
+  -- mahsulotni ko'radi, xom ashyoni esa ta'minot va o'z mudiri.
+  ('warehouse.material','warehouse',  'Xom ashyo omborlarini ko''rish'),
   -- Ta'minot (rejada)
   ('purchasing.view',   'purchasing', 'Ta''minotchilar va buyurtmalarni ko''rish'),
   ('purchasing.manage', 'purchasing', 'Ta''minot buyurtmasi berish'),
@@ -62,18 +69,20 @@ SELECT 'admin', code FROM permissions ON CONFLICT DO NOTHING;
 INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'direktor', code FROM permissions WHERE code LIKE '%.view'
 UNION ALL SELECT 'direktor', 'cash.manage'
+UNION ALL SELECT 'direktor', 'production.reports'
 UNION ALL SELECT 'direktor', 'admin.audit'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('ishlab_boshl', 'production.view'),  ('ishlab_boshl', 'production.entry'),
   ('ishlab_boshl', 'production.units'), ('ishlab_boshl', 'production.manage'),
-  ('ishlab_boshl', 'warehouse.view'),
+  ('ishlab_boshl', 'production.reports'), ('ishlab_boshl', 'warehouse.view'),
+  ('ishlab_boshl', 'warehouse.material'),
 
   -- Ma'lumot kirituvchi: jurnal va qoldiqni to'ldiradi, lekin marshrut,
   -- bo'lim quvvati va spravochniklarga tegmaydi.
   ('kirituvchi',   'production.view'), ('kirituvchi', 'production.entry'),
-  ('kirituvchi',   'production.units'),
+  ('kirituvchi',   'production.units'), ('kirituvchi', 'production.reports'),
 
   -- Tsex ustasida FAQAT o'tkazish huquqi. production.view jurnal, zavod
   -- ko'rinishi va panelni ochadi — ustaga bularning hammasi ortiqcha
@@ -89,11 +98,14 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('omborchi',     'warehouse.manage'),
 
   ('taminotchi',   'purchasing.view'), ('taminotchi', 'purchasing.manage'),
-  ('taminotchi',   'warehouse.view'),
+  ('taminotchi',   'warehouse.view'), ('taminotchi', 'warehouse.material'),
 
+  -- Sotuv menejeriga ishlab chiqarishdan FAQAT jurnal: o'z buyurtmasi
+  -- qaysi bo'limda turganini bilishi kerak. Zavod yuklamasi, panel va
+  -- konver yaratish — ishlab chiqarishning ishi. T/M ombor qoldig'i esa
+  -- kerak: nima sotishga tayyor turganini ko'rmasa savdo qila olmaydi.
   ('sotuvchi',     'sales.view'), ('sotuvchi', 'sales.manage'),
   ('sotuvchi',     'warehouse.view'), ('sotuvchi', 'production.view'),
-  ('sotuvchi',     'production.units'),
 
   ('kassir',       'cash.view'), ('kassir', 'cash.entry'),
 
@@ -118,6 +130,13 @@ DELETE FROM role_permissions
 -- bu qatorni o'chirish kifoya.
 DELETE FROM role_permissions
  WHERE role_code = 'omborchi' AND permission_code = 'production.view';
+
+-- Sotuvchida ilgari production.units ham bor edi — u bilan jurnaldan
+-- yangi konver ochilardi va boshlang'ich qoldiq sahifasi ochilardi.
+-- Ikkalasi ham ishlab chiqarishning ishi; buyurtma bo'yicha konver savdo
+-- moduli orqali ochiladi (u yozilgunga qadar — kirituvchi orqali).
+DELETE FROM role_permissions
+ WHERE role_code = 'sotuvchi' AND permission_code = 'production.units';
 
 -- Rol nomi va ko'rinishi ham kodda. ON CONFLICT DO NOTHING eski bazada
 -- nomni yangilamaydi, shuning uchun alohida yoziladi.

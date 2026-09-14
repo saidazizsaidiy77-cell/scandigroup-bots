@@ -44,7 +44,12 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-let rows = [], canAccept = false, tab = 'stock';
+// Telefonda — qabul qilish, kompyuterda — qoldiq. Mudir telefonni
+// omborning eshigida, mahsulot kelganda ochadi: unga kerakli birinchi
+// ekran «qabul qildim» tugmasi. Stol ustidagi kompyuterda esa u qoldiqni
+// ko'radi — nimadan nechta borligini.
+const isPhone = window.matchMedia('(max-width: 620px)').matches;
+let rows = [], canAccept = false, tab = isPhone ? 'inbox' : 'stock';
 const picked = new Set();
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -356,7 +361,7 @@ App.start(async () => {
   // o'qiladi — ochilmasa ham mudir kutayotgan borligini ko'radi.
   rows = await App.api('/api/units/stock/inbox');
   drawTabs();
-  await loadStock();
+  await (tab === 'inbox' ? draw() : loadStock());
 }, 'warehouse.view', 'production.view');
 </script>
 </body>

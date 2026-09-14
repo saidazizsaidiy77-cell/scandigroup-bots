@@ -172,7 +172,7 @@ async function load(){
     : empty(6, 'Bu sanada ma\'lumot yo\'q');
 }
 
-App.start(load, 'production.view');
+App.start(load, 'production.reports');
 setInterval(() => App.me() && load(), 60000);
 </script>
 </body>

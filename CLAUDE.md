@@ -75,10 +75,21 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | Rol | Huquq | Ko'radi |
 |---|---|---|
 | `tsex_usta` | `production.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi |
-| `kirituvchi` | + `production.units` | jurnal, boshlang'ich qoldiq |
+| `kirituvchi` | + `production.units`, `production.reports` | jurnal, boshlang'ich qoldiq, hisobotlar |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
-| `omborchi` | `warehouse.*` | faqat «Omborlar», ishlab chiqarish jurnali yopiq |
+| `omborchi` | `warehouse.view/move/manage` | faqat T/M ombor |
+| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, T/M ombor + vitrinalar, jurnal |
 | `admin` | barchasi | hammasi |
+
+**`production.view` jurnalni ochadi, `production.reports` esa zavod
+ko'rinishi va panelni.** Ikkisi alohida: sotuvchi o'z buyurtmasi qaysi
+bo'limda turganini bilishi kerak, zavod yuklamasi esa uning ishi emas.
+
+**Qaysi omborni kim ko'rishi — `warehouses.perm` ustunida**, kodda emas.
+`NULL` — `warehouse.view` yetarli (T/M ombor); `sales.view` — vitrinalar;
+`warehouse.material` — xom ashyo, MDF, furnitura. Yangi ombor qo'shilganda
+huquq shu qatorga yoziladi, modulga tegilmaydi. Ko'rinadigan ombor bitta
+bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
 
 **Tsex doirasi** — `worker_roles.scope_shop_id`. Doira bo'sh = hamma tsex.
 Bu filtr emas, **chegara**: `scopeOf(req)` orqali so'rovga qo'shiladi,

@@ -101,6 +101,18 @@ CREATE TABLE IF NOT EXISTS warehouses (
   sort      INT NOT NULL DEFAULT 100
 );
 
+-- Omborni KIM ko'rishi shu yerda, ombor qatorining o'zida yoziladi.
+-- Sabab: ro'yxat o'sib boradi va har yangi ombor uchun kodga shart
+-- qo'shilsa, bir kun kelib kimdir unutadi va ombor noto'g'ri odamga
+-- ochilib qoladi.
+--
+--   warehouse.view     — T/M ombor: omborchi ham, savdo ham, rahbariyat ham
+--   sales.view         — vitrinalar: savdo nuqtasi, ombor mudirining ishi emas
+--   warehouse.material — xom ashyo, MDF, furnitura: ta'minot va o'z mudiri
+--
+-- NULL bo'lsa — warehouse.view yetarli.
+ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS perm TEXT;
+
 -- Zavod aytgan omborlar. Faqat tayyor mahsulot ombori ishlayapti,
 -- qolganlari ro'yxatda «rejada» bo'lib turadi: ichi yozilgani sayin
 -- is_active = TRUE ga o'tkaziladi.
@@ -125,6 +137,14 @@ INSERT INTO warehouses (code, name, kind, note, is_active, sort) VALUES
   ('VITR-ARCA',  'Arca vitrina',           'fg',
    'Savdo nuqtasi',                                FALSE, 7)
 ON CONFLICT (code) DO NOTHING;
+
+-- Kim ko'rishi — kodda, chunki bu huquq masalasi. ON CONFLICT DO NOTHING
+-- eski qatorlarni yangilamaydi, shuning uchun alohida yoziladi.
+UPDATE warehouses SET perm = 'sales.view'
+ WHERE code IN ('VITR-ABU', 'VITR-PALMA', 'VITR-ARCA');
+UPDATE warehouses SET perm = 'warehouse.material'
+ WHERE code IN ('XOM', 'MDF', 'FURN');
+UPDATE warehouses SET perm = NULL WHERE code = 'TM';
 
 -- Bir paytlar men bu yerga misol tariqasida aytilgan omborlarni
 -- ro'yxat deb yozib qo'ygandim. Ular o'chiriladi — bir marta, bayroq

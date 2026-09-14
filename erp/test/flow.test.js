@@ -265,6 +265,25 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   const tm = list.body.rows.find((w) => w.code === 'TM');
   assert.ok(tm, 'T/M ombor ro\'yxatda');
   assert.equal(tm.href, '/ombor.html', 'ochiq ombor havolaga ega');
+  // Ombor mudiriga faqat o'z ombori: vitrinalar savdoniki, xom ashyo
+  // ta'minotniki. Ro'yxat ombor qatoridagi `perm` bo'yicha filtrlanadi.
+  assert.deepEqual(list.body.rows.map((w) => w.code), ['TM'],
+    'ombor mudiri boshqa omborlarni ko\'rmaydi');
+
+  // Savdo esa T/M ombor bilan vitrinalarni ko'radi, xom ashyoni emas
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  const wl = await savdo('GET', '/api/warehouse/list');
+  assert.equal(wl.status, 200, wl.text);
+  const kodlar = wl.body.rows.map((w) => w.code);
+  assert.ok(kodlar.includes('TM') && kodlar.includes('VITR-ABU'), kodlar.join(','));
+  assert.ok(!kodlar.includes('XOM') && !kodlar.includes('MDF') &&
+            !kodlar.includes('FURN'), 'xom ashyo omborlari savdoga ko\'rinmaydi');
+
+  // Zavod ko'rinishi va panel ham savdoning ishi emas
+  assert.equal((await savdo('GET', '/api/factory')).status, 403);
+  assert.equal((await savdo('GET', '/api/dashboard')).status, 403);
+  // Jurnal esa ochiq: o'z buyurtmasi qayerda turganini bilishi kerak
+  assert.equal((await savdo('GET', '/api/units/')).status, 200);
 
   // Konverni omborga kiritamiz: rang va mato bilan, chunki jamlanma
   // aynan shular bo'yicha guruhlanadi.
