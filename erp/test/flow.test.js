@@ -271,10 +271,10 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   const tm = list.body.rows.find((w) => w.code === 'TM');
   assert.ok(tm, 'T/M ombor ro\'yxatda');
   assert.equal(tm.href, '/ombor.html', 'ochiq ombor havolaga ega');
-  // Ombor mudiriga faqat o'z ombori: vitrinalar savdoniki, xom ashyo
-  // ta'minotniki. Ro'yxat ombor qatoridagi `perm` bo'yicha filtrlanadi.
-  assert.deepEqual(list.body.rows.map((w) => w.code), ['TM'],
-    'ombor mudiri boshqa omborlarni ko\'rmaydi');
+  // Ombor mudiriga zavodning HAMMA ombori ochiq
+  const mk = list.body.rows.map((w) => w.code);
+  for (const kod of ['TM', 'XOM', 'MDF', 'FURN', 'VITR-ABU', 'VITR-PALMA', 'VITR-ARCA'])
+    assert.ok(mk.includes(kod), `ombor mudiri ${kod} ni ko'radi`);
 
   // Savdo esa T/M ombor bilan vitrinalarni ko'radi, xom ashyoni emas
   const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));

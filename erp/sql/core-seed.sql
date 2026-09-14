@@ -91,11 +91,13 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('tsex_usta',    'production.entry'),
   ('operator',     'production.entry'),
 
-  -- Ombor mudiri: qabul qiladi, qoldiqni yuritadi, inventarizatsiya
-  -- qiladi. warehouse.manage hali kodda ishlatilmaydi — inventarizatsiya
-  -- moduli qo'shilganda rolni qayta ochish shart bo'lmasin.
+  -- Ombor mudiri: zavodning HAMMA omborini ko'radi — tayyor mahsulot,
+  -- vitrinalar va xom ashyo. U qabul qiladi, qoldiqni yuritadi,
+  -- inventarizatsiya qiladi. warehouse.manage va warehouse.material hali
+  -- kodda to'liq ishlatilmaydi — modullar qo'shilganda rolni qayta ochish
+  -- shart bo'lmasin.
   ('omborchi',     'warehouse.view'), ('omborchi', 'warehouse.move'),
-  ('omborchi',     'warehouse.manage'),
+  ('omborchi',     'warehouse.manage'), ('omborchi', 'warehouse.material'),
 
   ('taminotchi',   'purchasing.view'), ('taminotchi', 'purchasing.manage'),
   ('taminotchi',   'warehouse.view'), ('taminotchi', 'warehouse.material'),

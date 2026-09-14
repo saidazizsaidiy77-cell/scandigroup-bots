@@ -103,7 +103,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `tsex_usta` | `production.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi |
 | `kirituvchi` | + `production.units`, `production.reports` | jurnal, boshlang'ich qoldiq, hisobotlar |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
-| `omborchi` | `warehouse.view/move/manage` | faqat T/M ombor |
+| `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, T/M ombor + vitrinalar qoldig'i, jurnal — **faqat o'qish** |
 | `admin` | barchasi | hammasi |
 
@@ -118,8 +118,9 @@ tarixi ombor mudiriniki. Tekshiruv serverda, tugmani yashirish bilan
 chegaralanilmaydi.
 
 **Qaysi omborni kim ko'rishi — `warehouses.perm` ustunida**, kodda emas.
-`NULL` — `warehouse.view` yetarli (T/M ombor); `sales.view` — vitrinalar;
-`warehouse.material` — xom ashyo, MDF, furnitura. Yangi ombor qo'shilganda
+`NULL` — `warehouse.view` yetarli (T/M ombor va vitrinalar: ikkalasida ham
+tayyor mahsulot turadi); `warehouse.material` — xom ashyo, MDF, furnitura
+(ombor mudiri va ta'minot; savdoga ko'rinmaydi). Yangi ombor qo'shilganda
 huquq shu qatorga yoziladi, modulga tegilmaydi. Ko'rinadigan ombor bitta
 bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
 

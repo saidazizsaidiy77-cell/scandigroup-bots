@@ -106,11 +106,12 @@ CREATE TABLE IF NOT EXISTS warehouses (
 -- qo'shilsa, bir kun kelib kimdir unutadi va ombor noto'g'ri odamga
 -- ochilib qoladi.
 --
---   warehouse.view     — T/M ombor: omborchi ham, savdo ham, rahbariyat ham
---   sales.view         — vitrinalar: savdo nuqtasi, ombor mudirining ishi emas
---   warehouse.material — xom ashyo, MDF, furnitura: ta'minot va o'z mudiri
---
--- NULL bo'lsa — warehouse.view yetarli.
+--   NULL               — warehouse.view yetarli: T/M ombor va vitrinalar.
+--                        Ikkalasida ham tayyor mahsulot turadi, ikkalasini
+--                        ham ombor mudiri ham, savdo ham ko'radi.
+--   warehouse.material — xom ashyo, MDF, furnitura: ombor mudiri va
+--                        ta'minot. Savdoga ular ko'rinmaydi — u tayyor
+--                        mahsulot bilan ishlaydi.
 ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS perm TEXT;
 
 -- Zavod aytgan omborlar. Faqat tayyor mahsulot ombori ishlayapti,
@@ -140,11 +141,10 @@ ON CONFLICT (code) DO NOTHING;
 
 -- Kim ko'rishi — kodda, chunki bu huquq masalasi. ON CONFLICT DO NOTHING
 -- eski qatorlarni yangilamaydi, shuning uchun alohida yoziladi.
-UPDATE warehouses SET perm = 'sales.view'
- WHERE code IN ('VITR-ABU', 'VITR-PALMA', 'VITR-ARCA');
 UPDATE warehouses SET perm = 'warehouse.material'
  WHERE code IN ('XOM', 'MDF', 'FURN');
-UPDATE warehouses SET perm = NULL WHERE code = 'TM';
+UPDATE warehouses SET perm = NULL
+ WHERE code IN ('TM', 'VITR-ABU', 'VITR-PALMA', 'VITR-ARCA');
 
 -- Bir paytlar men bu yerga misol tariqasida aytilgan omborlarni
 -- ro'yxat deb yozib qo'ygandim. Ular o'chiriladi — bir marta, bayroq
