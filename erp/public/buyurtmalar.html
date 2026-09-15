@@ -252,6 +252,52 @@ function docHtml(o) {
                         balance: c?.balance });
 }
 
+//  ── KONVERLAR QAYERDA (faqat EKRANDA) ─────────────────────────────────
+//
+//  Buyurtma omborga yuborilgan yoki hali kutilayotgan bo'lsa, savdo
+//  xodimi «mahsulotim qayerda» degan savolga shu yerdan javob beradi.
+//  Ilgari buning uchun ombor sahifasiga kirish kerak edi — u yerda esa
+//  faqat T/M omborga TUSHGANI ko'rinadi: hali tsexda yurgan konver
+//  ombor qoldig'ida yo'q va savdo uni topa olmasdi.
+//
+//  Tahrir ko'rinishida bu «Qayerda» ustuni (`qayerda`), hujjat
+//  ko'rinishida esa ustun qo'shib bo'lmaydi: yuk xati qog'ozga chiqadi
+//  va unda ichki ish yozuvi turmaydi. Shuning uchun alohida kartochka
+//  va `.no-print` — balans bilan bir xil sababdan.
+//
+//  Omborga tushgach bo'lim yozilmaydi, «T/M ombor» deb turadi: konver
+//  endi tsexda emas, javonda. Sanasi ham shunda «turibdi» bo'ladi.
+//
+//  Chiqib ketgan va bekor qilingan buyurtmada ko'rsatilmaydi: mahsulot
+//  zavodda yo'q, «qayerda» degan savol ham qolmaydi.
+function trackCard(o) {
+  const list = cur.units || [];
+  if (!list.length || o.status === 'shipped' || o.status === 'cancelled') return '';
+  const nomi = (id) => (cur.items.find(x => x.id === id) || {}).product || '';
+  return `<div class="card no-print">
+    <h2>Konverlar qayerda</h2>
+    <p class="muted" style="font-size:12px;margin:-6px 0 14px">
+      ish uchun \u2014 yuk xatiga chiqmaydi \u00b7 o'zi yangilanib turadi</p>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>K&#8470;</th><th>Mahsulot</th><th>Qayerda</th>
+        <th class="num">Soni</th><th>Omborga</th></tr></thead>
+      <tbody>${list.map(u => `<tr>
+        <td><strong>${esc(u.conveyor_no)}</strong></td>
+        <td>${esc(nomi(u.order_item_id))}${u.color
+          ? ` <span class="muted">\u00b7 ${esc(u.color)}</span>` : ''}</td>
+        <td>${u.status === 'fg'
+          ? `<span class="tag ok">${esc(joyOf(u))}</span>`
+          : `<span class="tag">${esc(joyOf(u))}</span>${u.is_stock
+              ? ' <span class="tag">zahira</span>' : ''}`}</td>
+        <td class="num"><b>${u.qty}</b></td>
+        <td>${u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
+          : u.eta ? `${d8(u.eta)}${u.eta_src && u.eta_src !== 'fakt'
+              ? `<div class="muted" style="font-size:11px">${esc(u.eta_src)}</div>` : ''}`
+          : '<span class="muted">\u2014</span>'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`;
+}
+
 function draw(){
   const o = cur.order, isNew = !o.id;
   //  Omborga yuborilgandan keyin ham yopiladi: mudir ko'rib turgan
@@ -273,7 +319,7 @@ function draw(){
         </div>
       </div>
 
-      ${ro ? docHtml(o) : `
+      ${ro ? docHtml(o) + trackCard(o) : `
       <div class="card"><div class="fields">
         <!--  Zakaz raqami qo'lda ham yoziladi: zavod o'z daftarida raqam
               yuritadi va yuk xatida o'sha raqam turishi kerak. Bo'sh

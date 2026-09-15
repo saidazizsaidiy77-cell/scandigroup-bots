@@ -362,7 +362,16 @@ ikkinchisidan orqada qolardi.
 
 **«Qayerda» ustuni** (tahrir ko'rinishida, qator oxirida) — biriktirilgan
 konver hozir qayerda: «T/M ombor» yoki «Arra · Korpus tsexi», yonida
-nechtaligi. Savdo xodimi mijozga «qayerda ekan» degan savolga shu
+nechtaligi. Buyurtma omborga yuborilgach ustunlar hujjatga aylanadi,
+shuning uchun o'sha ma'lumot **«Konverlar qayerda»** kartochkasiga
+ko'chadi (`trackCard`): har konver, turgan bo'limi va tsexi, soni va
+omborga tushish sanasi. Omborga tushgach bo'lim yozilmaydi — «T/M
+ombor · turibdi» bo'lib qoladi: konver endi tsexda emas, javonda.
+Kartochka `.no-print` — yuk xatiga chiqmaydi, u ish quroli. Chiqib
+ketgan va bekor qilingan buyurtmada ko'rsatilmaydi: mahsulot zavodda
+yo'q. Shusiz savdo «mahsulotim qayerda» degan savolga javob topolmasdi:
+ombor sahifasida faqat omborga TUSHGANI ko'rinadi, tsexda yurgani
+qoldiqda yo'q. Savdo xodimi mijozga «qayerda ekan» degan savolga shu
 ustundan javob beradi. Konver keyingi bo'limga o'tsa **o'zi
 yangilanadi**: ochiq buyurtma har daqiqada qayta o'qiladi — faqat
 kutilayotgani (ishlab chiqarishda koneri bori), faqat oyna ochiq

@@ -1726,6 +1726,21 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
     { note: 'tegdim' })).status, 400);
 
+  //  Lekin KO'RA oladi: omborga yuborilgan buyurtma ichida har konver
+  //  qayerda turgani chiqadi («Konverlar qayerda» kartochkasi). Ilgari
+  //  savdo buning uchun ombor sahifasiga kirardi, u yerda esa faqat
+  //  omborga TUSHGANI ko'rinadi — tsexdagisi topilmasdi.
+  const konver = (await admin('GET', '/api/sales/orders/' + z.id)).body.units;
+  const tsexda = konver.find((u) => u.conveyor_no === yolda.conveyor_no);
+  assert.equal(tsexda.status, 'production');
+  assert.equal(tsexda.section, 'Arra', "bo'limi yoziladi");
+  assert.ok(tsexda.shop, 'tsexi ham yoziladi');
+  //  Omborga tushgani esa bo'limsiz — u endi javonda, tsexda emas
+  const javonda = konver.find((u) => u.conveyor_no === tayyor.conveyor_no);
+  assert.equal(javonda.status, 'fg');
+  assert.equal(javonda.section, null);
+  assert.equal(javonda.warehouse_code, 'TM');
+
   // Hammasi kelmagunча chiqarib bo'lmaydi
   const erta = await mudir('POST', `/api/sales/orders/${z.id}/ship`);
   assert.equal(erta.status, 400);
