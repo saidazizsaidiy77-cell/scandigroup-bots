@@ -520,14 +520,46 @@ function drawShip() {
   }).join('');
 }
 
-async function doShip(id) {
+//  Nakladnoy yozilayotgan payt: chiqarilgan kun va PUL KIRIM SANASI.
+//  Ikkinchisi — pul qachon keladi yoki qachon olindi; mudir mijoz bilan
+//  shu yerda kelishadi va keyin qidirib yurilmasin.
+//
+//  Pul kirim sanasi mijoz balansiga TEGMAYDI: sana — summa emas,
+//  to'lovning o'zini kassa moduli yozadi (hali yo'q).
+function doShip(id) {
   const o = ship.find(x => x.id === id);
-  if (!confirm(`${o.order_no} — ${o.customer_name}\n\n` +
-    `${o.assigned_qty} dona chiqarib yuborildimi?\n` +
-    `Qayerga: ${o.ship_to_name || '—'}\n\n` +
-    'Tasdiqlangach mahsulot ombordan chiqadi va mijoz qarziga qo\'shiladi.')) return;
+  const bugun = isoDay(new Date());
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closeShip()">
+      <div class="modal" style="max-width:460px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <h1 style="margin:0">${esc(o.order_no)}</h1>
+          <button onclick="closeShip()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:18px">${esc(o.customer_name)} \u00b7
+          <b>${o.assigned_qty}</b> dona \u00b7 ${esc(o.ship_to_name || '—')}</p>
+        <div class="stack">
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Chiqib ketgan sana</label>
+              <input id="shOn" type="date" value="${bugun}"></div>
+            <div style="flex:1"><label>Pul kirim sanasi</label>
+              <input id="shPay" type="date" value="${
+                (o.payment_on || '').slice(0, 10)}"></div>
+          </div>
+          <p class="muted" style="font-size:12px;margin:0">Pul kirim sanasi
+            yozib qo'yiladi — to'lovning o'zi kassada hisoblanadi.</p>
+          <button class="primary" onclick="okShip(${id})">Chiqarib yubordim</button>
+        </div>
+      </div></div>`;
+}
+
+const closeShip = () => { $('modalRoot').innerHTML = ''; };
+
+async function okShip(id) {
   try {
-    await App.api(`/api/sales/orders/${id}/ship`, { method: 'POST' });
+    await App.api(`/api/sales/orders/${id}/ship`, { method: 'POST',
+      body: JSON.stringify({ ship_on: $('shOn').value || null,
+                             payment_on: $('shPay').value || null }) });
+    closeShip();
     toast('Jo\'natildi');
     await loadShip();
   } catch (e) { toast(e.message, true); }

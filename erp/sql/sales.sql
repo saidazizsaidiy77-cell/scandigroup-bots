@@ -85,6 +85,14 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS sent_by       INT REFERENCES workers
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_on    DATE;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_by    INT REFERENCES workers(id);
 
+--  Pul kirim sanasi — nakladnoy yozilayotganda, mahsulot chiqib
+--  ketayotgan payt qo'yiladi: pul qachon keladi yoki qachon olindi.
+--
+--  Bu SANA, summa emas: kassa moduli yozilganda to'lovning o'zi o'sha
+--  yerda yoziladi. Shuning uchun bu maydon mijoz balansiga TEGMAYDI —
+--  sanani yozib qo'yish pul kelganini anglatmaydi.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_on DATE;
+
 -- Holatlar ro'yxati kengaydi: eski bazadagi cheklov almashtiriladi.
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
 ALTER TABLE orders ADD CONSTRAINT orders_status_check
@@ -207,7 +215,10 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        o.shipped_on, shw.name AS shipped_by_name,
        -- Bronlarning hammasi omborga yetib kelganmi: yetmagani bo'lsa
        -- ombor mudiri chiqarib bo'lmaydi va nimasi yo'qligini ko'radi.
-       COALESCE(a.in_wh, 0) AS in_warehouse_qty
+       COALESCE(a.in_wh, 0) AS in_warehouse_qty,
+       -- Pul kirim sanasi ham OXIRIDA: CREATE OR REPLACE VIEW ustunni
+       -- faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
+       o.payment_on
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id

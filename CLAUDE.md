@@ -160,7 +160,10 @@ uchun yangi konver OCHILMAYDI — ishlab chiqarish o'z rejasi bilan yuradi.
 Sarlavhada: mijoz (balansi bilan), menejer, **buyurtma sanasi**,
 **chiqib ketish sanasi**, **qayerga** (`order_destinations`: zavodga
 kiradi / yuk terminaliga / mijoz uyiga / do'konga) va **kutib oluvchi
-raqami**. Manzil faqat kerak bo'lgan yo'lda so'raladi va o'shanda
+raqami**. Qatorlarda rang va mato zavodda ishlatilganlaridan taklif
+qilinadi (`/api/sales/suggest`) — «Venge» va «venga» deb ikki xil
+yozilsa ombordan mos konver topilmasdi; yangisini yozish ham mumkin.
+Manzil faqat kerak bo'lgan yo'lda so'raladi va o'shanda
 majburiy (`needs_address`) — mashina qayerga borishini keyin hech kim
 topa olmasdi.
 
@@ -202,6 +205,11 @@ Mudirning «Jo'natish» tabida: nima, qancha, qayerga, kim kutib oladi va
 har konver qayerda turgani. **Bronning hammasi omborga yetib kelmaguncha
 tugma ishlamaydi** — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
 mijoz qarzini ham noto'g'ri oshirardi.
+
+Tasdiqlashda nakladnoy yoziladi: **chiqib ketgan sana** va **pul kirim
+sanasi** (`orders.payment_on`). Ikkinchisi — pul qachon keladi yoki
+qachon olindi; mudir mijoz bilan shu yerda kelishadi. Bu SANA, summa
+emas: mijoz balansiga tegmaydi, to'lovning o'zini kassa moduli yozadi.
 
 Tasdiqlangach konverlar `shipped` bo'ladi, `ship_on` yoziladi, ombor
 qoldig'idan chiqadi va mijoz balansiga qo'shiladi. Konverning faqat

@@ -51,6 +51,29 @@ async function assertCustomer(client, req, customerId) {
 //  savdo menejerida ishlab chiqarish huquqi bo'lmasligi mumkin, katalog
 //  esa `production.view` so'raydi. Yonida bo'sh qoldiq ham keladi —
 //  menejer nima sotayotganini yozayotganda ko'rib tursin.
+//  Zavodda ishlatilgan rang va matolar. Menejer buyurtma yozayotganda
+//  ro'yxatdan tanlaydi — «Venge» va «venga» deb ikki xil yozilsa ombordan
+//  mos konver topilmasdi. Yangisini yozish ham mumkin: ro'yxat taklif,
+//  chegara emas — zavod yangi mato olsa kod o'zgarmasin.
+//
+//  Ishlab chiqarishning `/suggest` idan alohida: u `production.view`
+//  so'raydi va savdo sahifasi ishlab chiqarish huquqiga tayanmasin.
+router.get('/suggest', need(...READ), wrap(async (_req, res) => {
+  const { rows } = await db.query(
+    `SELECT 'color' AS field, color AS value, COUNT(*) AS n
+       FROM production_units WHERE NULLIF(TRIM(color), '') IS NOT NULL
+      GROUP BY color
+     UNION ALL
+     SELECT 'fabric', fabric, COUNT(*)
+       FROM production_units WHERE NULLIF(TRIM(fabric), '') IS NOT NULL
+      GROUP BY fabric
+     ORDER BY n DESC, value`);
+  res.json({
+    colors:  rows.filter((r) => r.field === 'color').map((r) => r.value),
+    fabrics: rows.filter((r) => r.field === 'fabric').map((r) => r.value),
+  });
+}));
+
 router.get('/products', need(...READ), wrap(async (_req, res) => {
   const { rows } = await db.query(
     `SELECT p.id, p.name, p.sku, g.name AS product_type, g.uom,
@@ -675,10 +698,13 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
       await refreshStock(client, u.product_id);
     }
 
+    //  Pul kirim sanasi nakladnoy yozilayotganda qo'yiladi. Balansga
+    //  tegmaydi: sana — summa emas, to'lovning o'zini kassa yozadi.
     await client.query(
       `UPDATE orders SET status = 'shipped',
-              shipped_on = COALESCE($2::date, CURRENT_DATE), shipped_by = $3
-        WHERE id = $1`, [o.id, shipOn, req.user.id]);
+              shipped_on = COALESCE($2::date, CURRENT_DATE), shipped_by = $3,
+              payment_on = COALESCE($4::date, payment_on)
+        WHERE id = $1`, [o.id, shipOn, req.user.id, req.body.payment_on || null]);
     await audit(req, { module: 'warehouse', action: 'ship', entity: 'order',
                        entity_id: o.id,
                        payload: { order_no: o.order_no,

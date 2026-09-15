@@ -1264,6 +1264,14 @@ test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
   assert.equal(String(o.ordered_on).slice(0, 10), '2026-09-10');
   assert.equal(String(o.due_on).slice(0, 10), '2026-10-01');
 
+  //  Rang va mato ro'yxati: buyurtma yozayotganda zavodda ishlatilgani
+  //  taklif qilinadi, «Venge» va «venga» deb ikki xil yozilmasin.
+  const sg = (await admin('GET', '/api/sales/suggest')).body;
+  assert.ok(sg.colors.includes('Oq'), sg.colors.join(','));
+  assert.ok(sg.fabrics.some((f) => /Velvet/.test(f)), sg.fabrics.join(','));
+  assert.ok(!sg.colors.includes(null) && !sg.colors.includes(''),
+    'bo\'sh qiymat ro\'yxatga tushmaydi');
+
   // Ro'yxat ham keladi
   const d = (await admin('GET', '/api/sales/destinations')).body.rows;
   assert.deepEqual(d.map((x) => x.code), ['ZAVOD', 'TERMINAL', 'UY', 'DOKON']);
@@ -1343,14 +1351,15 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('POST', `/api/units/${yolda.id}/to-warehouse`,
     { warehouse_code: 'TM' })).status, 200);
 
-  // Endi chiqadi
+  // Endi chiqadi — nakladnoy bilan birga pul kirim sanasi ham yoziladi
   const r = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
-    { ship_on: '2026-10-04' });
+    { ship_on: '2026-10-04', payment_on: '2026-10-20' });
   assert.equal(r.status, 200, r.text);
 
   const o = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
   assert.equal(o.status, 'shipped');
   assert.equal(String(o.shipped_on).slice(0, 10), '2026-10-04');
+  assert.equal(String(o.payment_on).slice(0, 10), '2026-10-20');
   assert.equal(o.shipped_by_name, 'Sinov ombor mudiri');
 
   // Konverlar chiqib ketdi va ombor qoldig'idan ayrildi
@@ -1366,10 +1375,14 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   // Bron qolmadi — mahsulot chiqib ketdi, tarix `ship_on` da
   assert.equal((await admin('GET', `/api/units/${tayyor.id}/bron`)).body.reserved, 0);
 
-  // Mijoz qarziga qo'shildi: 6 × 250
+  // Mijoz qarziga qo'shildi: 6 × 250. Pul kirim SANASI balansga
+  // tegmaydi — sana summa emas, to'lovni kassa yozadi.
   const c = (await admin('GET', '/api/units/customers')).body.customers
     .find((x) => x.id === mijoz);
   assert.ok(Number(c.shipped_amount) >= 1500, String(c.shipped_amount));
+  assert.equal(Number(c.balance),
+    Number(c.opening_debt || 0) + Number(c.shipped_amount),
+    'balans faqat chiqib ketgandan hisoblanadi');
 
   // Ro'yxatdan chiqdi, ikkinchi marta jo'natilmaydi
   assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);

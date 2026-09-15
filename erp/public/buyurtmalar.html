@@ -38,6 +38,11 @@
   </table></div>
 </div>
 
+<!-- Zavodda ishlatilgan rang va matolar: qator kataklari shundan
+     taklif qiladi. Yangisini yozish ham mumkin. -->
+<datalist id="dlColor"></datalist>
+<datalist id="dlFabric"></datalist>
+
 <div id="modalRoot"></div>
 
 <script>
@@ -68,11 +73,13 @@ async function boot(){
   canWrite = App.can('sales.manage');
   $('btnNew').innerHTML = canWrite
     ? `<button class="primary" onclick="openOrder(null)">Yangi buyurtma</button>` : '';
-  const [c, p, d] = await Promise.all([
+  const [c, p, d, sg] = await Promise.all([
     App.api('/api/units/customers'), App.api('/api/sales/products'),
-    App.api('/api/sales/destinations')]);
+    App.api('/api/sales/destinations'), App.api('/api/sales/suggest')]);
   customers = c.customers; managers = c.managers; products = p.rows;
   dests = d.rows;
+  $('dlColor').innerHTML = sg.colors.map(v => `<option value="${esc(v)}">`).join('');
+  $('dlFabric').innerHTML = sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
   drawChips();
   await load();
 }
@@ -223,7 +230,8 @@ function draw(){
         ${o.status === 'shipped' ? `
           <p class="muted" style="margin-top:22px">Jo'natilgan: ${
             (o.shipped_on || '').slice(0, 10)}${o.shipped_by_name
-              ? ' \u00b7 ' + esc(o.shipped_by_name) : ''}</p>` : ''}
+              ? ' \u00b7 ' + esc(o.shipped_by_name) : ''}${o.payment_on
+              ? ` \u00b7 pul kirimi: <b>${(o.payment_on).slice(0, 10)}</b>` : ''}</p>` : ''}
         ${isNew && canWrite ? `<p class="muted" style="margin-top:10px;font-size:13px">
           Bron buyurtma saqlangandan keyin ochiladi.</p>` : ''}
       </div></div>`;
@@ -271,9 +279,11 @@ function drawItems(){
             esc(x.product_type)}${x.free_fg || x.free_stock
               ? ` (bo'sh: ${x.free_fg + x.free_stock})` : ''}</option>`).join('')}
       </select></td>
-      <td><input value="${esc(it.color || '')}" ${dis} style="max-width:120px"
+      <td><input value="${esc(it.color || '')}" ${dis} list="dlColor"
+                 style="max-width:120px" placeholder="—"
                  oninput="setField(${i},'color',this.value)"></td>
-      <td><input value="${esc(it.fabric || '')}" ${dis} style="max-width:120px"
+      <td><input value="${esc(it.fabric || '')}" ${dis} list="dlFabric"
+                 style="max-width:120px" placeholder="—"
                  oninput="setField(${i},'fabric',this.value)"></td>
       <td class="num"><input type="number" min="1" value="${it.qty ?? 1}" ${dis}
             style="max-width:70px;text-align:right"
