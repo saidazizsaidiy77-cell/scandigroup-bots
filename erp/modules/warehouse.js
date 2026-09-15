@@ -154,6 +154,15 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
               ${NORM('fabric')} AS fabric,
               COUNT(*)::int          AS units,
               COALESCE(SUM(qty), 0)::int AS qty,
+              --  Qoldiq UCH raqam bo'lib turadi:
+              --    qty  — omborda jismonan turgani (bronda turgani ham
+              --           shu yerda: u hali chiqib ketmagan);
+              --    bron — buyurtmaga olingani;
+              --    free — sotish mumkin bo'lgani.
+              --  Inventarizatsiyada sanaladigan raqam — qty: mahsulot
+              --  chiqib ketmagan bo'lsa u javonda turibdi.
+              COALESCE(SUM(reserved_qty), 0)::int AS bron,
+              COALESCE(SUM(qty - reserved_qty), 0)::int AS free,
               COALESCE(SUM(total_amount), 0) AS amount,
               MIN(fg_on) AS first_on,
               MAX(days_in_stock)::int AS oldest_days,
@@ -174,13 +183,17 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
       params),
     db.query(
       `SELECT COUNT(*)::int AS units, COALESCE(SUM(qty), 0)::int AS qty,
+              COALESCE(SUM(reserved_qty), 0)::int AS bron,
+              COALESCE(SUM(qty - reserved_qty), 0)::int AS free,
               COALESCE(SUM(total_amount), 0) AS amount
          FROM v_fg_units WHERE ${FROM_TO} AND ${search}`, params),
     // Stul DONA bilan, penal/kamod/sp/stol KOMPLEKT bilan sanaladi —
     // ularni bitta yig'indiga qo'shib bo'lmaydi: «22» degan raqam nimani
     // anglatishi noma'lum bo'lib qolardi.
     db.query(
-      `SELECT uom, COALESCE(SUM(qty), 0)::int AS qty
+      `SELECT uom, COALESCE(SUM(qty), 0)::int AS qty,
+              COALESCE(SUM(reserved_qty), 0)::int AS bron,
+              COALESCE(SUM(qty - reserved_qty), 0)::int AS free
          FROM v_fg_units WHERE ${FROM_TO} AND ${search}
         GROUP BY uom ORDER BY uom`, params),
     //  Tanlov ro'yxati filtrning O'ZIDAN qat'i nazar tuziladi: aks holda

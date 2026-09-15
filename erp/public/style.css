@@ -147,7 +147,8 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
    Ustun sarlavhalari yo'qolgani uchun raqamlar oldiga nomi qo'shiladi
    — aks holda "240" va "1 200" nimani anglatishi tushunarsiz bo'lardi. */
 .stock tbody tr{cursor:pointer}
-.stock .s-qty,.stock .s-price,.stock .s-amount{text-align:right}
+.stock .s-qty,.stock .s-price,.stock .s-amount,
+.stock .s-bron,.stock .s-free{text-align:right}
 @media (max-width:620px){
   .stock thead{display:none}
   .stock td{border:0;padding:0}
@@ -165,6 +166,11 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   .stock .s-amount{grid-area:amount;font-size:13px}
   .stock .s-price::before {content:'narx $';color:var(--muted)}
   .stock .s-amount::before{content:'summa $';color:var(--muted)}
+  /* T/M omborda o'sha ikki uyaga bron va bo'sh qoldiq tushadi */
+  .stock .s-bron {grid-area:price;font-size:13px}
+  .stock .s-free {grid-area:amount;font-size:13px}
+  .stock .s-bron::before{content:'bronda ';color:var(--muted)}
+  .stock .s-free::before{content:"bo'sh ";color:var(--muted)}
   /* Ochilgan qator — konver raqamlari: kartochka tarmog'iga kirmaydi */
   .stock tr.more{display:block;border:0;padding:0 0 14px}
   .stock tr.more td{display:block}

@@ -1563,6 +1563,45 @@ test('zakaz raqami qo\'lda qo\'yiladi va konverga ham ko\'chadi', async () => {
     'ZV-101', 'konverdagi raqam ham ko\'chdi');
 });
 
+//  ── T/M OMBOR QOLDIG'I: jami · bronda · bo'sh ────────────────────────
+//
+//  Ombor mudiri mahsulotni SANAYDI, pulni emas. Bronda turgan mahsulot
+//  hali chiqib ketmagan — u javonda turibdi, shuning uchun «Soni» dan
+//  ayrilmaydi: inventarizatsiyada sanaladigan raqam o'sha.
+test('ombor qoldig\'i jami, bronda va bo\'sh bo\'lib chiqadi', async () => {
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Sanoq', unit_price: 70,
+      is_opening: true, fg_on: '2026-09-04' }] })).body.created[0];
+  const qoldiq = async () => (await admin(
+    'GET', '/api/warehouse/fg/summary?q=Sanoq')).body;
+
+  let d = await qoldiq();
+  assert.equal(d.total.qty, 10);
+  assert.equal(d.total.bron, 0);
+  assert.equal(d.total.free, 10);
+  assert.equal(d.rows[0].qty, 10);
+  assert.equal(d.rows[0].free, 10);
+
+  //  Buyurtma urildi: 4 tasi bronga olindi
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 4, color: 'Sanoq' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 4 })).status, 200);
+
+  d = await qoldiq();
+  assert.equal(d.total.qty, 10, 'bronda turgani ham omborda — sanoq o\'zgarmaydi');
+  assert.equal(d.total.bron, 4);
+  assert.equal(d.total.free, 6, 'broni ayirilgan qoldiq');
+  assert.equal(d.rows[0].bron, 4);
+  assert.equal(d.rows[0].free, 6);
+  //  O'lchov birligi bo'yicha ham: dona bilan komplekt qo'shilmaydi
+  const uom = d.total.by_uom.find((x) => x.qty === 10);
+  assert.equal(uom.bron, 4);
+  assert.equal(uom.free, 6);
+});
+
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;

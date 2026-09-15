@@ -288,9 +288,24 @@ function drawStock() {
       <div class="card"><h2>Jami</h2>
         <div class="kpi">${d.total.by_uom && d.total.by_uom.length
           ? d.total.by_uom.map(x => `${x.qty}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
-          : d.total.qty}</div></div>
-      <div class="card"><h2>Summa</h2>
-        <div class="kpi">${d.total.amount ? '$' + money(d.total.amount) : '\u2014'}</div></div>
+          : d.total.qty}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">bronda turgani bilan
+          birga \u2014 inventarizatsiyada shu raqam sanaladi</p></div>
+      <!--  T/M omborda pul emas, DONA muhim: mudir mahsulotni sanaydi va
+            buyurtmaga qanchasi olinganini ko'radi. Vitrinada esa narx va
+            summa qoladi \u2014 u yerda sotuv nuqtasi hisobi yuritiladi. -->
+      ${isTM() ? `<div class="card"><h2>Bo'sh</h2>
+        <div class="kpi">${d.total.by_uom && d.total.by_uom.length
+          ? d.total.by_uom.map(x => `${x.free}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
+          : (d.total.free ?? 0)}</div>
+        <!--  Bron ham o'lchov birligi bilan: dona bilan komplektni
+              qo'shib bo'lmaydi (CLAUDE.md). -->
+        <p class="muted" style="margin-top:6px;font-size:12px">${
+          d.total.bron ? (d.total.by_uom || []).filter(x => x.bron)
+              .map(x => `${x.bron} ${esc(x.uom)}`).join(' \u00b7 ') + ' bronda'
+            : 'bron yo\'q'}</p></div>`
+      : `<div class="card"><h2>Summa</h2>
+        <div class="kpi">${d.total.amount ? '$' + money(d.total.amount) : '\u2014'}</div></div>`}
     </div>
 
     ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
@@ -304,8 +319,9 @@ function drawStock() {
         <thead><tr>
           <th class="s-name">Mahsulot</th><th class="s-type">Turi</th>
           <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
-          <th class="s-qty">Soni</th><th class="s-price">Narx, $</th>
-          <th class="s-amount">Summa, $</th>
+          <th class="s-qty">Soni</th>
+          ${isTM() ? `<th class="s-bron">Bronda</th><th class="s-free">Bo'sh</th>`
+                   : `<th class="s-price">Narx, $</th><th class="s-amount">Summa, $</th>`}
         </tr></thead>
         <tbody>${d.rows.map(r => drawStockRow(r)).join('')}</tbody>
       </table></div></div>`}`;
@@ -338,12 +354,21 @@ function drawStockRow(r) {
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
       <td class="s-qty"><b>${r.qty}</b> <span class="muted"
         style="font-size:11px">${esc(r.uom || '')}</span></td>
-      <td class="s-price">${price(r)}</td>
-      <!-- Narxi yo'q konverning summasi 0 emas, NOMA'LUM: nol raqam
-           «bepul» degan ma'no beradi. Baza matn qaytaradi ("0.00"),
-           shuning uchun Number bilan tekshiriladi. -->
-      <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
-        : '<span class="muted">\u2014</span>'}</td>
+      ${isTM()
+      //  Bronda turgan mahsulot OMBORDA: u hali chiqib ketmagan,
+      //  shuning uchun «Soni» dan ayrilmaydi — sotib bo'lmasligi
+      //  alohida ustunda turadi.
+      ? `<td class="s-bron">${r.bron
+            ? `<b>${r.bron}</b>` : '<span class="muted">\u2014</span>'}</td>
+         <td class="s-free">${r.free
+            ? `<b>${r.free}</b>` : '<span class="muted">0</span>'}</td>`
+      //  Vitrinada narx va summa: u yerda nuqta hisobi yuritiladi.
+      //  Narxi yo'q konverning summasi 0 emas, NOMA'LUM: nol raqam
+      //  «bepul» degan ma'no beradi. Baza matn qaytaradi ("0.00"),
+      //  shuning uchun Number bilan tekshiriladi.
+      : `<td class="s-price">${price(r)}</td>
+         <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
+            : '<span class="muted">\u2014</span>'}</td>`}
     </tr>
     ${!open ? '' : `<tr class="more"><td colspan="7" style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`

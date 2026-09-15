@@ -389,6 +389,24 @@ klient uni o'chira olmaydi.
 raqami, soni, turgan joyi, FAKT sanalar. Tekshiruv **serverda**
 (`modules/units.js`, `RESTRICTED`) — katakni yashirish himoya emas.
 
+**T/M ombor qoldig'i — dona hisobi, pul emas.** Ombor mudiri mahsulotni
+SANAYDI, shuning uchun T/M omborda narx va summa ustunlari yo'q; ularning
+o'rnida uch raqam turadi:
+
+  · **Soni** — omborda JISMONAN turgani. Bronda turgani ham shu yerda: u
+    hali chiqib ketmagan, javonda turibdi. **Inventarizatsiyada sanaladigan
+    raqam shu** — mudir javondagi donani shu ustun bilan solishtiradi.
+  · **Bronda** — buyurtmaga olingani (`unit_reservations`).
+  · **Bo'sh** — broni ayirilgani, ya'ni sotish mumkin bo'lgani.
+
+Yuqorida ham shu: «Jami» kartochkasi (bronda turgani bilan birga) va
+«Bo'sh» kartochkasi. Ikkalasi ham o'lchov birligi bilan — dona bilan
+komplektni qo'shib bo'lmaydi.
+
+**Vitrinada esa narx va summa qoladi**: u yerda nuqta hisobi yuritiladi
+va bron bo'lmaydi (vitrina savdoga chiqmaydi), ya'ni ikkita nol ustun
+faqat joy egallardi.
+
 **Ombordagi konverning sonini to'g'rilash.** Kiritishda adashish
 bo'ladi: 2 talik mahsulot 4 ta bo'lib yozilib ketadi. Omborga tushgan
 konver jurnaldan chiqadi, ya'ni uni tahrirlaydigan joy qolmasdi —
