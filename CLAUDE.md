@@ -222,10 +222,17 @@ konver topmasdi.
 
 **Ro'yxatda dona soni yozilmaydi.** Tanlash paytida u chalg'itadi:
 menejer mijoz so'ragan miqdorni yozadi, konverdagi qolgan dona esa
-boshqa mijozniki. Mahsulot ostida faqat QAYERDAN kelishi turadi
-(«T/M omborda bor» / «Zahirada — rangi tanlanadi» / «Omborda yo'q —
-ishlab chiqarishdan»), aniq soni esa bron oynasida, har konverning
-yonida. Shu sababdan bron qilingan konver yonida ham konverning umumiy
+boshqa mijozniki. Mahsulot ostida faqat QAYERDAN kelishi turadi, aniq
+soni esa bron oynasida, har konverning yonida.
+
+Izohda **hamma manba** yoziladi, bittasi emas: «T/M omborda bor ·
+ishlab chiqarishda». Ilgari faqat birinchisi chiqardi va omborda bori
+ko'rinib, yo'ldagi konver yashirinib qolardi — menejer «T/M omborda
+bor» ni o'qib, ishlab chiqarishdagini olish taklif qilinmagan deb
+o'ylardi. Holbuki u ham biriktiriladi: «Konver» oynasida uchala manba
+ham turadi va omborga eng yaqini tepada. Rang HALI TANLANMAGAN bo'lsa
+mahsulotning hamma satri qaraladi — aks holda to'la ombor ustida
+«omborda yo'q» deb yozilardi (`srcHint`). Shu sababdan bron qilingan konver yonida ham konverning umumiy
 hajmi ko'rsatilmaydi (ilgari «4 / 48» edi va buyurtma 48 ta deb
 o'qilardi) — faqat SHU buyurtmaga olingan soni.
 

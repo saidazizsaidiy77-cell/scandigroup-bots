@@ -446,6 +446,25 @@ const rowsFor = (it, level) => stock.filter(r =>
 const hasZahira = (it) => it.product_id
   && rowsFor(it, 2).some(r => r.src === 'stock');
 
+//  Qator QAYERDAN yopiladi — HAMMA manbasi bilan. Ilgari bittasi
+//  yozilardi va omborda bori ko'rinib, ishlab chiqarishdagisi
+//  yashirinib qolardi: menejer «T/M omborda bor» ni o'qib, yo'ldagi
+//  konverni olishni taklif qilinmagan deb o'ylardi. Holbuki u ham
+//  biriktiriladi — «Konver» oynasida omborga eng yaqini tepada turadi.
+//
+//  Rang HALI TANLANMAGAN bo'lsa mahsulotning hamma satri qaraladi:
+//  aks holda rangsiz satrlar bilan solishtirilib, to'la ombor ustida
+//  «omborda yo'q» deb yozilardi.
+const SRC_HINT = { fg: 'T/M omborda bor', stock: 'zahirada — rangi tanlanadi',
+                   production: 'ishlab chiqarishda' };
+function srcHint(it) {
+  if (!it.product_id) return '';
+  const rows = rowsFor(it, it.color ? 4 : 2);
+  const bor = SRC.map(([s]) => s).filter(s => rows.some(r => r.src === s));
+  return bor.length ? bor.map(s => SRC_HINT[s]).join(' \u00b7 ')
+                    : 'Bu rangda konver yo\'q';
+}
+
 //  Ro'yxat: qiymat birinchi uchragan manbada qoladi — omborda bori
 //  «T/M omborda» guruhida turadi va quyida takrorlanmaydi.
 function listOf(rows, key) {
@@ -534,15 +553,12 @@ function drawItems(){
     //  paytida chalg'itadi: menejer mijoz so'ragan miqdorni yozadi,
     //  konverdagi qolgan dona esa boshqa mijozniki. Aniq soni bron
     //  oynasida, har konverning yonida turadi.
-    const bor = rowsFor(it, 4).some(r => r.src === 'fg');
     const summa = (Number(it.qty) || 0) * (Number(it.unit_price) || 0);
 
     return `<tr data-i="${i}">
       <td>${cell(i, 'product_id', stock, it.product_id, dis, false)}
         ${it.product_id ? `<div class="muted" style="font-size:11px">${
-          bor ? 'T/M omborda bor'
-              : z ? 'Zahirada — rangi tanlanadi'
-              : 'Omborda yo\'q — ishlab chiqarishdan'}</div>` : ''}</td>
+          esc(srcHint(it))}</div>` : ''}</td>
       <td>${cell(i, 'color',  rowsFor(it, 2), it.color, dis, z)}</td>
       <td>${cell(i, 'fabric', rowsFor(it, 3), it.fabric, dis, z)}</td>
       <td class="num"><input type="number" min="1" value="${it.qty ?? 1}"
