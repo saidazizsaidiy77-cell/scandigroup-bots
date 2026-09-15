@@ -751,6 +751,11 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
 //
 //    boshiga + qarzdor − haqdor = oxiriga
 //
+//  QARZDOR — mijozning korxonaga qarzi; HAQDOR — korxonaning mijozga
+//  qarzi (oldindan to'lov, ortiqcha o'tkazma). Saldo shu ikki tomondan
+//  BIRIDA turadi, shuning uchun bitta ishorali ustun emas, ikkita ustun
+//  bo'lib beriladi: raqamning qaysi tomonda turgani uning ma'nosi.
+//
 //  Manba — `v_customer_ledger` (sql/sales.sql): boshlang'ich qarz va
 //  chiqib ketgan mahsulot, har biri o'z sanasi bilan. Haqdor ustuni
 //  hozircha bo'sh: to'lovni kassa moduli yozadi, u hali yo'q.
@@ -792,14 +797,31 @@ function period(q) {
   return from <= to ? { from, to } : { from: to, to: from };
 }
 
+//  Ishorali saldoni ikki tomonga ajratadi. Yig'indi ham tomon bo'yicha
+//  qo'shiladi, ishoralar QISQARTIRILMAYDI: bittasi 1000 qarzdor, boshqasi
+//  1000 haqdor bo'lsa «0» degan javob ikkalasini ham yashirardi.
+const yon = (v) => {
+  const n = Number(v) || 0;
+  return { debit: n > 0 ? n : 0, credit: n < 0 ? -n : 0 };
+};
+
 router.get('/debts', need(...READ), wrap(async (req, res) => {
   const { from, to } = period(req.query);
-  const { rows } = await db.query(DEBT_SQL,
-    [from, to, channelsOf(req), req.query.q || null]);
+  const { rows } = (await db.query(DEBT_SQL,
+    [from, to, channelsOf(req), req.query.q || null]));
+  for (const r of rows) {
+    const o = yon(r.opening), c = yon(r.closing);
+    r.opening_debit = o.debit; r.opening_credit = o.credit;
+    r.closing_debit = c.debit; r.closing_credit = c.credit;
+  }
   const sum = (k) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
   res.json({ from, to, rows,
              total: { opening: sum('opening'), debit: sum('debit'),
-                      credit: sum('credit'), closing: sum('closing') } });
+                      credit: sum('credit'), closing: sum('closing'),
+                      opening_debit: sum('opening_debit'),
+                      opening_credit: sum('opening_credit'),
+                      closing_debit: sum('closing_debit'),
+                      closing_credit: sum('closing_credit') } });
 }));
 
 //  Bitta mijozning harakatlari — qator ochilganda. «Qayerdan chiqdi shu

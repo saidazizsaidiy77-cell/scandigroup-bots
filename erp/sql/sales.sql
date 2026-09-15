@@ -280,8 +280,12 @@ SELECT c.id                                           AS customer_id,
        'Boshlang''ich qarz'::text                     AS note,
        NULL::text                                     AS conveyor_no,
        NULL::text                                     AS order_no,
-       c.opening_debt::numeric(16,2)                  AS debit,
-       0::numeric(16,2)                               AS credit
+       --  Tomonga shu yerda ajratiladi: manfiy boshlang'ich qarz —
+       --  QARZDOR ustunidagi minus emas, HAQDOR (korxona mijozga
+       --  qarzdor, ya'ni oldindan to'lov). Aks holda aylanma ustunida
+       --  manfiy raqam turib, yig'indi ham shuni yutib yuborardi.
+       GREATEST(c.opening_debt, 0)::numeric(16,2)     AS debit,
+       GREATEST(-c.opening_debt, 0)::numeric(16,2)    AS credit
   FROM customers c
  WHERE COALESCE(c.opening_debt, 0) <> 0
 UNION ALL
@@ -291,8 +295,8 @@ SELECT u.customer_id,
        (COALESCE(p.name, 'Mahsulot') || ' — ' || u.qty || ' ta')::text,
        u.conveyor_no::text,
        u.order_no::text,
-       COALESCE(u.total_amount, 0)::numeric(16,2),
-       0::numeric(16,2)
+       GREATEST(COALESCE(u.total_amount, 0), 0)::numeric(16,2),
+       GREATEST(-COALESCE(u.total_amount, 0), 0)::numeric(16,2)
   FROM production_units u
   LEFT JOIN products p ON p.id = u.product_id
  WHERE u.status = 'shipped' AND u.customer_id IS NOT NULL

@@ -38,12 +38,14 @@
 </div>
 
 <div class="grid g3" style="margin-top:16px">
-  <div class="card"><h2>Davr boshiga</h2><div class="kpi" id="kOpen">—<small> $</small></div></div>
-  <div class="card"><h2>Qarzdor (debit)</h2><div class="kpi" id="kDeb">—<small> $</small></div>
+  <div class="card"><h2>Davr boshiga</h2><div class="kpi" id="kOpen">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kOpenB"></p></div>
+  <div class="card"><h2>Qarzdor aylanma</h2><div class="kpi" id="kDeb">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Davr ichida chiqib ketgan mahsulot</p></div>
-  <div class="card"><h2>Haqdor (kredit)</h2><div class="kpi" id="kCre">—<small> $</small></div>
+  <div class="card"><h2>Haqdor aylanma</h2><div class="kpi" id="kCre">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">To'lovlar — kassa moduli yozilgach to'ladi</p></div>
-  <div class="card"><h2>Davr oxiriga</h2><div class="kpi" id="kClo">—<small> $</small></div></div>
+  <div class="card"><h2>Davr oxiriga</h2><div class="kpi" id="kClo">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kCloB"></p></div>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -51,15 +53,30 @@
     <h2 style="margin:0" id="tHead">Mijozlar</h2>
     <span class="muted" style="font-size:12px" id="tHint"></span>
   </div>
+  <!--  Aylanma-saldo shakli: har saldo IKKI ustun — qarzdor va haqdor.
+        Ilgari bitta ustun edi va manfiy raqam haqdorni anglatardi, lekin
+        buni jadval hech qayerda aytmasdi: 300 ni ko'rgan odam mijoz
+        qarzdormi yoki korxona qarzdormi deb o'ylab qolardi. -->
   <div style="overflow-x:auto"><table>
-    <thead><tr>
-      <th>Mijoz</th><th>Kanal</th><th>Menejer</th>
-      <th class="num">Boshiga, $</th><th class="num">Qarzdor, $</th>
-      <th class="num">Haqdor, $</th><th class="num">Oxiriga, $</th>
-    </tr></thead>
+    <thead>
+      <tr>
+        <th rowspan="2">Mijoz</th><th rowspan="2">Kanal</th><th rowspan="2">Menejer</th>
+        <th class="num" colspan="2" style="text-align:center">Davr boshiga, $</th>
+        <th class="num" colspan="2" style="text-align:center">Davr ichida, $</th>
+        <th class="num" colspan="2" style="text-align:center">Davr oxiriga, $</th>
+      </tr>
+      <tr>
+        <th class="num">Qarzdor</th><th class="num">Haqdor</th>
+        <th class="num">Qarzdor</th><th class="num">Haqdor</th>
+        <th class="num">Qarzdor</th><th class="num">Haqdor</th>
+      </tr>
+    </thead>
     <tbody id="tB"></tbody>
     <tfoot id="tF"></tfoot>
   </table></div>
+  <p class="muted" style="font-size:12px;margin-top:12px">
+    <b>Qarzdor</b> — mijozning korxonaga qarzi. <b>Haqdor</b> — korxonaning
+    mijozga qarzi (oldindan to'lov, ortiqcha o'tkazma).</p>
 </div>
 
 <script>
@@ -113,34 +130,45 @@ async function load() {
 
 function render() {
   const t = data.total;
-  $('kOpen').innerHTML = `${money(t.opening)}<small> $</small>`;
-  $('kDeb').innerHTML  = `${money(t.debit)}<small> $</small>`;
-  $('kCre').innerHTML  = `${money(t.credit)}<small> $</small>`;
-  $('kClo').innerHTML  = `${money(t.closing)}<small> $</small>`;
+  //  Kartochkada asosiy raqam — MIJOZLAR qarzi; korxonaning qarzi bo'lsa
+  //  ostida kulrang turadi. Ikkalasi bir raqamga qo'shilmaydi: ular
+  //  qarama-qarshi tomonlar.
+  const kpi = (idN, idB, debit, credit) => {
+    $(idN).innerHTML = `${money(debit)}<small> $ qarzdor</small>`;
+    $(idB).textContent = Number(credit)
+      ? `Korxona qarzi (haqdor): ${money(credit)} $` : '';
+  };
+  kpi('kOpen', 'kOpenB', t.opening_debit, t.opening_credit);
+  kpi('kClo',  'kCloB',  t.closing_debit, t.closing_credit);
+  $('kDeb').innerHTML = `${money(t.debit)}<small> $</small>`;
+  $('kCre').innerHTML = `${money(t.credit)}<small> $</small>`;
   $('tHead').textContent = `Mijozlar (${data.rows.length})`;
-  $('tHint').textContent = `${d8(data.from)} — ${d8(data.to)} · qatorni bossangiz harakatlari chiqadi`;
+  $('tHint').textContent = `${d8(data.from)} \u2014 ${d8(data.to)} \u00b7 qatorni bossangiz harakatlari chiqadi`;
 
   $('tB').innerHTML = data.rows.length ? data.rows.map(r => `
     <tr onclick="toggle(${r.id})" style="cursor:pointer">
       <td><strong>${esc(r.name)}</strong>${r.region
         ? `<div class="muted" style="font-size:12px">${esc(r.region)}</div>` : ''}</td>
       <td>${r.channel_name ? `<span class="tag">${esc(r.channel_name)}</span>`
-        : '<span class="muted">—</span>'}</td>
-      <td class="muted">${r.manager_name ? esc(r.manager_name) : '—'}</td>
-      <td class="num">${sum(r.opening)}</td>
+        : '<span class="muted">\u2014</span>'}</td>
+      <td class="muted">${r.manager_name ? esc(r.manager_name) : '\u2014'}</td>
+      <td class="num">${sum(r.opening_debit)}</td>
+      <td class="num">${sum(r.opening_credit)}</td>
       <td class="num">${sum(r.debit)}</td>
       <td class="num">${sum(r.credit)}</td>
-      <td class="num"><b${Number(r.closing) < 0 ? ' style="color:var(--ok)"' : ''}>${
-        sum(r.closing)}</b></td>
+      <td class="num"><b>${sum(r.closing_debit)}</b></td>
+      <td class="num"><b>${sum(r.closing_credit)}</b></td>
     </tr>${drawRows(r.id)}`).join('')
-    : `<tr><td class="muted" colspan="7">Tanlangan oraliqda qarzdorlik yo'q</td></tr>`;
+    : `<tr><td class="muted" colspan="9">Tanlangan oraliqda qarzdorlik yo'q</td></tr>`;
 
   $('tF').innerHTML = data.rows.length ? `
     <tr><td colspan="3"><b>Jami</b></td>
-      <td class="num"><b>${money(t.opening)}</b></td>
+      <td class="num"><b>${money(t.opening_debit)}</b></td>
+      <td class="num"><b>${money(t.opening_credit)}</b></td>
       <td class="num"><b>${money(t.debit)}</b></td>
       <td class="num"><b>${money(t.credit)}</b></td>
-      <td class="num"><b>${money(t.closing)}</b></td></tr>` : '';
+      <td class="num"><b>${money(t.closing_debit)}</b></td>
+      <td class="num"><b>${money(t.closing_credit)}</b></td></tr>` : '';
 }
 
 //  Bitta mijozning harakatlari. Ro'yxat shu yerdan bir marta so'raladi;
@@ -159,24 +187,26 @@ async function toggle(id) {
 function drawRows(id) {
   if (!open.has(id)) return '';
   const d = open.get(id);
-  if (!d) return `<tr><td colspan="7" class="muted">Yuklanmoqda…</td></tr>`;
-  if (d.error) return `<tr><td colspan="7" class="muted">${esc(d.error)}</td></tr>`;
-  if (!d.rows.length) return `<tr><td colspan="7" class="muted"
-    style="padding-left:24px">Bu oraliqda harakat bo'lmagan · davr boshiga
-    ${money(d.opening)} $</td></tr>`;
+  if (!d) return `<tr><td colspan="9" class="muted">Yuklanmoqda\u2026</td></tr>`;
+  if (d.error) return `<tr><td colspan="9" class="muted">${esc(d.error)}</td></tr>`;
+  if (!d.rows.length) return `<tr><td colspan="9" class="muted"
+    style="padding-left:24px">Bu oraliqda harakat bo'lmagan \u00b7 davr boshiga
+    ${money(Math.abs(d.opening))} $ ${Number(d.opening) < 0 ? 'haqdor' : 'qarzdor'}</td></tr>`;
   //  Yugurib boradigan qoldiq: har qatordan keyin qarz qancha bo'lgani.
-  //  Mijoz «shu kuni qancha edi» deb so'raganda javob shu ustunda.
+  //  Mijoz «shu kuni qancha edi» deb so'raganda javob shu ustunda — va u
+  //  ham o'z tomonida turadi, jadvalning saldo ustunlari bilan bir xil.
   let qoldiq = Number(d.opening) || 0;
   return d.rows.map(r => {
     qoldiq += Number(r.debit || 0) - Number(r.credit || 0);
     return `<tr>
-      <td style="padding-left:24px" class="muted">${d8(r.on_date)} · ${esc(r.note)}</td>
+      <td style="padding-left:24px" class="muted">${d8(r.on_date)} \u00b7 ${esc(r.note)}</td>
       <td>${r.conveyor_no ? `<span class="tag">${esc(r.conveyor_no)}</span>` : ''}</td>
       <td class="muted">${r.order_no ? esc(r.order_no) : ''}</td>
-      <td></td>
+      <td></td><td></td>
       <td class="num">${sum(r.debit)}</td>
       <td class="num">${sum(r.credit)}</td>
-      <td class="num muted">${money(qoldiq)}</td>
+      <td class="num muted">${qoldiq > 0 ? money(qoldiq) : ''}</td>
+      <td class="num muted">${qoldiq < 0 ? money(-qoldiq) : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -185,11 +215,14 @@ function drawRows(id) {
 //  to'rt ustun. Tafsilot kerak bo'lsa saytda qator ochiladi.
 function exportCsv() {
   const head = ['Mijoz', 'Region', 'Telefon', 'Kanal', 'Menejer',
-                'Boshiga', 'Qarzdor', 'Haqdor', 'Oxiriga'];
+                'Boshiga qarzdor', 'Boshiga haqdor',
+                'Davr qarzdor', 'Davr haqdor',
+                'Oxiriga qarzdor', 'Oxiriga haqdor'];
   const rows = data.rows.map(r => [r.name, r.region || '', r.phone || '',
     r.channel_name || '', r.manager_name || '',
-    Number(r.opening).toFixed(2), Number(r.debit).toFixed(2),
-    Number(r.credit).toFixed(2), Number(r.closing).toFixed(2)]
+    Number(r.opening_debit).toFixed(2), Number(r.opening_credit).toFixed(2),
+    Number(r.debit).toFixed(2), Number(r.credit).toFixed(2),
+    Number(r.closing_debit).toFixed(2), Number(r.closing_credit).toFixed(2)]
     .map(v => `"${String(v).replace(/"/g, '""')}"`));
   const csv = '﻿' + [head.map(h => `"${h}"`), ...rows]
     .map(r => r.join(';')).join('\r\n') + '\r\n';

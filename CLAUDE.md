@@ -152,9 +152,21 @@ o'z sanasi bilan:
 
     boshiga + qarzdor - haqdor = oxiriga
 
-**Qarzdor** (debit) — qarz oshdi, ya'ni mahsulot mijozga chiqdi.
-**Haqdor** (kredit) — qarz kamaydi, ya'ni to'lov. Kassa moduli yozilmagani
-uchun haqdor ustuni hozircha bo'sh: u yozilganda `v_customer_ledger` ga
+**Qarzdor** (debit) — MIJOZNING korxonaga qarzi; mahsulot chiqqanda
+oshadi. **Haqdor** (kredit) — KORXONANING mijozga qarzi: oldindan to'lov,
+ortiqcha o'tkazma. Saldo shu ikki tomondan birida turadi, shuning uchun
+jadvalda bitta ishorali ustun emas, **ikkita ustun**: «boshiga qarzdor /
+haqdor», «davr ichida qarzdor / haqdor», «oxiriga qarzdor / haqdor».
+Ilgari bitta ustun edi va manfiy raqam haqdorni anglatardi, lekin buni
+jadval hech qayerda aytmasdi — 300 ni ko'rgan odam kim kimga qarzdorligini
+bilmasdi. Tomonga ajratish `v_customer_ledger` da boshlanadi
+(`GREATEST(...)`): manfiy boshlang'ich qarz qarzdor ustunidagi minus emas,
+haqdor yozuvi bo'ladi. Yig'indi ham tomon bo'yicha qo'shiladi, ishoralar
+qisqartirilmaydi: biri 1000 qarzdor, boshqasi 1000 haqdor bo'lsa «0»
+degan javob ikkalasini ham yashirardi.
+
+Kassa moduli yozilmagani uchun haqdor aylanmasi hozircha deyarli bo'sh
+(faqat manfiy boshlang'ich qarz tushadi): u yozilganda `v_customer_ledger` ga
 bitta UNION shoxi qo'shiladi va hisobot o'zi to'ladi — sahifa ham, so'rov
 ham o'zgarmaydi. Sanasi yo'q harakat 1900-01-01 bo'ladi: har qanday
 oraliqdan oldin turadi va yig'indidan yo'qolib qolmaydi.

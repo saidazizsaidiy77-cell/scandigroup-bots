@@ -1525,6 +1525,13 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
   //  Oktabrda chiqib ketgani: 4 × 250 (narxsiz konver lentaga tushmaydi)
   assert.equal(Number(r.debit), 1000, String(r.debit));
   assert.equal(Number(r.credit), 0, 'kassa yo\'q — haqdor bo\'sh');
+  //  Saldo o'z TOMONIDA beriladi: qarzdor — mijozning korxonaga qarzi,
+  //  haqdor — korxonaning mijozga qarzi. Bitta ishorali raqam bo'lsa
+  //  jadvalni o'qigan odam qaysi biri ekanini bilmasdi.
+  assert.equal(Number(r.opening_debit), Number(r.opening));
+  assert.equal(Number(r.opening_credit), 0);
+  assert.equal(Number(r.closing_debit), Number(r.closing));
+  assert.equal(Number(r.closing_credit), 0);
   assert.equal(Number(r.closing), Number(r.opening) + Number(r.debit),
     'boshiga + qarzdor = oxiriga');
 
@@ -1568,6 +1575,23 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
   assert.ok(!hammasi.some((x) => x.id === mijoz), 'chegara ishlaydi');
   assert.equal((await eks('GET',
     `/api/sales/debts/${mijoz}?from=1900-01-01&to=2030-01-01`)).status, 404);
+
+  //  Ortiqcha to'lov: saldo HAQDOR tomonga o'tadi va u yerda musbat
+  //  bo'lib turadi (manfiy qarzdor emas).
+  await H.id(`UPDATE customers SET opening_debt = -200 WHERE id = $1`, [mijoz]);
+  const teskari = (await admin('GET',
+    '/api/sales/debts?from=2026-09-02&to=2026-09-03')).body.rows
+    .find((x) => x.id === mijoz);
+  assert.equal(Number(teskari.opening_debit), 0);
+  assert.equal(Number(teskari.opening_credit), 200);
+  assert.equal(Number(teskari.closing_credit), 200);
+  //  Aylanma ustunida ham minus turmaydi — u HAQDOR tomonda
+  const t2 = (await admin('GET',
+    '/api/sales/debts?from=2026-08-01&to=2026-09-30')).body.rows
+    .find((x) => x.id === mijoz);
+  assert.equal(Number(t2.debit) >= 0, true, String(t2.debit));
+  assert.equal(Number(t2.credit), 200, 'ortiqcha to\'lov haqdor aylanmada');
+  await H.id(`UPDATE customers SET opening_debt = 500 WHERE id = $1`, [mijoz]);
 
   //  Ombor mudirining ishi emas
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
