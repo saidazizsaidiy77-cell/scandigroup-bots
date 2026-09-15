@@ -25,12 +25,13 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Mijozga va'da qilingan kun. Muddat o'tsa ro'yxatda qizarib turadi.
   due_on      DATE,
   note        TEXT,
-  --   new       — yozildi, hali mahsulot biriktirilmagan
-  --   reserved  — mahsulot biriktirildi, jo'natilmagan
-  --   shipped   — mijozga chiqdi (jo'natma moduli yozadi)
+  --   new       — yozildi, hali bron qo'yilmagan
+  --   reserved  — bron qo'yildi, hali omborga yuborilmagan
+  --   to_ship   — savdo omborga yubordi, mudir chiqarishni nazorat qiladi
+  --   shipped   — mijozga chiqdi (ombor mudiri tasdiqladi)
   --   cancelled — bekor qilindi
   status      TEXT NOT NULL DEFAULT 'new'
-              CHECK (status IN ('new', 'reserved', 'shipped', 'cancelled')),
+              CHECK (status IN ('new', 'reserved', 'to_ship', 'shipped', 'cancelled')),
   created_by  INT REFERENCES workers(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -69,6 +70,25 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS address TEXT;
 -- ko'pincha kutib oluvchi boshqa odam — qarindosh, do'kon sotuvchisi,
 -- terminal xodimi bo'ladi.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS receiver_phone TEXT;
+
+-- ══════════════════════════════════════════ CHIQARISHNI OMBOR NAZORAT QILADI
+--
+--  Savdo buyurtmani yozadi va bron qo'yadi, lekin mahsulotni zavoddan
+--  CHIQARIB YUBORMAYDI. Buyurtma tayyor bo'lgach ombor mudiriga
+--  yuboriladi: u ko'zi bilan ko'rib, mashinaga ortilganini tasdiqlaydi.
+--
+--  Sabab qabul qilish bilan bir xil: bitta tugma bitta sana beradi,
+--  ikkita tugma esa ikkita — va omborda turgan mahsulot kimningdir
+--  qo'l ko'tarishisiz chiqib ketmaydi.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS sent_to_wh_on DATE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS sent_by       INT REFERENCES workers(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_on    DATE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_by    INT REFERENCES workers(id);
+
+-- Holatlar ro'yxati kengaydi: eski bazadagi cheklov almashtiriladi.
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+ALTER TABLE orders ADD CONSTRAINT orders_status_check
+  CHECK (status IN ('new', 'reserved', 'to_ship', 'shipped', 'cancelled'));
 CREATE INDEX IF NOT EXISTS idx_orders_status   ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_due      ON orders(due_on);
 
@@ -182,18 +202,27 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        -- CREATE OR REPLACE VIEW faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
        c.channel,
        -- Jo'natish tafsilotlari ham OXIRIDA, xuddi shu sababdan.
-       o.ship_to, d.name AS ship_to_name, o.address, o.receiver_phone
+       o.ship_to, d.name AS ship_to_name, o.address, o.receiver_phone,
+       o.sent_to_wh_on, sw.name AS sent_by_name,
+       o.shipped_on, shw.name AS shipped_by_name,
+       -- Bronlarning hammasi omborga yetib kelganmi: yetmagani bo'lsa
+       -- ombor mudiri chiqarib bo'lmaydi va nimasi yo'qligini ko'radi.
+       COALESCE(a.in_wh, 0) AS in_warehouse_qty
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id
   LEFT JOIN order_destinations d ON d.code = o.ship_to
+  LEFT JOIN workers sw  ON sw.id = o.sent_by
+  LEFT JOIN workers shw ON shw.id = o.shipped_by
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::int AS lines,
            COALESCE(SUM(oi.qty), 0)::int AS qty,
            COALESCE(SUM(oi.qty * COALESCE(oi.unit_price, 0)), 0) AS amount
       FROM order_items oi WHERE oi.order_id = o.id) i ON true
   LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(r.qty), 0)::int AS qty
+    SELECT COALESCE(SUM(r.qty), 0)::int AS qty,
+           COALESCE(SUM(r.qty) FILTER (WHERE u.status IN ('fg', 'shipped')), 0)::int
+             AS in_wh
       FROM unit_reservations r
       JOIN order_items oi     ON oi.id = r.order_item_id
       JOIN production_units u ON u.id = r.unit_id

@@ -70,6 +70,9 @@ let canMove = false, targets = [];
 //  uchun. Savdoga qoldiq yetarli: unga nima sotishga tayyor turgani
 //  kerak, o'sha mahsulot omborga qachon kirgani emas.
 let rows = [], tab = 'stock', canAccept = false, canLedger = false;
+//  Chiqariladigan buyurtmalar: savdo omborga yuborganlari. Mudir
+//  mashinaga ortilganini ko'zi bilan ko'rib tasdiqlaydi.
+let ship = [], canShip = false;
 const picked = new Set();
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -82,12 +85,14 @@ const money = v => v == null ? ''
 // Kirganda qoldiq ochiladi — «nimadan nechta bor» kunlik savol.
 // Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
 // qoldiqni ochib, kutayotgan mahsulotni ko'rmay qolishi mumkin.
-const ALL_TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'], ['moves', 'Harakat']];
+const ALL_TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'],
+                  ['ship', "Jo'natish"], ['moves', 'Harakat']];
 //  «Qabul qilish» faqat T/M omborda: ishlab chiqarish vitrinaga
 //  to'g'ridan-to'g'ri topshirmaydi, mahsulot u yerga T/M ombordan
 //  ko'chiriladi.
 const isTM = () => !WH || WH === 'TM';
 const tabs = () => ALL_TABS.filter(([k]) => (k !== 'inbox' || (canAccept && isTM()))
+                                         && (k !== 'ship' || (canShip && isTM()))
                                          && (k !== 'moves' || canLedger));
 function drawTabs() {
   // Bitta tab — tab emas: tanlash imkoni yo'q qator faqat joy egallaydi.
@@ -95,13 +100,15 @@ function drawTabs() {
   if (T.length < 2) { $('tabs').innerHTML = ''; return; }
   $('tabs').innerHTML = T.map(([k, t]) =>
     `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}${
-      k === 'inbox' && rows.length ? ` <b>${rows.length}</b>` : ''}</button>`).join('');
+      k === 'inbox' && rows.length ? ` <b>${rows.length}</b>` : ''}${
+      k === 'ship' && ship.length ? ` <b>${ship.length}</b>` : ''}</button>`).join('');
 }
 async function go(k) {
   tab = k; drawTabs();
   $('body').innerHTML = `<p class="muted">Yuklanmoqda…</p>`;
   if (k === 'inbox') return load();
   if (k === 'stock') return loadStock();
+  if (k === 'ship') return loadShip();
   return loadMoves();
 }
 
@@ -446,6 +453,86 @@ async function loadStock() {
     $(focus).setSelectionRange(9999, 9999); }
 }
 
+// ═══════════════════════════════════════════════════════ JO'NATISH
+//
+//  Savdo buyurtmani yozadi va bron qo'yadi, lekin mahsulotni zavoddan
+//  chiqarmaydi: tayyor bo'lgach omborga yuboradi. Mudir bu yerda
+//  ko'radi — nima, qancha, qayerga va kim kutib oladi — va mashinaga
+//  ortilganini tasdiqlaydi.
+//
+//  Bronning hammasi omborga yetib kelmagan bo'lsa tugma ishlamaydi:
+//  yarmi hali tsexda turganda «jo'natildi» deb yozib qo'yish mijoz
+//  qarzini ham noto'g'ri oshirardi.
+async function loadShip() {
+  ship = (await App.api('/api/sales/shipping')).rows;
+  drawTabs();
+  drawShip();
+}
+
+function drawShip() {
+  if (!ship.length) {
+    $('body').innerHTML = `<div class="card"><h2>Chiqariladigan buyurtma yo'q</h2>
+      <p class="muted" style="margin-top:8px">Savdo buyurtmani tayyorlab
+      «Omborga yuborish» deganda u shu yerda paydo bo'ladi.</p></div>`;
+    return;
+  }
+  $('body').innerHTML = ship.map(o => {
+    const tayyor = o.in_warehouse_qty >= o.assigned_qty;
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2 style="margin:0">${esc(o.order_no)} · ${esc(o.customer_name)}</h2>
+          <div class="muted" style="font-size:13px;margin-top:4px">
+            ${esc(o.ship_to_name || 'qayerga — tanlanmagan')}${
+              o.address ? ' · ' + esc(o.address) : ''}${
+              o.receiver_phone ? ' · kutib oluvchi ' + esc(o.receiver_phone)
+                : (o.customer_phone ? ' · ' + esc(o.customer_phone) : '')}
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:3px">
+            Chiqib ketish: ${o.due_on ? d8(o.due_on) : '—'} ·
+            ${esc(o.manager_name || '')} yubordi ${d8(o.sent_to_wh_on)}</div>
+        </div>
+        <div class="row" style="gap:8px;align-items:center">
+          ${tayyor ? `<span class="tag ok">hammasi omborda</span>`
+                   : `<span class="tag warn">${o.in_warehouse_qty} / ${
+                        o.assigned_qty} omborda</span>`}
+          <button class="primary" ${tayyor ? '' : 'disabled'}
+            onclick="doShip(${o.id})">Chiqarib yubordim</button>
+        </div>
+      </div>
+      <table class="board" style="margin-top:12px"><thead><tr>
+        <th class="c-no">Konveyer &#8470;</th><th class="c-name">Nomi</th>
+        <th class="c-type">Turi</th><th class="c-qty num">Soni</th><th>Qayerda</th>
+      </tr></thead><tbody>${o.units.map(u => `
+        <tr>
+          <td class="c-no"><b>${esc(u.conveyor_no)}</b></td>
+          <td class="c-name">${esc(u.product)}${u.color
+            ? `<div class="muted" style="font-size:12px">${esc(u.color)}${
+                u.fabric ? ' · ' + esc(u.fabric) : ''}</div>` : ''}</td>
+          <td class="c-type muted">${esc(u.product_type || '')}</td>
+          <td class="c-qty num">${u.qty}${u.unit_qty > u.qty
+            ? `<span class="muted" style="font-size:11px"> / ${u.unit_qty}</span>` : ''}</td>
+          <td>${u.status === 'fg'
+            ? `<span class="tag ok">${esc(u.warehouse || 'T/M ombor')}</span>`
+            : `<span class="tag warn">${esc(u.section || 'boshlanmagan')}</span>`}</td>
+        </tr>`).join('')}</tbody></table>
+    </div>`;
+  }).join('');
+}
+
+async function doShip(id) {
+  const o = ship.find(x => x.id === id);
+  if (!confirm(`${o.order_no} — ${o.customer_name}\n\n` +
+    `${o.assigned_qty} dona chiqarib yuborildimi?\n` +
+    `Qayerga: ${o.ship_to_name || '—'}\n\n` +
+    'Tasdiqlangach mahsulot ombordan chiqadi va mijoz qarziga qo\'shiladi.')) return;
+  try {
+    await App.api(`/api/sales/orders/${id}/ship`, { method: 'POST' });
+    toast('Jo\'natildi');
+    await loadShip();
+  } catch (e) { toast(e.message, true); }
+}
+
 // ═══════════════════════════════════════════════════════════ HARAKAT
 //
 //  Kirim — ombor qabul qilgani, chiqim — mijozga chiqqani. Chiqim savdo
@@ -513,6 +600,7 @@ async function loadMoves() {
 App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
   canMove = App.can('warehouse.move', 'warehouse.manage', 'production.manage');
+  canShip = canMove;
   // Ko'chiriladigan omborlar ro'yxati bir marta o'qiladi: har konver
   // uchun so'rov yuborilsa, ro'yxat ochilganda o'nlab so'rov ketardi.
   if (canMove) {
@@ -526,6 +614,11 @@ App.start(async () => {
   // Qabul qilish ro'yxati tabda raqam bo'lib turishi uchun oldindan
   // o'qiladi — ochilmasa ham mudir kutayotgan borligini ko'radi.
   if (canAccept && isTM()) rows = await App.api('/api/units/stock/inbox');
+  // Chiqariladiganlar soni tabda turadi: mudir ochmasa ham kutayotgan
+  // buyurtma borligini ko'radi.
+  if (canShip && isTM()) {
+    try { ship = (await App.api('/api/sales/shipping')).rows; } catch { ship = []; }
+  }
   drawTabs();
   await (tab === 'inbox' ? draw() : loadStock());
 }, 'warehouse.view', 'production.view');

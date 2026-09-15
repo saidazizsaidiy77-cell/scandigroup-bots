@@ -53,9 +53,11 @@ const money = (v) => {
 
 // Holat nomlari bitta joyda: jadval ham, tahrir oynasi ham shundan oladi.
 const STATUS = { new: 'Yangi', reserved: 'Bron qilingan',
-                 shipped: "Jo'natilgan", cancelled: 'Bekor qilingan' };
+                 to_ship: 'Omborda', shipped: "Jo'natilgan",
+                 cancelled: 'Bekor qilingan' };
 const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['reserved', 'Bron qilingan'],
-                 ['shipped', "Jo'natilgan"], ['cancelled', 'Bekor']];
+                 ['to_ship', 'Omborda'], ['shipped', "Jo'natilgan"],
+                 ['cancelled', 'Bekor']];
 
 let rows = [], customers = [], managers = [], products = [], dests = [];
 let status = '', canWrite = false;
@@ -104,7 +106,10 @@ async function load(){
         : '—'}</td>
       <td class="num">${o.lines}</td><td class="num">${o.qty}</td>
       <td class="num">${o.assigned_qty}${o.is_ready
-        ? ' <span class="tag ok">to\'liq</span>' : ''}</td>
+        ? ' <span class="tag ok">to\'liq</span>' : ''}${
+        o.status === 'to_ship' && o.in_warehouse_qty < o.assigned_qty
+          ? `<div class="muted" style="font-size:11px">${
+              o.in_warehouse_qty} tasi omborda</div>` : ''}</td>
       <td class="num">${money(o.amount)}</td>
       <td><span class="tag${o.status === 'cancelled' ? ' warn' : ''}"
         >${esc(STATUS[o.status] || o.status)}</span></td>
@@ -131,7 +136,10 @@ async function openOrder(id){
 
 function draw(){
   const o = cur.order, isNew = !o.id;
-  const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled';
+  //  Omborga yuborilgandan keyin ham yopiladi: mudir ko'rib turgan
+  //  buyurtma ostidan o'zgarib ketmasin. Qaytarib olinsa yana ochiladi.
+  const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled'
+          || o.status === 'to_ship';
   const dis = ro ? 'disabled' : '';
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
@@ -200,8 +208,22 @@ function draw(){
 
         ${ro ? '' : `<div class="row" style="gap:10px;margin-top:22px">
           <button class="primary" onclick="save()">Saqlash</button>
-          ${isNew ? '' : `<button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
+          ${isNew ? '' : `
+            <button onclick="sendToWh()">Omborga yuborish</button>
+            <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
         </div>`}
+        ${o.status === 'to_ship' && canWrite ? `
+          <div class="row" style="gap:10px;margin-top:22px;align-items:center">
+            <span class="tag ok">Ombor mudirida</span>
+            <span class="muted" style="font-size:13px">${
+              (o.sent_to_wh_on || '').slice(0, 10)}${o.sent_by_name
+                ? ' \u00b7 ' + esc(o.sent_by_name) : ''} yubordi</span>
+            <button onclick="unsendWh()">Qaytarib olish</button>
+          </div>` : ''}
+        ${o.status === 'shipped' ? `
+          <p class="muted" style="margin-top:22px">Jo'natilgan: ${
+            (o.shipped_on || '').slice(0, 10)}${o.shipped_by_name
+              ? ' \u00b7 ' + esc(o.shipped_by_name) : ''}</p>` : ''}
         ${isNew && canWrite ? `<p class="muted" style="margin-top:10px;font-size:13px">
           Bron buyurtma saqlangandan keyin ochiladi.</p>` : ''}
       </div></div>`;
@@ -342,6 +364,26 @@ async function save(){
         { method: 'POST', body: JSON.stringify(body) });
       await openOrder(o.id);
     }
+    load();
+  }catch(e){ alert(e.message); }
+}
+
+//  Buyurtmani ombor mudiriga topshirish. Shundan keyin mahsulotni
+//  zavoddan chiqarish uning ishi: u ko'zi bilan ko'rib tasdiqlaydi.
+async function sendToWh(){
+  if (!confirm('Buyurtma ombor mudiriga yuborilsinmi?\n\n' +
+    'Shundan keyin u tahrirlanmaydi — kerak bo\'lsa qaytarib olasiz.')) return;
+  try{
+    await App.api(`/api/sales/orders/${cur.order.id}/send`, { method: 'POST' });
+    await openOrder(cur.order.id);
+    load();
+  }catch(e){ alert(e.message); }
+}
+
+async function unsendWh(){
+  try{
+    await App.api(`/api/sales/orders/${cur.order.id}/unsend`, { method: 'POST' });
+    await openOrder(cur.order.id);
     load();
   }catch(e){ alert(e.message); }
 }

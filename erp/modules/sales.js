@@ -16,6 +16,7 @@
 const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
+const { clonePart, refreshStock } = require('./units');
 
 const router = express.Router();
 const READ  = ['sales.view', 'sales.manage'];
@@ -247,6 +248,14 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
     if (chans && !chans.includes(cur.channel))
       throw new Error('Bu buyurtma sizning yo\'nalishingizda emas');
     if (customer_id) await assertCustomer(client, req, customer_id);
+
+    //  Omborga yuborilgan buyurtma tahrirlanmaydi: mudir ko'rib turgan
+    //  ro'yxat ostidan o'zgarib ketmasin. Avval qaytarib olinadi
+    //  (`/unsend`). Bekor qilish ham shunday. Tekshiruv SHU YERDA:
+    //  sahifada tugmani yashirish himoya emas.
+    if (cur.status === 'to_ship' && status !== 'reserved')
+      throw new Error("Buyurtma omborda — avval qaytarib oling");
+    if (cur.status === 'shipped') throw new Error("Buyurtma jo'natilgan");
 
     //  Bekor qilishdan oldin konverlar ajratiladi: aks holda ombordagi
     //  mahsulot bekor qilingan buyurtmada band bo'lib qolardi va uni
@@ -511,6 +520,171 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
                                   conveyor_no: r.conveyor_no, qty: r.qty } }, client);
     await client.query('COMMIT');
     res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+// ═══════════════════════════════════ CHIQARISHNI OMBOR NAZORAT QILADI
+//
+//  Savdo buyurtmani yozadi va bron qo'yadi, lekin mahsulotni zavoddan
+//  chiqarib yubormaydi. Tayyor bo'lgach OMBORGA YUBORADI; ombor mudiri
+//  ko'zi bilan ko'rib, mashinaga ortilganini tasdiqlaydi.
+//
+//  Ikki bosqich qabul qilish bilan bir xil sababdan: omborda turgan
+//  mahsulot kimningdir qo'l ko'tarishisiz chiqib ketmasin.
+const SHIP = ['warehouse.move', 'warehouse.manage', 'production.manage'];
+
+router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(
+      `SELECT o.*, c.channel,
+              COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                          JOIN order_items i ON i.id = r.order_item_id
+                         WHERE i.order_id = o.id), 0)::int AS bron
+         FROM orders o JOIN customers c ON c.id = o.customer_id
+        WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
+    if (!o) throw new Error('Buyurtma topilmadi');
+    const chans = channelsOf(req);
+    if (chans && !chans.includes(o.channel))
+      throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
+    if (o.status === 'shipped') throw new Error('Allaqachon jo\'natilgan');
+    if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
+    if (o.status === 'to_ship') throw new Error('Allaqachon omborga yuborilgan');
+    if (!o.bron) throw new Error('Avval konver bron qiling');
+    if (!o.ship_to) throw new Error('«Qayerga» tanlanmagan');
+
+    await client.query(
+      `UPDATE orders SET status = 'to_ship', sent_to_wh_on = CURRENT_DATE,
+              sent_by = $2 WHERE id = $1`, [o.id, req.user.id]);
+    await audit(req, { module: 'sales', action: 'send-to-wh', entity: 'order',
+                       entity_id: o.id, payload: { order_no: o.order_no } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  Qaytarib olish: ombor hali chiqarmagan bo'lsa savdo o'zgartira oladi.
+router.post('/orders/:id/unsend', need(...WRITE), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `UPDATE orders o SET status = 'reserved', sent_to_wh_on = NULL, sent_by = NULL
+       FROM customers c
+      WHERE o.id = $1 AND c.id = o.customer_id AND o.status = 'to_ship'
+        AND ($2::text[] IS NULL OR c.channel = ANY($2))
+      RETURNING o.order_no`, [req.params.id, channelsOf(req)]);
+  if (!rows[0]) return res.status(400).json({ error: 'Buyurtma omborda emas' });
+  await audit(req, { module: 'sales', action: 'send-undo', entity: 'order',
+                     entity_id: Number(req.params.id),
+                     payload: { order_no: rows[0].order_no } });
+  res.json({ ok: true });
+}));
+
+//  Ombor mudirining ro'yxati: chiqarilishi kerak bo'lgan buyurtmalar.
+//  Savdo yo'nalishi chegarasi qo'yilmaydi — ombor hamma yo'nalishga
+//  xizmat qiladi; vitrina doirasi esa qo'yiladi: o'z nuqtasidagi
+//  mahsulotni chiqaradi.
+router.get('/shipping', need(...SHIP), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT o.*, c.phone AS customer_phone
+       FROM v_sales_orders o
+       JOIN customers c ON c.id = o.customer_id
+      WHERE o.status = 'to_ship'
+      ORDER BY o.due_on NULLS LAST, o.sent_to_wh_on, o.id`);
+  if (!rows.length) return res.json({ rows: [] });
+
+  //  Har buyurtmaning konverlari: qaysi omborda turibdi, tayyormi.
+  const units = (await db.query(
+    `SELECT i.order_id, u.id, u.conveyor_no, r.qty, u.qty AS unit_qty,
+            u.status, u.color, u.fabric, p.name AS product,
+            g.name AS product_type, s.name AS section,
+            CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse
+       FROM unit_reservations r
+       JOIN order_items i      ON i.id = r.order_item_id
+       JOIN production_units u ON u.id = r.unit_id
+       JOIN products p         ON p.id = u.product_id
+       JOIN product_groups g   ON g.id = p.group_id
+       LEFT JOIN sections s    ON s.id = u.current_section_id
+       LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
+                                   (SELECT id FROM warehouses WHERE code = 'TM'))
+      WHERE i.order_id = ANY($1::int[]) AND u.status <> 'cancelled'
+      ORDER BY u.conveyor_no`, [rows.map((r) => r.id)])).rows;
+
+  res.json({ rows: rows.map((o) => ({
+    ...o, units: units.filter((u) => u.order_id === o.id) })) });
+}));
+
+//  Chiqarib yuborish. Bronlarning HAMMASI omborda turgan bo'lishi kerak:
+//  yarmi hali tsexda bo'lsa mashinaga ortib bo'lmaydi va «jo'natildi»
+//  deb yozib qo'yish qarzni ham noto'g'ri oshirardi.
+router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(
+      `SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!o) throw new Error('Buyurtma topilmadi');
+    if (o.status === 'shipped') throw new Error('Allaqachon jo\'natilgan');
+    if (o.status !== 'to_ship')
+      throw new Error('Buyurtma omborga yuborilmagan');
+
+    const kutmoqda = (await client.query(
+      `SELECT u.conveyor_no, u.status, s.name AS section
+         FROM unit_reservations r
+         JOIN order_items i      ON i.id = r.order_item_id
+         JOIN production_units u ON u.id = r.unit_id
+         LEFT JOIN sections s    ON s.id = u.current_section_id
+        WHERE i.order_id = $1 AND u.status = 'production'
+        ORDER BY u.conveyor_no`, [o.id])).rows;
+    if (kutmoqda.length)
+      throw new Error('Hali omborga kelmagan: ' + kutmoqda
+        .map((u) => `${u.conveyor_no} (${u.section || 'boshlanmagan'})`).join(', '));
+
+    //  Faqat SHU buyurtmaga bron qilingan dona chiqadi. Konverning
+    //  qolgan qismi boshqa mijozniki bo'lishi mumkin — u omborda qoladi,
+    //  shuning uchun konver kerak bo'lsa bo'linadi.
+    const bron = (await client.query(
+      `SELECT r.id, r.unit_id, r.qty, u.qty AS unit_qty, u.conveyor_no
+         FROM unit_reservations r
+         JOIN order_items i      ON i.id = r.order_item_id
+         JOIN production_units u ON u.id = r.unit_id
+        WHERE i.order_id = $1 AND u.status = 'fg'
+        FOR UPDATE OF r, u`, [o.id])).rows;
+    if (!bron.length) throw new Error('Chiqariladigan konver yo\'q');
+
+    const shipOn = req.body.ship_on || null;
+    for (const b of bron) {
+      const u = (await client.query(
+        `SELECT * FROM production_units WHERE id = $1`, [b.unit_id])).rows[0];
+      const id = b.qty < u.qty
+        ? await clonePart(client, req, u, b.qty, { keepPlace: true })
+        : u.id;
+      await client.query(
+        `UPDATE production_units
+            SET status = 'shipped', ship_on = COALESCE($2::date, CURRENT_DATE),
+                customer_id = $3, order_no = $4
+          WHERE id = $1`, [id, shipOn, o.customer_id, o.order_no]);
+      //  Bron ko'chgan qatorga o'tadi, keyin o'chadi: mahsulot chiqib
+      //  ketgach bron degan narsa qolmaydi, tarix `ship_on` da.
+      await client.query(`DELETE FROM unit_reservations WHERE id = $1`, [b.id]);
+      await refreshStock(client, u.product_id);
+    }
+
+    await client.query(
+      `UPDATE orders SET status = 'shipped',
+              shipped_on = COALESCE($2::date, CURRENT_DATE), shipped_by = $3
+        WHERE id = $1`, [o.id, shipOn, req.user.id]);
+    await audit(req, { module: 'warehouse', action: 'ship', entity: 'order',
+                       entity_id: o.id,
+                       payload: { order_no: o.order_no,
+                                  units: bron.map((b) => b.conveyor_no) } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, units: bron.length });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });

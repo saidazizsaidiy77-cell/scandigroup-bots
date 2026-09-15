@@ -188,6 +188,26 @@ bron bo'lmaydi.
 «Bajarilgan» degan belgi saqlanmaydi, har safar bronlardan hisoblanadi
 (`v_sales_orders`): saqlangan belgi bir kun haqiqatdan ajralib qolardi.
 
+**★ CHIQARISHNI OMBOR MUDIRI NAZORAT QILADI.** Savdo buyurtmani yozadi
+va bron qo'yadi, lekin mahsulotni zavoddan CHIQARIB YUBORMAYDI:
+
+    yangi → bron qilingan → **omborda** → jo'natilgan
+            (savdo)          (savdo yubordi)  (mudir tasdiqladi)
+
+«Omborga yuborish» dan keyin buyurtma savdo uchun YOPILADI — mudir
+ko'rib turgan ro'yxat ostidan o'zgarib ketmasin. Kerak bo'lsa savdo
+qaytarib oladi (`/unsend`), mudir hali chiqarmagan bo'lsa.
+
+Mudirning «Jo'natish» tabida: nima, qancha, qayerga, kim kutib oladi va
+har konver qayerda turgani. **Bronning hammasi omborga yetib kelmaguncha
+tugma ishlamaydi** — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
+mijoz qarzini ham noto'g'ri oshirardi.
+
+Tasdiqlangach konverlar `shipped` bo'ladi, `ship_on` yoziladi, ombor
+qoldig'idan chiqadi va mijoz balansiga qo'shiladi. Konverning faqat
+BRON QILINGAN qismi chiqadi: qolgani boshqa mijozniki bo'lishi mumkin,
+shuning uchun kerak bo'lsa shu yerda bo'linadi.
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak). Zahiraga muddat bashorat qilinmaydi.
@@ -326,11 +346,11 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    raqami, mahsulot, soni, rangi, matosi, omborga kirgan sanasi.
 2. **Mijozlar bazasi** — nomi, telefoni, regioni, kanali.
    (Ikkalasi ham Excel'da bo'lsa yuklash yoziladi, qo'lda terilmaydi.)
-3. **Savdo** — buyurtma YOZILDI (`sql/sales.sql`, `modules/sales.js`,
-   `public/buyurtmalar.html`): buyurtma qatorlari va T/M ombordan hamda
-   zahiradan konver biriktirish. Jo'natma hali yo'q — zavod nima
-   yozilishini aytmagan (quyida, ochiq savollar).
+3. **Savdo** — YOZILDI (`sql/sales.sql`, `modules/sales.js`,
+   `public/buyurtmalar.html`): buyurtma, bron (ombor, zahira va ishlab
+   chiqarishdan) va chiqarishni ombor mudiri nazorat qilishi.
 4. **Kassa** — kirim hujjatlari. Mahsulot narxi `$`, harajat `so'm` ham.
+   Balans shunda to'liq bo'ladi: hozir to'lovlar ayirilmaydi.
 
 ## Ochiq savollar — zavoddan javob kutilmoqda
 
@@ -344,11 +364,11 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
   bo'lmaydi.
 
-**Savdo moduli**
-- Buyurtma qabul qilishda nima yoziladi?
-- Buyurtma qanday bajariladi — T/M ombordan olinadimi yoki yangi konver
-  ochiladimi? Bitta buyurtmada bir nechta mahsulot bo'ladimi?
-- Jo'natishda nima yoziladi (mashina, hujjat, kim olib ketdi)?
+**Jo'natma**
+- Mashina raqami, haydovchi va hujjat raqami yoziladimi? Hozir buyurtmada
+  faqat qayerga, manzil va kutib oluvchining raqami bor.
+- Buyurtma QISMAN chiqadimi? Hozir yo'q: bronning hammasi omborga
+  kelmaguncha chiqarib bo'lmaydi.
 
 **Kassa**
 - Kirim hujjatida nima bo'ladi — kimdan, qaysi buyurtma uchun, valyuta,
@@ -358,6 +378,6 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 
 ## Hali yo'q
 
-Ombor (xom ashyo), jo'natma, kassa, ishbay oylik, sifat nazorati (brakda
+Ombor (xom ashyo), kassa, ishbay oylik, sifat nazorati (brakda
 aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline rejim,
 PIN uchun urinishlar cheklovi (ataylab — zavod qarori).

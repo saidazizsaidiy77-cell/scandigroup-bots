@@ -1291,6 +1291,95 @@ test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
   assert.equal(Number(keyin.balance), Number(oldin.opening_debt || 0) + 1000);
 });
 
+test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+
+  // Biri omborda, biri hali tsexda
+  const tayyor = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Sut', unit_price: 250,
+      is_opening: true, fg_on: '2026-09-02' },
+  ] })).body.created[0];
+  const yolda = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Sut', section_id: ARRA },
+  ] })).body.created[0];
+
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'UY', address: 'Toshkent, Navoiy 5',
+    receiver_phone: '+998901110022', due_on: '2026-10-05',
+    items: [{ product_id: PENAL, qty: 6, color: 'Sut', unit_price: 250 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  for (const [u, n] of [[tayyor, 4], [yolda, 2]])
+    assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+      { item_id: qator.id, unit_id: u.id, qty: n })).status, 200);
+
+  // Ombor mudiri hali ko'rmaydi — savdo yubormagan
+  assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);
+
+  // Omborga yuborish
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`,
+    { })).status, 200);
+  const ro = (await mudir('GET', '/api/sales/shipping')).body.rows;
+  assert.equal(ro.length, 1);
+  assert.equal(ro[0].order_no, z.order_no);
+  assert.equal(ro[0].ship_to_name, 'Mijoz uyiga');
+  assert.equal(ro[0].address, 'Toshkent, Navoiy 5');
+  assert.equal(ro[0].receiver_phone, '+998901110022');
+  assert.equal(ro[0].assigned_qty, 6);
+  assert.equal(ro[0].in_warehouse_qty, 4, 'ikkitasi hali tsexda');
+  assert.equal(ro[0].units.length, 2);
+
+  // Yuborilgach savdo tahrirlay olmaydi
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { note: 'tegdim' })).status, 400);
+
+  // Hammasi kelmagunча chiqarib bo'lmaydi
+  const erta = await mudir('POST', `/api/sales/orders/${z.id}/ship`);
+  assert.equal(erta.status, 400);
+  assert.match(erta.body.error, /Hali omborga kelmagan/);
+  assert.match(erta.body.error, new RegExp(yolda.conveyor_no));
+
+  // Yo'ldagini omborga kiritamiz (jurnaldan tuzatish yo'li bilan)
+  assert.equal((await admin('POST', `/api/units/${yolda.id}/to-warehouse`,
+    { warehouse_code: 'TM' })).status, 200);
+
+  // Endi chiqadi
+  const r = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: '2026-10-04' });
+  assert.equal(r.status, 200, r.text);
+
+  const o = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
+  assert.equal(o.status, 'shipped');
+  assert.equal(String(o.shipped_on).slice(0, 10), '2026-10-04');
+  assert.equal(o.shipped_by_name, 'Sinov ombor mudiri');
+
+  // Konverlar chiqib ketdi va ombor qoldig'idan ayrildi
+  const holat = await H.id(
+    `SELECT status, to_char(ship_on,'YYYY-MM-DD') AS on, customer_id, order_no
+       FROM production_units WHERE id = $1`, [tayyor.id]);
+  assert.equal(holat.status, 'shipped');
+  assert.equal(holat.on, '2026-10-04');
+  assert.equal(holat.customer_id, mijoz);
+  assert.equal(holat.order_no, z.order_no);
+  assert.equal((await admin('GET', '/api/warehouse/fg/summary?q=Sut')).body.total.qty, 0);
+
+  // Bron qolmadi — mahsulot chiqib ketdi, tarix `ship_on` da
+  assert.equal((await admin('GET', `/api/units/${tayyor.id}/bron`)).body.reserved, 0);
+
+  // Mijoz qarziga qo'shildi: 6 × 250
+  const c = (await admin('GET', '/api/units/customers')).body.customers
+    .find((x) => x.id === mijoz);
+  assert.ok(Number(c.shipped_amount) >= 1500, String(c.shipped_amount));
+
+  // Ro'yxatdan chiqdi, ikkinchi marta jo'natilmaydi
+  assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`)).status, 400);
+
+  // Savdo o'zi chiqarib yubora olmaydi — bu ombor mudirining ishi
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await savdo('GET', '/api/sales/shipping')).status, 403);
+});
+
 test('savdo yo\'nalishi buyurtmaga ham chegara bo\'ladi', async () => {
   const eks = H.api(base, await H.sessionFor('Eksport menejeri'));
   const b2b = H.api(base, await H.sessionFor('B2B menejeri'));
