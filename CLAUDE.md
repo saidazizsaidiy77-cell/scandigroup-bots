@@ -204,12 +204,29 @@ uchun yangi konver OCHILMAYDI — ishlab chiqarish o'z rejasi bilan yuradi.
 Sarlavhada: mijoz (balansi bilan), menejer, **buyurtma sanasi**,
 **chiqib ketish sanasi**, **qayerga** (`order_destinations`: zavodga
 kiradi / yuk terminaliga / mijoz uyiga / do'konga) va **kutib oluvchi
-raqami**. Qatorlarda rang va mato zavodda ishlatilganlaridan taklif
-qilinadi (`/api/sales/suggest`) — «Venge» va «venga» deb ikki xil
-yozilsa ombordan mos konver topilmasdi; yangisini yozish ham mumkin.
-Manzil faqat kerak bo'lgan yo'lda so'raladi va o'shanda
+raqami**. Manzil faqat kerak bo'lgan yo'lda so'raladi va o'shanda
 majburiy (`needs_address`) — mashina qayerga borishini keyin hech kim
 topa olmasdi.
+
+**★ QATOR T/M OMBOR QOLDIG'IDAN YOZILADI** (`/api/sales/stock`).
+**Turi · Mahsulot · Rangi · Matosi — har biri ALOHIDA katak**, ro'yxati
+katalogdan emas, haqiqiy qoldiqdan quriladi va yonida nechta bo'sh
+qolgani turadi («Venge · 5 ta»). Menejer birinchi navbatda omborda
+BORINI sotadi; ilgari bitta uzun ro'yxat edi va undan rangni topib
+bo'lmasdi.
+
+Omborda yo'q narsani ham yozish mumkin — u ro'yxatning ikkinchi
+guruhida («Omborda yo'q»), rang va mato esa matn maydoniga aylanadi va
+zavodda ishlatilganlaridan taklif qiladi (`/api/sales/suggest`) —
+«Venge» va «venga» deb ikki xil yozilsa ombordan mos konver topilmasdi.
+Bunday qatorga bron ishlab chiqarishdan qo'yiladi.
+
+**Vitrina qoldig'i savdoga chiqmaydi.** Do'kondagi mahsulot o'sha
+nuqtada sotiladi — uni buyurtmaga olib ketish vitrinani bo'shatardi.
+Shuning uchun qator ro'yxatida ham, bron nomzodlarida ham faqat
+**T/M ombor**. Tekshiruv serverda (`CANDIDATE_WHERE` va `/assign`):
+to'g'ridan-to'g'ri id yuborilsa ham qabul qilinmaydi. Ombor sahifasida
+vitrina qoldig'i ko'rinaveradi — chegara savdoniki.
 
 **★ BRON — konver bo'linmaydi** (`unit_reservations`). Konver
 buyurtmaning aniq QATORIGA bron qilinadi: bir xil mahsulot ikki xil
@@ -222,9 +239,23 @@ bo'limga birga o'tadi, jurnalda bitta qator bo'lib turishi kerak.
 Shuning uchun bron alohida jadval, konverning o'zi qimirlamaydi.
 Ombordagi mahsulotda ham xuddi shu — manba bitta bo'lsin.
 
-Bron **uch manbaga** qo'yiladi: T/M ombor va vitrinalar (tayyor),
+Bron **uch manbaga** qo'yiladi: T/M ombor (tayyor — vitrina EMAS),
 zahira (rang kutmoqda) va **ishlab chiqarish** (hali yo'lda). Boshqa
 buyurtmaga konverning faqat QOLGANI taklif qilinadi.
+
+Ishlab chiqarishdagilar **omborga eng yaqini** bo'yicha saralanadi va
+yonida omborga tushish sanasi turadi (`v_unit_register.fg_on`: fakt →
+tsex boshlig'i qo'ygan reja → marshrut va quvvatdan taxmin). Mijoz
+tezroq oladigan konver tepada tursin — menejer «shu kuni beramiz»
+deyishi uchun.
+
+**«Kutmoqda»** — bron qo'yilgan, lekin bir qismi hali omborga
+kelmagan buyurtma. Saqlanadigan holat EMAS, har safar bronlardan
+hisoblanadi (`assigned_qty > in_warehouse_qty`): saqlangan belgi konver
+omborga kelgan kuni haqiqatdan ajralib qolardi. Ro'yxatda filtri bor
+(`/api/sales/orders?status=waiting`). Buyurtma baribir BITTA
+nakladnoy: yarmi tayyor bo'lgani uchun bo'linmaydi — hammasi omborga
+yetib kelmaguncha chiqarilmaydi.
 
 Bitta bron bo'lsa konverga mijoz va zakaz raqami yoziladi — jurnalda
 tsex boshlig'i «bu Alisherniki» deb ko'radi. Bir nechta bo'lsa bo'sh
@@ -305,8 +336,9 @@ bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
 shaharning uch nuqtasida va har birida o'z sotuvchisi bor. Sotuvchiga
 nuqtasi biriktirilsa u FAQAT o'sha vitrinaning qoldig'ini ko'radi —
 ustiga **T/M omborni**: zavodda nima turganini bilmasa mijozga «olib
-kelamiz» deya olmaydi. Boshqa nuqtadagi konverni buyurtmaga ham
-biriktira olmaydi (`warehousesOf` → `whScope`, `modules/warehouse.js`).
+kelamiz» deya olmaydi (`warehousesOf` → `whScope`,
+`modules/warehouse.js`). Bu KO'RISH doirasi: buyurtmaga esa vitrina
+mahsuloti umuman biriktirilmaydi — o'zinikiniki ham.
 
 Doira bo'sh = hamma ombor: bosh ofis menejeri (B2B, B2C, eksport) barcha
 tayyor mahsulot omborlarini ko'radi. **Ishlab chiqarish jurnali esa

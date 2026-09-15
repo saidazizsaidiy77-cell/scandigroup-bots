@@ -1087,23 +1087,38 @@ test('vitrina sotuvchisi o\'z nuqtasini va T/M omborni ko\'radi', async () => {
   assert.ok(z.id, JSON.stringify(z));
   const qator = (await shou('GET', '/api/sales/orders/' + z.id)).body.items[0];
 
+  //  ★ VITRINA SAVDOGA TAKLIF QILINMAYDI — o'z nuqtasiniki ham.
+  //  Do'kondagi mahsulot o'sha yerda sotiladi; buyurtmaga faqat T/M
+  //  ombordagi va ishlab chiqarishdagi konver olinadi (zavod qarori).
   const nomzod = (await shou('GET',
     `/api/sales/orders/${z.id}/candidates?item_id=${qator.id}`)).body.rows;
   const ranglar = nomzod.filter((u) => u.status === 'fg').map((u) => u.color);
-  assert.ok(ranglar.includes('Abu-rang') && ranglar.includes('TM-rang'), ranglar.join(','));
-  assert.ok(!ranglar.includes('Palma-rang'), 'boshqa nuqtadagi mahsulot sotilmaydi');
+  assert.ok(ranglar.includes('TM-rang'), ranglar.join(','));
+  assert.ok(!ranglar.includes('Abu-rang'), 'vitrina taklif qilinmaydi');
+  assert.ok(!ranglar.includes('Palma-rang'), 'boshqa nuqtadagi ham');
 
-  // To'g'ridan-to'g'ri id yuborsa ham qabul qilinmaydi
-  const palma = (await H.id(
-    `SELECT id FROM production_units WHERE color = 'Palma-rang'`)).id;
-  const xato = await shou('POST', `/api/sales/orders/${z.id}/assign`,
-    { item_id: qator.id, unit_id: palma });
-  assert.equal(xato.status, 400);
-  assert.match(xato.body.error, /biriktirilmagan/);
+  // To'g'ridan-to'g'ri id yuborsa ham qabul qilinmaydi — ikkala vitrina ham
+  for (const rang of ['Palma-rang', 'Abu-rang']) {
+    const v = (await H.id(
+      `SELECT id FROM production_units WHERE color = $1`, [rang])).id;
+    const xato = await shou('POST', `/api/sales/orders/${z.id}/assign`,
+      { item_id: qator.id, unit_id: v });
+    assert.equal(xato.status, 400, rang);
+    assert.match(xato.body.error, /vitrinadagi/);
+  }
 
-  // O'z nuqtasidagi esa biriktiriladi
+  //  T/M ombordagisi esa biriktiriladi
+  const tm = (await H.id(
+    `SELECT id FROM production_units WHERE color = 'TM-rang'`)).id;
   assert.equal((await shou('POST', `/api/sales/orders/${z.id}/assign`,
-    { item_id: qator.id, unit_id: uAbu.id })).status, 200);
+    { item_id: qator.id, unit_id: tm, qty: 1 })).status, 200);
+
+  //  Qator kataklari shu qoldiqdan quriladi: vitrina bu yerda ham yo'q
+  const savdoQoldiq = (await shou('GET', '/api/sales/stock')).body.rows;
+  assert.ok(savdoQoldiq.some((r) => r.color === 'TM-rang'), 'T/M ombor ko\'rinadi');
+  assert.ok(!savdoQoldiq.some((r) => ['Abu-rang', 'Palma-rang'].includes(r.color)),
+    'vitrina qoldig\'i savdo ro\'yxatida yo\'q');
+  assert.ok(savdoQoldiq.every((r) => r.product_type && r.product && r.free > 0));
 
   // Doirasi yo'q sotuvchi hammasini ko'radi
   const bosh = H.api(base, await H.sessionFor('Sinov sotuvchi'));
@@ -1412,6 +1427,65 @@ test('noto\'g\'ri kiritilgan konver ombordan bekor qilinadi', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   assert.equal((await mudir('PATCH', '/api/units/' + u.id,
     { status: 'cancelled' })).status, 403);
+});
+
+//  ── OMBORDA YO'Q MAHSULOT: eng yaqin konver va «Kutmoqda» ─────────────
+//
+//  Menejer avval T/M ombordan sotadi; omborda yo'q bo'lsa qatorni baribir
+//  yozadi va bron ishlab chiqarishdagi konverga qo'yiladi — OMBORGA ENG
+//  YAQINIGA. Buyurtma bitta nakladnoy bo'lib qoladi, holati «kutmoqda».
+test('omborda yo\'q mahsulot ishlab chiqarishdan bron qilinadi', async () => {
+  const STOL = (await H.id(`SELECT id FROM products WHERE sku LIKE 'STL-%' LIMIT 1`)).id;
+
+  //  Uchta konver yo'lda: rejalari har xil. Eng yaqini — 12-oktabr.
+  const kech = (await admin('POST', '/api/units/', { items: [
+    { product_id: STOL, qty: 3, color: 'Shabnam', section_id: ARRA,
+      fg_planned_on: '2026-12-20' }] })).body.created[0];
+  const erta = (await admin('POST', '/api/units/', { items: [
+    { product_id: STOL, qty: 3, color: 'Shabnam', section_id: ARRA,
+      fg_planned_on: '2026-10-12' }] })).body.created[0];
+
+  //  Qator kataklari T/M ombor qoldig'idan quriladi — bu mahsulot u yerda yo'q
+  const qoldiq = (await admin('GET', '/api/sales/stock')).body.rows;
+  assert.ok(!qoldiq.some((r) => r.product_id === STOL), 'omborda yo\'q');
+
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: STOL, qty: 3, color: 'Shabnam', unit_price: 100 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+
+  //  Nomzodlar: omborga eng yaqini tepada va sanasi bilan
+  const n = (await admin('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${qator.id}`)).body.rows;
+  assert.equal(n[0].id, erta.id, 'omborga eng yaqin konver birinchi');
+  assert.equal(String(n[0].eta).slice(0, 10), '2026-10-12');
+  assert.equal(n[0].eta_src, 'reja');
+  assert.ok(n.some((u) => u.id === kech.id), 'keyingisi ham ro\'yxatda');
+
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: erta.id, qty: 3 })).status, 200);
+
+  //  Buyurtma KUTMOQDA: bron to'liq, lekin mahsulot hali omborda emas
+  const o = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
+  assert.equal(o.status, 'reserved');
+  assert.equal(Number(o.assigned_qty), 3);
+  assert.equal(Number(o.in_warehouse_qty), 0, 'hali omborga kelmagan');
+
+  const kutmoqda = (await admin('GET', '/api/sales/orders?status=waiting')).body.rows;
+  assert.ok(kutmoqda.some((x) => x.id === z.id), 'kutmoqda filtri');
+
+  //  Bron qilingan konver yonida omborga tushish sanasi turadi
+  const u = (await admin('GET', '/api/sales/orders/' + z.id)).body.units[0];
+  assert.equal(String(u.eta).slice(0, 10), '2026-10-12');
+
+  //  Omborga kelgach ro'yxatdan chiqadi — «kutmoqda» saqlanmaydi,
+  //  har safar bronlardan hisoblanadi.
+  assert.equal((await admin('POST', `/api/units/${erta.id}/to-warehouse`,
+    { warehouse_code: 'TM' })).status, 200);
+  const keyin = (await admin('GET', '/api/sales/orders?status=waiting')).body.rows;
+  assert.ok(!keyin.some((x) => x.id === z.id), 'omborga keldi — endi kutilmaydi');
+  const o2 = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
+  assert.equal(Number(o2.in_warehouse_qty), 3);
 });
 
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {

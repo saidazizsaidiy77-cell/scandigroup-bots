@@ -88,10 +88,15 @@ router.get('/products', need(...READ), wrap(async (_req, res) => {
                   FILTER (WHERE u.status = 'production') AS stock
            FROM production_units u
            LEFT JOIN sections s ON s.id = u.current_section_id
+           LEFT JOIN warehouses tmw ON tmw.code = 'TM'
            LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
                                WHERE r.unit_id = u.id) b ON true
           WHERE u.product_id = p.id AND u.qty > COALESCE(b.qty, 0)
-            AND (u.status = 'fg'
+            --  Savdo uchun «omborda bor» degani faqat T/M OMBOR. Vitrina
+            --  do'kon qoldig'i: u yerdagi mahsulot nuqtada sotiladi,
+            --  buyurtmaga olinmaydi (zavod qarori).
+            AND ((u.status = 'fg'
+                  AND COALESCE(u.warehouse_id, tmw.id) = tmw.id)
                  OR (u.is_stock AND COALESCE(s.is_hold, false)))) f ON true
       WHERE p.active
       ORDER BY g.sort, g.name, p.name`);
@@ -119,21 +124,63 @@ router.get('/destinations', need(...READ), wrap(async (_req, res) => {
   res.json({ rows });
 }));
 
+//  ★ T/M OMBOR QOLDIG'I — buyurtma qatori shundan yoziladi.
+//
+//  Menejer birinchi navbatda OMBORDA BORINI sotadi, shuning uchun qator
+//  kataklari katalogdan emas, haqiqiy qoldiqdan quriladi: turi →
+//  mahsulot → rangi → matosi, har biri alohida va faqat omborda bor
+//  kombinatsiyalar. Ilgari bitta uzun ro'yxat edi va menejer «Milano ·
+//  Penal (bo'sh: 7)» degan qatordan rangni topa olmasdi.
+//
+//  Faqat T/M ombor: vitrina qoldig'i nuqtada sotiladi, buyurtmaga
+//  olinmaydi. Bron qo'yilgan dona ayriladi — bo'shi ko'rinadi.
+router.get('/stock', need(...READ), wrap(async (_req, res) => {
+  const { rows } = await db.query(
+    `SELECT g.name AS product_type, g.sort AS type_sort, g.uom,
+            p.id AS product_id, p.name AS product,
+            NULLIF(TRIM(u.color), '')  AS color,
+            NULLIF(TRIM(u.fabric), '') AS fabric,
+            SUM(u.qty - COALESCE(b.qty, 0))::int AS free
+       FROM production_units u
+       JOIN products p        ON p.id = u.product_id
+       JOIN product_groups g  ON g.id = p.group_id
+       JOIN warehouses tmw    ON tmw.code = 'TM'
+       LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
+                           WHERE r.unit_id = u.id) b ON true
+      WHERE u.status = 'fg'
+        AND COALESCE(u.warehouse_id, tmw.id) = tmw.id
+        AND u.qty > COALESCE(b.qty, 0)
+      GROUP BY g.name, g.sort, g.uom, p.id, p.name,
+               NULLIF(TRIM(u.color), ''), NULLIF(TRIM(u.fabric), '')
+      ORDER BY g.sort, g.name, p.name, 6, 7`);
+  res.json({ rows });
+}));
+
 // ──────────────────────────────────────────────────────────────── RO'YXAT
+//  «Kutmoqda» — saqlanadigan holat EMAS, bronlardan hisoblanadi: buyurtma
+//  bron qilingan, lekin bronning bir qismi hali ishlab chiqarishda.
+//  Saqlangan belgi bir kun haqiqatdan ajralib qolardi (konver omborga
+//  keldi — belgi eski holida qolardi), shuning uchun filtr ham shartdan
+//  o'tadi, ustundan emas.
 router.get('/orders', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
+  const kutmoqda = req.query.status === 'waiting';
   const { rows } = await db.query(
     `SELECT * FROM v_sales_orders
       WHERE ($1::text[] IS NULL OR channel = ANY($1))
         AND ($2::text IS NULL OR status = $2)
+        AND (NOT $6::boolean
+             OR (status IN ('reserved', 'to_ship')
+                 AND assigned_qty > in_warehouse_qty))
         AND ($3::int  IS NULL OR customer_id = $3)
         AND ($4::int  IS NULL OR manager_id = $4)
         AND ($5::text IS NULL OR order_no ILIKE '%' || $5 || '%'
              OR customer_name ILIKE '%' || $5 || '%')
       ORDER BY ordered_on DESC, id DESC
       LIMIT 500`,
-    [chans, req.query.status || null, req.query.customer_id || null,
-     req.query.manager_id || null, req.query.q || null]);
+    [chans, kutmoqda ? null : (req.query.status || null),
+     req.query.customer_id || null,
+     req.query.manager_id || null, req.query.q || null, kutmoqda]);
   res.json({ rows });
 }));
 
@@ -164,7 +211,10 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
     `SELECT u.id, r.order_item_id, u.conveyor_no, r.qty, u.qty AS unit_qty,
             u.color, u.fabric, u.status, u.is_stock,
             s.name AS section, sh.name AS shop,
-            CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse
+            CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse,
+            --  Hali yo'ldagi konver omborga qachon tushadi: buyurtma
+            --  «kutmoqda» deb turganda menejer mijozga shu kunni aytadi.
+            reg.fg_on AS eta, reg.fg_src AS eta_src
        FROM unit_reservations r
        JOIN order_items i      ON i.id = r.order_item_id
        JOIN production_units u ON u.id = r.unit_id
@@ -172,6 +222,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
        LEFT JOIN shops sh      ON sh.id = s.shop_id
        LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
                                    (SELECT id FROM warehouses WHERE code = 'TM'))
+       LEFT JOIN v_unit_register reg ON reg.id = u.id
       WHERE i.order_id = $1 AND u.status <> 'cancelled'
       ORDER BY u.conveyor_no`, [req.params.id])).rows;
 
@@ -349,16 +400,14 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
 //  nuqtadagi OMBOR mahsulotini bron qila olmaydi (izoh:
 //  modules/warehouse.js, `whScope`). Ishlab chiqarishdagi konver esa
 //  hali omborda emas — u hammaga ochiq.
+//  ★ VITRINA SAVDOGA TAKLIF QILINMAYDI. Vitrinadagi mahsulot o'sha
+//  nuqtada sotiladi — uni buyurtmaga olib ketish do'konni bo'shatardi.
+//  Shuning uchun tayyor mahsulotdan faqat T/M ombor chiqadi, vitrina
+//  qoldig'i esa ombor sahifasida ko'rinaveradi.
 const CANDIDATE_WHERE = `
   u.status IN ('fg', 'production')
   AND u.qty > COALESCE(b.qty, 0)
-  AND (u.status <> 'fg' OR $4::int[] IS NULL
-       OR COALESCE(u.warehouse_id, tmw.id) = ANY($4) OR wh.code = 'TM')`;
-
-const whIds = (req) => {
-  const ids = req.user?.scope_warehouse_ids || [];
-  return ids.length ? ids : null;
-};
+  AND (u.status <> 'fg' OR wh.code = 'TM')`;
 
 router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
@@ -382,6 +431,10 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
             COALESCE(b.qty, 0)::int AS reserved_qty,
             (u.qty - COALESCE(b.qty, 0))::int AS free_qty,
             COALESCE(s.is_hold, false) AS waiting,
+            --  Omborga qachon tushadi: fakt → tsex boshlig'i qo'ygan reja →
+            --  marshrut va quvvatdan taxmin (v_unit_register.fg_on).
+            --  Menejer mijozga «shu kuni beramiz» deyishi uchun shu sana.
+            r.fg_on AS eta, r.fg_src AS eta_src,
             (LOWER(COALESCE(u.color, '')) = LOWER(COALESCE($2, ''))
              OR $2 IS NULL) AS color_ok,
             (LOWER(COALESCE(u.fabric, '')) = LOWER(COALESCE($3, ''))
@@ -391,13 +444,17 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        LEFT JOIN shops sh   ON sh.id = s.shop_id
        LEFT JOIN warehouses tmw ON tmw.code = 'TM'
        LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id, tmw.id)
-       LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
-                           WHERE r.unit_id = u.id) b ON true
+       LEFT JOIN v_unit_register r ON r.id = u.id
+       LEFT JOIN LATERAL (SELECT SUM(r2.qty) AS qty FROM unit_reservations r2
+                           WHERE r2.unit_id = u.id) b ON true
       WHERE u.product_id = $1 AND ${CANDIDATE_WHERE}
-      ORDER BY (u.status = 'fg') DESC, color_ok DESC, fabric_ok DESC,
-               u.conveyor_no, u.part
+      --  Avval omborda turgani, keyin OMBORGA ENG YAQINI: mijoz tezroq
+      --  oladigan konver tepada tursin. Sanasi yo'q (zahira — buyurtma
+      --  kutmoqda) oxirida: unga muddat bashorat qilinmaydi.
+      ORDER BY (u.status = 'fg') DESC, r.fg_on ASC NULLS LAST,
+               color_ok DESC, fabric_ok DESC, u.conveyor_no, u.part
       LIMIT 200`,
-    [it.product_id, it.color || null, it.fabric || null, whIds(req)]);
+    [it.product_id, it.color || null, it.fabric || null]);
   res.json({ item: it, rows });
 }));
 
@@ -436,17 +493,17 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
     if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
     if (u.status === 'shipped') throw new Error(`${u.conveyor_no}: jo'natib bo'lingan`);
 
-    //  Vitrina doirasi serverda ham tekshiriladi: klient ro'yxatdan
-    //  tanlamay, to'g'ridan-to'g'ri id yuborishi mumkin. Ishlab
-    //  chiqarishdagi konver hali omborda emas — unga doira tegmaydi.
-    const ids = whIds(req);
-    if (u.status === 'fg' && ids) {
+    //  Tayyor mahsulot faqat T/M ombordan olinadi — vitrinadagi mahsulot
+    //  o'sha nuqtaniki. Tekshiruv serverda: klient ro'yxatdan tanlamay,
+    //  to'g'ridan-to'g'ri id yuborishi mumkin. Ishlab chiqarishdagi
+    //  konver hali omborda emas — unga bu qoida tegmaydi.
+    if (u.status === 'fg') {
       const ok = (await client.query(
         `SELECT 1 FROM warehouses w
           WHERE w.id = COALESCE($1, (SELECT id FROM warehouses WHERE code = 'TM'))
-            AND (w.id = ANY($2::int[]) OR w.code = 'TM')`,
-        [u.warehouse_id, ids])).rowCount;
-      if (!ok) throw new Error(`${u.conveyor_no}: bu ombor sizga biriktirilmagan`);
+            AND w.code = 'TM'`, [u.warehouse_id])).rowCount;
+      if (!ok) throw new Error(
+        `${u.conveyor_no}: vitrinadagi mahsulot buyurtmaga olinmaydi`);
     }
 
     //  Shu qatorning shu konverdagi eski broni ustiga qo'shiladi.

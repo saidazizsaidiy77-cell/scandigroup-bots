@@ -49,6 +49,7 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const d8 = v => !v ? '—' : (x => `${x.slice(8,10)}.${x.slice(5,7)}.${x.slice(2,4)}`)(String(v).slice(0,10));
 const money = (v) => {
   const x = Number(v) || 0;
   const [i, f] = (Math.abs(x) < 1e15 ? x.toFixed(2) : String(x)).split('.');
@@ -60,11 +61,23 @@ const money = (v) => {
 const STATUS = { new: 'Yangi', reserved: 'Bron qilingan',
                  to_ship: 'Omborda', shipped: "Jo'natilgan",
                  cancelled: 'Bekor qilingan' };
-const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['reserved', 'Bron qilingan'],
-                 ['to_ship', 'Omborda'], ['shipped', "Jo'natilgan"],
-                 ['cancelled', 'Bekor']];
+//  «Kutmoqda» — alohida holat emas, hisoblanadi: bron qo'yilgan, lekin
+//  bir qismi hali ishlab chiqarishda (server: `status=waiting`).
+const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['waiting', 'Kutmoqda'],
+                 ['reserved', 'Bron qilingan'], ['to_ship', 'Omborda'],
+                 ['shipped', "Jo'natilgan"], ['cancelled', 'Bekor']];
+
+//  Buyurtma holati EKRANDA: bronning bir qismi hali omborga kelmagan
+//  bo'lsa «Kutmoqda» deb ko'rsatiladi — mijozga aytiladigan gap shu.
+const statusOf = (o) =>
+  (o.status === 'reserved' || o.status === 'to_ship')
+  && Number(o.assigned_qty) > Number(o.in_warehouse_qty)
+    ? 'Kutmoqda' : (STATUS[o.status] || o.status);
 
 let rows = [], customers = [], managers = [], products = [], dests = [];
+//  T/M ombor qoldig'i: turi · mahsulot · rang · mato · bo'sh soni.
+//  Qator kataklari shundan quriladi — katalogdan emas.
+let stock = [];
 let status = '', canWrite = false;
 // Ochiq buyurtma: sarlavha, qatorlar va biriktirilgan konverlar.
 let cur = null;
@@ -73,11 +86,12 @@ async function boot(){
   canWrite = App.can('sales.manage');
   $('btnNew').innerHTML = canWrite
     ? `<button class="primary" onclick="openOrder(null)">Yangi buyurtma</button>` : '';
-  const [c, p, d, sg] = await Promise.all([
+  const [c, p, d, sg, st] = await Promise.all([
     App.api('/api/units/customers'), App.api('/api/sales/products'),
-    App.api('/api/sales/destinations'), App.api('/api/sales/suggest')]);
+    App.api('/api/sales/destinations'), App.api('/api/sales/suggest'),
+    App.api('/api/sales/stock')]);
   customers = c.customers; managers = c.managers; products = p.rows;
-  dests = d.rows;
+  dests = d.rows; stock = st.rows;
   $('dlColor').innerHTML = sg.colors.map(v => `<option value="${esc(v)}">`).join('');
   $('dlFabric').innerHTML = sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
   drawChips();
@@ -119,7 +133,7 @@ async function load(){
               o.in_warehouse_qty} tasi omborda</div>` : ''}</td>
       <td class="num">${money(o.amount)}</td>
       <td><span class="tag${o.status === 'cancelled' ? ' warn' : ''}"
-        >${esc(STATUS[o.status] || o.status)}</span></td>
+        >${esc(statusOf(o))}</span></td>
       <td class="num"><button onclick="openOrder(${o.id})">${canWrite ? '✎' : '→'}</button></td>
     </tr>`;
   }).join('') : '<tr><td class="muted" colspan="11">Buyurtma yo\'q</td></tr>';
@@ -154,7 +168,7 @@ function draw(){
         <div class="row" style="justify-content:space-between;margin-bottom:16px">
           <h1 style="margin:0">${isNew ? 'Yangi buyurtma' : esc(o.order_no)}</h1>
           <div class="row" style="gap:8px">
-            ${!isNew ? `<span class="tag">${esc(STATUS[o.status] || o.status)}</span>` : ''}
+            ${!isNew ? `<span class="tag">${esc(statusOf(o))}</span>` : ''}
             <button onclick="close_()">Yopish</button></div>
         </div>
 
@@ -203,7 +217,11 @@ function draw(){
 
         <h2 style="margin:22px 0 10px">Qatorlar</h2>
         <div style="overflow-x:auto"><table>
-          <thead><tr><th style="min-width:200px">Mahsulot</th><th>Rang</th><th>Mato</th>
+          <!--  Turi · Mahsulot · Rangi · Matosi — har biri alohida katak,
+                ro'yxati T/M ombor qoldig'idan quriladi. -->
+          <thead><tr><th style="min-width:120px">Turi</th>
+            <th style="min-width:170px">Mahsulot</th>
+            <th style="min-width:140px">Rangi</th><th style="min-width:140px">Matosi</th>
             <th class="num" style="width:80px">Soni</th>
             <th class="num" style="width:100px">Narx, $</th>
             <th class="num">Bron</th><th></th></tr></thead>
@@ -279,27 +297,106 @@ function drawAddr() {
   if (inp) inp.classList.toggle('need', !!(d && d.needs_address && !inp.value.trim()));
 }
 
+//  ── QATOR KATAKLARI ────────────────────────────────────────────────────
+//
+//  Turi · Mahsulot · Rangi · Matosi — HAR BIRI ALOHIDA katak. Ro'yxat
+//  T/M ombor qoldig'idan quriladi: menejer birinchi navbatda omborda
+//  BORINI sotadi va yonida nechta bo'sh qolganini ko'radi. Omborda yo'q
+//  narsani ham yozish mumkin — u ikkinchi guruhda turadi va bron ishlab
+//  chiqarishdan qo'yiladi (omborga eng yaqin konverdan).
+//
+//  Vitrina qoldig'i bu ro'yxatga kirmaydi: do'kondagi mahsulot o'sha
+//  nuqtada sotiladi (server: modules/sales.js, CANDIDATE_WHERE).
+const uniq = (a) => [...new Set(a.filter(Boolean))];
+const typeOf = (it) => it.type
+  || (products.find(x => x.id === Number(it.product_id)) || {}).product_type || '';
+
+//  Shu turdagi / mahsulotdagi qoldiq qatorlari
+const stockOf = (it) => stock.filter(r =>
+  (!typeOf(it) || r.product_type === typeOf(it))
+  && (!it.product_id || r.product_id === Number(it.product_id)));
+
+//  Aniq kombinatsiyaga nechta bo'sh dona bor
+function freeFor(it) {
+  if (!it.product_id) return null;
+  const rows = stock.filter(r => r.product_id === Number(it.product_id)
+    && (!it.color  || (r.color  || '') === it.color)
+    && (!it.fabric || (r.fabric || '') === it.fabric));
+  return rows.reduce((a, r) => a + Number(r.free || 0), 0);
+}
+
+//  Ikki guruhli ro'yxat: avval omborda borlari, keyin qolgan katalog.
+function opts(inStock, rest, value) {
+  const o = (v, label) => `<option value="${esc(v)}"${
+    String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`;
+  return `<option value="">— tanlang —</option>${
+    inStock.length ? `<optgroup label="T/M omborda">${
+      inStock.map(x => o(x.v, x.label)).join('')}</optgroup>` : ''}${
+    rest.length ? `<optgroup label="Omborda yo'q">${
+      rest.map(x => o(x.v, x.label)).join('')}</optgroup>` : ''}`;
+}
+
 function drawItems(){
   const o = cur.order;
   const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled';
   const dis = ro ? 'disabled' : '';
   $('tI').innerHTML = cur.items.length ? cur.items.map((it, i) => {
+    const t = typeOf(it);
     const p = products.find(x => x.id === Number(it.product_id));
     const need = Number(it.qty) || 0, got = Number(it.assigned_qty) || 0;
+    const free = freeFor(it);
+
+    // Turi
+    const tStock = uniq(stock.map(r => r.product_type))
+      .map(v => ({ v, label: `${v} · ${stock.filter(r => r.product_type === v)
+        .reduce((a, r) => a + r.free, 0)} ta` }));
+    const tRest = uniq(products.map(x => x.product_type))
+      .filter(v => !tStock.some(x => x.v === v)).map(v => ({ v, label: v }));
+
+    // Mahsulot — tanlangan turdagi
+    const pStock = uniq(stockOf({ type: t }).map(r => r.product_id)).map(id => {
+      const r = stock.find(x => x.product_id === id);
+      return { v: id, label: `${r.product} · ${stock
+        .filter(x => x.product_id === id).reduce((a, x) => a + x.free, 0)} ta` };
+    });
+    const pRest = products.filter(x => (!t || x.product_type === t)
+      && !pStock.some(y => Number(y.v) === x.id))
+      .map(x => ({ v: x.id, label: x.name }));
+
+    // Rang va mato — tanlangan mahsulotdagi qoldiqdan
+    const cRows = stock.filter(r => r.product_id === Number(it.product_id));
+    const colors = uniq(cRows.map(r => r.color)).map(v => ({ v,
+      label: `${v} · ${cRows.filter(r => r.color === v)
+        .reduce((a, r) => a + r.free, 0)} ta` }));
+    const fRows = cRows.filter(r => !it.color || (r.color || '') === it.color);
+    const fabrics = uniq(fRows.map(r => r.fabric)).map(v => ({ v,
+      label: `${v} · ${fRows.filter(r => r.fabric === v)
+        .reduce((a, r) => a + r.free, 0)} ta` }));
+
+    //  Qoldiqda yo'q qiymat yozilgan bo'lsa katak o'zi matn maydoniga
+    //  aylanadi: ro'yxat taklif, chegara emas.
+    const freeColor  = it.freeColor  || (it.color  && !colors.some(x => x.v === it.color));
+    const freeFabric = it.freeFabric || (it.fabric && !fabrics.some(x => x.v === it.fabric));
+
+    const cell = (list, val, onch, other, ph) => list.length && !other
+      ? `<select ${dis} onchange="${onch}" style="width:100%;min-width:135px">
+           ${opts(list, [], val)}<option value="__other">— boshqa —</option></select>`
+      : `<input value="${esc(val || '')}" ${dis} list="${ph}"
+               style="min-width:120px" placeholder="—"
+               oninput="setField(${i},'${ph === 'dlColor' ? 'color' : 'fabric'}',this.value)">`;
+
     return `<tr data-i="${i}">
-      <td><select class="p" ${dis} onchange="setField(${i},'product_id',this.value)">
-        <option value="">— tanlang —</option>
-        ${products.map(x => `<option value="${x.id}"
-          ${Number(it.product_id) === x.id ? 'selected' : ''}>${esc(x.name)} · ${
-            esc(x.product_type)}${x.free_fg || x.free_stock
-              ? ` (bo'sh: ${x.free_fg + x.free_stock})` : ''}</option>`).join('')}
-      </select></td>
-      <td><input value="${esc(it.color || '')}" ${dis} list="dlColor"
-                 style="max-width:120px" placeholder="—"
-                 oninput="setField(${i},'color',this.value)"></td>
-      <td><input value="${esc(it.fabric || '')}" ${dis} list="dlFabric"
-                 style="max-width:120px" placeholder="—"
-                 oninput="setField(${i},'fabric',this.value)"></td>
+      <td><select ${dis} onchange="setType(${i},this.value)"
+            style="width:100%;min-width:140px">
+        ${opts(tStock, tRest, t)}</select></td>
+      <td><select ${dis} onchange="setProduct(${i},this.value)"
+            style="width:100%;min-width:165px">
+        ${opts(pStock, pRest, it.product_id || '')}</select>
+        ${it.product_id ? `<div class="muted" style="font-size:11px">${
+          free ? `T/M omborda ${free} ta bo'sh`
+               : 'Omborda yo\'q — ishlab chiqarishdan'}</div>` : ''}</td>
+      <td>${cell(colors, it.color, `setPick(${i},'color',this.value)`, freeColor, 'dlColor')}</td>
+      <td>${cell(fabrics, it.fabric, `setPick(${i},'fabric',this.value)`, freeFabric, 'dlFabric')}</td>
       <td class="num"><input type="number" min="1" value="${it.qty ?? 1}" ${dis}
             style="max-width:70px;text-align:right"
             oninput="setField(${i},'qty',this.value)">
@@ -312,7 +409,27 @@ function drawItems(){
           ? `<button onclick="openPick(${it.id})">Bron</button> ` : ''}${
         ro ? '' : `<button onclick="delItem(${i})">✕</button>`}</td>
     </tr>`;
-  }).join('') : '<tr><td class="muted" colspan="7">Qator qo\'shilmagan</td></tr>';
+  }).join('') : '<tr><td class="muted" colspan="8">Qator qo\'shilmagan</td></tr>';
+}
+
+//  Turi o'zgarsa mahsulot, rang va mato tozalanadi: eski tanlov yangi
+//  turga to'g'ri kelmaydi va jimgina noto'g'ri qator bo'lib qolardi.
+function setType(i, v){
+  Object.assign(cur.items[i], { type: v, product_id: null, color: '', fabric: '',
+                                freeColor: false, freeFabric: false });
+  drawItems();
+}
+function setProduct(i, v){
+  Object.assign(cur.items[i], { product_id: v || null, color: '', fabric: '',
+                                freeColor: false, freeFabric: false });
+  drawItems();
+}
+//  «— boshqa —» tanlansa katak matn maydoniga aylanadi.
+function setPick(i, k, v){
+  const it = cur.items[i];
+  if (v === '__other') { it[k] = ''; it[k === 'color' ? 'freeColor' : 'freeFabric'] = true; }
+  else it[k] = v;
+  drawItems();
 }
 
 // Bron qilingan konverlar: qaysi qatorga, nechtasi, qayerda turibdi.
@@ -324,7 +441,7 @@ function drawUnits(){
     <h2 style="margin:0 0 10px">Bron qilingan konverlar</h2>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>K&#8470;</th><th>Mahsulot qatori</th><th>Rang</th><th>Mato</th>
-        <th class="num">Bron</th><th>Qayerda</th><th></th></tr></thead>
+        <th class="num">Bron</th><th>Qayerda</th><th>Omborga</th><th></th></tr></thead>
       <tbody>${cur.units.map(u => {
         const it = cur.items.find(x => x.id === u.order_item_id);
         return `<tr>
@@ -336,6 +453,10 @@ function drawUnits(){
           <td class="num"><b>${u.qty}</b>${u.unit_qty > u.qty
             ? `<span class="muted" style="font-size:11px"> / ${u.unit_qty}</span>` : ''}</td>
           <td>${where(u)}</td>
+          <td>${u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
+            : u.eta ? `${d8(u.eta)}${u.eta_src && u.eta_src !== 'fakt'
+                ? `<div class="muted" style="font-size:11px">${esc(u.eta_src)}</div>` : ''}`
+            : '<span class="muted">—</span>'}</td>
           <td class="num">${ro ? ''
             : `<button onclick="unassign(${u.id})">Bronni olish</button>`}</td>
         </tr>`; }).join('')}</tbody>
@@ -451,13 +572,20 @@ async function openPick(itemId){
         <p class="muted" style="margin-bottom:16px">${esc(it?.product || '')}${
           it?.color ? ' · ' + esc(it.color) : ''}${it?.fabric ? ' · ' + esc(it.fabric) : ''}
           · yopilmagani: <b>${left}</b> ${esc(it?.uom || '')}</p>
+        <!--  Tartib: avval T/M omborda turgani, keyin OMBORGA ENG YAQINI.
+              Mijoz tezroq oladigan konver tepada tursin. -->
         <div style="overflow-x:auto"><table>
-          <thead><tr><th>K&#8470;</th><th>Qayerda</th><th>Rang</th><th>Mato</th>
+          <thead><tr><th>K&#8470;</th><th>Qayerda</th><th>Omborga</th>
+            <th>Rang</th><th>Mato</th>
             <th class="num">Bo'sh</th><th class="num" style="width:90px">Bron</th>
             <th></th></tr></thead>
           <tbody>${pick.rows.length ? pick.rows.map(u => `<tr>
             <td><strong>${esc(u.conveyor_no)}</strong></td>
             <td>${where(u)}</td>
+            <td>${u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
+              : u.eta ? `${d8(u.eta)}${u.eta_src && u.eta_src !== 'fakt'
+                  ? `<div class="muted" style="font-size:11px">${esc(u.eta_src)}</div>` : ''}`
+              : '<span class="muted">—</span>'}</td>
             <td class="${u.color_ok ? '' : 'muted'}">${u.color ? esc(u.color) : '—'}</td>
             <td class="${u.fabric_ok ? '' : 'muted'}">${u.fabric ? esc(u.fabric) : '—'}</td>
             <!-- Konverda nechta bo'sh dona qolgani. Bir qismi boshqa
@@ -469,8 +597,8 @@ async function openPick(itemId){
                   style="max-width:80px;text-align:right"></td>
             <td class="num"><button class="primary" onclick="assign(${u.id})">Bron</button></td>
           </tr>`).join('')
-            : `<tr><td class="muted" colspan="7">Bo'sh konver yo'q —
-                 omborda ham, zahirada ham, ishlab chiqarishda ham</td></tr>`}</tbody>
+            : `<tr><td class="muted" colspan="8">Bo'sh konver yo'q —
+                 T/M omborda ham, zahirada ham, ishlab chiqarishda ham</td></tr>`}</tbody>
         </table></div>
       </div></div>`;
 }
