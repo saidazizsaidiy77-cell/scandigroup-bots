@@ -27,6 +27,18 @@ const channelsOf = (req) => {
   return c.length ? c : null;
 };
 
+//  Zakaz raqami qo'lda ham qo'yiladi: zavod o'z daftarida raqam yuritadi
+//  va nakladnoyda o'sha raqam turishi kerak. Bo'sh qoldirilsa tizim
+//  o'zi beradi (Z26-0001). Raqam butun bazada yagona — bir xil raqamli
+//  ikkita buyurtma bo'lsa konverdagi zakaz raqami qaysi biriga tegishli
+//  ekani bilinmasdi (`orders.order_no` UNIQUE).
+const cleanNo = (v) => {
+  const t = String(v ?? '').trim().replace(/\s+/g, ' ');
+  if (!t) return null;
+  if (t.length > 40) throw new Error('Zakaz raqami juda uzun');
+  return t;
+};
+
 // Z26-0001. Konveyer raqami bilan bir xil shakl: yil + ketma-ket raqam.
 async function nextOrderNo(client) {
   const prefix = `Z${String(new Date().getFullYear()).slice(-2)}-`;
@@ -124,35 +136,62 @@ router.get('/destinations', need(...READ), wrap(async (_req, res) => {
   res.json({ rows });
 }));
 
-//  ★ T/M OMBOR QOLDIG'I — buyurtma qatori shundan yoziladi.
+//  ★ QATOR RO'YXATI — HAQIQIY KONVERLARDAN
 //
-//  Menejer birinchi navbatda OMBORDA BORINI sotadi, shuning uchun qator
-//  kataklari katalogdan emas, haqiqiy qoldiqdan quriladi: turi →
-//  mahsulot → rangi → matosi, har biri alohida va faqat omborda bor
-//  kombinatsiyalar. Ilgari bitta uzun ro'yxat edi va menejer «Milano ·
-//  Penal (bo'sh: 7)» degan qatordan rangni topa olmasdi.
+//  Menejer qatorga katalogdan emas, MAVJUD mahsulotdan yozadi: mahsulot →
+//  rangi → matosi, har biri alohida katak. Zavodda mahsulot, rangi va
+//  matosi birgalikda bitta narsa — shuning uchun ro'yxat ham shu uchligi
+//  bilan keladi va rang qo'lda yozilmaydi: yo'q rang yozilsa unga hech
+//  qachon konver topilmasdi.
 //
-//  Faqat T/M ombor: vitrina qoldig'i nuqtada sotiladi, buyurtmaga
-//  olinmaydi. Bron qo'yilgan dona ayriladi — bo'shi ko'rinadi.
+//  Uch manba, shu tartibda:
+//    · `fg`         — T/M OMBOR qoldig'i, darrov beriladi (vitrina EMAS:
+//                     do'kondagi mahsulot ko'rgazmada turadi, sotuv T/M
+//                     ombordan ketadi);
+//    · `stock`      — ZAHIRA: kutish bo'limida buyurtma kutmoqda. Rangi
+//                     hali yo'q — mijoz aytgan rangga bo'yaladi, shuning
+//                     uchun unga ISTALGAN rang buyurtma qilinadi;
+//    · `production` — yo'ldagi konverlar, rangi allaqachon ma'lum.
+//
+//  To'rtinchi manba yo'q. «Buyurtma uchun yangi konver ochilmaydi» degan
+//  zavod qoidasi shuni anglatadi: sotiladigan narsa allaqachon mavjud.
+//  Bron qo'yilgan dona hammasida ayriladi — bo'shi ko'rinadi.
+const STOCK_SQL = `
+  SELECT $1::text AS src,
+         CASE $1 WHEN 'fg' THEN 1 WHEN 'stock' THEN 2 ELSE 3 END AS src_sort,
+         g.name AS product_type, g.sort AS type_sort, g.uom,
+         p.id AS product_id, p.name AS product,
+         NULLIF(TRIM(u.color), '')  AS color,
+         NULLIF(TRIM(u.fabric), '') AS fabric,
+         SUM(u.qty - COALESCE(b.qty, 0))::int AS free
+    FROM production_units u
+    JOIN products p        ON p.id = u.product_id
+    JOIN product_groups g  ON g.id = p.group_id
+    JOIN warehouses tmw    ON tmw.code = 'TM'
+    LEFT JOIN sections sc  ON sc.id = u.current_section_id
+    LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
+                        WHERE r.unit_id = u.id) b ON true
+   WHERE u.qty > COALESCE(b.qty, 0)
+     AND CASE $1
+           WHEN 'fg' THEN u.status = 'fg'
+                          AND COALESCE(u.warehouse_id, tmw.id) = tmw.id
+           WHEN 'stock' THEN u.status = 'production'
+                          AND u.is_stock AND COALESCE(sc.is_hold, false)
+           ELSE u.status = 'production'
+                          AND NOT (u.is_stock AND COALESCE(sc.is_hold, false))
+         END
+   GROUP BY g.name, g.sort, g.uom, p.id, p.name,
+            NULLIF(TRIM(u.color), ''), NULLIF(TRIM(u.fabric), '')`;
+
 router.get('/stock', need(...READ), wrap(async (_req, res) => {
+  const branch = (src) => STOCK_SQL.replace(/\$1/g, `'${src}'`);
   const { rows } = await db.query(
-    `SELECT g.name AS product_type, g.sort AS type_sort, g.uom,
-            p.id AS product_id, p.name AS product,
-            NULLIF(TRIM(u.color), '')  AS color,
-            NULLIF(TRIM(u.fabric), '') AS fabric,
-            SUM(u.qty - COALESCE(b.qty, 0))::int AS free
-       FROM production_units u
-       JOIN products p        ON p.id = u.product_id
-       JOIN product_groups g  ON g.id = p.group_id
-       JOIN warehouses tmw    ON tmw.code = 'TM'
-       LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
-                           WHERE r.unit_id = u.id) b ON true
-      WHERE u.status = 'fg'
-        AND COALESCE(u.warehouse_id, tmw.id) = tmw.id
-        AND u.qty > COALESCE(b.qty, 0)
-      GROUP BY g.name, g.sort, g.uom, p.id, p.name,
-               NULLIF(TRIM(u.color), ''), NULLIF(TRIM(u.fabric), '')
-      ORDER BY g.sort, g.name, p.name, 6, 7`);
+    `${branch('fg')}
+     UNION ALL
+     ${branch('stock')}
+     UNION ALL
+     ${branch('production')}
+     ORDER BY src_sort, type_sort, product_type, product, color, fabric`);
   res.json({ rows });
 }));
 
@@ -234,13 +273,17 @@ router.post('/orders', need(...WRITE), wrap(async (req, res) => {
   const { customer_id, manager_id, ordered_on, due_on, note, items = [],
           ship_to, address, receiver_phone } = req.body;
   if (!customer_id) throw new Error('Mijoz tanlanmagan');
+  const qolda = cleanNo(req.body.order_no);
 
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     await assertCustomer(client, req, customer_id);
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('order_no'))`);
-    const no = await nextOrderNo(client);
+    const no = qolda || await nextOrderNo(client);
+    if (qolda && (await client.query(
+        `SELECT 1 FROM orders WHERE order_no = $1`, [qolda])).rowCount)
+      throw new Error(`«${qolda}» raqamli buyurtma allaqachon bor`);
     const o = (await client.query(
       `INSERT INTO orders (order_no, customer_id, manager_id, ordered_on, due_on,
                            note, created_by, ship_to, address, receiver_phone)
@@ -359,6 +402,23 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
        due_on || null, note ?? null, status || null,
        await assertDest(client, ship_to, address ?? cur.address),
        address ?? null, receiver_phone ?? null]);
+
+    //  Raqam o'zgarsa konverlardagi zakaz raqami ham ko'chadi: u yerda
+    //  MATN turadi (`production_units.order_no`) va jurnalda tsex
+    //  boshlig'i o'sha raqamni ko'radi — eski raqam qolib ketsa ikkisi
+    //  bir-biridan ajralib qolardi.
+    const yangiNo = cleanNo(req.body.order_no);
+    if (yangiNo && yangiNo !== cur.order_no) {
+      if ((await client.query(
+          `SELECT 1 FROM orders WHERE order_no = $1 AND id <> $2`,
+          [yangiNo, req.params.id])).rowCount)
+        throw new Error(`«${yangiNo}» raqamli buyurtma allaqachon bor`);
+      await client.query(`UPDATE orders SET order_no = $2 WHERE id = $1`,
+                         [req.params.id, yangiNo]);
+      await client.query(
+        `UPDATE production_units SET order_no = $2 WHERE order_no = $1`,
+        [cur.order_no, yangiNo]);
+    }
 
     if (Array.isArray(items)) await saveItems(client, Number(req.params.id), items);
     await audit(req, { module: 'sales', action: 'update', entity: 'order',

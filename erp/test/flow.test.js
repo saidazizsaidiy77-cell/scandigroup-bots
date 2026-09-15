@@ -1445,9 +1445,13 @@ test('omborda yo\'q mahsulot ishlab chiqarishdan bron qilinadi', async () => {
     { product_id: STOL, qty: 3, color: 'Shabnam', section_id: ARRA,
       fg_planned_on: '2026-10-12' }] })).body.created[0];
 
-  //  Qator kataklari T/M ombor qoldig'idan quriladi — bu mahsulot u yerda yo'q
+  //  Qator ro'yxati uch manbadan: bu mahsulot T/M omborda YO'Q, lekin
+  //  ishlab chiqarishda bor — shuning uchun qatorga yozib bo'ladi.
   const qoldiq = (await admin('GET', '/api/sales/stock')).body.rows;
-  assert.ok(!qoldiq.some((r) => r.product_id === STOL), 'omborda yo\'q');
+  assert.ok(!qoldiq.some((r) => r.product_id === STOL && r.src === 'fg'),
+    'T/M omborda yo\'q');
+  assert.ok(qoldiq.some((r) => r.product_id === STOL && r.src === 'production'),
+    'ishlab chiqarishda bor');
 
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
   const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
@@ -1486,6 +1490,77 @@ test('omborda yo\'q mahsulot ishlab chiqarishdan bron qilinadi', async () => {
   assert.ok(!keyin.some((x) => x.id === z.id), 'omborga keldi — endi kutilmaydi');
   const o2 = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
   assert.equal(Number(o2.in_warehouse_qty), 3);
+});
+
+//  ── ZAHIRAGA RANG BUYURTMA QILINADI ──────────────────────────────────
+//
+//  Zahira kutish bo'limida rangsiz turadi: mijoz aytgan rangga bo'yaladi.
+//  Shuning uchun qator ro'yxatida u alohida manba (`stock`) bo'lib
+//  keladi va unga istalgan rang buyurtma qilinadi.
+test('zahira alohida manba bo\'lib chiqadi', async () => {
+  const HOLD = (await H.id(
+    `SELECT id FROM sections WHERE is_hold ORDER BY id LIMIT 1`)).id;
+  const z = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 6, section_id: HOLD, is_stock: true }] })).body.created[0];
+
+  const rows = (await admin('GET', '/api/sales/stock')).body.rows;
+  const zahira = rows.filter((r) => r.src === 'stock');
+  assert.ok(zahira.some((r) => r.product_id === PENAL), 'zahira ro\'yxatda');
+  assert.ok(zahira.every((r) => r.free > 0));
+
+  //  Uch manba ham o'z nomi bilan keladi va T/M ombor birinchi turadi
+  assert.deepEqual([...new Set(rows.map((r) => r.src))].slice(0, 1), ['fg']);
+  assert.ok(rows.some((r) => r.src === 'production'));
+
+  //  Rangsiz zahiraga rang yozib buyurtma beriladi — konver o'zi
+  //  qimirlamaydi, bron ustiga qo'yiladi.
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const o = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2, color: 'Pistoq', unit_price: 100 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + o.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${o.id}/assign`,
+    { item_id: qator.id, unit_id: z.id, qty: 2 })).status, 200);
+  const u = (await admin('GET', '/api/sales/orders/' + o.id)).body.units[0];
+  assert.equal(u.is_stock, true);
+  assert.equal(u.qty, 2, 'konver bo\'linmaydi — bron 2 ta');
+});
+
+//  ── ZAKAZ RAQAMI QO'LDA ──────────────────────────────────────────────
+test('zakaz raqami qo\'lda qo\'yiladi va konverga ham ko\'chadi', async () => {
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const o = (await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, order_no: '  ZV-77 ', items: [] })).body;
+  assert.equal(o.order_no, 'ZV-77', 'bo\'sh joylar tozalanadi');
+
+  //  Takrorlanmaydi
+  const bor = await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, order_no: 'ZV-77', items: [] });
+  assert.equal(bor.status, 400);
+  assert.match(bor.body.error, /allaqachon bor/);
+
+  //  Bo'sh qoldirilsa tizim beradi
+  const avto = (await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, items: [] })).body;
+  assert.match(avto.order_no, /^Z\d\d-\d{4}$/);
+
+  //  Raqam o'zgarsa konverdagi zakaz raqami ham ko'chadi
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: 'Zakaz', unit_price: 50,
+      is_opening: true, fg_on: '2026-09-03' }] })).body.created[0];
+  const q2 = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, color: 'Zakaz' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + q2.id)).body.items[0];
+  await admin('POST', `/api/sales/orders/${q2.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 1 });
+  assert.equal((await H.id(
+    `SELECT order_no FROM production_units WHERE id = $1`, [u.id])).order_no,
+    q2.order_no);
+
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + q2.id,
+    { order_no: 'ZV-101' })).status, 200);
+  assert.equal((await H.id(
+    `SELECT order_no FROM production_units WHERE id = $1`, [u.id])).order_no,
+    'ZV-101', 'konverdagi raqam ham ko\'chdi');
 });
 
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {

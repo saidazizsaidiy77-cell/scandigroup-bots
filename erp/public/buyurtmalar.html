@@ -12,6 +12,30 @@
 <meta name="apple-mobile-web-app-title" content="ZELTA">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="stylesheet" href="/style.css">
+<style>
+/*  Buyurtma oynasi — TO'LIQ EKRAN. Ilgari tor modal edi: qatorlar
+    jadvali sig'masdi va maydonlar bir-birining ostiga tushib ketardi.
+    Nomi `order-view`: `sheet` style.css da BAND (jadval-kiritish uslubi,
+    u yerda kataklar shaffof) va nomi to'qnashsa maydonlar ko'rinmay
+    qolardi. */
+.order-view{position:fixed;inset:0;background:var(--bg);z-index:40;overflow:auto}
+.order-in{max-width:1180px;margin:0 auto;padding:0 20px 64px}
+.order-top{position:sticky;top:0;z-index:2;background:var(--bg);
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:18px 0 16px;border-bottom:1px solid var(--line);margin-bottom:24px}
+/*  Maydonlar bir xil kenglikdagi ustunlarda: har katak o'z qatoridan
+    boshlanadi va yonidagi bilan TEKIS turadi. Ilgari flex edi va
+    mijoz ostidagi balans qatori qo'shnisini pastga surib yuborardi. */
+.fields{display:grid;gap:16px;
+  grid-template-columns:repeat(auto-fit,minmax(215px,1fr));align-items:start}
+.fields > div{min-width:0}
+/*  Katak ostidagi izoh joyi oldindan ajratilgan — matn chiqqanda
+    qo'shni maydon sakramaydi. */
+.hint{font-size:12px;color:var(--muted);margin-top:6px;min-height:17px}
+/*  Bo'limlar kartochkada: fon ustida maydonning o'z foni deyarli
+    ko'rinmaydi va katak qayerda tugashi bilinmaydi. */
+.order-view .card{margin-bottom:16px}
+</style>
 <script src="/app.js"></script>
 </head>
 <body>
@@ -37,11 +61,6 @@
     <tbody id="tB"></tbody>
   </table></div>
 </div>
-
-<!-- Zavodda ishlatilgan rang va matolar: qator kataklari shundan
-     taklif qiladi. Yangisini yozish ham mumkin. -->
-<datalist id="dlColor"></datalist>
-<datalist id="dlFabric"></datalist>
 
 <div id="modalRoot"></div>
 
@@ -78,6 +97,8 @@ let rows = [], customers = [], managers = [], products = [], dests = [];
 //  T/M ombor qoldig'i: turi · mahsulot · rang · mato · bo'sh soni.
 //  Qator kataklari shundan quriladi — katalogdan emas.
 let stock = [];
+//  Zavodda ishlatilgan rang va matolar — zahiraga tanlash uchun.
+let palette = { colors: [], fabrics: [] };
 let status = '', canWrite = false;
 // Ochiq buyurtma: sarlavha, qatorlar va biriktirilgan konverlar.
 let cur = null;
@@ -92,8 +113,10 @@ async function boot(){
     App.api('/api/sales/stock')]);
   customers = c.customers; managers = c.managers; products = p.rows;
   dests = d.rows; stock = st.rows;
-  $('dlColor').innerHTML = sg.colors.map(v => `<option value="${esc(v)}">`).join('');
-  $('dlFabric').innerHTML = sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
+  //  Zavodda ishlatilgan rang va matolar. Faqat ZAHIRA qatorida
+  //  ishlatiladi: uning rangi hali yo'q, mijoz aytgani bo'yicha
+  //  bo'yaladi. Qolgan hamma joyda rang konverning o'zidan keladi.
+  palette = { colors: sg.colors, fabrics: sg.fabrics };
   drawChips();
   await load();
 }
@@ -163,111 +186,127 @@ function draw(){
           || o.status === 'to_ship';
   const dis = ro ? 'disabled' : '';
   $('modalRoot').innerHTML = `
-    <div class="overlay" onclick="if(event.target===this)close_()">
-      <div class="modal" style="max-width:940px">
-        <div class="row" style="justify-content:space-between;margin-bottom:16px">
+    <div class="order-view"><div class="order-in">
+      <div class="order-top">
+        <div class="row" style="gap:10px">
           <h1 style="margin:0">${isNew ? 'Yangi buyurtma' : esc(o.order_no)}</h1>
-          <div class="row" style="gap:8px">
-            ${!isNew ? `<span class="tag">${esc(statusOf(o))}</span>` : ''}
-            <button onclick="close_()">Yopish</button></div>
+          ${!isNew ? `<span class="tag">${esc(statusOf(o))}</span>` : ''}
         </div>
-
-        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <div style="flex:2;min-width:230px"><label>Mijoz</label>
-            <select id="oCust" ${dis} onchange="drawBalance()">
-              <option value="">— tanlang —</option>
-              ${customers.map(c => `<option value="${c.id}"
-                ${o.customer_id === c.id ? 'selected' : ''}>${esc(c.name)}${
-                  c.region ? ' · ' + esc(c.region) : ''}</option>`).join('')}
-            </select>
-            <div id="oBal" class="muted" style="font-size:12px;margin-top:5px"></div></div>
-          <div style="flex:1;min-width:160px"><label>Menejer</label>
-            <select id="oMgr" ${dis}><option value="">— o'zim —</option>
-              ${managers.map(m => `<option value="${m.id}"
-                ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
-            </select></div>
-          <div style="flex:1;min-width:130px"><label>Buyurtma sanasi</label>
-            <input id="oOn" type="date" ${dis}
-                   value="${(o.ordered_on || '').slice(0, 10)}"></div>
-          <div style="flex:1;min-width:130px"><label>Chiqib ketish sanasi</label>
-            <input id="oDue" type="date" ${dis}
-                   value="${(o.due_on || '').slice(0, 10)}"></div>
+        <div class="row" style="gap:8px">
+          ${ro ? '' : `<button class="primary" onclick="save()">Saqlash</button>`}
+          <button onclick="close_()">Yopish</button>
         </div>
+      </div>
 
-        <!-- Jo'natish tafsilotlari. Manzil faqat kerak bo'lganda so'raladi:
-             mashina zavodga kirsa manzil yozadigan narsa yo'q. -->
-        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;
-             margin-top:14px">
-          <div style="flex:1;min-width:200px"><label>Qayerga</label>
-            <select id="oDest" ${dis} onchange="drawAddr()">
-              <option value="">— tanlanmagan —</option>
-              ${dests.map(d => `<option value="${esc(d.code)}"
-                ${o.ship_to === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
-            </select></div>
-          <div style="flex:2;min-width:220px" id="oAddrBox"><label>Manzil</label>
-            <input id="oAddr" ${dis} value="${esc(o.address || '')}"
-                   placeholder="shahar, ko'cha, uy"></div>
-          <div style="flex:1;min-width:170px"><label>Kutib oluvchi raqami</label>
-            <input id="oPhone" ${dis} value="${esc(o.receiver_phone || '')}"
-                   placeholder="+998..."></div>
-        </div>
+      <div class="card"><div class="fields">
+        <!--  Zakaz raqami qo'lda ham yoziladi: zavod o'z daftarida raqam
+              yuritadi va nakladnoyda o'sha raqam turishi kerak. Bo'sh
+              qoldirilsa tizim o'zi beradi. -->
+        <div><label>Zakaz &#8470;</label>
+          <input id="oNo" ${dis} value="${esc(o.order_no || '')}"
+                 placeholder="${isNew ? 'avtomatik' : ''}">
+          <div class="hint">${isNew ? 'bo\'sh qoldirsangiz tizim beradi' : ''}</div></div>
+        <div><label>Mijoz</label>
+          <select id="oCust" ${dis} onchange="drawBalance()">
+            <option value="">— tanlang —</option>
+            ${customers.map(c => `<option value="${c.id}"
+              ${o.customer_id === c.id ? 'selected' : ''}>${esc(c.name)}${
+                c.region ? ' · ' + esc(c.region) : ''}</option>`).join('')}
+          </select>
+          <div id="oBal" class="hint"></div></div>
+        <div><label>Menejer</label>
+          <select id="oMgr" ${dis}><option value="">— o'zim —</option>
+            ${managers.map(m => `<option value="${m.id}"
+              ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+          </select><div class="hint"></div></div>
+        <div><label>Buyurtma sanasi</label>
+          <input id="oOn" type="date" ${dis}
+                 value="${(o.ordered_on || '').slice(0, 10)}">
+          <div class="hint"></div></div>
+      </div>
 
-        <div style="margin-top:14px"><label>Izoh</label>
+      <!-- Jo'natish tafsilotlari. Manzil faqat kerak bo'lganda so'raladi:
+           mashina zavodga kirsa manzil yozadigan narsa yo'q. Maydonlar
+           to'rttadan: bittasi yolg'iz qatorda qolib ketmasin. -->
+      <div class="fields" style="margin-top:18px;padding-top:18px;
+           border-top:1px solid var(--line)">
+        <div><label>Chiqib ketish sanasi</label>
+          <input id="oDue" type="date" ${dis}
+                 value="${(o.due_on || '').slice(0, 10)}">
+          <div class="hint"></div></div>
+        <div><label>Qayerga</label>
+          <select id="oDest" ${dis} onchange="drawAddr()">
+            <option value="">— tanlanmagan —</option>
+            ${dests.map(d => `<option value="${esc(d.code)}"
+              ${o.ship_to === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
+          </select><div class="hint"></div></div>
+        <div id="oAddrBox"><label>Manzil</label>
+          <input id="oAddr" ${dis} value="${esc(o.address || '')}"
+                 placeholder="shahar, ko'cha, uy"><div class="hint"></div></div>
+        <div><label>Kutib oluvchi raqami</label>
+          <input id="oPhone" ${dis} value="${esc(o.receiver_phone || '')}"
+                 placeholder="+998..."><div class="hint"></div></div>
+        <!-- Izoh butun kenglikda: u yozma gap, bitta ustunga sig'maydi -->
+        <div style="grid-column:1/-1"><label>Izoh</label>
           <input id="oNote" ${dis} value="${esc(o.note || '')}"></div>
+      </div></div>
 
-        <h2 style="margin:22px 0 10px">Qatorlar</h2>
-        <div style="overflow-x:auto"><table>
-          <!--  Turi · Mahsulot · Rangi · Matosi — har biri alohida katak,
-                ro'yxati T/M ombor qoldig'idan quriladi. -->
-          <thead><tr><th style="min-width:120px">Turi</th>
-            <th style="min-width:170px">Mahsulot</th>
-            <th style="min-width:140px">Rangi</th><th style="min-width:140px">Matosi</th>
-            <th class="num" style="width:80px">Soni</th>
-            <th class="num" style="width:100px">Narx, $</th>
-            <th class="num">Bron</th><th></th></tr></thead>
-          <tbody id="tI"></tbody>
-        </table></div>
-        ${ro ? '' : `<button style="margin-top:10px" onclick="addItem()">+ Qator qo'shish</button>`}
+      <div class="card">
+      <h2>Qatorlar</h2>
+      <div style="overflow-x:auto"><table style="table-layout:fixed;min-width:860px">
+        <!--  Ustunlar bir xil o'lchamda: kataklar tekis tursin. -->
+        <colgroup>
+          <col style="width:25%"><col style="width:19%"><col style="width:19%">
+          <col style="width:9%"><col style="width:11%"><col style="width:9%">
+          <col style="width:8%">
+        </colgroup>
+        <thead><tr><th>Mahsulot</th><th>Rangi</th><th>Matosi</th>
+          <th class="num">Soni</th><th class="num">Narx, $</th>
+          <th class="num">Bron</th><th></th></tr></thead>
+        <tbody id="tI"></tbody>
+      </table></div>
+      ${ro ? '' : `<button style="margin-top:12px" onclick="addItem()">+ Qator qo'shish</button>`}
+      </div>
 
-        <div id="unitsBox" style="margin-top:20px"></div>
+      <div id="unitsBox"></div>
 
-        ${ro ? '' : `<div class="row" style="gap:10px;margin-top:22px">
-          <button class="primary" onclick="save()">Saqlash</button>
-          ${isNew ? '' : `
-            <button onclick="sendToWh()">Omborga yuborish</button>
-            <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
-        </div>`}
-        <!--  PUL KIRIM SANASI — savdo menejeriniki. Buyurtma olinayotganda
-              so'ralmaydi: o'shanda hali gap bo'lmaydi. Saqlangan
-              buyurtmada esa istalgan payt yoziladi va tuzatiladi,
-              jo'natilgandan keyin ham. -->
-        ${!isNew && canWrite ? `
-          <div class="row" style="gap:10px;align-items:flex-end;margin-top:22px;
-               border-top:1px solid var(--line);padding-top:18px">
-            <div style="max-width:190px"><label>Pul kirim sanasi</label>
-              <input id="oPay" type="date" value="${
-                (o.payment_on || '').slice(0, 10)}"></div>
-            <button onclick="savePayment()">Saqlash</button>
-            <span class="muted" style="font-size:12px">pul qachon keladi \u2014
-              to'lovning o'zi kassada hisoblanadi</span>
-          </div>` : ''}
+      ${ro ? '' : `<div class="row" style="gap:10px;margin-top:26px">
+        <button class="primary" onclick="save()">Saqlash</button>
+        ${isNew ? '' : `
+          <button onclick="sendToWh()">Omborga yuborish</button>
+          <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
+      </div>`}
+      <!--  PUL KIRIM SANASI — savdo menejeriniki. Buyurtma olinayotganda
+            so'ralmaydi: o'shanda hali gap bo'lmaydi. Saqlangan
+            buyurtmada esa istalgan payt yoziladi va tuzatiladi,
+            jo'natilgandan keyin ham. -->
+      ${!isNew && canWrite ? `
+        <div class="row" style="gap:10px;align-items:flex-end;margin-top:26px;
+             border-top:1px solid var(--line);padding-top:20px;flex-wrap:wrap">
+          <div style="max-width:190px"><label>Pul kirim sanasi</label>
+            <input id="oPay" type="date" value="${
+              (o.payment_on || '').slice(0, 10)}"></div>
+          <button onclick="savePayment()">Saqlash</button>
+          <span class="muted" style="font-size:12px">pul qachon keladi —
+            to'lovning o'zi kassada hisoblanadi</span>
+        </div>` : ''}
 
-        ${o.status === 'to_ship' && canWrite ? `
-          <div class="row" style="gap:10px;margin-top:22px;align-items:center">
-            <span class="tag ok">Ombor mudirida</span>
-            <span class="muted" style="font-size:13px">${
-              (o.sent_to_wh_on || '').slice(0, 10)}${o.sent_by_name
-                ? ' \u00b7 ' + esc(o.sent_by_name) : ''} yubordi</span>
-            <button onclick="unsendWh()">Qaytarib olish</button>
-          </div>` : ''}
-        ${o.status === 'shipped' ? `
-          <p class="muted" style="margin-top:22px">Jo'natilgan: ${
-            (o.shipped_on || '').slice(0, 10)}${o.shipped_by_name
-              ? ' \u00b7 ' + esc(o.shipped_by_name) : ''}${o.payment_on
-              ? ` \u00b7 pul kirimi: <b>${(o.payment_on).slice(0, 10)}</b>` : ''}</p>` : ''}
-        ${isNew && canWrite ? `<p class="muted" style="margin-top:10px;font-size:13px">
-          Bron buyurtma saqlangandan keyin ochiladi.</p>` : ''}
-      </div></div>`;
+      ${o.status === 'to_ship' && canWrite ? `
+        <div class="row" style="gap:10px;margin-top:26px;align-items:center;flex-wrap:wrap">
+          <span class="tag ok">Ombor mudirida</span>
+          <span class="muted" style="font-size:13px">${
+            (o.sent_to_wh_on || '').slice(0, 10)}${o.sent_by_name
+              ? ' · ' + esc(o.sent_by_name) : ''} yubordi</span>
+          <button onclick="unsendWh()">Qaytarib olish</button>
+        </div>` : ''}
+      ${o.status === 'shipped' ? `
+        <p class="muted" style="margin-top:26px">Jo'natilgan: ${
+          (o.shipped_on || '').slice(0, 10)}${o.shipped_by_name
+            ? ' · ' + esc(o.shipped_by_name) : ''}${o.payment_on
+            ? ` · pul kirimi: <b>${(o.payment_on).slice(0, 10)}</b>` : ''}</p>` : ''}
+      ${isNew && canWrite ? `<p class="muted" style="margin-top:12px;font-size:13px">
+        Bron buyurtma saqlangandan keyin ochiladi.</p>` : ''}
+    </div></div>`;
   drawItems();
   drawUnits();
   drawBalance();
@@ -299,41 +338,81 @@ function drawAddr() {
 
 //  ── QATOR KATAKLARI ────────────────────────────────────────────────────
 //
-//  Turi · Mahsulot · Rangi · Matosi — HAR BIRI ALOHIDA katak. Ro'yxat
-//  T/M ombor qoldig'idan quriladi: menejer birinchi navbatda omborda
-//  BORINI sotadi va yonida nechta bo'sh qolganini ko'radi. Omborda yo'q
-//  narsani ham yozish mumkin — u ikkinchi guruhda turadi va bron ishlab
-//  chiqarishdan qo'yiladi (omborga eng yaqin konverdan).
+//  Mahsulot → Rangi → Matosi. Birinchi MAHSULOT tanlanadi (turi uning
+//  yonida yozilib turadi) — menejer mijozdan «Milano penal» deb eshitadi,
+//  «penal» deb emas. Hammasi ro'yxatdan: qo'lda yozish yo'q, chunki
+//  ro'yxatda bo'lmagan rang hech qachon konver topmasdi.
 //
-//  Vitrina qoldig'i bu ro'yxatga kirmaydi: do'kondagi mahsulot o'sha
-//  nuqtada sotiladi (server: modules/sales.js, CANDIDATE_WHERE).
-const uniq = (a) => [...new Set(a.filter(Boolean))];
-const typeOf = (it) => it.type
-  || (products.find(x => x.id === Number(it.product_id)) || {}).product_type || '';
+//  Uch manba, shu tartibda:
+//    · T/M omborda    — darrov beriladi;
+//    · Zahirada       — kutish bo'limida buyurtma kutmoqda, RANGI HALI
+//                       YO'Q: mijoz aytgan rangga bo'yaladi, shuning
+//                       uchun zahiraga ISTALGAN rang buyurtma qilinadi;
+//    · Ishlab chiqarishda — yo'lda, rangi allaqachon ma'lum.
+//
+//  Vitrina yo'q: do'kondagi mahsulot ko'rgazmada turadi, sotuv T/M
+//  ombordan ketadi.
+const SRC = [['fg', 'T/M omborda'], ['stock', 'Zahirada'],
+             ['production', 'Ishlab chiqarishda']];
 
-//  Shu turdagi / mahsulotdagi qoldiq qatorlari
-const stockOf = (it) => stock.filter(r =>
-  (!typeOf(it) || r.product_type === typeOf(it))
-  && (!it.product_id || r.product_id === Number(it.product_id)));
+//  Shu qatorga tegishli qoldiq satrlari
+const rowsFor = (it, level) => stock.filter(r =>
+  (level < 2 || r.product_id === Number(it.product_id))
+  && (level < 3 || (r.color || '') === (it.color || '')));
 
-//  Aniq kombinatsiyaga nechta bo'sh dona bor
-function freeFor(it) {
-  if (!it.product_id) return null;
-  const rows = stock.filter(r => r.product_id === Number(it.product_id)
-    && (!it.color  || (r.color  || '') === it.color)
-    && (!it.fabric || (r.fabric || '') === it.fabric));
-  return rows.reduce((a, r) => a + Number(r.free || 0), 0);
+//  Zahira shu mahsulotda bormi — rang ro'yxati shunga qarab ochiladi
+const hasZahira = (it) => it.product_id
+  && rowsFor(it, 2).some(r => r.src === 'stock');
+
+//  Ro'yxat: qiymat birinchi uchragan manbada qoladi — omborda bori
+//  «T/M omborda» guruhida turadi va quyida takrorlanmaydi.
+function listOf(rows, key) {
+  const out = [];
+  for (const [src] of SRC)
+    for (const r of rows.filter(x => x.src === src)) {
+      const v = r[key] ?? '';
+      const e = out.find(x => String(x.v) === String(v));
+      if (e) { if (e.src === src) e.free += r.free; }
+      else out.push({ src, v, free: r.free,
+                      name: key === 'product_id' ? `${r.product} · ${r.product_type}` : '' });
+    }
+  return out;
 }
 
-//  Ikki guruhli ro'yxat: avval omborda borlari, keyin qolgan katalog.
-function opts(inStock, rest, value) {
-  const o = (v, label) => `<option value="${esc(v)}"${
-    String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`;
-  return `<option value="">— tanlang —</option>${
-    inStock.length ? `<optgroup label="T/M omborda">${
-      inStock.map(x => o(x.v, x.label)).join('')}</optgroup>` : ''}${
-    rest.length ? `<optgroup label="Omborda yo'q">${
-      rest.map(x => o(x.v, x.label)).join('')}</optgroup>` : ''}`;
+//  Bo'sh qiymat ham ma'noli: konverda rang yoki mato yozilmagan bo'ladi.
+const nameOf = (x, key) => key === 'product_id' ? x.name
+  : x.v !== '' ? x.v
+  : (key === 'color' ? '— rangsiz —' : '— matosiz —');
+
+//  Katak. Saqlangan qiymat ro'yxatda bo'lmasa (konver sotilib ketgan,
+//  eski buyurtma ochilgan) u oxirgi guruhda turadi — qator o'z
+//  qiymatini yo'qotmasin.
+function cell(i, key, rows, val, dis, zahira) {
+  const list = listOf(rows, key);
+  const sel = (v) => String(v) === String(val ?? '') ? ' selected' : '';
+  const grp = ([src, label]) => {
+    const g = list.filter(x => x.src === src);
+    return g.length ? `<optgroup label="${label}">${g.map(x =>
+      `<option value="${esc(x.v)}"${sel(x.v)}>${esc(nameOf(x, key))} · ${
+        x.free} ta</option>`).join('')}</optgroup>` : '';
+  };
+  //  ZAHIRAGA RANG TANLANADI: konverning rangi hali yo'q, mijoz aytgan
+  //  rangga bo'yaladi. Shuning uchun bu yerda zavodda ishlatilgan
+  //  ranglarning hammasi taklif qilinadi — qo'lda yozish baribir yo'q.
+  const pal = zahira && key !== 'product_id'
+    ? (key === 'color' ? palette.colors : palette.fabrics)
+        .filter(v => !list.some(x => String(x.v) === v)) : [];
+  const has = list.some(x => String(x.v) === String(val ?? '')) || pal.includes(val);
+  return `<select ${dis} onchange="setPick(${i},'${key}',this.value)" style="width:100%">
+    <option value=""${val == null || val === '' ? ' selected' : ''}>— tanlang —</option>
+    ${SRC.map(grp).join('')}
+    ${pal.length ? `<optgroup label="Zahiraga tanlanadi">${pal.map(v =>
+        `<option value="${esc(v)}"${sel(v)}>${esc(v)}</option>`).join('')}</optgroup>` : ''}
+    ${!has && val ? `<optgroup label="Ro'yxatda yo'q"><option value="${esc(val)}" selected
+        >${esc(key === 'product_id'
+            ? (products.find(x => x.id === Number(val)) || {}).name || val
+            : val)}</option></optgroup>` : ''}
+  </select>`;
 }
 
 function drawItems(){
@@ -341,94 +420,43 @@ function drawItems(){
   const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled';
   const dis = ro ? 'disabled' : '';
   $('tI').innerHTML = cur.items.length ? cur.items.map((it, i) => {
-    const t = typeOf(it);
     const p = products.find(x => x.id === Number(it.product_id));
     const need = Number(it.qty) || 0, got = Number(it.assigned_qty) || 0;
-    const free = freeFor(it);
-
-    // Turi
-    const tStock = uniq(stock.map(r => r.product_type))
-      .map(v => ({ v, label: `${v} · ${stock.filter(r => r.product_type === v)
-        .reduce((a, r) => a + r.free, 0)} ta` }));
-    const tRest = uniq(products.map(x => x.product_type))
-      .filter(v => !tStock.some(x => x.v === v)).map(v => ({ v, label: v }));
-
-    // Mahsulot — tanlangan turdagi
-    const pStock = uniq(stockOf({ type: t }).map(r => r.product_id)).map(id => {
-      const r = stock.find(x => x.product_id === id);
-      return { v: id, label: `${r.product} · ${stock
-        .filter(x => x.product_id === id).reduce((a, x) => a + x.free, 0)} ta` };
-    });
-    const pRest = products.filter(x => (!t || x.product_type === t)
-      && !pStock.some(y => Number(y.v) === x.id))
-      .map(x => ({ v: x.id, label: x.name }));
-
-    // Rang va mato — tanlangan mahsulotdagi qoldiqdan
-    const cRows = stock.filter(r => r.product_id === Number(it.product_id));
-    const colors = uniq(cRows.map(r => r.color)).map(v => ({ v,
-      label: `${v} · ${cRows.filter(r => r.color === v)
-        .reduce((a, r) => a + r.free, 0)} ta` }));
-    const fRows = cRows.filter(r => !it.color || (r.color || '') === it.color);
-    const fabrics = uniq(fRows.map(r => r.fabric)).map(v => ({ v,
-      label: `${v} · ${fRows.filter(r => r.fabric === v)
-        .reduce((a, r) => a + r.free, 0)} ta` }));
-
-    //  Qoldiqda yo'q qiymat yozilgan bo'lsa katak o'zi matn maydoniga
-    //  aylanadi: ro'yxat taklif, chegara emas.
-    const freeColor  = it.freeColor  || (it.color  && !colors.some(x => x.v === it.color));
-    const freeFabric = it.freeFabric || (it.fabric && !fabrics.some(x => x.v === it.fabric));
-
-    const cell = (list, val, onch, other, ph) => list.length && !other
-      ? `<select ${dis} onchange="${onch}" style="width:100%;min-width:135px">
-           ${opts(list, [], val)}<option value="__other">— boshqa —</option></select>`
-      : `<input value="${esc(val || '')}" ${dis} list="${ph}"
-               style="min-width:120px" placeholder="—"
-               oninput="setField(${i},'${ph === 'dlColor' ? 'color' : 'fabric'}',this.value)">`;
+    const z = hasZahira(it);
+    //  Aniq mahsulot · rang · mato ombordagi bo'sh soni
+    const fg = rowsFor(it, 4).filter(r => r.src === 'fg')
+      .reduce((a, r) => a + r.free, 0);
+    const zn = rowsFor(it, 2).filter(r => r.src === 'stock')
+      .reduce((a, r) => a + r.free, 0);
 
     return `<tr data-i="${i}">
-      <td><select ${dis} onchange="setType(${i},this.value)"
-            style="width:100%;min-width:140px">
-        ${opts(tStock, tRest, t)}</select></td>
-      <td><select ${dis} onchange="setProduct(${i},this.value)"
-            style="width:100%;min-width:165px">
-        ${opts(pStock, pRest, it.product_id || '')}</select>
+      <td>${cell(i, 'product_id', stock, it.product_id, dis, false)}
         ${it.product_id ? `<div class="muted" style="font-size:11px">${
-          free ? `T/M omborda ${free} ta bo'sh`
-               : 'Omborda yo\'q — ishlab chiqarishdan'}</div>` : ''}</td>
-      <td>${cell(colors, it.color, `setPick(${i},'color',this.value)`, freeColor, 'dlColor')}</td>
-      <td>${cell(fabrics, it.fabric, `setPick(${i},'fabric',this.value)`, freeFabric, 'dlFabric')}</td>
+          fg ? `T/M omborda ${fg} ta bo'sh`
+             : z ? `Zahirada ${zn} ta — rangi tanlanadi`
+             : 'Omborda yo\'q — ishlab chiqarishdan'}</div>` : ''}</td>
+      <td>${cell(i, 'color',  rowsFor(it, 2), it.color, dis, z)}</td>
+      <td>${cell(i, 'fabric', rowsFor(it, 3), it.fabric, dis, z)}</td>
       <td class="num"><input type="number" min="1" value="${it.qty ?? 1}" ${dis}
-            style="max-width:70px;text-align:right"
-            oninput="setField(${i},'qty',this.value)">
+            style="text-align:right" oninput="setField(${i},'qty',this.value)">
         ${p ? `<div class="muted" style="font-size:11px">${esc(p.uom || '')}</div>` : ''}</td>
       <td class="num"><input type="number" step="0.01" value="${it.unit_price ?? ''}" ${dis}
-            style="max-width:90px;text-align:right"
-            oninput="setField(${i},'unit_price',this.value)"></td>
+            style="text-align:right" oninput="setField(${i},'unit_price',this.value)"></td>
       <td class="num">${it.id ? `${got} / ${need}` : '<span class="muted">—</span>'}</td>
       <td class="num" style="white-space:nowrap">${it.id && !ro
           ? `<button onclick="openPick(${it.id})">Bron</button> ` : ''}${
         ro ? '' : `<button onclick="delItem(${i})">✕</button>`}</td>
     </tr>`;
-  }).join('') : '<tr><td class="muted" colspan="8">Qator qo\'shilmagan</td></tr>';
+  }).join('') : '<tr><td class="muted" colspan="7">Qator qo\'shilmagan</td></tr>';
 }
 
-//  Turi o'zgarsa mahsulot, rang va mato tozalanadi: eski tanlov yangi
-//  turga to'g'ri kelmaydi va jimgina noto'g'ri qator bo'lib qolardi.
-function setType(i, v){
-  Object.assign(cur.items[i], { type: v, product_id: null, color: '', fabric: '',
-                                freeColor: false, freeFabric: false });
-  drawItems();
-}
-function setProduct(i, v){
-  Object.assign(cur.items[i], { product_id: v || null, color: '', fabric: '',
-                                freeColor: false, freeFabric: false });
-  drawItems();
-}
-//  «— boshqa —» tanlansa katak matn maydoniga aylanadi.
-function setPick(i, k, v){
+//  Katak tanlanganda undan KEYINGILARI tozalanadi: eski rang yangi
+//  mahsulotga to'g'ri kelmaydi va jimgina noto'g'ri qator bo'lib qolardi.
+function setPick(i, key, v){
   const it = cur.items[i];
-  if (v === '__other') { it[k] = ''; it[k === 'color' ? 'freeColor' : 'freeFabric'] = true; }
-  else it[k] = v;
+  if (key === 'product_id') Object.assign(it, { product_id: v || null, color: '', fabric: '' });
+  else if (key === 'color') Object.assign(it, { color: v, fabric: '' });
+  else it.fabric = v;
   drawItems();
 }
 
@@ -438,7 +466,8 @@ function drawUnits(){
           || cur.order.status === 'cancelled';
   if (!cur.units.length) { $('unitsBox').innerHTML = ''; return; }
   $('unitsBox').innerHTML = `
-    <h2 style="margin:0 0 10px">Bron qilingan konverlar</h2>
+    <div class="card">
+    <h2>Bron qilingan konverlar</h2>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>K&#8470;</th><th>Mahsulot qatori</th><th>Rang</th><th>Mato</th>
         <th class="num">Bron</th><th>Qayerda</th><th>Omborga</th><th></th></tr></thead>
@@ -460,7 +489,7 @@ function drawUnits(){
           <td class="num">${ro ? ''
             : `<button onclick="unassign(${u.id})">Bronni olish</button>`}</td>
         </tr>`; }).join('')}</tbody>
-    </table></div>`;
+    </table></div></div>`;
 }
 
 //  Konver qayerda turibdi — bitta joyda yoziladi, uni ikkita ro'yxat
@@ -485,6 +514,7 @@ const close_ = () => { $('modalRoot').innerHTML = ''; cur = null; };
 
 async function save(){
   const body = {
+    order_no: $('oNo').value.trim() || null,
     customer_id: Number($('oCust').value) || null,
     manager_id: Number($('oMgr').value) || null,
     ordered_on: $('oOn').value || null,

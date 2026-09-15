@@ -208,25 +208,46 @@ raqami**. Manzil faqat kerak bo'lgan yo'lda so'raladi va o'shanda
 majburiy (`needs_address`) — mashina qayerga borishini keyin hech kim
 topa olmasdi.
 
-**★ QATOR T/M OMBOR QOLDIG'IDAN YOZILADI** (`/api/sales/stock`).
-**Turi · Mahsulot · Rangi · Matosi — har biri ALOHIDA katak**, ro'yxati
-katalogdan emas, haqiqiy qoldiqdan quriladi va yonida nechta bo'sh
-qolgani turadi («Venge · 5 ta»). Menejer birinchi navbatda omborda
-BORINI sotadi; ilgari bitta uzun ro'yxat edi va undan rangni topib
-bo'lmasdi.
+**★ QATOR MAVJUD KONVERLARDAN YOZILADI** (`/api/sales/stock`).
+Buyurtma oynasi — **to'liq ekran** (`public/buyurtmalar.html`, `.order-view`;
+nomi `sheet` EMAS — u style.css da band va to'qnashsa maydonlar ko'rinmay
+qoladi). Maydonlar bir xil kenglikdagi panjarada, to'rttadan.
 
-Omborda yo'q narsani ham yozish mumkin — u ro'yxatning ikkinchi
-guruhida («Omborda yo'q»), rang va mato esa matn maydoniga aylanadi va
-zavodda ishlatilganlaridan taklif qiladi (`/api/sales/suggest`) —
-«Venge» va «venga» deb ikki xil yozilsa ombordan mos konver topilmasdi.
-Bunday qatorga bron ishlab chiqarishdan qo'yiladi.
+Qatorda **Mahsulot → Rangi → Matosi**, har biri alohida katak.
+**Birinchi mahsulot tanlanadi** (turi uning yonida yozilib turadi):
+menejer mijozdan «Milano penal» deb eshitadi, «penal» deb emas.
+**Hammasi ro'yxatdan — qo'lda yozish yo'q**: zavodda mahsulot, rangi va
+matosi birgalikda bitta narsa, ro'yxatda bo'lmagan rang esa hech qachon
+konver topmasdi. Har qiymat yonida nechta bo'sh qolgani turadi
+(«Venge · 5 ta»).
 
-**Vitrina qoldig'i savdoga chiqmaydi.** Do'kondagi mahsulot o'sha
-nuqtada sotiladi — uni buyurtmaga olib ketish vitrinani bo'shatardi.
-Shuning uchun qator ro'yxatida ham, bron nomzodlarida ham faqat
-**T/M ombor**. Tekshiruv serverda (`CANDIDATE_WHERE` va `/assign`):
-to'g'ridan-to'g'ri id yuborilsa ham qabul qilinmaydi. Ombor sahifasida
-vitrina qoldig'i ko'rinaveradi — chegara savdoniki.
+Ro'yxat **uch manbadan**, shu tartibda:
+
+  1. **T/M omborda** — tayyor turibdi, darrov beriladi.
+  2. **Zahirada** — kutish bo'limida buyurtma kutmoqda va **rangi hali
+     yo'q**: mijoz aytgan rangga bo'yaladi. Shuning uchun zahirasi bor
+     mahsulotda rang ro'yxatiga «Zahiraga tanlanadi» guruhi qo'shiladi —
+     zavodda ishlatilgan ranglarning hammasi (`/api/sales/suggest`).
+  3. **Ishlab chiqarishda** — yo'lda, rangi allaqachon ma'lum.
+
+To'rtinchi manba yo'q: «buyurtma uchun yangi konver ochilmaydi» degan
+qoida sotiladigan narsa allaqachon mavjudligini anglatadi. Eski
+buyurtma ochilganda ro'yxatda qolmagan qiymat «Ro'yxatda yo'q» guruhida
+saqlanadi — qator o'z qiymatini yo'qotmaydi.
+
+**Zakaz raqami qo'lda ham qo'yiladi** (`orders.order_no`, UNIQUE). Zavod
+o'z daftarida raqam yuritadi va nakladnoyda o'sha raqam turishi kerak;
+bo'sh qoldirilsa tizim beradi (`Z26-0001`). Raqam o'zgartirilsa
+konverlardagi zakaz raqami ham ko'chadi (`production_units.order_no` —
+matn), aks holda jurnaldagi raqam buyurtmanikidan ajralib qolardi.
+
+**Vitrina savdoga umuman chiqmaydi.** Do'kondagi mahsulot ko'rgazmada
+turadi: u yerdan ham sotilmaydi, sotuv T/M ombordan ketadi. Shuning
+uchun qator ro'yxatida ham, bron nomzodlarida ham vitrina yo'q —
+vitrina sotuvchisiga o'z nuqtasiniki ham. Tekshiruv serverda
+(`CANDIDATE_WHERE` va `/assign`): to'g'ridan-to'g'ri id yuborilsa ham
+qabul qilinmaydi. Ombor sahifasida qoldig'i ko'rinaveradi — chegara
+savdoniki.
 
 **★ BRON — konver bo'linmaydi** (`unit_reservations`). Konver
 buyurtmaning aniq QATORIGA bron qilinadi: bir xil mahsulot ikki xil
@@ -240,7 +261,7 @@ Shuning uchun bron alohida jadval, konverning o'zi qimirlamaydi.
 Ombordagi mahsulotda ham xuddi shu — manba bitta bo'lsin.
 
 Bron **uch manbaga** qo'yiladi: T/M ombor (tayyor — vitrina EMAS),
-zahira (rang kutmoqda) va **ishlab chiqarish** (hali yo'lda). Boshqa
+zahira (rangi tanlanadi) va **ishlab chiqarish** (hali yo'lda). Boshqa
 buyurtmaga konverning faqat QOLGANI taklif qilinadi.
 
 Ishlab chiqarishdagilar **omborga eng yaqini** bo'yicha saralanadi va
