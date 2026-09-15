@@ -39,6 +39,21 @@ const cleanNo = (v) => {
   return t;
 };
 
+//  Yuk xatida «chiqarib yuboruvchi» — OMBOR MUDIRI. Tasdiqlaguncha kim
+//  chiqarishi noma'lum (`shipped_by` bo'sh), lekin zavodda ombor mudiri
+//  bitta: `omborchi` rolidagi yagona xodim bo'lsa uning ismi va telefoni
+//  hujjatda turadi. Bir nechta bo'lsa bo'sh qoladi — qog'ozda qo'lda
+//  yoziladi. Administrator hisobga olinmaydi: unda hamma huquq bor,
+//  lekin mahsulotni u chiqarmaydi.
+const keeperOf = async () => {
+  const { rows } = await db.query(
+    `SELECT w.name, w.phone FROM workers w
+       JOIN worker_roles wr ON wr.worker_id = w.id
+      WHERE w.active AND wr.role_code = 'omborchi'
+      ORDER BY w.name LIMIT 2`);
+  return rows.length === 1 ? rows[0] : null;
+};
+
 // Z26-0001. Konveyer raqami bilan bir xil shakl: yil + ketma-ket raqam.
 async function nextOrderNo(client) {
   const prefix = `Z${String(new Date().getFullYear()).slice(-2)}-`;
@@ -266,20 +281,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
       WHERE i.order_id = $1 AND u.status <> 'cancelled'
       ORDER BY u.conveyor_no`, [req.params.id])).rows;
 
-  //  Yuk xatida «chiqarib yuboruvchi» — OMBOR MUDIRI. Tasdiqlaguncha
-  //  kim chiqarishi noma'lum (`shipped_by` bo'sh), lekin zavodda ombor
-  //  mudiri bitta: `omborchi` rolidagi yagona xodim bo'lsa uning ismi
-  //  va telefoni hujjatda turadi. Bir nechta bo'lsa bo'sh qoladi —
-  //  qog'ozda qo'lda yoziladi. Administrator hisobga olinmaydi: unda
-  //  hamma huquq bor, lekin mahsulotni u chiqarmaydi.
-  const mudir = (await db.query(
-    `SELECT w.name, w.phone FROM workers w
-       JOIN worker_roles wr ON wr.worker_id = w.id
-      WHERE w.active AND wr.role_code = 'omborchi'
-      ORDER BY w.name LIMIT 2`)).rows;
-
-  res.json({ order: o, items, units,
-             keeper: mudir.length === 1 ? mudir[0] : null });
+  res.json({ order: o, items, units, keeper: await keeperOf() });
 }));
 
 // ─────────────────────────────────────────────────────── YARATISH / TAHRIR
@@ -701,6 +703,42 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
 //  Ikki bosqich qabul qilish bilan bir xil sababdan: omborda turgan
 //  mahsulot kimningdir qo'l ko'tarishisiz chiqib ketmasin.
 const SHIP = ['warehouse.move', 'warehouse.manage', 'production.manage'];
+
+//  ─────────────────────────────────────────────────────────── YUK XATI
+//
+//  Hujjatni CHOP ETADIGAN odam — ombor mudiri: mahsulotni mashinaga
+//  ortishdan oldin yuk xatini chiqaradi, haydovchining qo'liga beradi va
+//  shundan keyin «chiqarib yubordim» ni bosadi. Tasdiqdan KEYIN chop
+//  etish kech bo'lardi — qog'oz allaqachon yo'lda.
+//
+//  Uning savdo huquqi yo'q (`omborchi` — faqat `warehouse.*`), shuning
+//  uchun buyurtma oynasi unga ochilmaydi va hujjatga alohida yo'l kerak.
+//  Bu FAQAT O'QISH: buyurtmani ham, bronni ham o'zgartirmaydi.
+//
+//  Qaytaradigani buyurtma oynasidagi bilan bir xil — sarlavha, qatorlar
+//  va ombor mudiri; hujjatning o'zini ikkala sahifa bitta fayldan
+//  chizadi (`public/yukxati.js`).
+router.get('/waybill/:id', need(...READ, ...SHIP), wrap(async (req, res) => {
+  //  Savdo yo'nalishi chegarasi menejerga qo'yiladi (B2B menejeri
+  //  eksport hujjatini chiqara olmaydi); ombor mudirida kanal doirasi
+  //  bo'lmaydi — ombor hamma yo'nalishga xizmat qiladi.
+  const chans = channelsOf(req);
+  const o = (await db.query(
+    `SELECT * FROM v_sales_orders
+      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))`,
+    [req.params.id, chans])).rows[0];
+  if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+  const items = (await db.query(
+    `SELECT i.id, i.qty, i.unit_price, i.color, i.fabric,
+            p.name AS product, g.name AS product_type, g.uom
+       FROM order_items i
+       JOIN products p       ON p.id = i.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE i.order_id = $1 ORDER BY i.sort, i.id`, [req.params.id])).rows;
+
+  res.json({ order: o, items, keeper: await keeperOf() });
+}));
 
 router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
   const client = await db.connect();

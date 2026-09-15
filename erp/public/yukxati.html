@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Yuk xati · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/yukxati.css">
+<style>
+/*  Sahifada hujjatdan boshqa narsa yo'q, shuning uchun qog'ozga
+    tayyorlashning o'zi ham kerak emas: yuqori panel va tugmalarni
+    style.css ning umumiy chop etish qoidasi yashiradi. */
+.doc-page{max-width:900px;margin:0 auto}
+</style>
+<script src="/app.js"></script>
+<script src="/yukxati.js"></script>
+</head>
+<body>
+
+<div class="top no-print">
+  <div class="brand"><span class="dot"></span><h1>Yuk xati</h1></div>
+  <div class="row" style="gap:8px">
+    <button class="primary" onclick="window.print()">Chop etish</button>
+    <span class="row" id="erpUser"></span>
+  </div>
+</div>
+
+<div class="doc-page" id="doc"></div>
+
+<script>
+// ============================================================================
+//  YUK XATI — ALOHIDA SAHIFA
+//
+//  Mahsulotni zavoddan OMBOR MUDIRI chiqarib beradi: hujjatni chop etadi,
+//  haydovchining qo'liga beradi va shundan keyin «Chiqarib yubordim» ni
+//  bosadi. Tasdiqdan keyin chop etish kech bo'lardi — qog'oz allaqachon
+//  yo'lda bo'ladi.
+//
+//  Uning savdo huquqi yo'q (`omborchi` — faqat `warehouse.*`), shuning
+//  uchun buyurtma oynasi unga ochilmaydi va hujjat alohida sahifa bo'ldi.
+//  Sahifa faqat O'QIYDI: bu yerdan buyurtma ham, bron ham o'zgarmaydi.
+//
+//  Hujjatning o'zini `yukxati.js` chizadi — buyurtma oynasi ham o'shani
+//  ishlatadi, shuning uchun ikkalasi hech qachon ajralib ketmaydi.
+//
+//  Balans berilmaydi: bu sahifani ombor mudiri ochadi va mijozning
+//  qarzi uning ishi emas (menejerning ekranida turadi).
+const id = new URLSearchParams(location.search).get('id');
+
+App.start(async () => {
+  const el = document.getElementById('doc');
+  if (!id) { el.innerHTML = `<div class="card"><h2>Buyurtma tanlanmagan</h2></div>`; return; }
+  try {
+    const d = await App.api('/api/sales/waybill/' + encodeURIComponent(id));
+    el.innerHTML = Waybill.html(d);
+    document.title = `Yuk xati ${d.order.order_no} · ZELTA`;
+  } catch (e) {
+    el.innerHTML = `<div class="card"><h2>Hujjat ochilmadi</h2>
+      <p class="muted" style="margin-top:8px">${e.message}</p></div>`;
+  }
+}, 'sales.view', 'sales.manage', 'warehouse.move', 'warehouse.manage', 'production.manage');
+</script>
+</body>
+</html>

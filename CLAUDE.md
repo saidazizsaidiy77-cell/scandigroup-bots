@@ -334,6 +334,25 @@ qator (`FIRMA`) — u mijoz ma'lumoti emas, zavodning o'z nomi.
 Ro'yxatda ham tugmasi boshqa: tahrirlanadiganda ✎, yopilganda 👁 —
 qatorning o'zi ham bosiladi.
 
+**Yuk xatini OMBOR MUDIRI chop etadi.** Zavodda tartib shunday:
+mudir hujjatni chiqaradi → haydovchining qo'liga beradi → mashina
+ortiladi → va SHUNDAN KEYIN «Chiqarib yubordim» ni bosadi. Tasdiqdan
+keyin chop etish kech bo'lardi — qog'oz allaqachon yo'lda.
+
+Uning savdo huquqi yo'q (`omborchi` — faqat `warehouse.*`), ya'ni
+buyurtma oynasi unga ochilmaydi. Shuning uchun hujjatga alohida yo'l bor:
+`GET /api/sales/waybill/:id` (savdo ham, ombor ham o'qiydi) va
+`public/yukxati.html` — tugmasi ombor «Jo'natish» tabidagi har
+kartochkada. Sahifa faqat O'QIYDI: buyurtma ham, bron ham u yerdan
+o'zgarmaydi; balans ham berilmaydi — mijozning qarzi ombor mudirining
+ishi emas.
+
+**Hujjatning o'zi bitta faylda** — `public/yukxati.js`
+(`Waybill.html(...)`), uslubi `public/yukxati.css` da. Uni ikki sahifa
+chizadi (savdo buyurtmani ochganda va mudir chop etganda) va qog'ozda
+ikkalasi bir xil chiqishi kerak: matn ikki nusxada bo'lsa biri ertaga
+ikkinchisidan orqada qolardi.
+
 **«Qayerda» ustuni** (tahrir ko'rinishida, qator oxirida) — biriktirilgan
 konver hozir qayerda: «T/M ombor» yoki «Arra · Korpus tsexi», yonida
 nechtaligi. Savdo xodimi mijozga «qayerda ekan» degan savolga shu
@@ -500,6 +519,7 @@ erp/
   sql/                 migratsiya, migrate.js dagi tartibda
   modules/             express router'lar
   public/              sahifalar; app.js — menyu va sessiya
+                       yukxati.js — yuk xati hujjati (ikki sahifa chizadi)
   test/                node:test, HTTP orqali
 ```
 

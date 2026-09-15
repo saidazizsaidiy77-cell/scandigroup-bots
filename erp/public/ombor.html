@@ -592,6 +592,13 @@ function drawShip() {
           ${tayyor ? `<span class="tag ok">hammasi omborda</span>`
                    : `<span class="tag warn">${o.in_warehouse_qty} / ${
                         o.assigned_qty} omborda</span>`}
+          <!--  Yuk xati TASDIQDAN OLDIN chop etiladi: mudir hujjatni
+                chiqaradi, haydovchining qo'liga beradi, mashina ortiladi
+                va shundan keyin «Chiqarib yubordim» bosiladi. Tasdiqdan
+                keyin chop etish kech bo'lardi — qog'oz allaqachon yo'lda.
+                Alohida oynada ochiladi: ro'yxat joyida qolsin. -->
+          <button onclick="window.open('/yukxati.html?id=${o.id}',
+            'yukxati' + ${o.id})">Yuk xati</button>
           <button class="primary" ${tayyor ? '' : 'disabled'}
             onclick="doShip(${o.id})">Chiqarib yubordim</button>
         </div>

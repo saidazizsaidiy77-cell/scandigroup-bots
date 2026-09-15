@@ -1,0 +1,45 @@
+/*  YUK XATI — hujjatning KO'RINISHI.
+    Matni va tartibi `yukxati.js` da, uslubi shu yerda. Hujjatni ikki
+    sahifa chizadi — savdo menejeri buyurtmani ochganda va ombor mudiri
+    chop etganda — va qog'ozda ikkalasi bir xil chiqishi kerak, shuning
+    uchun uslub ham bitta faylda. */
+
+/*  Tepada korxona nomi va hujjat raqami, ostida ikki tomon: chapda
+    yetkazib beruvchi, o'ngda mijoz. Ikkisi bir xil kenglikda — qog'ozdagi
+    yuk xati shunday o'qiladi. */
+.doc-top{text-align:center;padding:4px 0 20px;border-bottom:1px solid var(--line);
+  margin-bottom:20px}
+.doc-firm{font-size:18px;font-weight:600;letter-spacing:.02em}
+.doc-no{font-size:15px;margin-top:6px}
+.doc-parties{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.doc-parties h3{font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+.doc-parties .who{font-size:15px;font-weight:600}
+.doc-parties .r{text-align:right}
+.doc-parties p{margin-top:3px;line-height:1.45}
+/*  Imzo joylari: chiziq va ostida kimning imzosi ekani. */
+.doc-sign{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:34px}
+.doc-sign .line{border-bottom:1px solid var(--text);height:34px;margin-bottom:6px;
+  display:flex;align-items:flex-end;padding-bottom:4px}
+.doc-sign small{color:var(--muted);font-size:12px;line-height:1.4;display:block}
+@media (max-width:620px){
+  .doc-parties,.doc-sign{grid-template-columns:1fr}
+  .doc-parties .r{text-align:left}
+}
+
+/*  Qog'ozga faqat hujjat tushadi. style.css ni ataylab qaytaradi: u
+    yerdagi umumiy qoida jadvalni ko'ndalang varaqqa va mayda shriftga
+    tushiradi (hisobot uchun), yuk xati esa oddiy A4 hujjat. */
+@media print{
+  @page{size:A4 portrait;margin:14mm}
+  body{padding:0}
+  .no-print{display:none!important}
+  .doc-sign{break-inside:avoid}
+  .doc-parties h3{display:block}
+  /*  style.css qog'ozda kartochkaning chetini ham, oralig'ini ham nolga
+      tushiradi — hujjatda esa bo'limlar bir-birining ustiga chiqib
+      ketmasligi kerak. */
+  .card{margin-bottom:16px!important}
+  .doc-parties{margin-bottom:14px}
+  table{margin-top:10px}
+}

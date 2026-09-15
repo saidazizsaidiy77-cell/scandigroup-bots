@@ -1650,6 +1650,40 @@ test('yuk xatida ombor mudiri ko\'rsatiladi', async () => {
   await H.id(`DELETE FROM workers WHERE name = 'Ikkinchi mudir'`);
 });
 
+//  ── YUK XATINI OMBOR MUDIRI CHOP ETADI ───────────────────────────────
+//
+//  Mahsulotni zavoddan u chiqarib beradi: hujjatni chop etib
+//  haydovchining qo'liga beradi va SHUNDAN KEYIN tasdiqlaydi. Uning
+//  savdo huquqi yo'q, shuning uchun buyurtma oynasi yopiq bo'lsa ham
+//  hujjat ochiq bo'lishi kerak.
+test('yuk xatini ombor mudiri buyurtma oynasisiz chiqaradi', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  await admin('POST', '/api/units/customers', { items: [{ name: 'Hujjat chop mijozi' }] });
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name='Hujjat chop mijozi'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 2, color: 'Chop', unit_price: 70 }] })).body;
+
+  //  Buyurtma oynasi unga yopiq — savdo hujjatni yozadi, u emas
+  assert.equal((await mudir('GET', '/api/sales/orders/' + z.id)).status, 403);
+
+  const w = await mudir('GET', '/api/sales/waybill/' + z.id);
+  assert.equal(w.status, 200, w.text);
+  assert.equal(w.body.order.order_no, z.order_no);
+  assert.equal(w.body.order.customer_name, 'Hujjat chop mijozi');
+  assert.equal(w.body.items.length, 1);
+  assert.equal(w.body.items[0].product_type, 'Penal');
+  assert.equal(Number(w.body.items[0].unit_price), 70);
+  //  Imzo chizig'i ustida turadigan odam — tasdiqdan oldin ham
+  assert.equal(w.body.keeper.name, 'Sinov ombor mudiri');
+
+  //  Tsex ustasiga hujjat ham yopiq: mahsulotni u chiqarmaydi
+  assert.equal((await korpus('GET', '/api/sales/waybill/' + z.id)).status, 403);
+  //  Yo'q buyurtma — 404, «ruxsat yo'q» emas
+  assert.equal((await mudir('GET', '/api/sales/waybill/999999')).status, 404);
+});
+
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;

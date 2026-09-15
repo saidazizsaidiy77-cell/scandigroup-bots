@@ -276,6 +276,14 @@ const App = (() => {
       title: 'Tayyor mahsulot ombori', lead: 'Qoldiq va qabul qilish',
       text: "Turi, rangi, matosi bo'yicha qoldiq \u00b7 qatorni ochsa konver raqamlari \u00b7 qadoqlash tsexidan qabul qilish",
       perm: ['warehouse.view', 'production.view'] },
+    //  Yuk xati menyuda ko'rinmaydi: u bitta buyurtmaning hujjati,
+    //  ro'yxatdan emas, buyurtmadan ochiladi — savdo buyurtma oynasidan,
+    //  ombor mudiri esa «Jo'natish» tabidagi tugmadan. Ro'yxatda qolishi
+    //  kerak: shusiz sahifa ustida turganda yuqoridagi bo'lim yonmaydi.
+    { href: '/yukxati.html', mod: ['sales', 'warehouse'], nav: 'Yuk xati', hidden: true,
+      title: 'Yuk xati', lead: 'Buyurtma hujjati',
+      text: "Yetkazib beruvchi va mijoz \u00b7 qatorlar va summa \u00b7 chiqarib yuboruvchi va qabul qiluvchi imzosi",
+      perm: ['sales.view', 'sales.manage', 'warehouse.move', 'warehouse.manage'] },
     { mod: 'warehouse', nav: 'Omborga kirim',           perm: ['warehouse.move'] },
     { mod: 'warehouse', nav: 'Hisobdan chiqarish',      perm: ['warehouse.manage'] },
     { mod: 'warehouse', nav: 'Omborlar aro harakatlar', perm: ['warehouse.move'] },
