@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Qarzdorlik · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Qarzdorlik</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div><label>Sanadan</label>
+      <input id="fFrom" type="date" onchange="load()"></div>
+    <div><label>Sanagacha</label>
+      <input id="fTo" type="date" onchange="load()"></div>
+    <button onclick="period('oy')">Shu oy</button>
+    <button onclick="period('otgan')">O'tgan oy</button>
+    <button onclick="period('yil')">Shu yil</button>
+    <button onclick="period('hammasi')">Hammasi</button>
+    <div style="flex:1;min-width:180px"><label>Qidiruv</label>
+      <input id="fQ" placeholder="mijoz, region yoki telefon" oninput="onSearch()"></div>
+    <button onclick="exportCsv()">Excelga yuklash</button>
+  </div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Davr boshiga</h2><div class="kpi" id="kOpen">—<small> $</small></div></div>
+  <div class="card"><h2>Qarzdor (debit)</h2><div class="kpi" id="kDeb">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Davr ichida chiqib ketgan mahsulot</p></div>
+  <div class="card"><h2>Haqdor (kredit)</h2><div class="kpi" id="kCre">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">To'lovlar — kassa moduli yozilgach to'ladi</p></div>
+  <div class="card"><h2>Davr oxiriga</h2><div class="kpi" id="kClo">—<small> $</small></div></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h2 style="margin:0" id="tHead">Mijozlar</h2>
+    <span class="muted" style="font-size:12px" id="tHint"></span>
+  </div>
+  <div style="overflow-x:auto"><table>
+    <thead><tr>
+      <th>Mijoz</th><th>Kanal</th><th>Menejer</th>
+      <th class="num">Boshiga, $</th><th class="num">Qarzdor, $</th>
+      <th class="num">Haqdor, $</th><th class="num">Oxiriga, $</th>
+    </tr></thead>
+    <tbody id="tB"></tbody>
+    <tfoot id="tF"></tfoot>
+  </table></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = (v) => {
+  const x = Number(v) || 0;
+  const [i, f] = (Math.abs(x) < 1e15 ? x.toFixed(2) : String(x)).split('.');
+  const grouped = i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return f && f !== '00' ? `${grouped}.${f}` : grouped;
+};
+//  Nol «—» bo'lib chiqadi: jadvalda nollar qatori ko'z chalg'itadi.
+//  `Number(...)` shart — "0.00" matni o'zi rost (truthy) qiymat.
+const sum = (v) => Number(v) ? money(v) : '<span class="muted">—</span>';
+const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4)
+  .toISOString().slice(0, 10);
+const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+
+let data = { rows: [], total: {} };
+//  Ochilgan mijozlar: qator bosilganda harakatlari ostida chiqadi.
+//  Ro'yxat FAQAT ochilganda so'raladi — chizish paytida emas.
+const open = new Map();
+
+function period(kind) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const kun = (a, b, c) => isoDay(new Date(a, b, c));
+  if (kind === 'oy')     { $('fFrom').value = kun(y, m, 1);     $('fTo').value = isoDay(now); }
+  if (kind === 'otgan')  { $('fFrom').value = kun(y, m - 1, 1); $('fTo').value = kun(y, m, 0); }
+  if (kind === 'yil')    { $('fFrom').value = kun(y, 0, 1);     $('fTo').value = isoDay(now); }
+  //  «Hammasi» — boshlang'ich qarzdan bugungacha: davr boshi bo'sh
+  //  qoladi va hamma harakat «qarzdor» ustuniga tushadi.
+  if (kind === 'hammasi'){ $('fFrom').value = '1900-01-01';     $('fTo').value = isoDay(now); }
+  load();
+}
+
+let qTimer = null;
+function onSearch() { clearTimeout(qTimer); qTimer = setTimeout(load, 300); }
+
+async function load() {
+  const p = new URLSearchParams();
+  if ($('fFrom').value) p.set('from', $('fFrom').value);
+  if ($('fTo').value)   p.set('to', $('fTo').value);
+  if ($('fQ').value.trim()) p.set('q', $('fQ').value.trim());
+  open.clear();
+  data = await App.api('/api/sales/debts?' + p);
+  $('fFrom').value = data.from; $('fTo').value = data.to;
+  render();
+}
+
+function render() {
+  const t = data.total;
+  $('kOpen').innerHTML = `${money(t.opening)}<small> $</small>`;
+  $('kDeb').innerHTML  = `${money(t.debit)}<small> $</small>`;
+  $('kCre').innerHTML  = `${money(t.credit)}<small> $</small>`;
+  $('kClo').innerHTML  = `${money(t.closing)}<small> $</small>`;
+  $('tHead').textContent = `Mijozlar (${data.rows.length})`;
+  $('tHint').textContent = `${d8(data.from)} — ${d8(data.to)} · qatorni bossangiz harakatlari chiqadi`;
+
+  $('tB').innerHTML = data.rows.length ? data.rows.map(r => `
+    <tr onclick="toggle(${r.id})" style="cursor:pointer">
+      <td><strong>${esc(r.name)}</strong>${r.region
+        ? `<div class="muted" style="font-size:12px">${esc(r.region)}</div>` : ''}</td>
+      <td>${r.channel_name ? `<span class="tag">${esc(r.channel_name)}</span>`
+        : '<span class="muted">—</span>'}</td>
+      <td class="muted">${r.manager_name ? esc(r.manager_name) : '—'}</td>
+      <td class="num">${sum(r.opening)}</td>
+      <td class="num">${sum(r.debit)}</td>
+      <td class="num">${sum(r.credit)}</td>
+      <td class="num"><b${Number(r.closing) < 0 ? ' style="color:var(--ok)"' : ''}>${
+        sum(r.closing)}</b></td>
+    </tr>${drawRows(r.id)}`).join('')
+    : `<tr><td class="muted" colspan="7">Tanlangan oraliqda qarzdorlik yo'q</td></tr>`;
+
+  $('tF').innerHTML = data.rows.length ? `
+    <tr><td colspan="3"><b>Jami</b></td>
+      <td class="num"><b>${money(t.opening)}</b></td>
+      <td class="num"><b>${money(t.debit)}</b></td>
+      <td class="num"><b>${money(t.credit)}</b></td>
+      <td class="num"><b>${money(t.closing)}</b></td></tr>` : '';
+}
+
+//  Bitta mijozning harakatlari. Ro'yxat shu yerdan bir marta so'raladi;
+//  `render()` faqat bor ma'lumotni chizadi — aks holda ikkalasi
+//  bir-birini cheksiz chaqirardi.
+async function toggle(id) {
+  if (open.has(id)) { open.delete(id); return render(); }
+  open.set(id, null);
+  render();
+  const p = new URLSearchParams({ from: data.from, to: data.to });
+  try { open.set(id, await App.api(`/api/sales/debts/${id}?` + p)); }
+  catch (e) { open.set(id, { error: e.message, rows: [] }); }
+  if (open.has(id)) render();
+}
+
+function drawRows(id) {
+  if (!open.has(id)) return '';
+  const d = open.get(id);
+  if (!d) return `<tr><td colspan="7" class="muted">Yuklanmoqda…</td></tr>`;
+  if (d.error) return `<tr><td colspan="7" class="muted">${esc(d.error)}</td></tr>`;
+  if (!d.rows.length) return `<tr><td colspan="7" class="muted"
+    style="padding-left:24px">Bu oraliqda harakat bo'lmagan · davr boshiga
+    ${money(d.opening)} $</td></tr>`;
+  //  Yugurib boradigan qoldiq: har qatordan keyin qarz qancha bo'lgani.
+  //  Mijoz «shu kuni qancha edi» deb so'raganda javob shu ustunda.
+  let qoldiq = Number(d.opening) || 0;
+  return d.rows.map(r => {
+    qoldiq += Number(r.debit || 0) - Number(r.credit || 0);
+    return `<tr>
+      <td style="padding-left:24px" class="muted">${d8(r.on_date)} · ${esc(r.note)}</td>
+      <td>${r.conveyor_no ? `<span class="tag">${esc(r.conveyor_no)}</span>` : ''}</td>
+      <td class="muted">${r.order_no ? esc(r.order_no) : ''}</td>
+      <td></td>
+      <td class="num">${sum(r.debit)}</td>
+      <td class="num">${sum(r.credit)}</td>
+      <td class="num muted">${money(qoldiq)}</td>
+    </tr>`;
+  }).join('');
+}
+
+//  Excel zavodda shu ko'rinishda kutiladi: bitta mijoz — bitta qator,
+//  to'rt ustun. Tafsilot kerak bo'lsa saytda qator ochiladi.
+function exportCsv() {
+  const head = ['Mijoz', 'Region', 'Telefon', 'Kanal', 'Menejer',
+                'Boshiga', 'Qarzdor', 'Haqdor', 'Oxiriga'];
+  const rows = data.rows.map(r => [r.name, r.region || '', r.phone || '',
+    r.channel_name || '', r.manager_name || '',
+    Number(r.opening).toFixed(2), Number(r.debit).toFixed(2),
+    Number(r.credit).toFixed(2), Number(r.closing).toFixed(2)]
+    .map(v => `"${String(v).replace(/"/g, '""')}"`));
+  const csv = '﻿' + [head.map(h => `"${h}"`), ...rows]
+    .map(r => r.join(';')).join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'),
+    { href: url, download: `qarzdorlik-${data.from}_${data.to}.csv` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+App.start(load, 'sales.view', 'sales.manage');
+</script>
+</body>
+</html>

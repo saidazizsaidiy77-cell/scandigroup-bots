@@ -1339,6 +1339,56 @@ test('omborga xato kiritilgan soni to\'g\'rilanadi', async () => {
   assert.equal((await mudir('PATCH', '/api/units/' + u.id, { qty: 3 })).status, 403);
 });
 
+test('noto\'g\'ri kiritilgan konver ombordan bekor qilinadi', async () => {
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 3, color: 'Xato', unit_price: 100,
+      is_opening: true, fg_on: '2026-09-08' },
+  ] })).body.created[0];
+  const qoldiq = async () => (await admin(
+    'GET', '/api/warehouse/fg/summary?q=Xato')).body.total;
+  assert.equal((await qoldiq()).qty, 3);
+  const stock = async () => Number((await H.id(
+    `SELECT qty FROM fg_stock WHERE product_id = $1`, [PENAL])).qty);
+  const oldin = await stock();
+
+  //  Bronda turgani bekor qilinmaydi — mijozga va'da qilingan mahsulot
+  //  jimgina yo'qolib qolardi.
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 3, color: 'Xato' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 3 })).status, 200);
+  const band = await admin('PATCH', '/api/units/' + u.id, { status: 'cancelled' });
+  assert.equal(band.status, 400);
+  assert.match(band.body.error, /bronda/);
+  assert.equal((await qoldiq()).qty, 3, 'qoldiq o\'zgarmadi');
+
+  // Bron olingach bekor qilinadi va qoldiqdan chiqadi
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unassign`,
+    { item_id: qator.id, unit_id: u.id })).status, 200);
+  assert.equal((await admin('PATCH', '/api/units/' + u.id,
+    { status: 'cancelled' })).status, 200);
+  assert.equal((await qoldiq()).qty, 0);
+  //  Jamlanma jadval ham: hisobot bekor qilingan konverni sanamasin
+  assert.equal(await stock(), oldin - 3);
+
+  // Chiqib ketgan konver bekor qilinmaydi — u mijozda va balansida
+  const ketgan = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, unit_price: 100, is_opening: true,
+      fg_on: '2026-09-08' },
+  ] })).body.created[0];
+  await H.id(`UPDATE production_units SET status='shipped' WHERE id=$1`, [ketgan.id]);
+  const yoq = await admin('PATCH', '/api/units/' + ketgan.id, { status: 'cancelled' });
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /chiqib ketgan/);
+
+  // Ombor mudirining ishi emas — tarixga tegadi
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  assert.equal((await mudir('PATCH', '/api/units/' + u.id,
+    { status: 'cancelled' })).status, 403);
+});
+
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
@@ -1450,6 +1500,78 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   // Savdo o'zi chiqarib yubora olmaydi — bu ombor mudirining ishi
   const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
   assert.equal((await savdo('GET', '/api/sales/shipping')).status, 403);
+});
+
+//  ── QARZDORLIK: oraliq hisoboti ────────────────────────────────────────
+//  Yuqoridagi test mahsulotni 2026-10-04 da chiqarib yubordi, mijozning
+//  boshlang'ich qarzi esa o'z sanasi bilan turadi. Hisobot shu ikkisini
+//  oraliqqa ajratadi: boshiga + qarzdor − haqdor = oxiriga.
+test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Kanalsiz mijoz'`)).id;
+  //  Boshlang'ich qarz — chiqarishdan OLDINGI sana bilan
+  await H.id(`UPDATE customers SET opening_debt = 500, opening_debt_on = '2026-09-01'
+               WHERE id = $1`, [mijoz]);
+
+  const okt = (await admin('GET',
+    '/api/sales/debts?from=2026-10-01&to=2026-10-31')).body;
+  assert.equal(okt.from, '2026-10-01');
+  const r = okt.rows.find((x) => x.id === mijoz);
+  assert.ok(r, 'mijoz hisobotda');
+  //  Davr boshiga — boshlang'ich qarz va undan oldin chiqib ketganlar.
+  //  Shu mijozdan avvalgi testlarda ham mahsulot chiqqan, shuning uchun
+  //  aniq raqam emas: boshlang'ich qarz ICHIDA ekani tekshiriladi.
+  assert.ok(Number(r.opening) >= 500, String(r.opening));
+  //  Oktabrda chiqib ketgani: 4 × 250 (narxsiz konver lentaga tushmaydi)
+  assert.equal(Number(r.debit), 1000, String(r.debit));
+  assert.equal(Number(r.credit), 0, 'kassa yo\'q — haqdor bo\'sh');
+  assert.equal(Number(r.closing), Number(r.opening) + Number(r.debit),
+    'boshiga + qarzdor = oxiriga');
+
+  //  Keyingi oy: chiqib ketgan mahsulot endi «boshiga» da turadi va
+  //  aylanma bo'sh bo'ladi — qarz esa o'zgarmaydi.
+  const noy = (await admin('GET',
+    '/api/sales/debts?from=2026-11-01&to=2026-11-30')).body;
+  const r2 = noy.rows.find((x) => x.id === mijoz);
+  assert.equal(Number(r2.opening), Number(r.closing));
+  assert.equal(Number(r2.debit), 0);
+  assert.equal(Number(r2.closing), Number(r.closing));
+
+  //  Oxiriga — `v_customer_sales.balance` bilan bir xil: ikki hisob bir
+  //  narsani aytishi kerak, aks holda qaysi biri to'g'ri degan savol chiqadi.
+  const c = (await admin('GET', '/api/units/customers')).body.customers
+    .find((x) => x.id === mijoz);
+  assert.equal(Number(r2.closing), Number(c.balance));
+
+  //  Butun tarix: davr boshlang'ich qarz sanasidan ham oldin boshlansa
+  //  «boshiga» bo'sh bo'ladi va hamma narsa aylanmaga tushadi.
+  const butun = (await admin('GET',
+    '/api/sales/debts?from=1900-01-01&to=2030-01-01')).body.rows
+    .find((x) => x.id === mijoz);
+  assert.equal(Number(butun.opening), 0);
+  assert.equal(Number(butun.debit), Number(r2.closing),
+    'boshlang\'ich qarz ham, chiqib ketgan mahsulot ham aylanmada');
+
+  //  Harakatlar: qaysi konver, qaysi kun. Yugurib boradigan qoldiq
+  //  sahifada shundan chiziladi.
+  const tafsilot = (await admin('GET',
+    `/api/sales/debts/${mijoz}?from=2026-10-01&to=2026-10-31`)).body;
+  assert.equal(Number(tafsilot.opening), Number(r.opening),
+    'jadval bilan tafsilot bitta raqamni aytadi');
+  assert.ok(tafsilot.rows.length >= 1);
+  assert.ok(tafsilot.rows.every((x) => x.conveyor_no));
+
+  //  Yo'nalish chegarasi: eksport menejeri B2B mijozini ko'rmaydi
+  const eks = H.api(base, await H.sessionFor('Eksport menejeri'));
+  const hammasi = (await eks('GET',
+    '/api/sales/debts?from=1900-01-01&to=2030-01-01')).body.rows;
+  assert.ok(!hammasi.some((x) => x.id === mijoz), 'chegara ishlaydi');
+  assert.equal((await eks('GET',
+    `/api/sales/debts/${mijoz}?from=1900-01-01&to=2030-01-01`)).status, 404);
+
+  //  Ombor mudirining ishi emas
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  assert.equal((await mudir('GET', '/api/sales/debts')).status, 403);
 });
 
 test('savdo yo\'nalishi buyurtmaga ham chegara bo\'ladi', async () => {

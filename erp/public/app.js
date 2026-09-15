@@ -201,6 +201,10 @@ const App = (() => {
       title: 'Buyurtmalar', lead: 'Mijoz nima so\'ragan',
       text: "Buyurtma qatorlari \u00b7 T/M ombordan va zahiradan konver biriktirish \u00b7 muddat va summa",
       perm: ['sales.view', 'sales.manage'] },
+    { href: '/qarzdorlik.html', mod: 'sales', nav: 'Qarzdorlik',
+      title: 'Qarzdorlik', lead: 'Oraliq bo\'yicha',
+      text: "Davr boshiga \u00b7 qarzdor/haqdor aylanmasi \u00b7 davr oxiriga \u00b7 mijoz kesimida harakatlari bilan",
+      perm: ['sales.view', 'sales.manage'] },
     { href: '/taminotchilar.html', mod: ['purchasing', 'refs'], nav: "Ta'minotchilar",
       title: "Ta'minotchilar", lead: "Kimdan sotib olinadi",
       text: "Nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim \u00b7 kirim hujjati va qarzdorlik shunga tayanadi",
@@ -242,10 +246,9 @@ const App = (() => {
     { mod: 'sales', nav: 'Buyurtmalar arxivi',          perm: ['sales.view'] },
     { mod: 'sales', nav: "O'chirilgan buyurtmalar",     perm: ['sales.manage'] },
     { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },
-    // Ikkalasi bir xil narsani anglatib qolmasin: dalolatnoma — mijoz bilan
-    // imzolanadigan hujjat, qarzdorlik — kim qancha qarzda degan hisobot.
+    // Dalolatnoma — mijoz bilan imzolanadigan hujjat; qarzdorlik esa
+    // hisobot va u yozilgan (yuqorida, o'z sahifasi bilan).
     { mod: 'sales', nav: 'Solishtirma dalolatnoma',     perm: ['sales.view'] },
-    { mod: 'sales', nav: 'Qarzdorlik',                  perm: ['sales.view'] },
 
     // Ta'minot
     { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },

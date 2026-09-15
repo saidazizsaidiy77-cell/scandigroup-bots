@@ -666,6 +666,34 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
     } finally { client.release(); }
   }
 
+  //  BEKOR QILISH. Konver noto'g'ri kiritilgan bo'lsa jurnaldan ham,
+  //  ombordan ham chiqariladi. Ikki narsa tekshiriladi:
+  //    · bronda turgan konver bekor qilinmaydi — mijozga va'da qilingan
+  //      mahsulot jimgina yo'qolib qolardi (soni bilan bir xil qoida);
+  //    · chiqib ketgani bekor qilinmaydi — u mijozda va balansida turibdi,
+  //      qaytishi «Qaytib olish» bilan yoziladi (u hali yo'q).
+  //  Qoldiq ham yangilanadi: `fg_stock` jamlanma jadval, konverni
+  //  o'zgartirish uni o'zi tuzatmaydi.
+  let oldUnit = null;
+  if (status) {
+    oldUnit = (await db.query(
+      `SELECT conveyor_no, status, product_id FROM production_units WHERE id = $1`,
+      [req.params.id])).rows[0];
+    if (!oldUnit) return res.status(404).json({ error: 'Konver topilmadi' });
+    if (status === 'cancelled') {
+      if (oldUnit.status === 'shipped')
+        return res.status(400).json({
+          error: `${oldUnit.conveyor_no}: chiqib ketgan konver bekor qilinmaydi` });
+      const bron = (await db.query(
+        `SELECT COALESCE(SUM(qty), 0)::int AS n FROM unit_reservations
+          WHERE unit_id = $1`, [req.params.id])).rows[0].n;
+      if (bron)
+        return res.status(400).json({
+          error: `${oldUnit.conveyor_no}: ${bron} tasi bronda — ` +
+                 `avval bronni oling` });
+    }
+  }
+
   const { rows } = await db.query(
     `UPDATE production_units SET
        order_no             = COALESCE($2, order_no),
@@ -701,6 +729,11 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
      typeof req.body.is_stock === 'boolean' ? req.body.is_stock : null,
      fg_on || null]);
   if (!rows[0]) return res.status(404).json({ error: 'Konver topilmadi' });
+  //  Ombor qoldig'i konverlardan qayta hisoblanadi: `fg` dan chiqqan ham,
+  //  unga kirgan ham qoldiqni o'zgartiradi.
+  if (oldUnit && status !== oldUnit.status
+      && (oldUnit.status === 'fg' || status === 'fg'))
+    await refreshStock(db, oldUnit.product_id);
   await audit(req, { module: 'production', action: 'update', entity: 'unit',
                      entity_id: req.params.id, payload: req.body });
   res.json({ ok: true });

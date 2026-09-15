@@ -144,6 +144,25 @@ bron qo'yilgani ham hali qarz emas — mahsulot mijozda emas. To'lovlar
 ayirilmaydi: kassa moduli yozilganda o'sha yerga bitta ayirma qo'shiladi.
 Buyurtma oynasida mijoz tanlanganda balans ostida chiqadi.
 
+**Qarzdorlik hisoboti** (`v_customer_ledger`, `/qarzdorlik.html`) — balans
+bitta raqam, zavodga esa ORALIQ kerak: «1-sentabrda qancha edi, oy ichida
+qancha qo'shildi, 30-sentabrda qancha bo'ldi». Shuning uchun hisobot
+balansdan emas, uni hosil qiladigan HARAKATLARdan yig'iladi — har biri
+o'z sanasi bilan:
+
+    boshiga + qarzdor - haqdor = oxiriga
+
+**Qarzdor** (debit) — qarz oshdi, ya'ni mahsulot mijozga chiqdi.
+**Haqdor** (kredit) — qarz kamaydi, ya'ni to'lov. Kassa moduli yozilmagani
+uchun haqdor ustuni hozircha bo'sh: u yozilganda `v_customer_ledger` ga
+bitta UNION shoxi qo'shiladi va hisobot o'zi to'ladi — sahifa ham, so'rov
+ham o'zgarmaydi. Sanasi yo'q harakat 1900-01-01 bo'ladi: har qanday
+oraliqdan oldin turadi va yig'indidan yo'qolib qolmaydi.
+
+Qator bosilganda ostida o'sha mijozning harakatlari chiqadi (qaysi konver,
+qaysi zakaz, qaysi kun) va yonida yugurib boradigan qoldiq. Chegara savdo
+bilan bir xil: menejer faqat o'z yo'nalishidagi mijozlarni ko'radi.
+
 **Boshlang'ich qarzdorlik** (`customers.opening_debt`, `$`) — tizim ishga
 tushgan kundagi mijoz qarzi. Bir martalik raqam, hisoblanmaydi: kassa
 yozilganda qarz shundan davom etadi (`boshlang'ich + sotuvlar − to'lovlar`).
@@ -294,6 +313,15 @@ mudirida bu ko'rinmaydi — soni tarixga tegadi. **Bron qo'yilgan donadan
 kam qilib bo'lmaydi**: mijozga va'da qilingan mahsulot jimgina
 yo'qolib qolardi.
 
+**Noto'g'ri kiritilgan konverni bekor qilish** — xuddi shu oynada,
+«Konverni bekor qilish». Jurnaldagi «×» bilan bitta yo'l
+(`PATCH /api/units/:id`, `status='cancelled'`), lekin omborga tushgan
+konver jurnaldan chiqib ketadi va u yerdan topilmasdi. Qoldiqdan ham,
+jamlanma `fg_stock` dan ham chiqadi; tarixi o'chmaydi — konver «bekor
+qilingan» bo'lib qoladi. Ikki holda bekor qilinmaydi: **bronda turgani**
+(mijozga va'da qilingan) va **chiqib ketgani** (u mijozda va balansida —
+qaytishi «Qaytib olish» bilan yoziladi, u hali yo'q).
+
 ---
 
 ## Fayllar
@@ -369,8 +397,9 @@ keladi. Shuning uchun avval kiritish, keyin modul.
 2. **Mijozlar bazasi** — nomi, telefoni, regioni, kanali.
    (Ikkalasi ham Excel'da bo'lsa yuklash yoziladi, qo'lda terilmaydi.)
 3. **Savdo** — YOZILDI (`sql/sales.sql`, `modules/sales.js`,
-   `public/buyurtmalar.html`): buyurtma, bron (ombor, zahira va ishlab
-   chiqarishdan) va chiqarishni ombor mudiri nazorat qilishi.
+   `public/buyurtmalar.html`, `public/qarzdorlik.html`): buyurtma, bron
+   (ombor, zahira va ishlab chiqarishdan), chiqarishni ombor mudiri
+   nazorat qilishi va oraliq bo'yicha qarzdorlik.
 4. **Kassa** — kirim hujjatlari. Mahsulot narxi `$`, harajat `so'm` ham.
    Balans shunda to'liq bo'ladi: hozir to'lovlar ayirilmaydi.
 

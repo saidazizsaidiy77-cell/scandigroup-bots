@@ -742,4 +742,87 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+// ══════════════════════════════════════════════════════════ QARZDORLIK
+//
+//  «Kim qancha qarz» — bitta raqam emas, ORALIQ: davr boshiga qancha edi,
+//  davr ichida qancha qo'shildi (qarzdor) va qancha yopildi (haqdor),
+//  davr oxiriga qancha qoldi. Buxgalteriya tilida debit/kredit; zavodda
+//  esa qarzdor/haqdor deyiladi va ekranda ham shunday yoziladi.
+//
+//    boshiga + qarzdor − haqdor = oxiriga
+//
+//  Manba — `v_customer_ledger` (sql/sales.sql): boshlang'ich qarz va
+//  chiqib ketgan mahsulot, har biri o'z sanasi bilan. Haqdor ustuni
+//  hozircha bo'sh: to'lovni kassa moduli yozadi, u hali yo'q.
+//
+//  Chegara boshqa savdo sahifalari bilan bir xil: menejer faqat o'z
+//  yo'nalishidagi mijozlarni ko'radi (`channelsOf`).
+const DEBT_SQL = `
+  SELECT c.id, c.name, c.region, c.phone, c.channel,
+         ch.name AS channel_name, m.name AS manager_name,
+         COALESCE(SUM(l.debit - l.credit) FILTER (WHERE l.on_date <  $1), 0) AS opening,
+         COALESCE(SUM(l.debit)  FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) AS debit,
+         COALESCE(SUM(l.credit) FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) AS credit,
+         COALESCE(SUM(l.debit - l.credit) FILTER (WHERE l.on_date <= $2), 0) AS closing
+    FROM customers c
+    LEFT JOIN customer_channels ch ON ch.code = c.channel
+    LEFT JOIN workers m            ON m.id = c.manager_id
+    LEFT JOIN v_customer_ledger l  ON l.customer_id = c.id
+   WHERE c.active
+     AND ($3::text[] IS NULL OR c.channel = ANY($3))
+     AND ($4::text IS NULL OR c.name ILIKE '%' || $4 || '%'
+          OR c.region ILIKE '%' || $4 || '%' OR c.phone ILIKE '%' || $4 || '%')
+   GROUP BY c.id, c.name, c.region, c.phone, c.channel, ch.name, m.name
+  HAVING COALESCE(SUM(l.debit - l.credit) FILTER (WHERE l.on_date <  $1), 0) <> 0
+      OR COALESCE(SUM(l.debit)  FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) <> 0
+      OR COALESCE(SUM(l.credit) FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) <> 0
+      OR COALESCE(SUM(l.debit - l.credit) FILTER (WHERE l.on_date <= $2), 0) <> 0
+   ORDER BY closing DESC, c.name`;
+
+//  Oraliq berilmasa: shu oyning boshidan bugungacha. Sana noto'g'ri
+//  yozilsa ham hisobot ochilishi kerak — shuning uchun tekshirilgan
+//  qiymat olinadi, xato qaytarilmaydi.
+function period(q) {
+  const bugun = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const ok = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? s : null);
+  const to = ok(q.to) || iso(bugun);
+  const from = ok(q.from)
+    || iso(new Date(Date.UTC(bugun.getUTCFullYear(), bugun.getUTCMonth(), 1)));
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+router.get('/debts', need(...READ), wrap(async (req, res) => {
+  const { from, to } = period(req.query);
+  const { rows } = await db.query(DEBT_SQL,
+    [from, to, channelsOf(req), req.query.q || null]);
+  const sum = (k) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
+  res.json({ from, to, rows,
+             total: { opening: sum('opening'), debit: sum('debit'),
+                      credit: sum('credit'), closing: sum('closing') } });
+}));
+
+//  Bitta mijozning harakatlari — qator ochilganda. «Qayerdan chiqdi shu
+//  raqam» degan savolga javob: qaysi konver, qaysi zakaz, qaysi kun.
+router.get('/debts/:id', need(...READ), wrap(async (req, res) => {
+  const { from, to } = period(req.query);
+  const chans = channelsOf(req);
+  const c = (await db.query(
+    `SELECT id, name FROM customers
+      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))`,
+    [req.params.id, chans])).rows[0];
+  if (!c) return res.status(404).json({ error: 'Mijoz topilmadi' });
+
+  const opening = Number((await db.query(
+    `SELECT COALESCE(SUM(debit - credit), 0) AS n FROM v_customer_ledger
+      WHERE customer_id = $1 AND on_date < $2`, [c.id, from])).rows[0].n);
+  const { rows } = await db.query(
+    `SELECT on_date, kind, note, conveyor_no, order_no, debit, credit
+       FROM v_customer_ledger
+      WHERE customer_id = $1 AND on_date BETWEEN $2 AND $3
+      ORDER BY on_date, conveyor_no
+      LIMIT 500`, [c.id, from, to]);
+  res.json({ customer: c, from, to, opening, rows });
+}));
+
 module.exports = router;

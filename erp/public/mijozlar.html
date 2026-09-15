@@ -68,7 +68,7 @@
     <thead><tr><th>Mijoz nomi</th><th>Respublika</th><th>Region</th><th>Tel raqami</th>
       <th>Kanali</th><th>Menejer</th>
       <th class="num">Zakaz</th><th class="num">Dona</th><th class="num">Summa, $</th>
-      <th class="num">Qarz, $</th><th></th></tr></thead>
+      <th class="num">Qarzi, $</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
 </div>
@@ -155,8 +155,14 @@ function render(){
       <td class="muted">${c.manager_name ? esc(c.manager_name) : '<span class="tag warn">biriktirilmagan</span>'}</td>
       <td class="num">${c.orders}</td><td class="num">${c.qty}</td>
       <td class="num">${money(c.amount)}</td>
-      <td class="num">${c.opening_debt
-        ? `<b>${money(c.opening_debt)}</b>` : '<span class="muted">—</span>'}</td>
+      <!-- Qarz — BALANS (boshlang'ich qarz + chiqib ketgan mahsulot),
+           faqat boshlang'ich qarz emas: mijozga mahsulot chiqqani
+           ustunda ko'rinmasa, ro'yxat «qarzi yo'q» deb turardi. -->
+      <td class="num">${Number(c.balance)
+        ? `<b>${money(c.balance)}</b>${Number(c.opening_debt)
+            ? `<div class="muted" style="font-size:11px">bosh. ${money(c.opening_debt)}</div>`
+            : ''}`
+        : '<span class="muted">—</span>'}</td>
       <td class="num"><button onclick="openForm(${c.id})">✎</button></td>
     </tr>`).join('')
     : '<tr><td class="muted" colspan="11">Mijoz topilmadi</td></tr>';

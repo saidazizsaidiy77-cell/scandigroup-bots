@@ -363,7 +363,8 @@ function drawStockRow(r) {
         }).join('') + ((canMove || canFixQty)
         ? `<div class="muted" style="font-size:12px;margin-top:6px">Konver
              raqamini bosing \u2014 ${[canMove ? "boshqa omborga ko'chirish" : '',
-               canFixQty ? 'sonini to\'g\'rilash' : ''].filter(Boolean).join(', ')}</div>` : '')}
+               canFixQty ? "sonini to'g'rilash yoki bekor qilish" : '']
+               .filter(Boolean).join(', ')}</div>` : '')}
     </td></tr>`}`;
 }
 
@@ -430,7 +431,36 @@ function openMove(id, no, qty, bron) {
             bron ? `, shundan <b>${bron}</b> tasi bronda` : ''}. Qoldiq va
             hisobotlar darrov to'g'rilanadi.</p>
         </div>` : ''}
+
+        <!--  Butunlay noto'g'ri kiritilgan konver. Jurnaldagi «×» bilan
+              bir xil yo'l — lekin omborga tushgan konver jurnaldan
+              chiqib ketadi va u yerdan topilmasdi. Bronda turgani va
+              chiqib ketgani bekor qilinmaydi (tekshiruv serverda). -->
+        ${canFixQty ? `<div class="stack" style="margin-top:20px;
+            border-top:1px solid var(--line);padding-top:18px">
+          <div><label>Noto'g'ri kiritilgan</label>
+            <button class="danger" onclick="doCancel(${id}, '${esc(no)}', ${qty})">
+              Konverni bekor qilish</button></div>
+          <p class="muted" style="font-size:12px;margin:0">Qoldiqdan ham,
+            jurnaldan ham chiqadi. Tarixi o'chmaydi — konver «bekor qilingan»
+            bo'lib qoladi.</p>
+        </div>` : ''}
       </div></div>`;
+}
+
+//  Bekor qilish jurnaldagi bilan bitta yo'l: `PATCH /api/units/:id` ga
+//  `status: 'cancelled'`. Qoldiq server tomonda qayta hisoblanadi.
+async function doCancel(id, no, qty) {
+  if (!confirm(`${no} (${qty} ta) bekor qilinsinmi?\n\n` +
+               `Ombor qoldig'idan chiqadi va jurnalda «bekor qilingan» ` +
+               `bo'lib qoladi.`)) return;
+  try {
+    await App.api('/api/units/' + id, { method: 'PATCH',
+      body: JSON.stringify({ status: 'cancelled' }) });
+    closeMove();
+    toast(`${no} bekor qilindi`);
+    await loadStock();
+  } catch (e) { toast(e.message, true); }
 }
 
 //  Soni jurnaldagi tahrir bilan bir xil yo'ldan o'tadi (`PATCH /api/units/:id`):
