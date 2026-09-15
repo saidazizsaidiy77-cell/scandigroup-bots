@@ -890,12 +890,12 @@ test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri vitrinaga kiritiladi', async (
   assert.equal((await jami('&product_type=Penal')).qty, 2);
   assert.equal((await jami('&product_type=Stul')).qty, 9);
   assert.equal((await jami('&product_type=Penal,Stul')).units, 2, 'ikkitasi birdan');
-  assert.equal((await jami(`&product_id=${PENAL},${STUL}`)).units, 2);
-  assert.equal((await jami(`&product_id=${STUL}`)).qty, 9);
+  assert.equal((await jami('&product_type=Penal,Stul')).qty, 11);
 
-  // Tanlov ro'yxati shu omborda TURGANLARIDAN tuziladi
+  // Tanlov ro'yxati shu omborda TURGANLARIDAN tuziladi, qoldig'i bilan
   const f = (await admin('GET', '/api/warehouse/fg/summary?w=VITR-ARCA')).body.facets;
-  assert.deepEqual(f.map((x) => x.product_type).sort(), ['Penal', 'Stul']);
+  assert.deepEqual(f, [{ product_type: 'Penal', qty: 2 },
+                       { product_type: 'Stul', qty: 9 }]);
 
   // T/M omborda ko'rinmaydi — aks holda bitta mahsulot ikki joyda sanalardi
   assert.equal((await admin('GET', '/api/warehouse/fg/summary?q=Shokolad')).body.total.qty, 0);

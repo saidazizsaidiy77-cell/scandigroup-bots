@@ -211,11 +211,15 @@ const openRows = new Map();   // kalit → konverlar (bir marta yuklanadi)
 
 const rowKey = r => `${r.product_id}|${r.color || ''}|${r.fabric || ''}`;
 
-//  Tanlangan turlar va mahsulotlar. Bir nechtasi birdan tanlanadi —
-//  «penal va kamod nechta qoldi» degan savol zavodda bitta turnikidan
-//  ko'proq beriladi. Shuning uchun ro'yxat emas, bosiladigan chiplar:
-//  ikkinchisini tanlash uchun Ctrl ushlab turish kerak bo'lmasin.
-const sel = { type: new Set(), prod: new Set() };
+//  Tanlangan turlar. Bir nechtasi birdan tanlanadi — «penal va kamod
+//  nechta qoldi» degan savol zavodda bitta turnikidan ko'proq beriladi.
+//  Shuning uchun ro'yxat emas, bosiladigan chiplar: ikkinchisini tanlash
+//  uchun Ctrl ushlab turish kerak bo'lmasin.
+//
+//  Mahsulot bo'yicha alohida filtr YO'Q: turlar beshta, mahsulot esa
+//  o'nlab — har biriga chip qo'yilsa filtr jadvaldan uzun bo'lib
+//  ketardi. Aniq mahsulot kerak bo'lsa qidiruv maydoni bor.
+const sel = { type: new Set() };
 
 function stockParams() {
   const p = wq(new URLSearchParams());
@@ -223,51 +227,24 @@ function stockParams() {
   const f = $('sFrom')?.value;         if (f) p.set('from', f);
   const t = $('sTo')?.value;           if (t) p.set('to', t);
   if (sel.type.size) p.set('product_type', [...sel.type].join(','));
-  if (sel.prod.size) p.set('product_id', [...sel.prod].join(','));
   return p.toString();
 }
 
 //  Turlar: nechtasi tanlansa, hammasi ko'rsatiladi. Yonida qoldig'i —
 //  qaysi turdan nima borligi tanlashdan oldin ko'rinsin.
 function typeChips(d) {
-  const by = new Map();
-  for (const f of d.facets || [])
-    by.set(f.product_type, (by.get(f.product_type) || 0) + f.qty);
-  if (by.size < 2) return '';
-  return [...by].map(([t, qty]) =>
-    `<button class="${sel.type.has(t) ? 'primary' : ''}"
-       onclick="toggleType('${esc(t)}')">${esc(t)} <b>${qty}</b></button>`).join('');
-}
-
-//  Mahsulotlar ro'yxati tanlangan turlarga qarab qisqaradi: «Stul»
-//  tanlangach penal nomlari turishi ortiqcha.
-function prodChips(d) {
-  const list = (d.facets || [])
-    .filter(f => !sel.type.size || sel.type.has(f.product_type));
+  const list = d.facets || [];
+  // Bitta tur bo'lsa chip ham kerak emas: tanlash imkoni yo'q qator
+  // faqat joy egallaydi.
   if (list.length < 2) return '';
   return list.map(f =>
-    `<button class="${sel.prod.has(String(f.product_id)) ? 'primary' : ''}"
-       onclick="toggleProd('${f.product_id}')">${esc(f.product)}${
-         sel.type.size === 1 ? '' : ' \u00b7 ' + esc(f.product_type)
-       } <b>${f.qty}</b></button>`).join('');
+    `<button class="${sel.type.has(f.product_type) ? 'primary' : ''}"
+       onclick="toggleType('${esc(f.product_type)}')"
+       >${esc(f.product_type)} <b>${f.qty}</b></button>`).join('');
 }
 
 function toggleType(t) {
   sel.type.has(t) ? sel.type.delete(t) : sel.type.add(t);
-  //  Tanlangan mahsulot endi ko'rinmaydigan turdan bo'lib qolsa
-  //  tashlanadi — aks holda jadval sababsiz bo'sh chiqardi.
-  if (sel.type.size) {
-    for (const id of [...sel.prod]) {
-      const f = stock.facets.find(x => String(x.product_id) === id);
-      if (f && !sel.type.has(f.product_type)) sel.prod.delete(id);
-    }
-  }
-  loadStock();
-}
-
-function toggleProd(id) {
-  id = String(id);
-  sel.prod.has(id) ? sel.prod.delete(id) : sel.prod.add(id);
   loadStock();
 }
 
@@ -293,10 +270,6 @@ function drawStock() {
       ${typeChips(d) ? `<div style="margin-top:14px">
         <label>Turi</label>
         <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
-      ${prodChips(d) ? `<div style="margin-top:12px">
-        <label>Mahsulot</label>
-        <div class="row" style="gap:6px;flex-wrap:wrap;max-height:132px;overflow-y:auto"
-          >${prodChips(d)}</div></div>` : ''}
     </div>
 
     <div class="grid g3" style="margin-top:16px">
@@ -312,7 +285,7 @@ function drawStock() {
 
     ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
       <p class="muted" style="margin-top:8px">${d.q || d.from || d.to
-        || sel.type.size || sel.prod.size
+        || sel.type.size
         ? 'Tanlangan shart bo\'yicha mahsulot topilmadi.'
         : 'Qabul qilingan mahsulot shu yerda turadi.'}</p></div>`
     : `<div class="card" style="margin-top:16px">
@@ -428,7 +401,7 @@ let t1 = null;
 const debStock = () => { clearTimeout(t1); t1 = setTimeout(loadStock, 350); };
 function clearStock() {
   ['sQ', 'sFrom', 'sTo'].forEach(i => { if ($(i)) $(i).value = ''; });
-  sel.type.clear(); sel.prod.clear();
+  sel.type.clear();
   loadStock();
 }
 function period2(days) {

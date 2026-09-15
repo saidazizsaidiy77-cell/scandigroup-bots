@@ -1293,16 +1293,14 @@ function stockQuery(q, limit) {
         AND ($5::text IS NULL OR conveyor_no ILIKE '%' || $5 || '%'
              OR product ILIKE '%' || $5 || '%' OR sku ILIKE '%' || $5 || '%'
              OR order_no ILIKE '%' || $5 || '%')
-        -- Ombor ekranidagi mahsulot va turi filtri. Excel ekranda
-        -- ko'rinayotgani bilan bir xil bo'lishi kerak: mudir filtrlab
-        -- yuklab olsa, faylda boshqa narsa chiqmasin.
-        AND ($7::text IS NULL OR product_id = ANY(string_to_array($7, ',')::int[]))
-        AND ($8::text IS NULL OR product_type = ANY(string_to_array($8, ',')))
+        -- Ombor ekranidagi tur filtri. Excel ekranda ko'rinayotgani
+        -- bilan bir xil bo'lishi kerak: mudir filtrlab yuklab olsa,
+        -- faylda boshqa narsa chiqmasin.
+        AND ($7::text IS NULL OR product_type = ANY(string_to_array($7, ',')))
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no
       LIMIT ${limit}`,
     params: [groupIds(q), q.customer_id || null, q.from || null, q.to || null,
-             q.q || null, q.w || null, q.product_id || null,
-             q.product_type || null],
+             q.q || null, q.w || null, q.product_type || null],
   };
 }
 
