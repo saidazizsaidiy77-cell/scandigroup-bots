@@ -32,7 +32,7 @@
   <div style="overflow-x:auto"><table>
     <thead><tr><th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
       <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
-      <th class="num">Biriktirilgan</th><th class="num">Summa, $</th>
+      <th class="num">Bron</th><th class="num">Summa, $</th>
       <th>Holat</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
@@ -52,12 +52,12 @@ const money = (v) => {
 };
 
 // Holat nomlari bitta joyda: jadval ham, tahrir oynasi ham shundan oladi.
-const STATUS = { new: 'Yangi', reserved: 'Biriktirilgan',
+const STATUS = { new: 'Yangi', reserved: 'Bron qilingan',
                  shipped: "Jo'natilgan", cancelled: 'Bekor qilingan' };
-const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['reserved', 'Biriktirilgan'],
+const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['reserved', 'Bron qilingan'],
                  ['shipped', "Jo'natilgan"], ['cancelled', 'Bekor']];
 
-let rows = [], customers = [], managers = [], products = [];
+let rows = [], customers = [], managers = [], products = [], dests = [];
 let status = '', canWrite = false;
 // Ochiq buyurtma: sarlavha, qatorlar va biriktirilgan konverlar.
 let cur = null;
@@ -66,9 +66,11 @@ async function boot(){
   canWrite = App.can('sales.manage');
   $('btnNew').innerHTML = canWrite
     ? `<button class="primary" onclick="openOrder(null)">Yangi buyurtma</button>` : '';
-  const [c, p] = await Promise.all([
-    App.api('/api/units/customers'), App.api('/api/sales/products')]);
+  const [c, p, d] = await Promise.all([
+    App.api('/api/units/customers'), App.api('/api/sales/products'),
+    App.api('/api/sales/destinations')]);
   customers = c.customers; managers = c.managers; products = p.rows;
+  dests = d.rows;
   drawChips();
   await load();
 }
@@ -142,24 +144,43 @@ function draw(){
         </div>
 
         <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <div style="flex:2;min-width:220px"><label>Mijoz</label>
-            <select id="oCust" ${dis}>
+          <div style="flex:2;min-width:230px"><label>Mijoz</label>
+            <select id="oCust" ${dis} onchange="drawBalance()">
               <option value="">— tanlang —</option>
               ${customers.map(c => `<option value="${c.id}"
                 ${o.customer_id === c.id ? 'selected' : ''}>${esc(c.name)}${
                   c.region ? ' · ' + esc(c.region) : ''}</option>`).join('')}
-            </select></div>
+            </select>
+            <div id="oBal" class="muted" style="font-size:12px;margin-top:5px"></div></div>
           <div style="flex:1;min-width:160px"><label>Menejer</label>
             <select id="oMgr" ${dis}><option value="">— o'zim —</option>
               ${managers.map(m => `<option value="${m.id}"
                 ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
             </select></div>
-          <div style="flex:1;min-width:130px"><label>Yozilgan</label>
+          <div style="flex:1;min-width:130px"><label>Buyurtma sanasi</label>
             <input id="oOn" type="date" ${dis}
                    value="${(o.ordered_on || '').slice(0, 10)}"></div>
-          <div style="flex:1;min-width:130px"><label>Muddat</label>
+          <div style="flex:1;min-width:130px"><label>Chiqib ketish sanasi</label>
             <input id="oDue" type="date" ${dis}
                    value="${(o.due_on || '').slice(0, 10)}"></div>
+        </div>
+
+        <!-- Jo'natish tafsilotlari. Manzil faqat kerak bo'lganda so'raladi:
+             mashina zavodga kirsa manzil yozadigan narsa yo'q. -->
+        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;
+             margin-top:14px">
+          <div style="flex:1;min-width:200px"><label>Qayerga</label>
+            <select id="oDest" ${dis} onchange="drawAddr()">
+              <option value="">— tanlanmagan —</option>
+              ${dests.map(d => `<option value="${esc(d.code)}"
+                ${o.ship_to === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
+            </select></div>
+          <div style="flex:2;min-width:220px" id="oAddrBox"><label>Manzil</label>
+            <input id="oAddr" ${dis} value="${esc(o.address || '')}"
+                   placeholder="shahar, ko'cha, uy"></div>
+          <div style="flex:1;min-width:170px"><label>Kutib oluvchi raqami</label>
+            <input id="oPhone" ${dis} value="${esc(o.receiver_phone || '')}"
+                   placeholder="+998..."></div>
         </div>
 
         <div style="margin-top:14px"><label>Izoh</label>
@@ -170,7 +191,7 @@ function draw(){
           <thead><tr><th style="min-width:200px">Mahsulot</th><th>Rang</th><th>Mato</th>
             <th class="num" style="width:80px">Soni</th>
             <th class="num" style="width:100px">Narx, $</th>
-            <th class="num">Biriktirilgan</th><th></th></tr></thead>
+            <th class="num">Bron</th><th></th></tr></thead>
           <tbody id="tI"></tbody>
         </table></div>
         ${ro ? '' : `<button style="margin-top:10px" onclick="addItem()">+ Qator qo'shish</button>`}
@@ -182,10 +203,35 @@ function draw(){
           ${isNew ? '' : `<button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
         </div>`}
         ${isNew && canWrite ? `<p class="muted" style="margin-top:10px;font-size:13px">
-          Konver biriktirish buyurtma saqlangandan keyin ochiladi.</p>` : ''}
+          Bron buyurtma saqlangandan keyin ochiladi.</p>` : ''}
       </div></div>`;
   drawItems();
   drawUnits();
+  drawBalance();
+  drawAddr();
+}
+
+//  Mijoz tanlanganda balansi ostida chiqadi. Zavod qoidasi: qarzga
+//  faqat CHIQIB KETGAN mahsulot qo'shiladi — buyurtma yozilgani ham,
+//  bron qo'yilgani ham hali qarz emas.
+function drawBalance() {
+  const el = $('oBal'); if (!el) return;
+  const c = customers.find(x => String(x.id) === $('oCust').value);
+  if (!c) { el.innerHTML = ''; return; }
+  const bal = Number(c.balance) || 0;
+  el.innerHTML = `Balans: <b class="${bal > 0 ? 'tag bad' : ''}"
+      style="font-size:12px">${bal > 0 ? money(bal) + ' $ qarz' : 'qarz yo\'q'}</b>${
+    Number(c.opening_debt) ? ` \u00b7 boshlang'ich ${money(c.opening_debt)}` : ''}${
+    c.phone ? ` \u00b7 ${esc(c.phone)}` : ''}`;
+}
+
+//  Manzil faqat kerak bo'lgan yo'lda ko'rinadi (`order_destinations.needs_address`).
+function drawAddr() {
+  const box = $('oAddrBox'); if (!box) return;
+  const d = dests.find(x => x.code === $('oDest').value);
+  box.hidden = !d || !d.needs_address;
+  const inp = $('oAddr');
+  if (inp) inp.classList.toggle('need', !!(d && d.needs_address && !inp.value.trim()));
 }
 
 function drawItems(){
@@ -216,22 +262,22 @@ function drawItems(){
             oninput="setField(${i},'unit_price',this.value)"></td>
       <td class="num">${it.id ? `${got} / ${need}` : '<span class="muted">—</span>'}</td>
       <td class="num" style="white-space:nowrap">${it.id && !ro
-          ? `<button onclick="openPick(${it.id})">Konver</button> ` : ''}${
+          ? `<button onclick="openPick(${it.id})">Bron</button> ` : ''}${
         ro ? '' : `<button onclick="delItem(${i})">✕</button>`}</td>
     </tr>`;
   }).join('') : '<tr><td class="muted" colspan="7">Qator qo\'shilmagan</td></tr>';
 }
 
-// Biriktirilgan konverlar ro'yxati: qaysi qatorga, qaysi bo'limda turibdi.
+// Bron qilingan konverlar: qaysi qatorga, nechtasi, qayerda turibdi.
 function drawUnits(){
   const ro = !canWrite || cur.order.status === 'shipped'
           || cur.order.status === 'cancelled';
   if (!cur.units.length) { $('unitsBox').innerHTML = ''; return; }
   $('unitsBox').innerHTML = `
-    <h2 style="margin:0 0 10px">Biriktirilgan konverlar</h2>
+    <h2 style="margin:0 0 10px">Bron qilingan konverlar</h2>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>K&#8470;</th><th>Mahsulot qatori</th><th>Rang</th><th>Mato</th>
-        <th class="num">Soni</th><th>Qayerda</th><th></th></tr></thead>
+        <th class="num">Bron</th><th>Qayerda</th><th></th></tr></thead>
       <tbody>${cur.units.map(u => {
         const it = cur.items.find(x => x.id === u.order_item_id);
         return `<tr>
@@ -239,14 +285,24 @@ function drawUnits(){
           <td class="muted">${it ? esc(it.product) : '—'}</td>
           <td class="muted">${u.color ? esc(u.color) : '—'}</td>
           <td class="muted">${u.fabric ? esc(u.fabric) : '—'}</td>
-          <td class="num">${u.qty}</td>
-          <td>${u.status === 'fg' ? '<span class="tag ok">T/M ombor</span>'
-               : `<span class="tag">${esc(u.section || '—')}</span>${
-                   u.is_stock ? ' <span class="tag">zahira</span>' : ''}`}</td>
+          <!-- Konverning o'zi kattaroq bo'lsa yonida turadi: 6 / 10 -->
+          <td class="num"><b>${u.qty}</b>${u.unit_qty > u.qty
+            ? `<span class="muted" style="font-size:11px"> / ${u.unit_qty}</span>` : ''}</td>
+          <td>${where(u)}</td>
           <td class="num">${ro ? ''
-            : `<button onclick="unassign(${u.id})">Ajratish</button>`}</td>
+            : `<button onclick="unassign(${u.id})">Bronni olish</button>`}</td>
         </tr>`; }).join('')}</tbody>
     </table></div>`;
+}
+
+//  Konver qayerda turibdi — bitta joyda yoziladi, uni ikkita ro'yxat
+//  ham ishlatadi (bron qilinganlar va nomzodlar).
+function where(u) {
+  if (u.status === 'fg')
+    return `<span class="tag ok">${esc(u.warehouse || 'T/M ombor')}</span>`;
+  return `<span class="tag">${esc(u.section || 'boshlanmagan')}</span>${
+    u.is_stock ? ' <span class="tag">zahira</span>'
+               : ' <span class="muted" style="font-size:11px">ishlanmoqda</span>'}`;
 }
 
 function setField(i, k, v){ cur.items[i][k] = v; }
@@ -266,6 +322,9 @@ async function save(){
     ordered_on: $('oOn').value || null,
     due_on: $('oDue').value || null,
     note: $('oNote').value.trim() || null,
+    ship_to: $('oDest').value || null,
+    address: $('oAddr').value.trim() || null,
+    receiver_phone: $('oPhone').value.trim() || null,
     items: cur.items.map(it => ({ id: it.id, product_id: Number(it.product_id) || null,
       qty: Number(it.qty) || 1, color: it.color || null, fabric: it.fabric || null,
       unit_price: it.unit_price === '' || it.unit_price == null ? null : Number(it.unit_price),
@@ -310,30 +369,31 @@ async function openPick(itemId){
     <div class="overlay" onclick="if(event.target===this)closePick()">
       <div class="modal" style="max-width:760px">
         <div class="row" style="justify-content:space-between;margin-bottom:6px">
-          <h1 style="margin:0">Konver biriktirish</h1>
+          <h1 style="margin:0">Konver bron qilish</h1>
           <button onclick="closePick()">Orqaga</button></div>
         <p class="muted" style="margin-bottom:16px">${esc(it?.product || '')}${
           it?.color ? ' · ' + esc(it.color) : ''}${it?.fabric ? ' · ' + esc(it.fabric) : ''}
           · yopilmagani: <b>${left}</b> ${esc(it?.uom || '')}</p>
         <div style="overflow-x:auto"><table>
           <thead><tr><th>K&#8470;</th><th>Qayerda</th><th>Rang</th><th>Mato</th>
-            <th class="num">Bor</th><th class="num" style="width:90px">Olinadi</th>
+            <th class="num">Bo'sh</th><th class="num" style="width:90px">Bron</th>
             <th></th></tr></thead>
           <tbody>${pick.rows.length ? pick.rows.map(u => `<tr>
             <td><strong>${esc(u.conveyor_no)}</strong></td>
-            <td>${u.status === 'fg'
-              ? '<span class="tag ok">T/M ombor</span>'
-              : `<span class="tag">${esc(u.section || '—')}</span> <span class="tag">zahira</span>`}</td>
+            <td>${where(u)}</td>
             <td class="${u.color_ok ? '' : 'muted'}">${u.color ? esc(u.color) : '—'}</td>
             <td class="${u.fabric_ok ? '' : 'muted'}">${u.fabric ? esc(u.fabric) : '—'}</td>
-            <td class="num">${u.qty}</td>
-            <td class="num"><input id="q${u.id}" type="number" min="1" max="${u.qty}"
-                  value="${Math.max(1, Math.min(u.qty, left || u.qty))}"
+            <!-- Konverda nechta bo'sh dona qolgani. Bir qismi boshqa
+                 mijozda bo'lsa yonida kulrang turadi: 4 / 10 -->
+            <td class="num"><b>${u.free_qty}</b>${u.reserved_qty
+              ? `<span class="muted" style="font-size:11px"> / ${u.qty}</span>` : ''}</td>
+            <td class="num"><input id="q${u.id}" type="number" min="1" max="${u.free_qty}"
+                  value="${Math.max(1, Math.min(u.free_qty, left || u.free_qty))}"
                   style="max-width:80px;text-align:right"></td>
-            <td class="num"><button class="primary" onclick="assign(${u.id})">Olish</button></td>
+            <td class="num"><button class="primary" onclick="assign(${u.id})">Bron</button></td>
           </tr>`).join('')
             : `<tr><td class="muted" colspan="7">Bo'sh konver yo'q —
-                 ombor ham, zahira ham bo'sh</td></tr>`}</tbody>
+                 omborda ham, zahirada ham, ishlab chiqarishda ham</td></tr>`}</tbody>
         </table></div>
       </div></div>`;
 }

@@ -356,7 +356,7 @@ function render(){
       <div class="muted" style="font-size:13px">${s}</div></div>`).join('');
 
   $('tB').innerHTML = rows.length ? rows.map(r => `
-    <tr>
+    <tr onclick="toggleBron(${r.id}, event)" style="cursor:pointer">
       <td class="k">${canMove && r.status === 'production'
         ? `<input type="checkbox" class="sel" value="${r.id}" style="width:auto" onchange="bulk()">`
         : '<span class="pad"></span>'}<strong>${esc(r.conveyor_no)}</strong></td>
@@ -394,8 +394,11 @@ function render(){
         ${canEdit ? `<button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>` : ''}
         ${canEdit && r.status !== 'cancelled'
           ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
-    </tr>`).join('')
+    </tr>${openBron.has(r.id) ? bronRow(r) : ''}`).join('')
     : '<tr><td class="muted" colspan="16">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
+
+  // Ochilgan qatorlar qayta chiziladi (bron ro'yxati)
+  for (const id of openBron.keys()) if (rows.some(r => r.id === id)) drawBron(id);
 
   $('rowCount').textContent = rows.length
     ? (rows.length >= 500
@@ -747,6 +750,54 @@ async function doToWarehouse(id){
     await load();
     alert(`${d.conveyor_no} \u2192 ${d.warehouse}`);
   }catch(e){ alert(e.message); }
+}
+
+// ═══════════════════════════════════════════ KONVERDAGI BRONLAR
+//
+//  10 ta ishlanmoqda, 6 tasi bronda — kimga? Javob qator BOSILGANDA
+//  ostida chiqadi. Alohida ustun qo'yilmagan: konverlarning ko'pida
+//  bron bo'lmaydi va bo'sh ustun har qatorda joy egallab turardi.
+const openBron = new Map();   // konver id → bronlar (undefined = yuklanmoqda)
+
+function toggleBron(id, ev) {
+  // Qatordagi tugma yoki katakcha bosilgan bo'lsa ochilmaydi
+  if (ev && ev.target.closest('button, input, a')) return;
+  if (openBron.has(id)) { openBron.delete(id); return render(); }
+  openBron.set(id, undefined);
+  render();
+  drawBron(id);
+}
+
+async function drawBron(id) {
+  try {
+    const d = await App.api(`/api/units/${id}/bron`);
+    openBron.set(id, d);
+  } catch { openBron.set(id, { rows: [], reserved: 0, free: null }); }
+  render();
+}
+
+function bronRow(r) {
+  const d = openBron.get(r.id);
+  const inner = d === undefined
+    ? '<span class="muted">Yuklanmoqda…</span>'
+    : !d.rows.length
+      ? `<span class="muted">Bron yo'q — ${r.qty} tasi ham bo'sh</span>`
+      : `<div class="muted" style="font-size:12px;margin-bottom:6px">
+           ${d.reserved} tasi bronda${d.free ? `, ${d.free} tasi bo'sh` : ''}</div>
+         <table style="width:auto"><tbody>${d.rows.map(x => `
+           <tr>
+             <td style="padding:3px 16px 3px 0"><strong>${esc(x.customer_name)}</strong>${
+               x.region ? `<span class="muted" style="font-size:11px"> · ${
+                 esc(x.region)}</span>` : ''}</td>
+             <td style="padding:3px 16px 3px 0" class="num"><b>${x.qty}</b> ta</td>
+             <td style="padding:3px 16px 3px 0" class="muted">${esc(x.order_no)}</td>
+             <td style="padding:3px 16px 3px 0" class="muted">${
+               x.due_on ? d8(x.due_on) : '—'}</td>
+             <td style="padding:3px 0" class="muted">${
+               x.manager_name ? esc(x.manager_name) : ''}</td>
+           </tr>`).join('')}</tbody></table>`;
+  return `<tr class="bron"><td colspan="16"
+    style="background:var(--bg);padding:10px 14px">${inner}</td></tr>`;
 }
 
 const close_ = () => { $('modalRoot').innerHTML = ''; };

@@ -217,15 +217,19 @@ SELECT u.id,
        COALESCE(u.warehouse_id, tm.id) AS warehouse_id,
        COALESCE(w.name, tm.name)       AS warehouse,
        COALESCE(w.code, tm.code)       AS warehouse_code,
-       -- Buyurtmaga biriktirilganmi: band konver boshqa omborga
-       -- ko'chirilmaydi va ro'yxatda «band» bo'lib turadi.
-       u.order_item_id
+       -- Nechtasi bronda. Band konver boshqa omborga ko'chirilmaydi va
+       -- ro'yxatda «band» bo'lib turadi. Konverning BIR QISMI bron
+       -- bo'lishi mumkin, shuning uchun bu belgi emas, SON
+       -- (izoh: sql/sales.sql, `unit_reservations`).
+       COALESCE(b.qty, 0)::int AS reserved_qty
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
 LEFT JOIN customers c  ON c.id = u.customer_id
 LEFT JOIN warehouses w ON w.id = u.warehouse_id
 LEFT JOIN warehouses tm ON tm.code = 'TM'
+LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
+                    WHERE r.unit_id = u.id) b ON true
 WHERE u.status = 'fg';
 
 -- Ombor harakati: kirim va chiqim bitta ro'yxatda. Sana oralig'i bo'yicha

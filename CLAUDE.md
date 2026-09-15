@@ -138,6 +138,12 @@ ustunidagi sana REJA emas, omborga kirgan FAKT kun bo'ladi: konver darrov
 ish «Omborga kirgan» ustuni bilan bo'ladi. Qoida `createOne()` da — ikkala
 yo'l ham shundan o'tadi.
 
+**Mijoz balansi** (`v_customer_sales.balance`) — `boshlang'ich qarz +
+CHIQIB KETGAN mahsulot summasi`. Zavod qoidasi: buyurtma yozilgani ham,
+bron qo'yilgani ham hali qarz emas — mahsulot mijozda emas. To'lovlar
+ayirilmaydi: kassa moduli yozilganda o'sha yerga bitta ayirma qo'shiladi.
+Buyurtma oynasida mijoz tanlanganda balans ostida chiqadi.
+
 **Boshlang'ich qarzdorlik** (`customers.opening_debt`, `$`) — tizim ishga
 tushgan kundagi mijoz qarzi. Bir martalik raqam, hisoblanmaydi: kassa
 yozilganda qarz shundan davom etadi (`boshlang'ich + sotuvlar − to'lovlar`).
@@ -151,15 +157,36 @@ bilan: bitta buyurtmada bir nechta mahsulot bo'ladi. Raqamni tizim beradi
 tayyor turgan konverdan yoki buyurtma kutayotgan **zahiradan**. Buyurtma
 uchun yangi konver OCHILMAYDI — ishlab chiqarish o'z rejasi bilan yuradi.
 
-Konver buyurtmaning aniq QATORIGA biriktiriladi
-(`production_units.order_item_id`), buyurtmaga emas: bir xil mahsulot ikki
-xil rangda bo'lishi mumkin. Biriktirilgan konver band bo'ladi va boshqa
-buyurtmaning ro'yxatida umuman chiqmaydi. Konverning BIR QISMI ham
-olinadi — 10 talikdan 4 tasi ketsa, qolgan 6 tasi o'sha joyda bo'sh
-turaveradi (`clonePart`, `units.js`); ajratilganda bo'laklar qayta
-qo'shiladi. «Bajarilgan» degan belgi saqlanmaydi, har safar konverlardan
-hisoblanadi (`v_sales_orders`): saqlangan belgi bir kun haqiqatdan
-ajralib qolardi.
+Sarlavhada: mijoz (balansi bilan), menejer, **buyurtma sanasi**,
+**chiqib ketish sanasi**, **qayerga** (`order_destinations`: zavodga
+kiradi / yuk terminaliga / mijoz uyiga / do'konga) va **kutib oluvchi
+raqami**. Manzil faqat kerak bo'lgan yo'lda so'raladi va o'shanda
+majburiy (`needs_address`) — mashina qayerga borishini keyin hech kim
+topa olmasdi.
+
+**★ BRON — konver bo'linmaydi** (`unit_reservations`). Konver
+buyurtmaning aniq QATORIGA bron qilinadi: bir xil mahsulot ikki xil
+rangda bo'lishi mumkin. Bitta konverda bir nechta mijozning broni
+bo'ladi — «10 ta ishlanmoqda, 6 tasi Alisherga, 4 tasi bo'sh».
+
+Ilgari bir qismi olinsa konver BO'LINARDI. Ishlab chiqarishdagi konver
+uchun bu noto'g'ri: 10 ta stul bitta partiya bo'lib yuradi, bo'limdan
+bo'limga birga o'tadi, jurnalda bitta qator bo'lib turishi kerak.
+Shuning uchun bron alohida jadval, konverning o'zi qimirlamaydi.
+Ombordagi mahsulotda ham xuddi shu — manba bitta bo'lsin.
+
+Bron **uch manbaga** qo'yiladi: T/M ombor va vitrinalar (tayyor),
+zahira (rang kutmoqda) va **ishlab chiqarish** (hali yo'lda). Boshqa
+buyurtmaga konverning faqat QOLGANI taklif qilinadi.
+
+Bitta bron bo'lsa konverga mijoz va zakaz raqami yoziladi — jurnalda
+tsex boshlig'i «bu Alisherniki» deb ko'radi. Bir nechta bo'lsa bo'sh
+qoladi: **jurnalda qator bosilganda** ostida bronlar ro'yxati chiqadi
+(`GET /api/units/:id/bron`). Alohida ustun yo'q — konverlarning ko'pida
+bron bo'lmaydi.
+
+«Bajarilgan» degan belgi saqlanmaydi, har safar bronlardan hisoblanadi
+(`v_sales_orders`): saqlangan belgi bir kun haqiqatdan ajralib qolardi.
 
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,

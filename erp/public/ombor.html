@@ -342,15 +342,15 @@ function drawStockRow(r) {
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? `<span class="muted">\u2014</span>`
       : units.map(u => `<span class="tag" style="margin:2px 6px 2px 0${
-          canMove && !u.order_item_id ? ';cursor:pointer' : ''}"
+          canMove && !u.reserved_qty ? ';cursor:pointer' : ''}"
           title="${esc(u.customer_name || whName)} \u00b7 ${d8(u.fg_on)} \u00b7 ${
-            u.days_in_stock} kun${canMove && !u.order_item_id
+            u.days_in_stock} kun${canMove && !u.reserved_qty
               ? ' \u00b7 bosib boshqa omborga ko\'chiriladi' : ''}"
-          ${canMove && !u.order_item_id
+          ${canMove && !u.reserved_qty
             ? `onclick="event.stopPropagation();openMove(${u.id},'${
                 esc(u.conveyor_no)}',${u.qty})"` : ''}
           >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}${
-            u.order_item_id ? ' \u00b7 band' : ''}</span>`).join('') + (canMove
+            u.reserved_qty ? ` \u00b7 ${u.reserved_qty} bron` : ''}</span>`).join('') + (canMove
         ? `<div class="muted" style="font-size:12px;margin-top:6px">Konver
              raqamini bosing \u2014 boshqa omborga ko'chiriladi</div>` : '')}
     </td></tr>`}`;

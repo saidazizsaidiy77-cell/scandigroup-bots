@@ -1087,130 +1087,208 @@ test('vitrina sotuvchisi o\'z nuqtasini va T/M omborni ko\'radi', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════ SAVDO
-
-test('buyurtmaga ombordagi konver biriktiriladi — butunicha va bir qismi', async () => {
+test('konver bo\'linmaydi — ustiga bron qo\'yiladi, bir nechta mijozdan', async () => {
   const STUL = (await H.id(`SELECT id FROM products WHERE sku='STU-LAURA'`)).id;
 
-  // Ombordagi ikkita konver: 3 talik penal va 10 talik stul
-  const qoldiq = await admin('POST', '/api/units/', { items: [
-    { product_id: PENAL, qty: 3, color: 'Oq',  is_opening: true, fg_on: '2026-09-01' },
-    { product_id: STUL,  qty: 10, color: 'Oq', is_opening: true, fg_on: '2026-09-01' },
-  ] });
-  assert.equal(qoldiq.status, 200, qoldiq.text);
-  const [penalUnit, stulUnit] = qoldiq.body.created;
+  // Ombordagi 10 talik stul
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: STUL, qty: 10, color: 'Oq', unit_price: 55,
+      is_opening: true, fg_on: '2026-09-01' },
+  ] })).body.created[0];
 
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
-  const r = await admin('POST', '/api/sales/orders', {
-    customer_id: mijoz, due_on: '2026-10-01', items: [
-      { product_id: PENAL, qty: 3, color: 'Oq', unit_price: 300 },
-      { product_id: STUL,  qty: 4, color: 'Oq', unit_price: 55 },
-    ] });
-  assert.equal(r.status, 200, r.text);
-  assert.match(r.body.order_no, /^Z\d\d-\d{4}$/, r.body.order_no);
-  const zakaz = r.body.id;
+  const zakaz = async (qty) => {
+    const r = await admin('POST', '/api/sales/orders',
+      { customer_id: mijoz, items: [{ product_id: STUL, qty, unit_price: 55 }] });
+    assert.equal(r.status, 200, r.text);
+    const o = (await admin('GET', '/api/sales/orders/' + r.body.id)).body;
+    return { id: r.body.id, no: r.body.order_no, item: o.items[0].id };
+  };
+  const z1 = await zakaz(6);
+  const z2 = await zakaz(4);
 
-  const ochish = async () => (await admin('GET', '/api/sales/orders/' + zakaz)).body;
-  let o = await ochish();
-  assert.equal(o.items.length, 2);
-  const [q1, q2] = o.items;
+  // 6 tasi birinchi buyurtmaga
+  assert.equal((await admin('POST', `/api/sales/orders/${z1.id}/assign`,
+    { item_id: z1.item, unit_id: u.id, qty: 6 })).status, 200);
 
-  const nomzod = async (itemId) => (await admin(
-    'GET', `/api/sales/orders/${zakaz}/candidates?item_id=${itemId}`)).body.rows;
-  assert.ok((await nomzod(q1.id)).some((u) => u.id === penalUnit.id));
+  // KONVER BO'LINMADI: bitta qator, soni o'zgarmadi
+  const qatorlar = (await require('../db').db.query(
+    `SELECT qty FROM production_units WHERE conveyor_no = $1`, [u.conveyor_no])).rows;
+  assert.deepEqual(qatorlar.map((x) => x.qty), [10], 'bitta qator bo\'lib qoldi');
 
-  // 1) Butun konver
-  assert.equal((await admin('POST', `/api/sales/orders/${zakaz}/assign`,
-    { item_id: q1.id, unit_id: penalUnit.id })).status, 200);
+  // Bron ro'yxati: jurnalda qator ochilganda shu chiqadi
+  let bron = (await admin('GET', `/api/units/${u.id}/bron`)).body;
+  assert.equal(bron.reserved, 6);
+  assert.equal(bron.free, 4);
+  assert.equal(bron.rows.length, 1);
+  assert.equal(bron.rows[0].order_no, z1.no);
+  assert.equal(bron.rows[0].qty, 6);
 
-  // 2) 10 talik konverdan 4 tasi — qolgan 6 tasi omborda bo'sh turadi
-  assert.equal((await admin('POST', `/api/sales/orders/${zakaz}/assign`,
-    { item_id: q2.id, unit_id: stulUnit.id, qty: 4 })).status, 200);
+  // Bitta bron bo'lsa konverga mijoz va zakaz raqami yoziladi —
+  // jurnalda tsex boshlig'i kimga ketayotganini ko'radi
+  let konver = await H.id(
+    `SELECT order_no, customer_id FROM production_units WHERE id = $1`, [u.id]);
+  assert.equal(konver.order_no, z1.no);
+  assert.equal(konver.customer_id, mijoz);
 
-  o = await ochish();
-  assert.equal(o.order.status, 'reserved', 'konver biriktirilgach buyurtma band bo\'ladi');
-  assert.equal(Number(o.items[0].assigned_qty), 3);
-  assert.equal(Number(o.items[1].assigned_qty), 4);
-  assert.equal(o.order.is_ready, true, '3 + 4 = butun buyurtma yopildi');
+  // Qolgan 4 tasini boshqa buyurtma oladi
+  assert.equal((await admin('POST', `/api/sales/orders/${z2.id}/assign`,
+    { item_id: z2.item, unit_id: u.id, qty: 4 })).status, 200);
+  bron = (await admin('GET', `/api/units/${u.id}/bron`)).body;
+  assert.equal(bron.reserved, 10);
+  assert.equal(bron.free, 0);
+  assert.deepEqual(bron.rows.map((r) => r.qty), [6, 4]);
 
-  // Konverga zakaz raqami va mijoz yozildi
-  const bogla = await H.id(
-    `SELECT order_no, customer_id FROM production_units WHERE id = $1`, [penalUnit.id]);
-  assert.equal(bogla.order_no, r.body.order_no);
-  assert.equal(bogla.customer_id, mijoz);
+  // Ikki mijoz bo'lsa konverda bittasi yozilmaydi — ro'yxat qatorda turadi
+  konver = await H.id(
+    `SELECT order_no, customer_id FROM production_units WHERE id = $1`, [u.id]);
+  assert.equal(konver.order_no, null);
+  assert.equal(konver.customer_id, null);
 
-  // Bo'lingan konver: bir xil raqamda ikkita qator, jami 10 ta
-  const bolaklar = (await require('../db').db.query(
-    `SELECT qty, order_item_id FROM production_units WHERE conveyor_no = $1 ORDER BY qty`,
-    [stulUnit.conveyor_no])).rows;
-  assert.equal(bolaklar.length, 2, JSON.stringify(bolaklar));
-  assert.equal(bolaklar.reduce((a, b) => a + b.qty, 0), 10, 'dona yo\'qolmadi');
-  assert.equal(bolaklar.find((b) => b.qty === 4).order_item_id, q2.id);
-  assert.equal(bolaklar.find((b) => b.qty === 6).order_item_id, null,
-    'qolgan bo\'lak bo\'sh turadi');
+  // Bo'sh dona qolmadi: konver endi nomzodlar ro'yxatida chiqmaydi
+  const z3 = await zakaz(1);
+  const nomzod = (await admin('GET',
+    `/api/sales/orders/${z3.id}/candidates?item_id=${z3.item}`)).body.rows;
+  assert.ok(!nomzod.some((x) => x.id === u.id), 'to\'lgan konver taklif qilinmaydi');
 
-  // Band konver boshqa buyurtmaga chiqmaydi
-  assert.ok(!(await nomzod(q1.id)).some((u) => u.id === penalUnit.id),
-    'biriktirilgan konver ro\'yxatda turmaydi');
+  // Qo'lda yuborsa ham olinmaydi
+  const kop = await admin('POST', `/api/sales/orders/${z3.id}/assign`,
+    { item_id: z3.item, unit_id: u.id, qty: 1 });
+  assert.equal(kop.status, 400);
+  assert.match(kop.body.error, /bo'sh 0 ta/);
 
-  const yana = await admin('POST', `/api/sales/orders/${zakaz}/assign`,
-    { item_id: q1.id, unit_id: penalUnit.id });
-  assert.equal(yana.status, 400);
-  assert.match(yana.body.error, /band/);
+  // Buyurtma to'ldi
+  const o1 = (await admin('GET', '/api/sales/orders/' + z1.id)).body;
+  assert.equal(Number(o1.items[0].assigned_qty), 6);
+  assert.equal(o1.order.status, 'reserved');
+  assert.equal(o1.order.is_ready, true);
+  assert.equal(o1.units.length, 1);
+  assert.equal(o1.units[0].qty, 6, 'bron soni ko\'rinadi');
+  assert.equal(o1.units[0].unit_qty, 10, 'konverning o\'zi 10 ta');
 
-  // Konveri bor qator o'chirilmaydi, buyurtma ham bekor qilinmaydi
-  const ochir = await admin('PATCH', '/api/sales/orders/' + zakaz,
-    { items: [{ id: q2.id, product_id: STUL, qty: 4 }] });
-  assert.equal(ochir.status, 400, ochir.text);
-  const bekor = await admin('PATCH', '/api/sales/orders/' + zakaz, { status: 'cancelled' });
+  // Bron qo'yilgan konver boshqa omborga ko'chmaydi
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const koch = await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: u.id, to_code: 'VITR-ABU' });
+  assert.equal(koch.status, 400);
+  assert.match(koch.body.error, /bronda/);
+
+  // Bron qo'yilgan qator o'chirilmaydi, buyurtma bekor qilinmaydi
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z1.id,
+    { items: [] })).status, 400);
+  const bekor = await admin('PATCH', '/api/sales/orders/' + z1.id,
+    { status: 'cancelled' });
   assert.equal(bekor.status, 400);
-  assert.match(bekor.body.error, /ajrating/);
+  assert.match(bekor.body.error, /bronni olib tashlang/);
 
-  // Ajratilganda bo'laklar qayta qo'shiladi
-  const bolak = (await require('../db').db.query(
-    `SELECT id FROM production_units WHERE conveyor_no=$1 AND order_item_id IS NOT NULL`,
-    [stulUnit.conveyor_no])).rows[0].id;
-  assert.equal((await admin('POST', `/api/sales/orders/${zakaz}/unassign`,
-    { unit_id: bolak })).status, 200);
-  const qaytgan = (await require('../db').db.query(
-    `SELECT qty FROM production_units WHERE conveyor_no = $1`, [stulUnit.conveyor_no])).rows;
-  assert.deepEqual(qaytgan.map((x) => x.qty), [10], 'bo\'laklar bitta qatorga qaytdi');
-
-  // Hammasi ajratilsa buyurtma yana "yangi" bo'ladi
-  assert.equal((await admin('POST', `/api/sales/orders/${zakaz}/unassign`,
-    { unit_id: penalUnit.id })).status, 200);
-  assert.equal((await ochish()).order.status, 'new');
-  assert.equal((await H.id(`SELECT order_no FROM production_units WHERE id=$1`,
-    [penalUnit.id])).order_no, null, 'ajratilganda zakaz raqami ham o\'chadi');
+  // Bronni olish: konver yana bo'shaydi, buyurtma "yangi" bo'ladi
+  assert.equal((await admin('POST', `/api/sales/orders/${z1.id}/unassign`,
+    { unit_id: u.id })).status, 200);
+  bron = (await admin('GET', `/api/units/${u.id}/bron`)).body;
+  assert.equal(bron.reserved, 4);
+  assert.equal((await admin('GET', '/api/sales/orders/' + z1.id)).body.order.status, 'new');
+  assert.equal((await H.id(
+    `SELECT order_no FROM production_units WHERE id=$1`, [u.id])).order_no, z2.no,
+    'bitta bron qolgach mijoz yana yoziladi');
 });
 
-test('zahiradagi konver biriktiriladi, ishlab chiqarishdagi esa yo\'q', async () => {
-  const RANG = (await H.id(`SELECT id FROM sections WHERE code='BOY-RANG'`)).id;
-  const zah = (await admin('POST', '/api/units/', { items: [
-    { product_id: PENAL, qty: 2, color: 'Venge', section_id: RANG, is_stock: true },
-  ] })).body.created[0];
+test('ishlab chiqarishdagi konverga ham bron qo\'yiladi', async () => {
   const ish = (await admin('POST', '/api/units/', { items: [
-    { product_id: PENAL, qty: 2, color: 'Venge', section_id: ARRA },
+    { product_id: PENAL, qty: 8, color: 'Venge', section_id: ARRA },
   ] })).body.created[0];
 
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
   const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
-    items: [{ product_id: PENAL, qty: 2, color: 'Venge' }] })).body;
+    items: [{ product_id: PENAL, qty: 3, color: 'Venge' }] })).body;
   const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
 
+  // Hali yo'lda bo'lsa ham nomzodlar ro'yxatida turadi — qayerdaligi bilan
   const nomzod = (await admin('GET',
     `/api/sales/orders/${z.id}/candidates?item_id=${qator.id}`)).body.rows;
-  assert.ok(nomzod.some((u) => u.id === zah.id), 'zahira ro\'yxatda');
-  assert.ok(!nomzod.some((u) => u.id === ish.id),
-    'ishlab chiqarishdagi konver sotilmaydi');
+  const n = nomzod.find((x) => x.id === ish.id);
+  assert.ok(n, 'ishlab chiqarishdagi konver ham taklif qilinadi');
+  assert.equal(n.status, 'production');
+  assert.equal(n.section, 'Arra');
+  assert.equal(n.free_qty, 8);
 
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
-    { item_id: qator.id, unit_id: zah.id })).status, 200);
+    { item_id: qator.id, unit_id: ish.id, qty: 3 })).status, 200);
 
-  // Ishlab chiqarishdagini to'g'ridan-to'g'ri yuborsa ham qabul qilinmaydi
+  // Konver ishlab chiqarishda qoldi va BO'LINMADI — marshrut bo'ylab
+  // birga yuradi, jurnalda bitta qator
+  const holat = await H.id(
+    `SELECT status, qty, current_section_id FROM production_units WHERE id=$1`, [ish.id]);
+  assert.deepEqual([holat.status, holat.qty, holat.current_section_id],
+                   ['production', 8, ARRA]);
+  assert.equal((await admin('GET', `/api/units/${ish.id}/bron`)).body.reserved, 3);
+
+  // Jurnalda hamon bitta qator
+  const j = (await admin('GET', '/api/units/?conveyor_no=' + ish.conveyor_no)).body;
+  assert.equal(j.length, 1);
+
+  // Bron konverni qimirlatmaydi: keyingi bo'limga o'tkazish ishlayveradi
+  assert.equal((await admin('POST', '/api/units/move',
+    { items: [{ unit_id: ish.id }] })).status, 200);
+  assert.equal((await admin('GET', `/api/units/${ish.id}/bron`)).body.reserved, 3,
+    'o\'tkazilgach ham bron joyida');
+
+  // Bekor qilingan konverga bron qo'yilmaydi
+  const bekor = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, section_id: ARRA } ] })).body.created[0];
+  assert.equal((await admin('PATCH', '/api/units/' + bekor.id,
+    { status: 'cancelled' })).status, 200);
   const xato = await admin('POST', `/api/sales/orders/${z.id}/assign`,
-    { item_id: qator.id, unit_id: ish.id });
+    { item_id: qator.id, unit_id: bekor.id });
   assert.equal(xato.status, 400);
-  assert.match(xato.body.error, /ombordagi yoki zahiradagi/);
+  assert.match(xato.body.error, /bekor qilingan/);
+});
+
+test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+
+  // Manzil talab qiladigan yo'l manzilsiz saqlanmaydi
+  const yoq = await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, ship_to: 'UY', items: [] });
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /manzil kerak/);
+
+  // Zavodga kirsa manzil so'ralmaydi
+  const ok = await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD', receiver_phone: '+998901234567',
+    ordered_on: '2026-09-10', due_on: '2026-10-01', items: [] });
+  assert.equal(ok.status, 200, ok.text);
+  const o = (await admin('GET', '/api/sales/orders/' + ok.body.id)).body.order;
+  assert.equal(o.ship_to, 'ZAVOD');
+  assert.equal(o.ship_to_name, 'Avtomobil zavodga kiradi');
+  assert.equal(o.receiver_phone, '+998901234567');
+  assert.equal(String(o.ordered_on).slice(0, 10), '2026-09-10');
+  assert.equal(String(o.due_on).slice(0, 10), '2026-10-01');
+
+  // Ro'yxat ham keladi
+  const d = (await admin('GET', '/api/sales/destinations')).body.rows;
+  assert.deepEqual(d.map((x) => x.code), ['ZAVOD', 'TERMINAL', 'UY', 'DOKON']);
+  assert.equal(d.find((x) => x.code === 'ZAVOD').needs_address, false);
+  assert.equal(d.find((x) => x.code === 'UY').needs_address, true);
+
+  //  BALANS: qarzga faqat CHIQIB KETGAN mahsulot qo'shiladi. Buyurtma
+  //  yozilgani ham, bron qo'yilgani ham hali qarz emas.
+  const balans = async () => (await admin('GET', '/api/units/customers'))
+    .body.customers.find((c) => c.id === mijoz);
+  const oldin = await balans();
+  assert.equal(Number(oldin.shipped_amount), 0);
+  assert.equal(Number(oldin.balance), Number(oldin.opening_debt || 0));
+
+  // Mijozga chiqib ketgan konver qarzga qo'shiladi
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, unit_price: 500, is_opening: true,
+      fg_on: '2026-09-01', customer_id: mijoz },
+  ] })).body.created[0];
+  await require('../db').db.query(
+    `UPDATE production_units SET status='shipped', ship_on=CURRENT_DATE WHERE id=$1`,
+    [u.id]);
+  const keyin = await balans();
+  assert.equal(Number(keyin.shipped_amount), 1000);
+  assert.equal(Number(keyin.balance), Number(oldin.opening_debt || 0) + 1000);
 });
 
 test('savdo yo\'nalishi buyurtmaga ham chegara bo\'ladi', async () => {

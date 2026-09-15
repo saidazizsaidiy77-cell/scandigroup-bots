@@ -696,6 +696,30 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ─────────────────────────────────────────── KONVERDAGI BRONLAR RO'YXATI
+//
+//  Jurnalda qator bosilganda ostida chiqadi: «10 ta ishlanmoqda, 6 tasi
+//  bronda — kimga». Alohida ustun yo'q: kundalik ishda konverlarning
+//  ko'pida bron bo'lmaydi va bo'sh ustun faqat joy egallardi.
+//
+//  Huquq — jurnalni ko'rish huquqi: kimga ketayotgani tsex boshlig'iga
+//  ham, rahbariyatga ham kerak.
+router.get('/:id/bron', need('production.view'), wrap(async (req, res) => {
+  const [unit, rows] = await Promise.all([
+    db.query(`SELECT id, conveyor_no, qty FROM production_units WHERE id = $1`,
+             [req.params.id]),
+    db.query(
+      `SELECT id, qty, order_id, order_no, due_on, customer_id, customer_name,
+              region, manager_name, order_status
+         FROM v_unit_bron WHERE unit_id = $1
+        ORDER BY created_at`, [req.params.id]),
+  ]);
+  if (!unit.rows[0]) return res.status(404).json({ error: 'Konver topilmadi' });
+  const reserved = rows.rows.reduce((n, r) => n + r.qty, 0);
+  res.json({ unit: unit.rows[0], rows: rows.rows,
+             reserved, free: unit.rows[0].qty - reserved });
+}));
+
 // ────────────────────────────────── XATO KIRITILGANNI OMBORGA O'TKAZISH
 //
 //  Boshlang'ich qoldiq kiritilayotganda «Tseh» ustunidan ombor o'rniga
@@ -904,7 +928,7 @@ async function clonePart(client, req, u, n, { toSection = null, movedOn = null,
         current_section_id, entered_section_on, customer_id, unit_price,
         status, is_opening, note, created_by, color, fabric,
         lak_planned_on, lak_on, pack_planned_on, pack_on, fg_planned_on, fg_on,
-        next_shop_planned_on, is_stock, order_item_id)
+        next_shop_planned_on, is_stock)
      SELECT conveyor_no,
             (SELECT MAX(part) + 1 FROM production_units WHERE conveyor_no = u.conveyor_no),
             order_no, product_id, $2, started_on,
@@ -918,11 +942,7 @@ async function clonePart(client, req, u, n, { toSection = null, movedOn = null,
             fg_on,
             -- Topshirish belgisi KO'CHIRILMAYDI: yangi bo'lak boshqa
             -- bo'limda va uni qaytadan jo'natish kerak bo'ladi.
-            next_shop_planned_on, is_stock,
-            -- Buyurtma bog'lami ham ko'chadi: biriktirilgan konver
-            -- bo'linsa, buyurtmada "biriktirilgan" soni kamayib
-            -- qolmasligi kerak.
-            order_item_id
+            next_shop_planned_on, is_stock
        FROM production_units u WHERE id = $1
      RETURNING id`,
     [u.id, n, toSection, movedOn || null, req.user.id, keepPlace])).rows[0].id;

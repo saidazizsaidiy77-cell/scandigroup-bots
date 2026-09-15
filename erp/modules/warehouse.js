@@ -205,7 +205,7 @@ router.get('/fg/units', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);
   const { rows } = await db.query(
     `SELECT id, conveyor_no, order_no, qty, fg_on, days_in_stock,
-            customer_name, is_stock, total_amount, order_item_id
+            customer_name, is_stock, total_amount, reserved_qty
        FROM v_fg_units
       WHERE product_id = $3
         AND ${NORM('color')}  IS NOT DISTINCT FROM $4
@@ -247,14 +247,18 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const u = (await client.query(
-      `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh
+      `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh,
+              COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                         WHERE r.unit_id = u.id), 0)::int AS reserved
          FROM production_units u
          LEFT JOIN warehouses tm ON tm.code = 'TM'
         WHERE u.id = $1 FOR UPDATE OF u`, [unit_id])).rows[0];
     if (!u) throw new Error('Konver topilmadi');
     if (u.status !== 'fg') throw new Error(`${u.conveyor_no}: omborda emas`);
-    if (u.order_item_id)
-      throw new Error(`${u.conveyor_no}: buyurtmaga biriktirilgan — avval ajrating`);
+    //  Bron qo'yilgan dona ko'chmaydi: u mijozniki bo'lib turibdi va
+    //  boshqa omborga chiqib ketsa sotuvchi topa olmasdi.
+    if (u.reserved)
+      throw new Error(`${u.conveyor_no}: ${u.reserved} tasi bronda — avval bronni oling`);
     if (u.at_wh === to.id) throw new Error(`${u.conveyor_no}: allaqachon shu omborda`);
 
     // Berayotgan omborni ham tekshiramiz: xodim ko'rmaydigan ombordan

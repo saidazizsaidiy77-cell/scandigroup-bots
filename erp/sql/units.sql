@@ -352,7 +352,18 @@ SELECT c.id, c.name, c.country, c.region, c.phone,
        COALESCE(SUM(u.qty), 0)                AS qty,
        COALESCE(SUM(u.total_amount), 0)       AS amount,
        COUNT(DISTINCT u.order_no)             AS orders,
-       MAX(u.started_on)                      AS last_order_on
+       MAX(u.started_on)                      AS last_order_on,
+       --  BALANS. Zavod qoidasi: qarzga faqat CHIQIB KETGAN mahsulot
+       --  qo'shiladi. Buyurtma yozilgani yoki konver biriktirilgani hali
+       --  qarz emas — mahsulot mijozda emas.
+       --
+       --  To'lovlar ayirilmaydi: kassa moduli hali yo'q. U yozilganda
+       --  shu yerga bitta ayirma qo'shiladi va balans o'zi to'g'rilanadi.
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0)
+         AS shipped_amount,
+       COALESCE(c.opening_debt, 0)
+         + COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0)
+         AS balance
 FROM customers c
 LEFT JOIN customer_channels ch ON ch.code = c.channel
 LEFT JOIN workers m            ON m.id = c.manager_id

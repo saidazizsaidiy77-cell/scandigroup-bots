@@ -16,7 +16,6 @@
 const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
-const { clonePart } = require('./units');
 
 const router = express.Router();
 const READ  = ['sales.view', 'sales.manage'];
@@ -59,15 +58,40 @@ router.get('/products', need(...READ), wrap(async (_req, res) => {
        FROM products p
        JOIN product_groups g ON g.id = p.group_id
        LEFT JOIN LATERAL (
-         SELECT SUM(u.qty) FILTER (WHERE u.status = 'fg') AS qty,
-                SUM(u.qty) FILTER (WHERE u.status = 'production') AS stock
+         SELECT SUM(u.qty - COALESCE(b.qty, 0))
+                  FILTER (WHERE u.status = 'fg') AS qty,
+                SUM(u.qty - COALESCE(b.qty, 0))
+                  FILTER (WHERE u.status = 'production') AS stock
            FROM production_units u
            LEFT JOIN sections s ON s.id = u.current_section_id
-          WHERE u.product_id = p.id AND u.order_item_id IS NULL
+           LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
+                               WHERE r.unit_id = u.id) b ON true
+          WHERE u.product_id = p.id AND u.qty > COALESCE(b.qty, 0)
             AND (u.status = 'fg'
                  OR (u.is_stock AND COALESCE(s.is_hold, false)))) f ON true
       WHERE p.active
       ORDER BY g.sort, g.name, p.name`);
+  res.json({ rows });
+}));
+
+//  Mahsulot qayerga boradi. Ro'yxat bazada (`order_destinations`),
+//  shuning uchun yangi yo'l qo'shilsa bu kod o'zgarmaydi. Manzil
+//  talab qiladigan yo'l tanlansa manzilsiz saqlanmaydi: mashina
+//  qayerga borishini keyin hech kim topa olmasdi.
+async function assertDest(client, code, address) {
+  if (!code) return null;
+  const d = (await client.query(
+    `SELECT code, name, needs_address FROM order_destinations WHERE code = $1`,
+    [code])).rows[0];
+  if (!d) throw new Error('Yetkazish yo\'li topilmadi');
+  if (d.needs_address && !String(address || '').trim())
+    throw new Error(`«${d.name}» uchun manzil kerak`);
+  return d.code;
+}
+
+router.get('/destinations', need(...READ), wrap(async (_req, res) => {
+  const { rows } = await db.query(
+    `SELECT code, name, needs_address FROM order_destinations ORDER BY sort, name`);
   res.json({ rows });
 }));
 
@@ -105,16 +129,23 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
        JOIN products p       ON p.id = i.product_id
        JOIN product_groups g ON g.id = p.group_id
        LEFT JOIN LATERAL (
-         SELECT SUM(u.qty) AS qty FROM production_units u
-          WHERE u.order_item_id = i.id AND u.status <> 'cancelled') a ON true
+         SELECT SUM(r.qty) AS qty FROM unit_reservations r
+           JOIN production_units u ON u.id = r.unit_id
+          WHERE r.order_item_id = i.id AND u.status <> 'cancelled') a ON true
       WHERE i.order_id = $1 ORDER BY i.sort, i.id`, [req.params.id])).rows;
 
+  //  Bronlangan konverlar. Soni — BRONNIKI, konvernikidan kam bo'lishi
+  //  mumkin: 10 talikdan 6 tasi shu buyurtmaga olingan bo'lsa 6 ko'rinadi.
   const units = (await db.query(
-    `SELECT u.id, u.order_item_id, u.conveyor_no, u.qty, u.color, u.fabric,
-            u.status, u.is_stock, s.name AS section, wh.name AS warehouse
-       FROM production_units u
-       JOIN order_items i     ON i.id = u.order_item_id
-       LEFT JOIN sections s   ON s.id = u.current_section_id
+    `SELECT u.id, r.order_item_id, u.conveyor_no, r.qty, u.qty AS unit_qty,
+            u.color, u.fabric, u.status, u.is_stock,
+            s.name AS section, sh.name AS shop,
+            CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse
+       FROM unit_reservations r
+       JOIN order_items i      ON i.id = r.order_item_id
+       JOIN production_units u ON u.id = r.unit_id
+       LEFT JOIN sections s    ON s.id = u.current_section_id
+       LEFT JOIN shops sh      ON sh.id = s.shop_id
        LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
                                    (SELECT id FROM warehouses WHERE code = 'TM'))
       WHERE i.order_id = $1 AND u.status <> 'cancelled'
@@ -125,7 +156,8 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
 
 // ─────────────────────────────────────────────────────── YARATISH / TAHRIR
 router.post('/orders', need(...WRITE), wrap(async (req, res) => {
-  const { customer_id, manager_id, ordered_on, due_on, note, items = [] } = req.body;
+  const { customer_id, manager_id, ordered_on, due_on, note, items = [],
+          ship_to, address, receiver_phone } = req.body;
   if (!customer_id) throw new Error('Mijoz tanlanmagan');
 
   const client = await db.connect();
@@ -136,10 +168,13 @@ router.post('/orders', need(...WRITE), wrap(async (req, res) => {
     const no = await nextOrderNo(client);
     const o = (await client.query(
       `INSERT INTO orders (order_no, customer_id, manager_id, ordered_on, due_on,
-                           note, created_by)
-       VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), $5,$6,$7) RETURNING id, order_no`,
+                           note, created_by, ship_to, address, receiver_phone)
+       VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), $5,$6,$7,$8,$9,$10)
+       RETURNING id, order_no`,
       [no, customer_id, manager_id || req.user.id, ordered_on || null,
-       due_on || null, note || null, req.user.id])).rows[0];
+       due_on || null, note || null, req.user.id,
+       await assertDest(client, ship_to, address), address || null,
+       receiver_phone || null])).rows[0];
 
     await saveItems(client, o.id, items);
     await audit(req, { module: 'sales', action: 'create', entity: 'order',
@@ -162,11 +197,12 @@ async function saveItems(client, orderId, items) {
     `SELECT i.id, p.name FROM order_items i
        JOIN products p ON p.id = i.product_id
       WHERE i.order_id = $1 AND NOT (i.id = ANY($2::int[]))
-        AND EXISTS (SELECT 1 FROM production_units u
-                     WHERE u.order_item_id = i.id AND u.status <> 'cancelled')`,
+        AND EXISTS (SELECT 1 FROM unit_reservations r
+                      JOIN production_units u ON u.id = r.unit_id
+                     WHERE r.order_item_id = i.id AND u.status <> 'cancelled')`,
     [orderId, keep])).rows;
   if (busy.length)
-    throw new Error(`Konver biriktirilgan qatorni o'chirib bo'lmaydi: ` +
+    throw new Error(`Bron qo'yilgan qatorni o'chirib bo'lmaydi: ` +
                     busy.map((b) => b.name).join(', '));
 
   await client.query(
@@ -198,7 +234,8 @@ async function saveItems(client, orderId, items) {
 }
 
 router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
-  const { customer_id, manager_id, ordered_on, due_on, note, status, items } = req.body;
+  const { customer_id, manager_id, ordered_on, due_on, note, status, items,
+          ship_to, address, receiver_phone } = req.body;
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -216,11 +253,12 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
     //  hech kim sota olmasdi.
     if (status === 'cancelled') {
       const busy = (await client.query(
-        `SELECT COUNT(*)::int AS n FROM production_units u
-           JOIN order_items i ON i.id = u.order_item_id
+        `SELECT COUNT(*)::int AS n FROM unit_reservations r
+           JOIN order_items i      ON i.id = r.order_item_id
+           JOIN production_units u ON u.id = r.unit_id
           WHERE i.order_id = $1 AND u.status <> 'cancelled'`,
         [req.params.id])).rows[0].n;
-      if (busy) throw new Error(`Avval ${busy} ta konverni ajrating`);
+      if (busy) throw new Error(`Avval ${busy} ta bronni olib tashlang`);
     }
 
     await client.query(
@@ -229,10 +267,15 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
               ordered_on = COALESCE($4::date, ordered_on),
               due_on     = COALESCE($5::date, due_on),
               note       = COALESCE($6, note),
-              status     = COALESCE($7, status)
+              status     = COALESCE($7, status),
+              ship_to    = COALESCE($8, ship_to),
+              address    = COALESCE($9, address),
+              receiver_phone = COALESCE($10, receiver_phone)
         WHERE id = $1`,
       [req.params.id, customer_id || null, manager_id || null, ordered_on || null,
-       due_on || null, note ?? null, status || null]);
+       due_on || null, note ?? null, status || null,
+       await assertDest(client, ship_to, address ?? cur.address),
+       address ?? null, receiver_phone ?? null]);
 
     if (Array.isArray(items)) await saveItems(client, Number(req.params.id), items);
     await audit(req, { module: 'sales', action: 'update', entity: 'order',
@@ -253,19 +296,30 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
 //    · zahira    — buyurtma kutayotgan konver (`is_stock`, `sections.is_hold`).
 //  Yangi konver ochilmaydi.
 //
-//  Biriktirilgan konver band bo'ladi: `order_item_id` to'lgani uchun u
-//  boshqa buyurtmaning ro'yxatida umuman chiqmaydi. Ikki menejer bir vaqtda
-//  bitta konverni olsa ham ikkinchisi xato oladi — tekshiruv qator
+//  Bron qo'yilgan dona band bo'ladi: boshqa buyurtmaga faqat QOLGANI
+//  taklif qilinadi. Ikki menejer bir vaqtda bitta konverni olsa ham
+//  ikkinchisi «bo'sh N ta» degan xato oladi — tekshiruv qator
 //  qulflangandan keyin (`FOR UPDATE`).
 
+//  Nomzodlar — buyurtma qatorini yopishi mumkin bo'lgan konverlar:
+//
+//    · T/M ombor va vitrinalar — tayyor turibdi, darrov beriladi;
+//    · zahira — rang kutmoqda, buyurtma tushsa tugatiladi;
+//    · ishlab chiqarish — hali yo'lda, ustiga BRON qo'yiladi.
+//
+//  Uchalasi ham bitta ro'yxatda: menejer mijozga «bor» yoki «shu kuni
+//  tayyor» deyishi uchun ikkita ekranni ochib solishtirib o'tirmasin.
+//
+//  Bekor qilingan va jo'natilgan konver chiqmaydi. To'liq bronlangani
+//  ham: unda bo'sh dona qolmagan.
+//
 //  Vitrina sotuvchisiga o'z nuqtasi biriktirilgan bo'lsa, u boshqa
-//  nuqtadagi mahsulotni buyurtmaga biriktira olmaydi: ko'rmaydigan
-//  mahsulotni sotib bo'lmaydi (izoh: modules/warehouse.js, `whScope`).
-//  Zahira bunga kirmaydi — u omborda emas, zavodda turibdi.
+//  nuqtadagi OMBOR mahsulotini bron qila olmaydi (izoh:
+//  modules/warehouse.js, `whScope`). Ishlab chiqarishdagi konver esa
+//  hali omborda emas — u hammaga ochiq.
 const CANDIDATE_WHERE = `
-  u.order_item_id IS NULL
-  AND u.status IN ('fg', 'production')
-  AND (u.status = 'fg' OR (u.is_stock AND COALESCE(s.is_hold, false)))
+  u.status IN ('fg', 'production')
+  AND u.qty > COALESCE(b.qty, 0)
   AND (u.status <> 'fg' OR $4::int[] IS NULL
        OR COALESCE(u.warehouse_id, tmw.id) = ANY($4) OR wh.code = 'TM')`;
 
@@ -292,7 +346,10 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT u.id, u.conveyor_no, u.part, u.qty, u.color, u.fabric, u.status,
             u.is_stock, u.fg_on, s.name AS section, sh.name AS shop,
-            wh.name AS warehouse,
+            CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse,
+            COALESCE(b.qty, 0)::int AS reserved_qty,
+            (u.qty - COALESCE(b.qty, 0))::int AS free_qty,
+            COALESCE(s.is_hold, false) AS waiting,
             (LOWER(COALESCE(u.color, '')) = LOWER(COALESCE($2, ''))
              OR $2 IS NULL) AS color_ok,
             (LOWER(COALESCE(u.fabric, '')) = LOWER(COALESCE($3, ''))
@@ -302,6 +359,8 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        LEFT JOIN shops sh   ON sh.id = s.shop_id
        LEFT JOIN warehouses tmw ON tmw.code = 'TM'
        LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id, tmw.id)
+       LEFT JOIN LATERAL (SELECT SUM(r.qty) AS qty FROM unit_reservations r
+                           WHERE r.unit_id = u.id) b ON true
       WHERE u.product_id = $1 AND ${CANDIDATE_WHERE}
       ORDER BY (u.status = 'fg') DESC, color_ok DESC, fabric_ok DESC,
                u.conveyor_no, u.part
@@ -330,19 +389,24 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
       [item_id, req.params.id])).rows[0];
     if (!it) throw new Error('Qator topilmadi');
 
+    //  Konver qulflanadi: ikki menejer bir vaqtda bir konverga bron
+    //  qo'ysa, ikkinchisi bo'sh dona qolmaganini ko'rishi kerak.
     const u = (await client.query(
-      `SELECT u.*, s.is_hold FROM production_units u
+      `SELECT u.*, s.is_hold,
+              COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                         WHERE r.unit_id = u.id), 0)::int AS reserved
+         FROM production_units u
          LEFT JOIN sections s ON s.id = u.current_section_id
         WHERE u.id = $1 FOR UPDATE OF u`, [unit_id])).rows[0];
     if (!u) throw new Error('Konver topilmadi');
-    if (u.order_item_id) throw new Error(`${u.conveyor_no}: boshqa buyurtmada band`);
     if (u.product_id !== it.product_id)
       throw new Error(`${u.conveyor_no}: boshqa mahsulot`);
-    if (!(u.status === 'fg' || (u.status === 'production' && u.is_stock && u.is_hold)))
-      throw new Error(`${u.conveyor_no}: faqat ombordagi yoki zahiradagi konver biriktiriladi`);
+    if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
+    if (u.status === 'shipped') throw new Error(`${u.conveyor_no}: jo'natib bo'lingan`);
 
     //  Vitrina doirasi serverda ham tekshiriladi: klient ro'yxatdan
-    //  tanlamay, to'g'ridan-to'g'ri id yuborishi mumkin.
+    //  tanlamay, to'g'ridan-to'g'ri id yuborishi mumkin. Ishlab
+    //  chiqarishdagi konver hali omborda emas — unga doira tegmaydi.
     const ids = whIds(req);
     if (u.status === 'fg' && ids) {
       const ok = (await client.query(
@@ -353,42 +417,60 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
       if (!ok) throw new Error(`${u.conveyor_no}: bu ombor sizga biriktirilmagan`);
     }
 
-    const n = qty == null || qty === '' ? u.qty : Number(qty);
-    if (!Number.isInteger(n) || n <= 0 || n > u.qty)
-      throw new Error(`${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
+    //  Shu qatorning shu konverdagi eski broni ustiga qo'shiladi.
+    const bor = (await client.query(
+      `SELECT qty FROM unit_reservations WHERE unit_id = $1 AND order_item_id = $2`,
+      [u.id, it.id])).rows[0];
+    const free = u.qty - u.reserved + (bor ? bor.qty : 0);
+    const n = qty == null || qty === '' ? free : Number(qty);
+    if (!Number.isInteger(n) || n <= 0)
+      throw new Error(`${u.conveyor_no}: soni noto'g'ri`);
+    if (n > free)
+      throw new Error(`${u.conveyor_no}: bo'sh ${free} ta, ${n} ta so'ralmoqda`);
 
-    //  Bir qismi olinsa konver bo'linadi: biriktirilgani yangi qator
-    //  bo'ladi, qolgani joyida bo'sh turaveradi.
-    const id = n < u.qty
-      ? await clonePart(client, req, u, n, { keepPlace: true })
-      : u.id;
-
-    //  Zakaz raqami va mijoz konverga ham yoziladi: jurnal, zavod
-    //  ko'rinishi va ombor shu ustunlarga tayanadi (sql/sales.sql).
     await client.query(
-      `UPDATE production_units
-          SET order_item_id = $2, order_no = $3, customer_id = $4
-        WHERE id = $1`, [id, it.id, o.order_no, o.customer_id]);
+      `INSERT INTO unit_reservations (unit_id, order_item_id, qty, created_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (unit_id, order_item_id) DO UPDATE SET qty = $3`,
+      [u.id, it.id, n, req.user.id]);
+    await stampUnit(client, u.id);
 
     if (o.status === 'new')
       await client.query(`UPDATE orders SET status = 'reserved' WHERE id = $1`, [o.id]);
 
-    await audit(req, { module: 'sales', action: 'assign', entity: 'order',
+    await audit(req, { module: 'sales', action: 'bron', entity: 'order',
                        entity_id: o.id,
                        payload: { order_no: o.order_no, conveyor_no: u.conveyor_no,
                                   qty: n } }, client);
     await client.query('COMMIT');
-    res.json({ ok: true, unit_id: id, qty: n });
+    res.json({ ok: true, unit_id: u.id, qty: n });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
   } finally { client.release(); }
 }));
 
-//  Ajratish. Bo'lingan konver qaytadan yaxlitlanadi: shu bo'limda turgan,
-//  bo'sh va bir xil raqamli qator bo'lsa donalar unga qo'shiladi va
-//  bo'shagan qator o'chadi (tarixi qo'shilgan qatorga ko'chadi) — aks
-//  holda biriktirib-ajratgan sayin ombor ro'yxati qator bilan to'lardi.
+//  Konverdagi zakaz raqami va mijoz bronlardan qaytadan yoziladi.
+//
+//  Bitta bron bo'lsa ikkalasi ham to'ladi — jurnalda tsex boshlig'i
+//  «bu Alisherniki» deb ko'radi va navbatni shunga qarab tuzadi. Bir
+//  nechta bo'lsa bo'sh qoladi: bittasini tanlab yozish qolganini
+//  yashirardi, ro'yxatning o'zi esa qatorni ochganda chiqadi.
+async function stampUnit(client, unitId) {
+  await client.query(
+    `UPDATE production_units u SET
+       order_no    = b.order_no,
+       customer_id = b.customer_id
+     FROM (SELECT CASE WHEN COUNT(DISTINCT v.order_id) = 1
+                       THEN MIN(v.order_no) END AS order_no,
+                  CASE WHEN COUNT(DISTINCT v.order_id) = 1
+                       THEN MIN(v.customer_id) END AS customer_id
+             FROM v_unit_bron v WHERE v.unit_id = $1) b
+     WHERE u.id = $1`, [unitId]);
+}
+
+//  Bronni olib tashlash. Konver bo'linmagani uchun yaxlitlash ham
+//  kerak emas: bitta qator o'chadi, konverning o'zi joyida qoladi.
 router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
   const client = await db.connect();
   try {
@@ -401,47 +483,34 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
     if (chans && !chans.includes(o.channel))
       throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
 
-    const u = (await client.query(
-      `SELECT u.* FROM production_units u
-         JOIN order_items i ON i.id = u.order_item_id
-        WHERE u.id = $1 AND i.order_id = $2 FOR UPDATE OF u`,
-      [req.body.unit_id, req.params.id])).rows[0];
-    if (!u) throw new Error('Konver bu buyurtmada emas');
+    const r = (await client.query(
+      `SELECT r.id, r.unit_id, r.qty, u.conveyor_no
+         FROM unit_reservations r
+         JOIN order_items i     ON i.id = r.order_item_id
+         JOIN production_units u ON u.id = r.unit_id
+        WHERE r.unit_id = $1 AND i.order_id = $2
+          AND ($3::int IS NULL OR r.order_item_id = $3)`,
+      [req.body.unit_id, req.params.id, req.body.item_id || null])).rows[0];
+    if (!r) throw new Error('Bu buyurtmada bunday bron yo\'q');
 
-    await client.query(
-      `UPDATE production_units SET order_item_id = NULL, order_no = NULL,
-              customer_id = NULL WHERE id = $1`, [u.id]);
+    await client.query(`DELETE FROM unit_reservations WHERE id = $1`, [r.id]);
+    await stampUnit(client, r.unit_id);
 
-    const free = (await client.query(
-      `SELECT id FROM production_units
-        WHERE conveyor_no = $1 AND id <> $2 AND order_item_id IS NULL
-          AND status = $3 AND current_section_id IS NOT DISTINCT FROM $4::int
-        ORDER BY id LIMIT 1 FOR UPDATE`,
-      [u.conveyor_no, u.id, u.status, u.current_section_id])).rows[0];
-    if (free) {
-      await client.query(`UPDATE production_units SET qty = qty + $2 WHERE id = $1`,
-                         [free.id, u.qty]);
-      await client.query(`UPDATE unit_moves SET unit_id = $2 WHERE unit_id = $1`,
-                         [u.id, free.id]);
-      await client.query(`DELETE FROM production_units WHERE id = $1`, [u.id]);
-    }
-
-    //  Biriktirilgani qolmasa buyurtma yana "yangi" bo'ladi: holat
-    //  saqlangan belgi emas, konverlardan kelib chiqadi.
+    //  Broni qolmasa buyurtma yana "yangi" bo'ladi: holat saqlangan
+    //  belgi emas, bronlardan kelib chiqadi.
     await client.query(
       `UPDATE orders o SET status = 'new'
         WHERE o.id = $1 AND o.status = 'reserved'
-          AND NOT EXISTS (SELECT 1 FROM production_units x
+          AND NOT EXISTS (SELECT 1 FROM unit_reservations x
                             JOIN order_items i ON i.id = x.order_item_id
-                           WHERE i.order_id = $1 AND x.status <> 'cancelled')`,
-      [o.id]);
+                           WHERE i.order_id = $1)`, [o.id]);
 
-    await audit(req, { module: 'sales', action: 'unassign', entity: 'order',
+    await audit(req, { module: 'sales', action: 'bron-undo', entity: 'order',
                        entity_id: o.id,
                        payload: { order_no: o.order_no,
-                                  conveyor_no: u.conveyor_no, qty: u.qty } }, client);
+                                  conveyor_no: r.conveyor_no, qty: r.qty } }, client);
     await client.query('COMMIT');
-    res.json({ ok: true, merged: !!free });
+    res.json({ ok: true });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
