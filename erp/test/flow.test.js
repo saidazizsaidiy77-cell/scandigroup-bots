@@ -969,6 +969,83 @@ test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri vitrinaga kiritiladi', async (
   assert.match(xato.text, /topilmadi/);
 });
 
+test('vitrina sotuvchisi o\'z nuqtasini va T/M omborni ko\'radi', async () => {
+  const { db } = require('../db');
+  const ABU = (await H.id(`SELECT id FROM warehouses WHERE code='VITR-ABU'`)).id;
+  await db.query(`INSERT INTO workers (name) VALUES ('Abu-Saxiy sotuvchisi')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code, scope_warehouse_id)
+                  SELECT id, 'sotuvchi', $1 FROM workers WHERE name='Abu-Saxiy sotuvchisi'
+                  ON CONFLICT (worker_id, role_code)
+                  DO UPDATE SET scope_warehouse_id = $1`, [ABU]);
+  const shou = H.api(base, await H.sessionFor('Abu-Saxiy sotuvchisi'));
+
+  // Har omborga bittadan mahsulot
+  const qoy = async (kod, rang) => (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: rang, is_opening: true,
+      fg_on: '2026-09-06', warehouse_code: kod },
+  ] })).body.created[0];
+  const uAbu = await qoy('VITR-ABU', 'Abu-rang');
+  await qoy('VITR-PALMA', 'Palma-rang');
+  await qoy('TM', 'TM-rang');
+
+  // Ro'yxatda faqat o'z nuqtasi va T/M ombor
+  const kodlar = (await shou('GET', '/api/warehouse/list')).body.rows.map((w) => w.code);
+  assert.deepEqual(kodlar.sort(), ['TM', 'VITR-ABU'],
+    'boshqa vitrinalar ham, xom ashyo omborlari ham ko\'rinmaydi');
+
+  // Qoldiq: o'ziniki va T/M ombor ochiq, boshqasi yo'q
+  const qoldiq = async (w) => await shou('GET', `/api/warehouse/fg/summary?w=${w}`);
+  assert.equal((await qoldiq('VITR-ABU')).body.total.qty, 2);
+  assert.ok((await qoldiq('TM')).body.total.qty >= 2, 'zavod ombori ochiq');
+  const yopiq = await qoldiq('VITR-PALMA');
+  assert.equal(yopiq.status, 400);
+  assert.match(yopiq.body.error, /topilmadi/);
+
+  // Konverlar ro'yxati va Excel ham shu chegarada
+  assert.equal((await shou(
+    'GET', `/api/warehouse/fg/units?w=VITR-PALMA&product_id=${PENAL}&color=Palma-rang`
+  )).status, 400);
+  const excel = await shou('GET', '/api/units/stock?w=VITR-PALMA');
+  assert.equal(excel.status, 200);
+  assert.equal(excel.body.rows.length, 0, 'ko\'rmaydigan ombor bo\'sh chiqadi');
+
+  // Ishlab chiqarish jurnali OCHIQ — chegara omborniki, jurnalniki emas
+  assert.equal((await shou('GET', '/api/units/')).status, 200);
+
+  // Buyurtma yozadi, lekin faqat ko'rinadigan ombordan biriktiradi
+  assert.equal((await admin('POST', '/api/units/customers', { items: [
+    { name: 'Vitrina mijozi' }] })).status, 200);
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Vitrina mijozi'`)).id;
+  const z = (await shou('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2 }] })).body;
+  assert.ok(z.id, JSON.stringify(z));
+  const qator = (await shou('GET', '/api/sales/orders/' + z.id)).body.items[0];
+
+  const nomzod = (await shou('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${qator.id}`)).body.rows;
+  const ranglar = nomzod.filter((u) => u.status === 'fg').map((u) => u.color);
+  assert.ok(ranglar.includes('Abu-rang') && ranglar.includes('TM-rang'), ranglar.join(','));
+  assert.ok(!ranglar.includes('Palma-rang'), 'boshqa nuqtadagi mahsulot sotilmaydi');
+
+  // To'g'ridan-to'g'ri id yuborsa ham qabul qilinmaydi
+  const palma = (await H.id(
+    `SELECT id FROM production_units WHERE color = 'Palma-rang'`)).id;
+  const xato = await shou('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: palma });
+  assert.equal(xato.status, 400);
+  assert.match(xato.body.error, /biriktirilmagan/);
+
+  // O'z nuqtasidagi esa biriktiriladi
+  assert.equal((await shou('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: uAbu.id })).status, 200);
+
+  // Doirasi yo'q sotuvchi hammasini ko'radi
+  const bosh = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  const hammasi = (await bosh('GET', '/api/warehouse/list')).body.rows.map((w) => w.code);
+  assert.ok(hammasi.includes('VITR-PALMA'), hammasi.join(','));
+});
+
 // ═══════════════════════════════════════════════════════════════════ SAVDO
 
 test('buyurtmaga ombordagi konver biriktiriladi — butunicha va bir qismi', async () => {

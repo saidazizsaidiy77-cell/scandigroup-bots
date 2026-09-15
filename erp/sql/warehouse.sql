@@ -135,6 +135,23 @@ ALTER TABLE production_units ADD COLUMN IF NOT EXISTS warehouse_id INT
 CREATE INDEX IF NOT EXISTS idx_units_warehouse ON production_units(warehouse_id)
   WHERE warehouse_id IS NOT NULL;
 
+-- ──────────────────────────────────────────── XODIM QAYSI VITRINADA ISHLAYDI
+--
+--  Vitrinalar shaharning uch nuqtasida va har birida o'z sotuvchisi bor.
+--  Sotuvchiga o'z nuqtasi biriktiriladi: u faqat o'z vitrinasining
+--  qoldig'ini ko'radi, ustiga T/M omborni — zavodda nima borligini
+--  bilmasa mijozga «olib kelamiz» deya olmaydi.
+--
+--  Tsex doirasi (`scope_shop_id`) va savdo yo'nalishi (`scope_channel`)
+--  bilan bir xil: bu filtr emas, klient o'chira olmaydigan CHEGARA
+--  (`warehousesOf(req)`, modules/warehouse.js). Bo'sh bo'lsa — hamma
+--  ombor (ombor mudiri, rahbariyat, administrator).
+--
+--  Ustun shu faylda, `core.sql` da emas: u `warehouses` ga bog'lanadi,
+--  ya'ni jadval avval yaratilgan bo'lishi kerak.
+ALTER TABLE worker_roles ADD COLUMN IF NOT EXISTS scope_warehouse_id INT
+  REFERENCES warehouses(id);
+
 -- ───────────────────────────────────────────── OMBORLAR ARO KO'CHIRISH
 --
 --  T/M ombordan vitrinaga (va teskari) mahsulot berilganda yoziladi.

@@ -1331,13 +1331,26 @@ const STOCK_SORT = {
   days_in_stock: 'days_in_stock', total_amount: 'total_amount',
 };
 
-function stockQuery(q, limit) {
+//  Xodimga ko'rinadigan ombor. Vitrina sotuvchisiga nuqtasi
+//  biriktirilgan bo'lsa u faqat o'shani va T/M omborni ko'radi
+//  (izoh: modules/warehouse.js, `whScope`). Mos kelmasa so'rov NULL
+//  qaytaradi va ro'yxat bo'sh chiqadi — xato emas, shunchaki yo'q.
+const WH_PICK = `(SELECT w.id FROM warehouses w
+                   WHERE w.code = COALESCE($6, 'TM')
+                     AND (w.perm IS NULL OR w.perm = ANY($8::text[]))
+                     AND ($9::int[] IS NULL OR w.id = ANY($9) OR w.code = 'TM'))`;
+
+const whIds = (req) => {
+  const ids = req.user?.scope_warehouse_ids || [];
+  return ids.length ? ids : null;
+};
+
+function stockQuery(q, limit, req) {
   const col = STOCK_SORT[q.sort] || 'fg_on';
   const way = String(q.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   return {
     text: `SELECT * FROM v_fg_units
-      WHERE warehouse_id = (SELECT id FROM warehouses
-                             WHERE code = COALESCE($6, 'TM'))
+      WHERE warehouse_id = ${WH_PICK}
         AND ($1::int[] IS NULL OR group_id = ANY($1))
         AND ($2::int  IS NULL OR customer_id = $2)
         AND ($3::date IS NULL OR fg_on >= $3)
@@ -1352,27 +1365,32 @@ function stockQuery(q, limit) {
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no
       LIMIT ${limit}`,
     params: [groupIds(q), q.customer_id || null, q.from || null, q.to || null,
-             q.q || null, q.w || null, q.product_type || null],
+             q.q || null, q.w || null, q.product_type || null,
+             req.user.permissions, whIds(req)],
   };
 }
 
 router.get('/stock', need('warehouse.view', 'production.view'), wrap(async (req, res) => {
-  const { text, params } = stockQuery(req.query, 1000);
+  const { text, params } = stockQuery(req.query, 1000, req);
   const [rows, groups] = await Promise.all([
     db.query(text, params),
     // Guruh bo'yicha yig'indi — ro'yxat uzun bo'lsa ham umumiy manzara
     db.query(
       `SELECT product_type, COUNT(*)::int AS units, SUM(qty)::int AS qty
          FROM v_fg_units
-        WHERE warehouse_id = (SELECT id FROM warehouses
-                               WHERE code = COALESCE($1, 'TM'))
-        GROUP BY product_type ORDER BY product_type`, [req.query.w || null]),
+        WHERE warehouse_id = (SELECT w.id FROM warehouses w
+                               WHERE w.code = COALESCE($1, 'TM')
+                                 AND (w.perm IS NULL OR w.perm = ANY($2::text[]))
+                                 AND ($3::int[] IS NULL OR w.id = ANY($3)
+                                      OR w.code = 'TM'))
+        GROUP BY product_type ORDER BY product_type`,
+      [req.query.w || null, req.user.permissions, whIds(req)]),
   ]);
   res.json({ rows: rows.rows, groups: groups.rows });
 }));
 
 router.get('/stock/export', need('warehouse.view', 'production.view'), wrap(async (req, res) => {
-  const { text, params } = stockQuery(req.query, 20000);
+  const { text, params } = stockQuery(req.query, 20000, req);
   const { rows } = await db.query(text, params);
   const cols = [
     ['Konveyer raqami', (r) => r.conveyor_no],
@@ -1410,12 +1428,14 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
     `SELECT * FROM v_fg_moves
       WHERE on_date BETWEEN $1::date AND $2::date
         AND ($3::text IS NULL OR kind = $3)
-        AND warehouse_id = (SELECT id FROM warehouses
-                             WHERE code = COALESCE($4, 'TM')
-                               AND (perm IS NULL OR perm = ANY($5::text[])))
+        AND warehouse_id = (SELECT w.id FROM warehouses w
+                             WHERE w.code = COALESCE($4, 'TM')
+                               AND (w.perm IS NULL OR w.perm = ANY($5::text[]))
+                               AND ($6::int[] IS NULL OR w.id = ANY($6)
+                                    OR w.code = 'TM'))
       ORDER BY on_date DESC, kind, conveyor_no
       LIMIT 2000`, [from, to, req.query.kind || null, req.query.w || null,
-                    req.user.permissions]);
+                    req.user.permissions, whIds(req)]);
   res.json({
     from, to, rows,
     kirim:  rows.filter((r) => r.kind === 'kirim').reduce((n, r) => n + r.qty, 0),

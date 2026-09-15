@@ -178,7 +178,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `kirituvchi` | + `production.units`, `production.reports` | jurnal, boshlang'ich qoldiq, hisobotlar |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
-| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, T/M ombor + vitrinalar qoldig'i, jurnal — **faqat o'qish** |
+| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor |
 | `admin` | barchasi | hammasi |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
@@ -197,6 +197,19 @@ tayyor mahsulot turadi); `warehouse.material` — xom ashyo, MDF, furnitura
 (ombor mudiri va ta'minot; savdoga ko'rinmaydi). Yangi ombor qo'shilganda
 huquq shu qatorga yoziladi, modulga tegilmaydi. Ko'rinadigan ombor bitta
 bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
+
+**Vitrina doirasi** — `worker_roles.scope_warehouse_id`. Vitrinalar
+shaharning uch nuqtasida va har birida o'z sotuvchisi bor. Sotuvchiga
+nuqtasi biriktirilsa u FAQAT o'sha vitrinaning qoldig'ini ko'radi —
+ustiga **T/M omborni**: zavodda nima turganini bilmasa mijozga «olib
+kelamiz» deya olmaydi. Boshqa nuqtadagi konverni buyurtmaga ham
+biriktira olmaydi (`warehousesOf` → `whScope`, `modules/warehouse.js`).
+
+Doira bo'sh = hamma ombor: bosh ofis menejeri (B2B, B2C, eksport) barcha
+tayyor mahsulot omborlarini ko'radi. **Ishlab chiqarish jurnali esa
+hammaga ochiq** — chegara omborniki, jurnalniki emas: sotuvchi o'z
+buyurtmasi qaysi bo'limda turganini bilishi kerak. Xodimlar sahifasida
+savdo roli tanlanganda yo'nalish yonida vitrina ham so'raladi.
 
 **Savdo yo'nalishi** — `worker_roles.scope_channel`. Menejerga kanal
 biriktirilsa (B2B, EXPORT...), u faqat o'sha kanaldagi mijozlarni ko'radi.

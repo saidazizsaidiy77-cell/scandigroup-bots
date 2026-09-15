@@ -68,7 +68,9 @@ async function load(){
       <td class="muted">${w.pin ? esc(w.pin) : '—'}</td>
       <td class="muted">${w.tg_id ? esc(w.tg_id) : '<span class="tag warn">ulanmagan</span>'}</td>
       <td>${w.roles.length ? w.roles.map(r =>
-        `<span class="tag">${esc(r.name)}${r.scope_shop ? ' · ' + esc(r.scope_shop) : ''}</span>`
+        `<span class="tag">${esc(r.name)}${r.scope_shop ? ' · ' + esc(r.scope_shop) : ''}${
+           r.scope_warehouse ? ' · ' + esc(r.scope_warehouse) : ''}${
+           r.scope_channel_name ? ' · ' + esc(r.scope_channel_name) : ''}</span>`
         ).join(' ') : '<span class="tag bad">rol yo\'q</span>'}</td>
       <td>${w.active ? '<span class="tag ok">faol</span>' : '<span class="tag">o\'chirilgan</span>'}</td>
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
@@ -85,6 +87,7 @@ function openForm(id){
   const checked = (code) => w?.roles.some(r => r.code === code);
   const scopeOf = (code) => w?.roles.find(r => r.code === code)?.scope_shop_id || '';
   const chanOf  = (code) => w?.roles.find(r => r.code === code)?.scope_channel || '';
+  const whOf    = (code) => w?.roles.find(r => r.code === code)?.scope_warehouse_id || '';
 
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
@@ -122,11 +125,21 @@ function openForm(id){
                   <!-- Tsex doirasi ishlab chiqarish rollari uchun, savdo
                        yo'nalishi esa savdo uchun: bittasi tanlanadi. -->
                   ${SALES_ROLES.has(r.code) ? `
-                  <select class="chan" data-role="${r.code}" style="width:190px">
+                  <select class="chan" data-role="${r.code}" style="width:150px">
                     <option value="">Barcha yo'nalish</option>
                     ${meta.channels.map(c => `<option value="${esc(c.code)}"
                       ${chanOf(r.code) === c.code ? 'selected' : ''}
                       >${esc(c.name)}</option>`).join('')}
+                  </select>
+                  <!-- Vitrina sotuvchisi shaharning bir nuqtasida ishlaydi:
+                       nuqtasi biriktirilsa u faqat o'sha vitrinaning
+                       qoldig'ini ko'radi (ustiga T/M omborni). Bo'sh
+                       qoldirilsa — bosh ofis, hamma omborni ko'radi. -->
+                  <select class="wh" data-role="${r.code}" style="width:170px">
+                    <option value="">Vitrinasiz (bosh ofis)</option>
+                    ${(meta.warehouses || []).map(h => `<option value="${h.id}"
+                      ${String(whOf(r.code)) === String(h.id) ? 'selected' : ''}
+                      >${esc(h.name)}</option>`).join('')}
                   </select>` : `
                   <select class="scope" data-role="${r.code}" style="width:190px">
                     <option value="">Barcha tsex</option>
@@ -154,6 +167,7 @@ async function save(id){
     code: cb.value,
     scope_shop_id: document.querySelector(`.scope[data-role="${cb.value}"]`)?.value || null,
     scope_channel: document.querySelector(`.chan[data-role="${cb.value}"]`)?.value || null,
+    scope_warehouse_id: document.querySelector(`.wh[data-role="${cb.value}"]`)?.value || null,
   }));
   const body = {
     name:  $('wName').value.trim(),

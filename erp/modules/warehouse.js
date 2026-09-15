@@ -33,11 +33,33 @@ const MOVE = ['warehouse.move', 'warehouse.manage', 'production.manage'];
 //  klientning xatosi, server yiqilgani emas (`wrap`, db.js).
 const bad = (msg) => Object.assign(new Error(msg), { status: 400 });
 
+//  ★ VITRINA DOIRASI
+//
+//  Vitrinalar shaharning uch nuqtasida, har birida o'z sotuvchisi bor.
+//  Sotuvchiga nuqtasi biriktirilgan bo'lsa (`worker_roles.scope_warehouse_id`)
+//  u FAQAT o'sha vitrinani ko'radi — ustiga T/M omborni: zavodda nima
+//  turganini bilmasa mijozga «olib kelamiz» deya olmaydi.
+//
+//  Tsex doirasi bilan bir xil: bu filtr emas, CHEGARA — so'rovga shu
+//  yerda qo'shiladi va klient uni o'chira olmaydi. Doira bo'sh bo'lsa
+//  (ombor mudiri, rahbariyat, administrator) — hamma ombor.
+//
+//  Ikkinchi chegara `warehouses.perm` da: xom ashyo omborlari savdoga
+//  baribir ko'rinmaydi. Ikkalasi ham bajarilishi kerak.
+const SCOPE = `(w.perm IS NULL OR w.perm = ANY($1::text[]))
+           AND ($2::int[] IS NULL OR w.id = ANY($2) OR w.code = 'TM')`;
+
+const whScope = (req) => {
+  const ids = req.user?.scope_warehouse_ids || [];
+  return [req.user.permissions, ids.length ? ids : null];
+};
+
 async function whOf(req, code) {
+  const [perms, ids] = whScope(req);
   const { rows } = await db.query(
-    `SELECT id, code, name, kind, is_active FROM warehouses
-      WHERE code = COALESCE($1, 'TM') AND (perm IS NULL OR perm = ANY($2::text[]))`,
-    [code || null, req.user.permissions]);
+    `SELECT w.id, w.code, w.name, w.kind, w.is_active FROM warehouses w
+      WHERE w.code = COALESCE($3, 'TM') AND ${SCOPE}`,
+    [perms, ids, code || null]);
   if (!rows[0]) throw bad('Ombor topilmadi');
   return rows[0];
 }
@@ -57,8 +79,8 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
     db.query(`SELECT w.id, w.code, w.name, w.kind, w.note, w.is_active, s.name AS shop_name
                 FROM warehouses w
                 LEFT JOIN shops s ON s.id = w.shop_id
-               WHERE w.perm IS NULL OR w.perm = ANY($1::text[])
-               ORDER BY w.is_active DESC, w.sort, w.name`, [req.user.permissions]),
+               WHERE ${SCOPE}
+               ORDER BY w.is_active DESC, w.sort, w.name`, whScope(req)),
     // Qoldiq har ombor bo'yicha alohida: vitrina ochilgandan keyin
     // umumiy raqam noto'g'ri bo'lardi — uchta kartochka bir xil sonni
     // ko'rsatib turardi.
@@ -202,10 +224,9 @@ router.get('/fg/units', need(...READ), wrap(async (req, res) => {
 
 router.get('/targets', need(...MOVE), wrap(async (req, res) => {
   const { rows } = await db.query(
-    `SELECT id, code, name FROM warehouses
-      WHERE kind = 'fg' AND is_active
-        AND (perm IS NULL OR perm = ANY($1::text[]))
-      ORDER BY sort, name`, [req.user.permissions]);
+    `SELECT w.id, w.code, w.name FROM warehouses w
+      WHERE w.kind = 'fg' AND w.is_active AND ${SCOPE}
+      ORDER BY w.sort, w.name`, whScope(req));
   res.json({ rows });
 }));
 
@@ -232,10 +253,10 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
     // Berayotgan omborni ham tekshiramiz: xodim ko'rmaydigan ombordan
     // mahsulot chiqarib yubora olmasin. So'rov TRANZAKSIYANING `client`
     // idan yuboriladi — hovuzdan yangi ulanish olinmaydi (CLAUDE.md, 3-qoida).
+    const [perms, ids] = whScope(req);
     const from = (await client.query(
-      `SELECT id, name FROM warehouses
-        WHERE id = $1 AND (perm IS NULL OR perm = ANY($2::text[]))`,
-      [u.at_wh, req.user.permissions])).rows[0];
+      `SELECT w.id, w.name FROM warehouses w WHERE w.id = $3 AND ${SCOPE}`,
+      [perms, ids, u.at_wh])).rows[0];
     if (!from) throw new Error('Bu ombor sizga ochiq emas');
 
     const n = qty == null || qty === '' ? u.qty : Number(qty);

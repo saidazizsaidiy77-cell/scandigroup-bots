@@ -22,7 +22,8 @@ async function loadWorker(workerId) {
     db.query(`SELECT permission_code FROM v_worker_permissions WHERE worker_id = $1`, [workerId]),
     db.query(
       `SELECT wr.role_code AS code, r.name, r.surface,
-              wr.scope_shop_id, wr.scope_line_id, wr.scope_channel
+              wr.scope_shop_id, wr.scope_line_id, wr.scope_channel,
+              wr.scope_warehouse_id
          FROM worker_roles wr JOIN roles r ON r.code = wr.role_code
         WHERE wr.worker_id = $1 ORDER BY r.sort`, [workerId]),
   ]);
@@ -34,6 +35,8 @@ async function loadWorker(workerId) {
     scope_shop_ids: roles.rows.map((r) => r.scope_shop_id).filter(Boolean),
     // Savdo yo'nalishi: bo'sh bo'lsa hamma kanal (izoh: sql/units.sql)
     scope_channels: roles.rows.map((r) => r.scope_channel).filter(Boolean),
+    // Vitrina sotuvchisi o'z nuqtasini ko'radi (izoh: sql/warehouse.sql)
+    scope_warehouse_ids: roles.rows.map((r) => r.scope_warehouse_id).filter(Boolean),
   };
 }
 

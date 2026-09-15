@@ -258,10 +258,21 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
 //  bitta konverni olsa ham ikkinchisi xato oladi — tekshiruv qator
 //  qulflangandan keyin (`FOR UPDATE`).
 
+//  Vitrina sotuvchisiga o'z nuqtasi biriktirilgan bo'lsa, u boshqa
+//  nuqtadagi mahsulotni buyurtmaga biriktira olmaydi: ko'rmaydigan
+//  mahsulotni sotib bo'lmaydi (izoh: modules/warehouse.js, `whScope`).
+//  Zahira bunga kirmaydi — u omborda emas, zavodda turibdi.
 const CANDIDATE_WHERE = `
   u.order_item_id IS NULL
   AND u.status IN ('fg', 'production')
-  AND (u.status = 'fg' OR (u.is_stock AND COALESCE(s.is_hold, false)))`;
+  AND (u.status = 'fg' OR (u.is_stock AND COALESCE(s.is_hold, false)))
+  AND (u.status <> 'fg' OR $4::int[] IS NULL
+       OR COALESCE(u.warehouse_id, tmw.id) = ANY($4) OR wh.code = 'TM')`;
+
+const whIds = (req) => {
+  const ids = req.user?.scope_warehouse_ids || [];
+  return ids.length ? ids : null;
+};
 
 router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
@@ -289,13 +300,13 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        FROM production_units u
        LEFT JOIN sections s ON s.id = u.current_section_id
        LEFT JOIN shops sh   ON sh.id = s.shop_id
-       LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
-                                    (SELECT id FROM warehouses WHERE code = 'TM'))
+       LEFT JOIN warehouses tmw ON tmw.code = 'TM'
+       LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id, tmw.id)
       WHERE u.product_id = $1 AND ${CANDIDATE_WHERE}
       ORDER BY (u.status = 'fg') DESC, color_ok DESC, fabric_ok DESC,
                u.conveyor_no, u.part
       LIMIT 200`,
-    [it.product_id, it.color || null, it.fabric || null]);
+    [it.product_id, it.color || null, it.fabric || null, whIds(req)]);
   res.json({ item: it, rows });
 }));
 
@@ -329,6 +340,18 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
       throw new Error(`${u.conveyor_no}: boshqa mahsulot`);
     if (!(u.status === 'fg' || (u.status === 'production' && u.is_stock && u.is_hold)))
       throw new Error(`${u.conveyor_no}: faqat ombordagi yoki zahiradagi konver biriktiriladi`);
+
+    //  Vitrina doirasi serverda ham tekshiriladi: klient ro'yxatdan
+    //  tanlamay, to'g'ridan-to'g'ri id yuborishi mumkin.
+    const ids = whIds(req);
+    if (u.status === 'fg' && ids) {
+      const ok = (await client.query(
+        `SELECT 1 FROM warehouses w
+          WHERE w.id = COALESCE($1, (SELECT id FROM warehouses WHERE code = 'TM'))
+            AND (w.id = ANY($2::int[]) OR w.code = 'TM')`,
+        [u.warehouse_id, ids])).rowCount;
+      if (!ok) throw new Error(`${u.conveyor_no}: bu ombor sizga biriktirilmagan`);
+    }
 
     const n = qty == null || qty === '' ? u.qty : Number(qty);
     if (!Number.isInteger(n) || n <= 0 || n > u.qty)
