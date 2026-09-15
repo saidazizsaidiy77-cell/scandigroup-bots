@@ -1602,6 +1602,54 @@ test('ombor qoldig\'i jami, bronda va bo\'sh bo\'lib chiqadi', async () => {
   assert.equal(uom.free, 6);
 });
 
+//  ── YUK XATIDA CHIQARIB YUBORUVCHI ───────────────────────────────────
+//
+//  Hujjat mahsulot berilayotganda chop etiladi, tasdiq esa keyin
+//  bosiladi — shuning uchun tasdiqlanmagan buyurtmada ham ombor
+//  mudirining ismi va telefoni turadi.
+test('yuk xatida ombor mudiri ko\'rsatiladi', async () => {
+  await H.id(`UPDATE workers SET phone = '+998900000001'
+               WHERE name = 'Sinov ombor mudiri'`);
+  //  O'z mijozi bilan: bu buyurtma chiqib ketadi va boshqa testning
+  //  qarzdorlik hisobiga qo'shilib ketmasin.
+  await admin('POST', '/api/units/customers', { items: [{ name: 'Xujjat mijozi' }] });
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Xujjat mijozi'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 1, color: 'Xujjat', unit_price: 90 }] })).body;
+
+  //  Hali hech kim chiqarmagan — lekin mudir bitta, ismi hujjatda
+  const d = (await admin('GET', '/api/sales/orders/' + z.id)).body;
+  assert.equal(d.order.shipped_by_name, null, 'hali tasdiqlanmagan');
+  assert.equal(d.keeper.name, 'Sinov ombor mudiri');
+  assert.equal(d.keeper.phone, '+998900000001');
+
+  //  Chiqarib yuborilgach — aynan tasdiqlagan odam
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: 'Xujjat', unit_price: 90,
+      is_opening: true, fg_on: '2026-09-05' }] })).body.created[0];
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 1 });
+  await admin('POST', `/api/sales/orders/${z.id}/send`);
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: '2026-10-06' })).status, 200);
+
+  const keyin = (await admin('GET', '/api/sales/orders/' + z.id)).body;
+  assert.equal(keyin.order.shipped_by_name, 'Sinov ombor mudiri');
+  assert.equal(keyin.order.shipped_by_phone, '+998900000001');
+
+  //  Mudir bir nechta bo'lsa kim ekani noma'lum — hujjatda bo'sh qoladi
+  await H.id(`INSERT INTO workers (name, active) VALUES ('Ikkinchi mudir', true)
+              ON CONFLICT DO NOTHING`);
+  await H.id(`INSERT INTO worker_roles (worker_id, role_code)
+              SELECT id, 'omborchi' FROM workers WHERE name = 'Ikkinchi mudir'
+              ON CONFLICT DO NOTHING`);
+  assert.equal((await admin('GET', '/api/sales/orders/' + z.id)).body.keeper, null);
+  await H.id(`DELETE FROM workers WHERE name = 'Ikkinchi mudir'`);
+});
+
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;

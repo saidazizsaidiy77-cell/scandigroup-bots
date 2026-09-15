@@ -266,7 +266,20 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
       WHERE i.order_id = $1 AND u.status <> 'cancelled'
       ORDER BY u.conveyor_no`, [req.params.id])).rows;
 
-  res.json({ order: o, items, units });
+  //  Yuk xatida «chiqarib yuboruvchi» — OMBOR MUDIRI. Tasdiqlaguncha
+  //  kim chiqarishi noma'lum (`shipped_by` bo'sh), lekin zavodda ombor
+  //  mudiri bitta: `omborchi` rolidagi yagona xodim bo'lsa uning ismi
+  //  va telefoni hujjatda turadi. Bir nechta bo'lsa bo'sh qoladi —
+  //  qog'ozda qo'lda yoziladi. Administrator hisobga olinmaydi: unda
+  //  hamma huquq bor, lekin mahsulotni u chiqarmaydi.
+  const mudir = (await db.query(
+    `SELECT w.name, w.phone FROM workers w
+       JOIN worker_roles wr ON wr.worker_id = w.id
+      WHERE w.active AND wr.role_code = 'omborchi'
+      ORDER BY w.name LIMIT 2`)).rows;
+
+  res.json({ order: o, items, units,
+             keeper: mudir.length === 1 ? mudir[0] : null });
 }));
 
 // ─────────────────────────────────────────────────────── YARATISH / TAHRIR

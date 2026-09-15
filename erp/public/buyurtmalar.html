@@ -322,10 +322,17 @@ function docHead(o) {
 function docSign(o) {
   return `<div class="doc-sign">
     <div>
-      <div class="line">${o.shipped_by_name
-        ? `<span>${esc(o.shipped_by_name)}${o.shipped_by_phone
-            ? ` <span class="muted">${esc(o.shipped_by_phone)}</span>` : ''}</span>`
-        : ''}</div>
+      <div class="line">${(() => {
+        //  Tasdiqlagan bo'lsa — aynan o'sha odam; hali tasdiqlamagan
+        //  bo'lsa ombor mudiri (`keeper`), chunki hujjat mahsulot
+        //  berilayotganda chop etiladi — tasdiq keyin bosiladi.
+        const kim = o.shipped_by_name
+          ? { name: o.shipped_by_name, phone: o.shipped_by_phone }
+          : cur.keeper;
+        return kim && kim.name
+          ? `<span>${esc(kim.name)}${kim.phone
+              ? ` <span class="muted">${esc(kim.phone)}</span>` : ''}</span>` : '';
+      })()}</div>
       <small>Chiqarib yuboruvchi — ombor mudiri, imzo</small></div>
     <div><div class="line"></div>
       <small>Qabul qilib oluvchi — F.I.O., imzo</small></div>

@@ -308,9 +308,18 @@ chiqib ketgan yoki bekor qilingan) — qog'ozdagi hujjat kabi:
     o'ngda    MIJOZ: nomi, regioni, qayerga, kutib oluvchi raqami
     qatorlar  mahsulot · rangi · matosi · soni · narxi · summasi, «Jami»
     pastda    imzo joylari — chapda **chiqarib yuboruvchi: ombor mudiri**
-              (mahsulotni zavoddan u chiqarib beradi; tasdiqlagan bo'lsa
-              ismi va telefoni chiziq ustida turadi), o'ngda qabul qilib
+              (mahsulotni zavoddan u chiqarib beradi), o'ngda qabul qilib
               oluvchi
+
+Chiqarib yuboruvchining ismi va telefoni chiziq ustida turadi: tasdiqlagan
+bo'lsa AYNAN o'sha odam (`shipped_by_name`), hali tasdiqlamagan bo'lsa
+**ombor mudiri** — hujjat mahsulot berilayotganda chop etiladi, tasdiq
+esa keyin bosiladi. Mudir `omborchi` rolidagi yagona faol xodimdan
+olinadi (`keeper`, `GET /orders/:id`); bir nechta bo'lsa bo'sh qoladi va
+qog'ozda qo'lda yoziladi. Administrator hisobga olinmaydi: unda hamma
+huquq bor, lekin mahsulotni u chiqarmaydi. **Telefon xodim
+kartochkasidan keladi** — Xodimlar sahifasida yozilmagan bo'lsa
+hujjatda ham chiqmaydi.
 
 Ikki tomon bir xil kenglikda — yuk xati shunday o'qiladi. Bo'sh maydon
 umuman yozilmaydi. **Mijoz balansi ekranda turadi, qog'ozga chiqmaydi**
