@@ -1296,8 +1296,8 @@ function stockQuery(q, limit) {
         -- Ombor ekranidagi mahsulot va turi filtri. Excel ekranda
         -- ko'rinayotgani bilan bir xil bo'lishi kerak: mudir filtrlab
         -- yuklab olsa, faylda boshqa narsa chiqmasin.
-        AND ($7::int  IS NULL OR product_id = $7)
-        AND ($8::text IS NULL OR product_type = $8)
+        AND ($7::text IS NULL OR product_id = ANY(string_to_array($7, ',')::int[]))
+        AND ($8::text IS NULL OR product_type = ANY(string_to_array($8, ',')))
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no
       LIMIT ${limit}`,
     params: [groupIds(q), q.customer_id || null, q.from || null, q.to || null,

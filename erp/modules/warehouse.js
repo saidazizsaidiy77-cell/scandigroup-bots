@@ -107,8 +107,12 @@ const NORM = (col) => `NULLIF(TRIM(COALESCE(${col}, '')), '')`;
 //  xato qilmasin va «nimalar bor» degan savolga ro'yxatning o'zi javob
 //  bersin. Ro'yxat SHU OMBORDA turganlaridan tuziladi — bo'sh
 //  bo'ladigan variant tanlanib, mudir «hech nima yo'q» deb o'ylamasin.
-const PICK = `($5::int IS NULL OR product_id = $5)
-          AND ($6::text IS NULL OR product_type = $6)`;
+//
+//  Bir nechtasi birdan tanlanadi: «penal va kamod» degan savol zavodda
+//  bitta turnikidan ko'ra ko'proq beriladi. Vergul bilan keladi
+//  (`product_type=Penal,Kamod`) — bitta tanlov ham shu yo'ldan o'tadi.
+const PICK = `($5::text IS NULL OR product_id = ANY(string_to_array($5, ',')::int[]))
+          AND ($6::text IS NULL OR product_type = ANY(string_to_array($6, ',')))`;
 
 router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);

@@ -211,35 +211,63 @@ const openRows = new Map();   // kalit → konverlar (bir marta yuklanadi)
 
 const rowKey = r => `${r.product_id}|${r.color || ''}|${r.fabric || ''}`;
 
+//  Tanlangan turlar va mahsulotlar. Bir nechtasi birdan tanlanadi —
+//  «penal va kamod nechta qoldi» degan savol zavodda bitta turnikidan
+//  ko'proq beriladi. Shuning uchun ro'yxat emas, bosiladigan chiplar:
+//  ikkinchisini tanlash uchun Ctrl ushlab turish kerak bo'lmasin.
+const sel = { type: new Set(), prod: new Set() };
+
 function stockParams() {
   const p = wq(new URLSearchParams());
   const q = $('sQ')?.value.trim();     if (q) p.set('q', q);
   const f = $('sFrom')?.value;         if (f) p.set('from', f);
   const t = $('sTo')?.value;           if (t) p.set('to', t);
-  const g = $('sType')?.value;         if (g) p.set('product_type', g);
-  const m = $('sProd')?.value;         if (m) p.set('product_id', m);
+  if (sel.type.size) p.set('product_type', [...sel.type].join(','));
+  if (sel.prod.size) p.set('product_id', [...sel.prod].join(','));
   return p.toString();
 }
 
-//  Mahsulot ro'yxati turga qarab qisqaradi: «Stul» tanlangach penal
-//  nomlari ro'yxatda turishi ortiqcha. Yonida qoldig'i turadi — qaysi
-//  biri bor, qaysi biri bo'sh ekani tanlashdan oldin ko'rinsin.
-function prodOptions(d) {
-  const t = d.product_type;
-  return (d.facets || [])
-    .filter(f => !t || f.product_type === t)
-    .map(f => `<option value="${f.product_id}"
-      ${String(d.product_id) === String(f.product_id) ? 'selected' : ''}
-      >${esc(f.product)}${t ? '' : ' \u00b7 ' + esc(f.product_type)} (${f.qty})</option>`)
-    .join('');
+//  Turlar: nechtasi tanlansa, hammasi ko'rsatiladi. Yonida qoldig'i —
+//  qaysi turdan nima borligi tanlashdan oldin ko'rinsin.
+function typeChips(d) {
+  const by = new Map();
+  for (const f of d.facets || [])
+    by.set(f.product_type, (by.get(f.product_type) || 0) + f.qty);
+  if (by.size < 2) return '';
+  return [...by].map(([t, qty]) =>
+    `<button class="${sel.type.has(t) ? 'primary' : ''}"
+       onclick="toggleType('${esc(t)}')">${esc(t)} <b>${qty}</b></button>`).join('');
 }
 
-//  Tur o'zgarsa tanlangan mahsulot boshqa turdan bo'lib qolishi mumkin —
-//  shunda ro'yxat bo'sh chiqardi. Mahsulot tozalanadi.
-function pickType() {
-  const t = $('sType').value;
-  const cur = stock.facets.find(f => String(f.product_id) === $('sProd').value);
-  if (cur && t && cur.product_type !== t) $('sProd').value = '';
+//  Mahsulotlar ro'yxati tanlangan turlarga qarab qisqaradi: «Stul»
+//  tanlangach penal nomlari turishi ortiqcha.
+function prodChips(d) {
+  const list = (d.facets || [])
+    .filter(f => !sel.type.size || sel.type.has(f.product_type));
+  if (list.length < 2) return '';
+  return list.map(f =>
+    `<button class="${sel.prod.has(String(f.product_id)) ? 'primary' : ''}"
+       onclick="toggleProd('${f.product_id}')">${esc(f.product)}${
+         sel.type.size === 1 ? '' : ' \u00b7 ' + esc(f.product_type)
+       } <b>${f.qty}</b></button>`).join('');
+}
+
+function toggleType(t) {
+  sel.type.has(t) ? sel.type.delete(t) : sel.type.add(t);
+  //  Tanlangan mahsulot endi ko'rinmaydigan turdan bo'lib qolsa
+  //  tashlanadi — aks holda jadval sababsiz bo'sh chiqardi.
+  if (sel.type.size) {
+    for (const id of [...sel.prod]) {
+      const f = stock.facets.find(x => String(x.product_id) === id);
+      if (f && !sel.type.has(f.product_type)) sel.prod.delete(id);
+    }
+  }
+  loadStock();
+}
+
+function toggleProd(id) {
+  id = String(id);
+  sel.prod.has(id) ? sel.prod.delete(id) : sel.prod.add(id);
   loadStock();
 }
 
@@ -248,16 +276,6 @@ function drawStock() {
   $('body').innerHTML = `
     <div class="card">
       <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-        <div style="min-width:150px"><label>Mahsulot</label>
-          <select id="sProd" onchange="loadStock()">
-            <option value="">— hammasi —</option>
-            ${prodOptions(d)}</select></div>
-        <div style="min-width:130px"><label>Turi</label>
-          <select id="sType" onchange="pickType()">
-            <option value="">— hammasi —</option>
-            ${[...new Set((d.facets || []).map(f => f.product_type))].map(t =>
-              `<option value="${esc(t)}" ${d.product_type === t ? 'selected' : ''}
-                >${esc(t)}</option>`).join('')}</select></div>
         <div style="flex:1;min-width:150px"><label>Qidiruv</label>
           <input id="sQ" placeholder="rang, mato, konveyer \u2116"
                  value="${esc(d.q || '')}" oninput="debStock()"></div>
@@ -271,6 +289,14 @@ function drawStock() {
         ${App.can('production.units', 'production.manage')
           ? `<button onclick="location.href='/qoldiq.html'">Fayldan kiritish</button>` : ''}
       </div>
+
+      ${typeChips(d) ? `<div style="margin-top:14px">
+        <label>Turi</label>
+        <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
+      ${prodChips(d) ? `<div style="margin-top:12px">
+        <label>Mahsulot</label>
+        <div class="row" style="gap:6px;flex-wrap:wrap;max-height:132px;overflow-y:auto"
+          >${prodChips(d)}</div></div>` : ''}
     </div>
 
     <div class="grid g3" style="margin-top:16px">
@@ -286,7 +312,7 @@ function drawStock() {
 
     ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
       <p class="muted" style="margin-top:8px">${d.q || d.from || d.to
-        || d.product_id || d.product_type
+        || sel.type.size || sel.prod.size
         ? 'Tanlangan shart bo\'yicha mahsulot topilmadi.'
         : 'Qabul qilingan mahsulot shu yerda turadi.'}</p></div>`
     : `<div class="card" style="margin-top:16px">
@@ -401,7 +427,8 @@ async function doMove(id) {
 let t1 = null;
 const debStock = () => { clearTimeout(t1); t1 = setTimeout(loadStock, 350); };
 function clearStock() {
-  ['sQ','sFrom','sTo','sProd','sType'].forEach(i => { if ($(i)) $(i).value = ''; });
+  ['sQ', 'sFrom', 'sTo'].forEach(i => { if ($(i)) $(i).value = ''; });
+  sel.type.clear(); sel.prod.clear();
   loadStock();
 }
 function period2(days) {
@@ -420,8 +447,7 @@ async function loadStock() {
   openRows.clear();
   const d = await App.api('/api/warehouse/fg/summary' + (q ? '?' + q : ''));
   const p = new URLSearchParams(q);
-  stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to'),
-            product_type: p.get('product_type'), product_id: p.get('product_id') };
+  stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to') };
   if (d.warehouse) setTitle(d.warehouse.name);
   drawStock();
   if (focus && $(focus)) { $(focus).focus(); if ($(focus).setSelectionRange)

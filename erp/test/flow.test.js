@@ -876,6 +876,27 @@ test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri vitrinaga kiritiladi', async (
   assert.equal(s.body.total.qty, 2);
   assert.equal(s.body.warehouse.name, 'Arca vitrina');
 
+  //  Tur bo'yicha filtr BIR NECHTASINI qabul qiladi: «penal va kamod
+  //  nechta qoldi» degan savol zavodda bitta turnikidan ko'proq beriladi.
+  const STUL = (await H.id(`SELECT id FROM products WHERE sku='STU-LAURA'`)).id;
+  assert.equal((await admin('POST', '/api/units/', { items: [
+    { product_id: STUL, qty: 9, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-03', warehouse_code: 'VITR-ARCA' },
+  ] })).status, 200);
+
+  const jami = async (q) => (await admin(
+    'GET', '/api/warehouse/fg/summary?w=VITR-ARCA' + q)).body.total;
+  assert.equal((await jami('')).units, 2, 'ikkalasi ham omborda');
+  assert.equal((await jami('&product_type=Penal')).qty, 2);
+  assert.equal((await jami('&product_type=Stul')).qty, 9);
+  assert.equal((await jami('&product_type=Penal,Stul')).units, 2, 'ikkitasi birdan');
+  assert.equal((await jami(`&product_id=${PENAL},${STUL}`)).units, 2);
+  assert.equal((await jami(`&product_id=${STUL}`)).qty, 9);
+
+  // Tanlov ro'yxati shu omborda TURGANLARIDAN tuziladi
+  const f = (await admin('GET', '/api/warehouse/fg/summary?w=VITR-ARCA')).body.facets;
+  assert.deepEqual(f.map((x) => x.product_type).sort(), ['Penal', 'Stul']);
+
   // T/M omborda ko'rinmaydi — aks holda bitta mahsulot ikki joyda sanalardi
   assert.equal((await admin('GET', '/api/warehouse/fg/summary?q=Shokolad')).body.total.qty, 0);
 
