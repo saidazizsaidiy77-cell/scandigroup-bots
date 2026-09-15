@@ -74,7 +74,10 @@ const picked = new Set();
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
-const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
+// Narx kasrli bo'lishi mumkin (o'rtacha), summa esa odatda butun.
+// Ikkitadan ortiq kasr raqam ko'rsatilmaydi — u hech narsa aytmaydi.
+const money = v => v == null ? ''
+  : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 
 // Kirganda qoldiq ochiladi — «nimadan nechta bor» kunlik savol.
 // Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
@@ -294,8 +297,8 @@ function drawStock() {
         <thead><tr>
           <th class="s-name">Mahsulot</th><th class="s-type">Turi</th>
           <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
-          <th class="s-qty">Soni</th><th class="s-units">Konver</th>
-          <th class="s-days">Kun</th>
+          <th class="s-qty">Soni</th><th class="s-price">Narx, $</th>
+          <th class="s-amount">Summa, $</th>
         </tr></thead>
         <tbody>${d.rows.map(r => drawStockRow(r)).join('')}</tbody>
       </table></div></div>`}`;
@@ -304,6 +307,18 @@ function drawStock() {
 //  Qator + (ochilgan bo'lsa) uning konverlari. Konverlar ostidagi qator
 //  jadvalning o'zida turadi — alohida oyna ochilsa mudir qaysi qatordan
 //  kelganini yo'qotadi.
+//  Qatordagi narx. Bir xil mahsulot turli narxda kirgan bo'lsa bitta
+//  «to'g'ri» raqam yo'q — shunda o'rtacha ko'rsatiladi va «o'rt.» deb
+//  belgilanadi. Narxsiz konverlar bo'lsa summa ham to'liq emas, shuning
+//  uchun chiziqcha: bo'sh katak savol berdiradi, yolg'on raqam bermaydi.
+function price(r) {
+  if (r.price_min == null) return '<span class="muted">\u2014</span>';
+  const one = Number(r.price_min) === Number(r.price_max);
+  const v = one ? Number(r.price_min) : (Number(r.amount) / (Number(r.qty) || 1));
+  return money(v) + (one ? ''
+    : ` <span class="muted" style="font-size:11px">o'rt.</span>`);
+}
+
 function drawStockRow(r) {
   const k = rowKey(r);
   const open = openRows.has(k);
@@ -316,8 +331,12 @@ function drawStockRow(r) {
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
       <td class="s-qty"><b>${r.qty}</b> <span class="muted"
         style="font-size:11px">${esc(r.uom || '')}</span></td>
-      <td class="s-units muted">${r.units}</td>
-      <td class="s-days ${r.oldest_days > 60 ? 'bad' : 'muted'}">${r.oldest_days ?? ''}</td>
+      <td class="s-price">${price(r)}</td>
+      <!-- Narxi yo'q konverning summasi 0 emas, NOMA'LUM: nol raqam
+           «bepul» degan ma'no beradi. Baza matn qaytaradi ("0.00"),
+           shuning uchun Number bilan tekshiriladi. -->
+      <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
+        : '<span class="muted">\u2014</span>'}</td>
     </tr>
     ${!open ? '' : `<tr class="more"><td colspan="7" style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`

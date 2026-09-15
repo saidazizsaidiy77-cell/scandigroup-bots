@@ -156,7 +156,14 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
               COALESCE(SUM(qty), 0)::int AS qty,
               COALESCE(SUM(total_amount), 0) AS amount,
               MIN(fg_on) AS first_on,
-              MAX(days_in_stock)::int AS oldest_days
+              MAX(days_in_stock)::int AS oldest_days,
+              -- Narx qatorda BITTA raqam bo'lib turadi. Bir xil mahsulot
+              -- turli narxda kirgan bo'lishi mumkin, shuning uchun eng
+              -- kichigi va eng kattasi ham keladi: farq bo'lsa ekranda
+              -- «o'rt.» deb belgilanadi va o'rtacha ko'rsatiladi —
+              -- yolg'on aniq raqamdan ko'ra ochiq o'rtacha yaxshi.
+              MIN(unit_price) AS price_min,
+              MAX(unit_price) AS price_max
          FROM v_fg_units
         WHERE ${FROM_TO} AND ${search}
         GROUP BY product_type, product_id, product, sku, uom,
