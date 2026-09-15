@@ -278,13 +278,29 @@ tsex boshlig'i qo'ygan reja → marshrut va quvvatdan taxmin). Mijoz
 tezroq oladigan konver tepada tursin — menejer «shu kuni beramiz»
 deyishi uchun.
 
-**«Kutmoqda»** — bron qo'yilgan, lekin bir qismi hali omborga
-kelmagan buyurtma. Saqlanadigan holat EMAS, har safar bronlardan
-hisoblanadi (`assigned_qty > in_warehouse_qty`): saqlangan belgi konver
-omborga kelgan kuni haqiqatdan ajralib qolardi. Ro'yxatda filtri bor
-(`/api/sales/orders?status=waiting`). Buyurtma baribir BITTA
+**Ekranda «bron» so'zi yo'q.** Bron — ICHKI mexanizm (konverni qatorga
+biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
+
+  · **Tayyor** — hammasi T/M omborda, chiqarishga tayyor;
+  · **Kutmoqda** — bir qismi hali ishlab chiqarishda, omborga kelmagan.
+
+Ikkalasi ham saqlanadigan holat EMAS, har safar bronlardan hisoblanadi
+(`assigned_qty > in_warehouse_qty` bo'lsa «Kutmoqda»): saqlangan belgi
+konver omborga kelgan kuni haqiqatdan ajralib qolardi. Ro'yxatda filtri
+bor (`/api/sales/orders?status=waiting`). Buyurtma baribir BITTA
 nakladnoy: yarmi tayyor bo'lgani uchun bo'linmaydi — hammasi omborga
 yetib kelmaguncha chiqarilmaydi.
+
+Shu sababdan buyurtma ekranida ham, ro'yxatda ham alohida «bron» ustuni
+yo'q: u qator sonini takrorlardi («4 / 4»). **Konver biriktirish ham,
+qaytarish ham bitta oynadan** — qatordagi «Konver» tugmasi. Nomzodlar
+ro'yxatida shu qatorga allaqachon olingan konverlar eng tepada turadi va
+yonida «Qaytarish» tugmasi bo'ladi (`CANDIDATE_WHERE` da `mine`).
+
+**Yopilgan buyurtma NAKLADNOY bo'lib o'qiladi** (omborga yuborilgan,
+jo'natilgan yoki bekor qilingan): ochilma ro'yxatlar o'rniga bitta qator
+matn — «Milano · Penal / Venge / Velvet», keyin soni, narxi va summasi,
+ostida «Jami». Tanlash tugagan, endi u hujjat.
 
 Bitta bron bo'lsa konverga mijoz va zakaz raqami yoziladi — jurnalda
 tsex boshlig'i «bu Alisherniki» deb ko'radi. Bir nechta bo'lsa bo'sh

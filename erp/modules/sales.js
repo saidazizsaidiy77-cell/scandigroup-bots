@@ -466,7 +466,11 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
 //  qoldig'i esa ombor sahifasida ko'rinaveradi.
 const CANDIDATE_WHERE = `
   u.status IN ('fg', 'production')
-  AND u.qty > COALESCE(b.qty, 0)
+  --  Bo'sh donasi qolgani YOKI shu qatorga allaqachon bron qilingani.
+  --  Ikkinchisi shuning uchun: bronni olib tashlash ham SHU oynadan
+  --  qilinadi — buyurtma ekranida alohida «bron qilingan konverlar»
+  --  ro'yxati yo'q, u qator sonini takrorlardi.
+  AND (u.qty > COALESCE(b.qty, 0) OR COALESCE(mine.qty, 0) > 0)
   AND (u.status <> 'fg' OR wh.code = 'TM')`;
 
 router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
@@ -490,6 +494,8 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
             CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse,
             COALESCE(b.qty, 0)::int AS reserved_qty,
             (u.qty - COALESCE(b.qty, 0))::int AS free_qty,
+            --  Shu QATORGA olingan dona: bronni olish tugmasi shunga qarab
+            COALESCE(mine.qty, 0)::int AS mine,
             COALESCE(s.is_hold, false) AS waiting,
             --  Omborga qachon tushadi: fakt → tsex boshlig'i qo'ygan reja →
             --  marshrut va quvvatdan taxmin (v_unit_register.fg_on).
@@ -507,14 +513,20 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        LEFT JOIN v_unit_register r ON r.id = u.id
        LEFT JOIN LATERAL (SELECT SUM(r2.qty) AS qty FROM unit_reservations r2
                            WHERE r2.unit_id = u.id) b ON true
+       LEFT JOIN LATERAL (SELECT SUM(r3.qty) AS qty FROM unit_reservations r3
+                           WHERE r3.unit_id = u.id
+                             AND r3.order_item_id = $4) mine ON true
       WHERE u.product_id = $1 AND ${CANDIDATE_WHERE}
       --  Avval omborda turgani, keyin OMBORGA ENG YAQINI: mijoz tezroq
       --  oladigan konver tepada tursin. Sanasi yo'q (zahira — buyurtma
       --  kutmoqda) oxirida: unga muddat bashorat qilinmaydi.
-      ORDER BY (u.status = 'fg') DESC, r.fg_on ASC NULLS LAST,
+      --  Bron qilinganlari eng tepada: menejer avval nima olganini
+      --  ko'radi, keyin qolganini tanlaydi.
+      ORDER BY (COALESCE(mine.qty, 0) > 0) DESC,
+               (u.status = 'fg') DESC, r.fg_on ASC NULLS LAST,
                color_ok DESC, fabric_ok DESC, u.conveyor_no, u.part
       LIMIT 200`,
-    [it.product_id, it.color || null, it.fabric || null]);
+    [it.product_id, it.color || null, it.fabric || null, it.id]);
   res.json({ item: it, rows });
 }));
 
