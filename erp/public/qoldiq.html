@@ -35,9 +35,10 @@
     o'tkaziladi. Qadoqlash bo'limi tanlansa konver darrov T/M omboriga tushadi.
     Zakaz, mijoz va narx keyin ham qo'yilishi mumkin — jurnal sahifasidan.</p>
   <p class="muted" style="margin-top:8px;font-size:13px">
-    <strong>T/M omborda turgan mahsulot</strong> — <strong>Tseh</strong>
-    ustunidan <strong>«T/M ombor»</strong> tanlang: bo'lim katagi o'chadi,
-    <strong>«T/M ombor»</strong> ustunidagi sana esa reja emas, omborga
+    <strong>Omborda turgan mahsulot</strong> — <strong>Tseh</strong>
+    ustunidan omborni tanlang (<strong>T/M ombor</strong> yoki vitrina):
+    bo'lim katagi o'chadi, <strong>«Omborga kirgan»</strong>
+    ustunidagi sana esa reja emas, omborga
     <strong>kirgan kun</strong> bo'lib yoziladi. Bunday konver ishlab
     chiqarish jurnalida emas, ombor qoldig'ida turadi — u yerdan sotiladi.
     Fayldan yuklaganda xuddi shu ish <strong>«Omborga kirgan»</strong>
@@ -93,7 +94,7 @@
       <th class="num" style="width:70px">Zahira</th>
       <th style="min-width:135px">Lak tsehi</th>
       <th style="min-width:135px">Qadoqlash tsehi</th>
-      <th style="min-width:135px">T/M ombor</th>
+      <th style="min-width:135px">Omborga kirgan</th>
       <th style="min-width:170px">Mijoz nomi</th>
       <th class="num" style="min-width:130px">Narx, $</th>
       <th class="num" style="min-width:140px">Summa, $</th>
@@ -135,11 +136,18 @@ let ref = null, customers = [], seq = 0, nextNo = null, suggest = { colors: [], 
 // ustun — qog'oz jurnalda ham shunday. Ikkovi birga SKU ni beradi.
 let byFason = new Map();
 
+//  Tayyor mahsulot omborlari: T/M ombor va vitrinalar. «Tseh» ustunida
+//  har biri alohida qator bo'lib turadi — vitrinada turgan mahsulot
+//  aynan o'sha vitrinaga kiritilsin.
+let fgHouses = [];
+
 async function boot(){
-  const [r, c, nn, sg] = await Promise.all([
+  const [r, c, nn, sg, w] = await Promise.all([
     App.api('/api/ref'), App.api('/api/units/customers'),
-    App.api('/api/units/next-no'), App.api('/api/units/suggest')]);
+    App.api('/api/units/next-no'), App.api('/api/units/suggest'),
+    App.api('/api/warehouse/list')]);
   ref = r; customers = c.customers; nextNo = nn; suggest = sg;
+  fgHouses = w.rows.filter(x => x.kind === 'fg' && x.is_active);
 
   for (const p of ref.products.filter(p => p.route_template_id)){
     if (!byFason.has(p.name)) byFason.set(p.name, []);
@@ -192,7 +200,7 @@ function addRow(k = 1){
         <td><select class="c-shop" onchange="fillSec(this)">
           <option value="">— boshlanmagan —</option>
           ${ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
-          <option value="fg">T/M ombor</option>
+          ${fgHouses.map(w => `<option value="fg:${esc(w.code)}">${esc(w.name)}</option>`).join('')}
         </select></td>
         <td><select class="c-sec" onchange="sum()"><option value="">—</option></select></td>
         <td class="num"><input class="c-stock" type="checkbox" style="width:auto"
@@ -242,7 +250,7 @@ function fillPrice(tr){
 function fillSec(sel){
   const tr = sel.closest('tr');
   const sec = tr.querySelector('.c-sec');
-  const fg  = sel.value === 'fg';
+  const fg  = sel.value.startsWith('fg:');
   // Omborda turgan mahsulotning bo'limi yo'q: u konveyerdan chiqib
   // bo'lgan. Katak o'chiriladi va «T/M ombor» ustuni sana so'raydi —
   // o'sha kun qoldiqqa kirgan kun bo'ladi.
@@ -297,8 +305,9 @@ function collect(){
       // kirgan FAKT kun bo'ladi va konver darrov qoldiqqa tushadi.
       lak_planned_on:  g('.c-lak')  || null,
       pack_planned_on: g('.c-pack') || null,
-      ...(g('.c-shop') === 'fg'
-            ? { fg_on: g('.c-fg') || g('.c-start') || null }
+      ...(g('.c-shop').startsWith('fg:')
+            ? { fg_on: g('.c-fg') || g('.c-start') || null,
+                warehouse_code: g('.c-shop').slice(3) }
             : { fg_planned_on: g('.c-fg') || null }),
       customer_id: g('.c-cust') || null,
       customer_id_raw: g('.c-cust'),

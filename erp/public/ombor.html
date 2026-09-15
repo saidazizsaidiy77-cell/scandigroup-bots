@@ -25,6 +25,7 @@
 
 <div class="row" id="tabs" style="margin-bottom:16px;gap:8px;flex-wrap:wrap"></div>
 <div id="body"></div>
+<div id="modalRoot"></div>
 
 <script>
 // ============================================================================
@@ -49,6 +50,15 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
 // ekran «qabul qildim» tugmasi. Stol ustidagi kompyuterda esa u qoldiqni
 // ko'radi — nimadan nechta borligini.
 const isPhone = window.matchMedia('(max-width: 620px)').matches;
+
+//  Qaysi ombor ochilgan — manzilda (`?w=VITR-ABU`). Ko'rsatilmasa T/M
+//  ombor: eski havolalar va telefondagi yorliqlar shundan buzilmaydi.
+//  Kod har so'rovga qo'shiladi, shunda qoldiq, tarix va Excel bitta
+//  ombor haqida gapiradi.
+const WH = new URLSearchParams(location.search).get('w') || '';
+const wq = (p) => { if (WH) p.set('w', WH); return p; };
+let whName = '';
+let canMove = false, targets = [];
 //  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
 //  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
 //
@@ -70,7 +80,11 @@ const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
 // Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
 // qoldiqni ochib, kutayotgan mahsulotni ko'rmay qolishi mumkin.
 const ALL_TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'], ['moves', 'Harakat']];
-const tabs = () => ALL_TABS.filter(([k]) => (k !== 'inbox' || canAccept)
+//  «Qabul qilish» faqat T/M omborda: ishlab chiqarish vitrinaga
+//  to'g'ridan-to'g'ri topshirmaydi, mahsulot u yerga T/M ombordan
+//  ko'chiriladi.
+const isTM = () => !WH || WH === 'TM';
+const tabs = () => ALL_TABS.filter(([k]) => (k !== 'inbox' || (canAccept && isTM()))
                                          && (k !== 'moves' || canLedger));
 function drawTabs() {
   // Bitta tab — tab emas: tanlash imkoni yo'q qator faqat joy egallaydi.
@@ -86,6 +100,16 @@ async function go(k) {
   if (k === 'inbox') return load();
   if (k === 'stock') return loadStock();
   return loadMoves();
+}
+
+//  Sahifa sarlavhasi ombor nomi bilan almashadi: uchta vitrina va T/M
+//  ombor bitta sahifadan ochiladi va qaysi birida turganini ko'rish
+//  kerak — brauzer tabida ham.
+function setTitle(name) {
+  if (!name || name === whName) return;
+  whName = name;
+  document.querySelector('.top h1').textContent = name;
+  document.title = name + ' \u00b7 ZELTA';
 }
 
 function toast(msg, bad) {
@@ -188,7 +212,7 @@ const openRows = new Map();   // kalit → konverlar (bir marta yuklanadi)
 const rowKey = r => `${r.product_id}|${r.color || ''}|${r.fabric || ''}`;
 
 function stockParams() {
-  const p = new URLSearchParams();
+  const p = wq(new URLSearchParams());
   const q = $('sQ')?.value.trim();     if (q) p.set('q', q);
   const f = $('sFrom')?.value;         if (f) p.set('from', f);
   const t = $('sTo')?.value;           if (t) p.set('to', t);
@@ -264,9 +288,18 @@ function drawStockRow(r) {
     ${!open ? '' : `<tr class="more"><td colspan="7" style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? `<span class="muted">\u2014</span>`
-      : units.map(u => `<span class="tag" style="margin:2px 6px 2px 0" title="${
-          esc(u.customer_name || 'T/M ombor')} \u00b7 ${d8(u.fg_on)} \u00b7 ${u.days_in_stock} kun"
-          >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}</span>`).join('')}
+      : units.map(u => `<span class="tag" style="margin:2px 6px 2px 0${
+          canMove && !u.order_item_id ? ';cursor:pointer' : ''}"
+          title="${esc(u.customer_name || whName)} \u00b7 ${d8(u.fg_on)} \u00b7 ${
+            u.days_in_stock} kun${canMove && !u.order_item_id
+              ? ' \u00b7 bosib boshqa omborga ko\'chiriladi' : ''}"
+          ${canMove && !u.order_item_id
+            ? `onclick="event.stopPropagation();openMove(${u.id},'${
+                esc(u.conveyor_no)}',${u.qty})"` : ''}
+          >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}${
+            u.order_item_id ? ' \u00b7 band' : ''}</span>`).join('') + (canMove
+        ? `<div class="muted" style="font-size:12px;margin-top:6px">Konver
+             raqamini bosing \u2014 boshqa omborga ko'chiriladi</div>` : '')}
     </td></tr>`}`;
 }
 
@@ -275,7 +308,7 @@ async function toggleRow(k, productId) {
   const r = stock.rows.find(x => rowKey(x) === k);
   openRows.set(k, undefined);
   drawStock();
-  const p = new URLSearchParams({ product_id: productId });
+  const p = wq(new URLSearchParams({ product_id: productId }));
   if (r.color)  p.set('color', r.color);
   if (r.fabric) p.set('fabric', r.fabric);
   if (stock.from) p.set('from', stock.from);
@@ -283,6 +316,51 @@ async function toggleRow(k, productId) {
   const d = await App.api('/api/warehouse/fg/units?' + p);
   openRows.set(k, d.rows);
   drawStock();
+}
+
+// ═══════════════════════════════════════════ BOSHQA OMBORGA KO'CHIRISH
+//
+//  Vitrinaga mahsulot shu yerdan chiqariladi. Konverning bir qismi ham
+//  ko'chadi: 10 talikdan 3 tasi vitrinaga qo'yiladi, 7 tasi omborda
+//  qoladi — shunda konver ikkita qator bo'ladi, raqami bir xil.
+function openMove(id, no, qty) {
+  const other = targets.filter(t => t.code !== (WH || 'TM'));
+  if (!other.length) return toast('Ko\'chiradigan boshqa ombor yo\'q', true);
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closeMove()">
+      <div class="modal" style="max-width:420px">
+        <div class="row" style="justify-content:space-between;margin-bottom:16px">
+          <h1 style="margin:0">${esc(no)}</h1>
+          <button onclick="closeMove()">Yopish</button></div>
+        <div class="stack">
+          <div><label>Qayerga</label>
+            <select id="mvTo">${other.map(t =>
+              `<option value="${esc(t.code)}">${esc(t.name)}</option>`).join('')}</select></div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Soni (bor: ${qty})</label>
+              <input id="mvQty" type="number" min="1" max="${qty}" value="${qty}"></div>
+            <div style="flex:1"><label>Sana</label>
+              <input id="mvOn" type="date" value="${isoDay(new Date())}"></div>
+          </div>
+          <div><label>Izoh</label><input id="mvNote" placeholder="ixtiyoriy"></div>
+          <button class="primary" onclick="doMove(${id})">Ko'chirish</button>
+        </div>
+      </div></div>`;
+}
+const closeMove = () => { $('modalRoot').innerHTML = ''; };
+
+async function doMove(id) {
+  const body = { unit_id: id, to_code: $('mvTo').value,
+                 qty: Number($('mvQty').value) || null,
+                 moved_on: $('mvOn').value || null,
+                 note: $('mvNote').value.trim() || null };
+  try {
+    const r = await App.api('/api/warehouse/fg/transfer',
+      { method: 'POST', body: JSON.stringify(body) });
+    closeMove();
+    toast(`${r.qty} ta \u2192 ${r.to}`);
+    await loadStock();
+  } catch (e) { toast(e.message, true); }
 }
 
 let t1 = null;
@@ -305,6 +383,7 @@ async function loadStock() {
   const d = await App.api('/api/warehouse/fg/summary' + (q ? '?' + q : ''));
   const p = new URLSearchParams(q);
   stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to') };
+  if (d.warehouse) setTitle(d.warehouse.name);
   drawStock();
   if (focus && $(focus)) { $(focus).focus(); if ($(focus).setSelectionRange)
     $(focus).setSelectionRange(9999, 9999); }
@@ -367,7 +446,7 @@ function period(days) {
 }
 
 async function loadMoves() {
-  const p = new URLSearchParams();
+  const p = wq(new URLSearchParams());
   p.set('from', $('mFrom')?.value || isoDay(new Date(Date.now() - 7 * 864e5)));
   p.set('to', $('mTo')?.value || isoDay(new Date()));
   moves = await App.api('/api/units/stock/moves?' + p);
@@ -376,13 +455,20 @@ async function loadMoves() {
 
 App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
+  canMove = App.can('warehouse.move', 'warehouse.manage', 'production.manage');
+  // Ko'chiriladigan omborlar ro'yxati bir marta o'qiladi: har konver
+  // uchun so'rov yuborilsa, ro'yxat ochilganda o'nlab so'rov ketardi.
+  if (canMove) {
+    try { targets = (await App.api('/api/warehouse/targets')).rows; }
+    catch { targets = []; }
+  }
   canLedger = App.can('warehouse.move', 'warehouse.manage',
                       'production.manage', 'production.reports');
   // Telefonda mudir eshik oldida turadi — birinchi ekran qabul qilish
-  if (isPhone && canAccept) tab = 'inbox';
+  if (isPhone && canAccept && isTM()) tab = 'inbox';
   // Qabul qilish ro'yxati tabda raqam bo'lib turishi uchun oldindan
   // o'qiladi — ochilmasa ham mudir kutayotgan borligini ko'radi.
-  if (canAccept) rows = await App.api('/api/units/stock/inbox');
+  if (canAccept && isTM()) rows = await App.api('/api/units/stock/inbox');
   drawTabs();
   await (tab === 'inbox' ? draw() : loadStock());
 }, 'warehouse.view', 'production.view');

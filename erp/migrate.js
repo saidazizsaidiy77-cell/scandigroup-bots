@@ -19,8 +19,12 @@ const FILES = [
   'catalog.sql',         // katalogni saytdan boshqarish: guruh, fason, SKU
   'purchasing.sql',      // ta'minot: ta'minotchilar spravochnigi
   'routes.sql',          // marshrut: qaysi bo'limdan qaysi tartibda o'tadi
-  'warehouse.sql',       // ombor: qoldiq va harakat, konveyer raqami bo'yicha
   'sales.sql',           // savdo: buyurtma va uning qatorlari
+  //  Ombor OXIRIDA: `v_fg_units` konver qaysi buyurtmaga biriktirilganini
+  //  ham ko'rsatadi (`order_item_id`, sales.sql da qo'shiladi). Toza
+  //  bazada tartib buzilsa migratsiya birinchi ishga tushishdayoq
+  //  yiqiladi — ya'ni sayt umuman ko'tarilmaydi.
+  'warehouse.sql',       // ombor: qoldiq va harakat, konveyer raqami bo'yicha
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

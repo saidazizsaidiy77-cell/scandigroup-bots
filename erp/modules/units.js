@@ -417,6 +417,16 @@ async function createOne(client, req, it) {
       `${it.conveyor_no}: tanlangan bo'lim bu mahsulot marshrutida yo'q`);
   }
 
+  //  Ombor kodi berilsa — borligi tekshiriladi. Tekshirilmasa noto'g'ri
+  //  yozilgan kod jimgina NULL bo'lib qolardi va mahsulot boshqa
+  //  omborda paydo bo'lardi.
+  if (it.warehouse_code) {
+    const ok = (await client.query(
+      `SELECT 1 FROM warehouses WHERE code = $1 AND kind = 'fg' AND is_active`,
+      [it.warehouse_code])).rowCount;
+    if (!ok) throw new Error(`${it.conveyor_no}: «${it.warehouse_code}» ombori topilmadi`);
+  }
+
   const place = it.section_id ? (await client.query(
     `SELECT s.is_exit, sh.milestone
        FROM sections s JOIN shops sh ON sh.id = s.shop_id
@@ -437,11 +447,16 @@ async function createOne(client, req, it) {
         entered_section_on, customer_id, unit_price, ship_on, next_shop_planned_on,
         status, is_opening, note, created_by,
         color, fabric, lak_planned_on, lak_on, pack_planned_on, pack_on,
-        fg_planned_on, is_stock)
+        fg_planned_on, is_stock, warehouse_id)
      VALUES ($1,$2,$3,$4, COALESCE($5::date, CURRENT_DATE), $6,
              COALESCE($7::date, CURRENT_DATE), $8,$9,$10,$11,
              $12, $13, $14, $15,
-             $16,$17,$18,$19,$20,$21,$22,$23)
+             $16,$17,$18,$19,$20,$21,$22,$23,
+             -- Ombor faqat mahsulot omborga kirgan bo'lsa yoziladi.
+             -- Ko'rsatilmasa T/M ombor: boshlang'ich qoldiqning katta
+             -- qismi o'sha yerda va har qatorda tanlash so'ralmaydi.
+             CASE WHEN $24::text IS NULL THEN NULL
+                  ELSE (SELECT id FROM warehouses WHERE code = $24) END)
      RETURNING id, conveyor_no`,
     [String(it.conveyor_no).trim(), it.order_no || null, it.product_id,
      Number(it.qty) || 1, it.started_on || null, it.section_id || null,
@@ -452,7 +467,8 @@ async function createOne(client, req, it) {
      trim(it.color), trim(it.fabric),
      it.lak_planned_on || null, lakOn,
      it.pack_planned_on || null, packOn,
-     it.fg_planned_on || null, !!it.is_stock])).rows[0];
+     it.fg_planned_on || null, !!it.is_stock,
+     (isExit || it.fg_on) ? (it.warehouse_code || 'TM') : null])).rows[0];
 
   if (it.section_id) {
     await client.query(
@@ -1209,7 +1225,8 @@ async function acceptStock(client, req, unitId, undo) {
     if (u.status !== 'fg')
       throw new Error(`${u.conveyor_no}: T/M omborda emas`);
     await client.query(
-      `UPDATE production_units SET status = 'production', fg_on = NULL WHERE id = $1`, [unitId]);
+      `UPDATE production_units SET status = 'production', fg_on = NULL,
+              warehouse_id = NULL WHERE id = $1`, [unitId]);
     await refreshStock(client, u.product_id);
     return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: false };
   }
@@ -1221,9 +1238,15 @@ async function acceptStock(client, req, unitId, undo) {
   if (!u.handover_on)
     throw new Error(`${u.conveyor_no}: hali jo'natilmagan — qadoqlash tsexi «jo'natdim» deyishi kerak`);
 
+  //  Ishlab chiqarishdan kelgan mahsulot HAR DOIM T/M omborga tushadi:
+  //  vitrinaga u shu yerdan ko'chiriladi (`warehouse/fg/transfer`). Tsex
+  //  vitrinaga to'g'ridan-to'g'ri topshirmaydi — aks holda ombor mudiri
+  //  ko'rmagan mahsulot hisobga tushib qolardi.
   await client.query(
     `UPDATE production_units
-        SET status = 'fg', fg_on = COALESCE(fg_on, CURRENT_DATE)
+        SET status = 'fg', fg_on = COALESCE(fg_on, CURRENT_DATE),
+            warehouse_id = COALESCE(warehouse_id,
+                                    (SELECT id FROM warehouses WHERE code = 'TM'))
       WHERE id = $1`, [unitId]);
   await refreshStock(client, u.product_id);
   return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: true };
@@ -1261,7 +1284,9 @@ function stockQuery(q, limit) {
   const way = String(q.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   return {
     text: `SELECT * FROM v_fg_units
-      WHERE ($1::int[] IS NULL OR group_id = ANY($1))
+      WHERE warehouse_id = (SELECT id FROM warehouses
+                             WHERE code = COALESCE($6, 'TM'))
+        AND ($1::int[] IS NULL OR group_id = ANY($1))
         AND ($2::int  IS NULL OR customer_id = $2)
         AND ($3::date IS NULL OR fg_on >= $3)
         AND ($4::date IS NULL OR fg_on <= $4)
@@ -1271,7 +1296,7 @@ function stockQuery(q, limit) {
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no
       LIMIT ${limit}`,
     params: [groupIds(q), q.customer_id || null, q.from || null, q.to || null,
-             q.q || null],
+             q.q || null, q.w || null],
   };
 }
 
@@ -1282,7 +1307,10 @@ router.get('/stock', need('warehouse.view', 'production.view'), wrap(async (req,
     // Guruh bo'yicha yig'indi — ro'yxat uzun bo'lsa ham umumiy manzara
     db.query(
       `SELECT product_type, COUNT(*)::int AS units, SUM(qty)::int AS qty
-         FROM v_fg_units GROUP BY product_type ORDER BY product_type`),
+         FROM v_fg_units
+        WHERE warehouse_id = (SELECT id FROM warehouses
+                               WHERE code = COALESCE($1, 'TM'))
+        GROUP BY product_type ORDER BY product_type`, [req.query.w || null]),
   ]);
   res.json({ rows: rows.rows, groups: groups.rows });
 }));
@@ -1326,8 +1354,12 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
     `SELECT * FROM v_fg_moves
       WHERE on_date BETWEEN $1::date AND $2::date
         AND ($3::text IS NULL OR kind = $3)
+        AND warehouse_id = (SELECT id FROM warehouses
+                             WHERE code = COALESCE($4, 'TM')
+                               AND (perm IS NULL OR perm = ANY($5::text[])))
       ORDER BY on_date DESC, kind, conveyor_no
-      LIMIT 2000`, [from, to, req.query.kind || null]);
+      LIMIT 2000`, [from, to, req.query.kind || null, req.query.w || null,
+                    req.user.permissions]);
   res.json({
     from, to, rows,
     kirim:  rows.filter((r) => r.kind === 'kirim').reduce((n, r) => n + r.qty, 0),

@@ -270,7 +270,11 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   assert.equal(list.status, 200, list.text);
   const tm = list.body.rows.find((w) => w.code === 'TM');
   assert.ok(tm, 'T/M ombor ro\'yxatda');
-  assert.equal(tm.href, '/ombor.html', 'ochiq ombor havolaga ega');
+  assert.equal(tm.href, '/ombor.html?w=TM', 'havola qaysi ombor ekanini aytadi');
+  // Vitrinalar ham ochiq: ular showroom, lekin qoldiq nuqtai nazaridan
+  // oddiy ombor — tayyor mahsulot turadi.
+  const abu = list.body.rows.find((w) => w.code === 'VITR-ABU');
+  assert.equal(abu.href, '/ombor.html?w=VITR-ABU');
   // Ombor mudiriga zavodning HAMMA ombori ochiq
   const mk = list.body.rows.map((w) => w.code);
   for (const kod of ['TM', 'XOM', 'MDF', 'FURN', 'VITR-ABU', 'VITR-PALMA', 'VITR-ARCA'])
@@ -791,6 +795,97 @@ test('mijozning boshlang\'ich qarzi kiritiladi va qayta yuklashda o\'chmaydi', a
   const c = (await admin('GET', '/api/units/customers')).body.customers
     .find((x) => x.name === 'Qarzsiz mijoz');
   assert.equal(Number(c.opening_debt), 300);
+});
+
+// ══════════════════════════════════════════════════════════════ VITRINALAR
+
+test('mahsulot T/M ombordan vitrinaga ko\'chiriladi, bir qismi ham', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+
+  // T/M omborda 10 talik konver
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Bej', is_opening: true, fg_on: '2026-09-05' },
+  ] })).body.created[0];
+
+  const qoldiq = async (w) => (await mudir(
+    'GET', `/api/warehouse/fg/summary?w=${w}&q=Bej`)).body;
+  assert.equal((await qoldiq('TM')).total.qty, 10);
+  assert.equal((await qoldiq('VITR-ABU')).total.qty, 0, 'vitrina hozircha bo\'sh');
+
+  // 3 tasi vitrinaga
+  const r = await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: u.id, qty: 3, to_code: 'VITR-ABU', moved_on: '2026-09-10' });
+  assert.equal(r.status, 200, r.text);
+
+  assert.equal((await qoldiq('TM')).total.qty, 7, 'qolgani T/M omborda turibdi');
+  assert.equal((await qoldiq('VITR-ABU')).total.qty, 3);
+
+  // Konver bo'lindi: raqami bir xil, jami o'zgarmadi
+  const bolaklar = (await require('../db').db.query(
+    `SELECT qty, w.code FROM production_units u
+       LEFT JOIN warehouses w ON w.id = u.warehouse_id
+      WHERE u.conveyor_no = $1 ORDER BY qty`, [u.conveyor_no])).rows;
+  assert.equal(bolaklar.reduce((a, b) => a + b.qty, 0), 10, 'dona yo\'qolmadi');
+  assert.equal(bolaklar.find((b) => b.qty === 3).code, 'VITR-ABU');
+  assert.equal(bolaklar.find((b) => b.qty === 7).code, 'TM');
+
+  // Vitrinadagi bo'lakni butunicha boshqa vitrinaga
+  const vitr = (await mudir('GET',
+    `/api/warehouse/fg/units?w=VITR-ABU&product_id=${PENAL}&color=Bej`)).body.rows[0];
+  assert.equal(vitr.qty, 3);
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: vitr.id, to_code: 'VITR-PALMA' })).status, 200);
+  assert.equal((await qoldiq('VITR-ABU')).total.qty, 0);
+  assert.equal((await qoldiq('VITR-PALMA')).total.qty, 3);
+
+  // Harakat tarixi: bergan omborda chiqim, olganida kirim
+  const tarix = async (w) => (await mudir('GET',
+    `/api/units/stock/moves?w=${w}&from=2026-09-01&to=2026-09-30`)).body;
+  assert.equal((await tarix('VITR-ABU')).chiqim, 3, 'vitrinadan chiqdi');
+  assert.equal((await tarix('VITR-PALMA')).kirim, 3, 'ikkinchisiga kirdi');
+
+  // Xatolar
+  const yoq = await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: vitr.id, to_code: 'VITR-PALMA' });
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /allaqachon/);
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: vitr.id, to_code: 'XOM' })).status, 400, 'xom ashyo omboriga emas');
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: vitr.id, qty: 99, to_code: 'VITR-ARCA' })).status, 400);
+
+  // Savdo ko'radi, lekin ko'chira olmaydi
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await savdo('GET', '/api/warehouse/fg/summary?w=VITR-PALMA')).status, 200);
+  assert.equal((await savdo('POST', '/api/warehouse/fg/transfer',
+    { unit_id: vitr.id, to_code: 'TM' })).status, 403);
+});
+
+test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri vitrinaga kiritiladi', async () => {
+  const r = await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Shokolad', is_opening: true,
+      fg_on: '2026-09-03', warehouse_code: 'VITR-ARCA' },
+  ] });
+  assert.equal(r.status, 200, r.text);
+  const w = await H.id(
+    `SELECT w.code FROM production_units u JOIN warehouses w ON w.id = u.warehouse_id
+      WHERE u.id = $1`, [r.body.created[0].id]);
+  assert.equal(w.code, 'VITR-ARCA');
+
+  const s = await admin('GET', '/api/warehouse/fg/summary?w=VITR-ARCA&q=Shokolad');
+  assert.equal(s.body.total.qty, 2);
+  assert.equal(s.body.warehouse.name, 'Arca vitrina');
+
+  // T/M omborda ko'rinmaydi — aks holda bitta mahsulot ikki joyda sanalardi
+  assert.equal((await admin('GET', '/api/warehouse/fg/summary?q=Shokolad')).body.total.qty, 0);
+
+  // Noto'g'ri ombor kodi jimgina yutilmaydi
+  const xato = await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, is_opening: true, fg_on: '2026-09-03',
+      warehouse_code: 'YO-Q' },
+  ] });
+  assert.equal(xato.status, 400);
+  assert.match(xato.text, /topilmadi/);
 });
 
 // ═══════════════════════════════════════════════════════════════════ SAVDO

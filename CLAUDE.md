@@ -68,12 +68,38 @@ jo'natuvchi «jo'natdim» (`production_units.handover_*`) → qabul qiluvchi
 o'tkazadi. Jo'natilmagan konverni qabul qilib bo'lmaydi. Jo'natish —
 harakat EMAS, mahsulot joyidan qimirlamaydi.
 
-**Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: tayyor mahsulot,
-xom ashyo va zavod aytadigan boshqalari. Ro'yxat bazada, `sql/warehouse.sql`
-da. `kind='fg'` — qoldiq konver hisobida; `kind='material'` — xom ashyo
-(hali yozilmagan). `is_active=FALSE` ombor ro'yxatda «rejada» bo'lib
-turadi, ochilmaydi. Yangi ombor qo'shish — shu faylga bitta qator,
-sahifaga tegilmaydi.
+**Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
+vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,
+`sql/warehouse.sql` da. `kind='fg'` — qoldiq konver hisobida;
+`kind='material'` — xom ashyo (hali yozilmagan). `is_active=FALSE` ombor
+ro'yxatda «rejada» bo'lib turadi, ochilmaydi. Yangi ombor qo'shish — shu
+faylga bitta qator, sahifaga tegilmaydi.
+
+Konver qaysi omborda turgani `production_units.warehouse_id` da. NULL —
+T/M ombor: ustun qo'shilgunga qadar kiritilgan konverlar shu yerda deb
+o'qiladi (`v_fg_units` COALESCE bilan). Har ombor bitta sahifadan
+ochiladi — `/ombor.html?w=VITR-ABU` — va qoldiq, tarix, Excel hammasi
+o'sha ombor haqida gapiradi.
+
+**Vitrinaga mahsulot ikki yo'l bilan tushadi.** Ishlab chiqarish vitrinaga
+TOPSHIRMAYDI: qadoqlash tsexidan kelgan mahsulot har doim T/M omborga
+qabul qilinadi, vitrinaga u shu yerdan ko'chiriladi — aks holda ombor
+mudiri ko'rmagan mahsulot hisobga tushib qolardi.
+
+  1. **Ko'chirish** — T/M ombor qoldig'ida konver raqamini bosib, omborni
+     tanlash (`warehouse/fg/transfer`). Konverning BIR QISMI ham ko'chadi:
+     10 talikdan 3 tasi vitrinaga chiqadi, 7 tasi omborda qoladi —
+     konver bo'linadi (`clonePart`), raqami bir xil qoladi. Buyurtmaga
+     biriktirilgan konver ko'chmaydi: avval ajratiladi.
+  2. **Boshlang'ich qoldiq** — «Tseh» ustunidan vitrina tanlanadi: hozir
+     vitrinada turgan mahsulot to'g'ridan-to'g'ri o'sha yerga kiritiladi.
+     Fayldan yuklashda ham shu — `warehouse_code` ustuni.
+
+Omborlar aro ko'chirish `warehouse_moves` ga yoziladi va ombor tarixida
+IKKI qator bo'lib chiqadi: berganida chiqim, olganida kirim. Ishlab
+chiqarishdan kirim esa mahsulot BIRINCHI tushgan omborga yoziladi, hozir
+turganiga emas — aks holda ko'chirilgan mahsulot vitrinada ikki marta
+kirim bo'lib ko'rinardi.
 
 **Javobgar tsex** (`product_groups.owner_shop_id`) — bo'lim konver
 QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini. Stul lak
@@ -196,7 +222,8 @@ erp/
 
 `sql/` tartibi: core → core-seed → production → production-seed →
 catalog-groups → production-sku → units → register → catalog → purchasing →
-routes → warehouse. Yangi fayl qo'shsangiz `migrate.js` ga ham yozing.
+routes → sales → warehouse. Yangi fayl qo'shsangiz `migrate.js` ga ham yozing.
+Ombor oxirida: uning view'i savdo qo'shadigan ustunni ham o'qiydi.
 
 **Menyuning yagona manbai** — `public/app.js` dagi `MODULES` va `PAGES`.
 Yangi sahifa faqat shu ro'yxatga qo'shiladi.
@@ -266,11 +293,6 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   venge? Har rang alohida materialmi, yoki bitta material + rang ustunimi?
   Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
   bo'lmaydi.
-
-**Vitrinalar** (`Abu-Saxiy`, `Palma`, `Arca`) — showroom, tayyor
-mahsulot turadi (`kind='fg'`). Ular ochilganda konverga qaysi omborda
-turgani yozilishi kerak: hozir butun tayyor mahsulot bitta omborda deb
-hisoblanadi, bunday ustun yo'q. Savdo moduli bilan birga qilinadi.
 
 **Savdo moduli**
 - Buyurtma qabul qilishda nima yoziladi?

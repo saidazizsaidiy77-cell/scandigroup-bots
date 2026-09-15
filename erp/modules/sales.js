@@ -111,10 +111,12 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
 
   const units = (await db.query(
     `SELECT u.id, u.order_item_id, u.conveyor_no, u.qty, u.color, u.fabric,
-            u.status, u.is_stock, s.name AS section
+            u.status, u.is_stock, s.name AS section, wh.name AS warehouse
        FROM production_units u
        JOIN order_items i     ON i.id = u.order_item_id
        LEFT JOIN sections s   ON s.id = u.current_section_id
+       LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
+                                   (SELECT id FROM warehouses WHERE code = 'TM'))
       WHERE i.order_id = $1 AND u.status <> 'cancelled'
       ORDER BY u.conveyor_no`, [req.params.id])).rows;
 
@@ -279,6 +281,7 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT u.id, u.conveyor_no, u.part, u.qty, u.color, u.fabric, u.status,
             u.is_stock, u.fg_on, s.name AS section, sh.name AS shop,
+            wh.name AS warehouse,
             (LOWER(COALESCE(u.color, '')) = LOWER(COALESCE($2, ''))
              OR $2 IS NULL) AS color_ok,
             (LOWER(COALESCE(u.fabric, '')) = LOWER(COALESCE($3, ''))
@@ -286,6 +289,8 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        FROM production_units u
        LEFT JOIN sections s ON s.id = u.current_section_id
        LEFT JOIN shops sh   ON sh.id = s.shop_id
+       LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
+                                    (SELECT id FROM warehouses WHERE code = 'TM'))
       WHERE u.product_id = $1 AND ${CANDIDATE_WHERE}
       ORDER BY (u.status = 'fg') DESC, color_ok DESC, fabric_ok DESC,
                u.conveyor_no, u.part
