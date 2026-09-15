@@ -1706,6 +1706,18 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
     assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
       { item_id: qator.id, unit_id: u.id, qty: n })).status, 200);
 
+  //  Ro'yxatning o'zida ham konverlar qayerdaligi ko'rinadi: savdo
+  //  xodimi «mahsulotim qayerda» degan savolga buyurtmani ochmasdan
+  //  javob beradi. Omborda turgani birinchi.
+  const qator_ = (await admin('GET', '/api/sales/orders?q=' + z.order_no)).body.rows[0];
+  assert.equal(qator_.places.length, 2);
+  assert.equal(qator_.places[0].omborda, true);
+  assert.equal(qator_.places[0].warehouse_code, 'TM');
+  assert.equal(qator_.places[0].qty, 4);
+  assert.equal(qator_.places[1].omborda, false);
+  assert.equal(qator_.places[1].joy, 'Arra');
+  assert.equal(qator_.places[1].qty, 2);
+
   // Ombor mudiri hali ko'rmaydi — savdo yubormagan
   assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);
 

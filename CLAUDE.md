@@ -371,7 +371,16 @@ Kartochka `.no-print` — yuk xatiga chiqmaydi, u ish quroli. Chiqib
 ketgan va bekor qilingan buyurtmada ko'rsatilmaydi: mahsulot zavodda
 yo'q. Shusiz savdo «mahsulotim qayerda» degan savolga javob topolmasdi:
 ombor sahifasida faqat omborga TUSHGANI ko'rinadi, tsexda yurgani
-qoldiqda yo'q. Savdo xodimi mijozga «qayerda ekan» degan savolga shu
+qoldiqda yo'q.
+
+**Ro'yxatda ham shu ustun bor** (`joylar`, `/api/sales/orders` dagi
+`places`): har buyurtmaning konverlari joyi bo'yicha guruhlangan holda
+keladi, omborda turgani birinchi. Ilgari ro'yxatda faqat holat turardi
+(«Kutmoqda») va joyini bilish uchun buyurtmalarni birma-bir ochish kerak
+edi. Ikkitadan ko'p joy bo'lsa qolgani «+N» — hammasi buyurtma ichida.
+Konver biriktirilmagan bo'lsa katak BO'SH: «Yangi» holati buni
+allaqachon aytadi. Chiqib ketgan va bekor qilingan buyurtma so'ralmaydi
+ham — mahsulot zavodda yo'q. Savdo xodimi mijozga «qayerda ekan» degan savolga shu
 ustundan javob beradi. Konver keyingi bo'limga o'tsa **o'zi
 yangilanadi**: ochiq buyurtma har daqiqada qayta o'qiladi — faqat
 kutilayotgani (ishlab chiqarishda koneri bori), faqat oyna ochiq

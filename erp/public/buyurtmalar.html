@@ -75,7 +75,10 @@
     <thead><tr><th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
       <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
       <th class="num">Summa, $</th>
-      <th>Holat</th><th></th></tr></thead>
+      <!--  «Qayerda» — biriktirilgan konverlar hozir turgan joyi.
+            Savdo xodimidan kun bo'yi «mahsulotim qayerda» deb
+            so'rashadi; ilgari javob har buyurtmani ochib ko'rilardi. -->
+      <th>Qayerda</th><th>Holat</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
 </div>
@@ -151,6 +154,30 @@ function drawChips(){
 }
 function setStatus(k){ status = k; drawChips(); load(); }
 
+//  Ro'yxatdagi «Qayerda»: konverlar joyi bo'yicha guruhlangan holda
+//  serverdan keladi (`places`), omborda turgani birinchi. Tsex nomi
+//  ikkinchi qatorda — ro'yxat tor va bo'lim bilan tsex bitta qatorga
+//  sig'masdi.
+//
+//  Ikkitadan ko'p joy bo'lsa qolgani «+N» bo'lib yig'iladi: buyurtma
+//  ochilganda hammasi ko'rinadi («Konverlar qayerda»).
+//
+//  Konver biriktirilmagan bo'lsa katak BO'SH qoladi: «Yangi» holati buni
+//  allaqachon aytadi va ikkinchi marta yozish ustunni shovqinga
+//  to'ldirardi.
+function joylar(o) {
+  const list = o.places || [];
+  if (!list.length) return '';
+  const ko = list.slice(0, 2).map((x) => `<div><span class="tag${
+    x.omborda ? ' ok' : ''}" style="font-size:11px">${esc(
+      x.warehouse_code === 'TM' ? 'T/M ombor' : x.joy)}</span>
+    <span class="muted" style="font-size:11px">${x.qty} ta</span>${x.shop
+      ? `<div class="muted" style="font-size:11px">${esc(x.shop)}</div>` : ''}</div>`);
+  if (list.length > 2)
+    ko.push(`<div class="muted" style="font-size:11px">+${list.length - 2}</div>`);
+  return ko.join('');
+}
+
 async function load(){
   const q = new URLSearchParams();
   if (status) q.set('status', status);
@@ -177,6 +204,7 @@ async function load(){
         : '—'}</td>
       <td class="num">${o.lines}</td><td class="num">${o.qty}</td>
       <td class="num">${money(o.amount)}</td>
+      <td>${joylar(o)}</td>
       <td><span class="tag${o.status === 'cancelled' ? ' warn' : ''}"
         >${esc(statusOf(o))}</span></td>
       <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
@@ -184,7 +212,7 @@ async function load(){
       <td class="num"><button onclick="openOrder(${o.id})"
         title="${yopiq ? 'Ko\'rish' : 'Tahrirlash'}">${yopiq ? '👁' : '✎'}</button></td>
     </tr>`;
-  }).join('') : '<tr><td class="muted" colspan="10">Buyurtma yo\'q</td></tr>';
+  }).join('') : '<tr><td class="muted" colspan="11">Buyurtma yo\'q</td></tr>';
 }
 
 // ─────────────────────────────────────────────────────── BUYURTMA TAHRIRI

@@ -235,6 +235,40 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
     [chans, kutmoqda ? null : (req.query.status || null),
      req.query.customer_id || null,
      req.query.manager_id || null, req.query.q || null, kutmoqda]);
+
+  //  ★ HAR BUYURTMA QAYERDA — ro'yxatning o'zida.
+  //
+  //  Savdo xodimidan kun bo'yi «mahsulotim qayerda» deb so'rashadi.
+  //  Ro'yxatda faqat holat turardi («Kutmoqda»), joyini bilish uchun esa
+  //  buyurtmani birma-bir ochish kerak edi — o'ntasini ko'rish o'nta
+  //  bosish degani.
+  //
+  //  Bitta so'rov bilan hammasiga: konverlar joyi bo'yicha guruhlanadi,
+  //  omborda turgani birinchi. Chiqib ketgan va bekor qilingan buyurtma
+  //  so'ralmaydi — mahsulot zavodda yo'q va bron ham qolmagan.
+  const ochiq = rows.filter((o) => o.status !== 'shipped'
+                                && o.status !== 'cancelled').map((o) => o.id);
+  if (ochiq.length) {
+    const joy = (await db.query(
+      `SELECT i.order_id, (u.status = 'fg') AS omborda,
+              CASE WHEN u.status = 'fg' THEN wh.code END AS warehouse_code,
+              CASE WHEN u.status = 'fg' THEN COALESCE(wh.name, 'T/M ombor')
+                   ELSE COALESCE(s.name, 'boshlanmagan') END AS joy,
+              CASE WHEN u.status <> 'fg' THEN sh.name END AS shop,
+              SUM(r.qty)::int AS qty
+         FROM unit_reservations r
+         JOIN order_items i      ON i.id = r.order_item_id
+         JOIN production_units u ON u.id = r.unit_id
+         LEFT JOIN sections s    ON s.id = u.current_section_id
+         LEFT JOIN shops sh      ON sh.id = s.shop_id
+         LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
+                                     (SELECT id FROM warehouses WHERE code = 'TM'))
+        WHERE i.order_id = ANY($1::int[]) AND u.status <> 'cancelled'
+        GROUP BY 1, 2, 3, 4, 5
+        ORDER BY omborda DESC, joy`, [ochiq])).rows;
+    for (const o of rows)
+      o.places = joy.filter((x) => x.order_id === o.id);
+  }
   res.json({ rows });
 }));
 
