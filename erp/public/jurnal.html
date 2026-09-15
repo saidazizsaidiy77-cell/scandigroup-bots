@@ -73,14 +73,17 @@
         <th class="sep" data-sort="product">Maxsulot nomi</th>
         <th data-sort="product_type">Guruhi</th>
         <th data-sort="color">Rang</th><th data-sort="fabric">Mato</th>
+        <!--  Soni JISMONAN nechta ekani; yonida nechtasi mijozga
+              va'da qilingani va nechtasi bo'shligi. Tsex boshlig'i 10
+              talik konverni ko'rib «hammasi bo'sh» deb o'ylardi. -->
         <th class="num" data-sort="qty">Soni</th>
+        <th class="num" data-sort="booked_qty">Bronda</th>
+        <th class="num" data-sort="free_qty">Bo'sh</th>
         <th class="sep" data-sort="section">Qayerda</th>
         <th class="sep" data-sort="lak_on">Lak tsehi</th>
         <th data-sort="pack_on">Qadoqlash tsehi</th>
         <th data-sort="fg_on">T/M ombor</th>
         <th class="sep" data-sort="customer_name">Mijoz nomi</th>
-        <th class="num" data-sort="unit_price">Narx, $</th>
-        <th class="num" data-sort="total_amount">Summa, $</th>
         <th class="sep"></th>
       </tr></thead>
       <tbody id="tB"></tbody>
@@ -341,8 +344,10 @@ function render(){
   const canFix = FIX_TO_WAREHOUSE && App.can('production.manage');
   const inProd = rows.filter(r => r.status === 'production').length;
   const inFg   = rows.filter(r => r.status === 'fg').length;
-  const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);
   const qty    = rows.reduce((s, r) => s + Number(r.qty || 0), 0);
+  //  Jurnal pul emas, DONA hisobi: ishlab chiqarish nechta mahsulot
+  //  yasayotganini sanaydi, ularning summasini emas.
+  const booked = rows.reduce((s, r) => s + Number(r.booked_qty || 0), 0);
   // Bo'lingan konver jurnalda bir nechta qator bo'lib turadi (10 tadan
   // 3 tasi keyingi bo'limda). Ko'rsatkichda u BITTA konver bo'lib
   // sanalishi kerak, aks holda zavodda yo'q konverlar paydo bo'ladi.
@@ -351,7 +356,7 @@ function render(){
     ['Jami konver', konverlar, qty + ' dona'],
     ['Ishlab chiqarishda', inProd, 'konveyerda'],
     ['T/M omborda', inFg, 'tayyor'],
-    ['Jami summa', '$' + money(amount), 'USD'],
+    ["Bo'sh", qty - booked, `${booked} tasi buyurtmada`],
   ].map(([t, v, s]) => `<div class="card"><h2>${t}</h2><div class="kpi">${v}</div>
       <div class="muted" style="font-size:13px">${s}</div></div>`).join('');
 
@@ -369,6 +374,11 @@ function render(){
                           : '<span class="muted">—</span>')}</td>
       <td>${r.fabric ? esc(r.fabric) : '<span class="muted">—</span>'}</td>
       <td class="num">${r.qty}</td>
+      <!--  Bronda 0 bo'lsa raqam emas, tire: nolni o'qib o'tirmasin.
+            Qator bosilsa ostida bronlar ro'yxati chiqadi. -->
+      <td class="num">${r.booked_qty
+        ? `<strong>${r.booked_qty}</strong>` : '<span class="muted">\u2014</span>'}</td>
+      <td class="num${r.free_qty ? '' : ' muted'}">${r.free_qty}</td>
       <td class="sep">${r.section
         ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${
             r.waiting ? 'buyurtma kutilmoqda' : esc(r.shop || '')}</div>`
@@ -378,10 +388,6 @@ function render(){
       <td>${dateCell(r, r.fg_on,   r.fg_src,   r.fg_late)}</td>
       <td class="sep">${r.customer_id ? esc(r.customer_name)
             : '<span class="muted">T/M ombor</span>'}</td>
-      <td class="num muted">${money(r.unit_price)}</td>
-      <td class="num">${r.unit_price == null
-        ? '<span class="muted">—</span>'
-        : `<strong>${money(r.total_amount)}</strong>`}</td>
       <td class="act sep">
         ${canMove && r.status === 'production'
           ? `<button onclick="move(${r.id})">O'tkazish</button>` : ''}
@@ -405,9 +411,11 @@ function render(){
     : '';
 
   $('tF').innerHTML = rows.length ? `<tr>
-    <td colspan="7"></td><td class="num"><strong>${qty}</strong></td>
-    <td colspan="6"></td><td class="num"><strong>${money(amount)}</strong></td>
-    <td></td></tr>` : '';
+    <td colspan="7"></td>
+    <td class="num"><strong>${qty}</strong></td>
+    <td class="num"><strong>${booked}</strong></td>
+    <td class="num"><strong>${qty - booked}</strong></td>
+    <td colspan="5"></td><td></td></tr>` : '';
   bulk();
 }
 

@@ -392,8 +392,21 @@ konverni qaytaring».
 Bitta bron bo'lsa konverga mijoz va zakaz raqami yoziladi — jurnalda
 tsex boshlig'i «bu Alisherniki» deb ko'radi. Bir nechta bo'lsa bo'sh
 qoladi: **jurnalda qator bosilganda** ostida bronlar ro'yxati chiqadi
-(`GET /api/units/:id/bron`). Alohida ustun yo'q — konverlarning ko'pida
-bron bo'lmaydi.
+(`GET /api/units/:id/bron`) — kim, nechta, qaysi zakaz.
+
+**Jurnalda uch ustun: «Soni · Bronda · Bo'sh»** — ombor qoldig'idagi
+bilan bir xil: soni JISMONAN nechta, bronda mijozga va'da qilingani,
+bo'sh esa qolgani. Tsex boshlig'i 10 talik konverni ko'rib «hammasi
+bo'sh» deb o'ylardi, holbuki 6 tasi allaqachon mijozniki. **Narx va
+summa ustunlari yo'q** (ekranda ham, Excelda ham): ishlab chiqarish
+jurnali nechta mahsulot yasalayotganini sanaydi, pulini emas — u savdo
+va kassaniki. Narx maydonining O'ZI kartochkada qoladi: mijoz balansi
+o'shandan hisoblanadi.
+
+Bronda turgan dona `unit_reservations` dan hisoblanadi va
+`registerQuery` da, view da EMAS: `unit_reservations` savdo jadvali va
+migratsiyada `register.sql` dan keyin yaratiladi — toza bazada
+`v_unit_register` uni topa olmasdi.
 
 «Bajarilgan» degan belgi saqlanmaydi, har safar bronlardan hisoblanadi
 (`v_sales_orders`): saqlangan belgi bir kun haqiqatdan ajralib qolardi.

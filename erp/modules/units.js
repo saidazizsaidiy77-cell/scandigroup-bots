@@ -140,6 +140,8 @@ const SORT = {
   lak_on: 'lak_on', pack_on: 'pack_on', fg_on: 'fg_on',
   customer_name: 'customer_name', unit_price: 'unit_price',
   total_amount: 'total_amount',
+  //  Tashqi so'rovda hisoblanadi (`registerQuery`), view da yo'q.
+  booked_qty: 'booked_qty', free_qty: 'free_qty',
 };
 
 // Jurnal va Excel bitta so'rovdan chiqadi: ekranda ko'ringan filtr va
@@ -196,7 +198,20 @@ function registerQuery(q, limit, scope = null) {
   const way = String(q.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
   return {
-    text: `SELECT * FROM v_unit_register
+    //  BUYURTMADA — konverning nechta donasi mijozga va'da qilingani
+    //  (`unit_reservations`). Jurnalga shu sababdan keldi: tsex boshlig'i
+    //  10 talik konverni ko'rib «hammasi bo'sh» deb o'ylardi, holbuki
+    //  6 tasi allaqachon mijozniki. Bo'sh soni shundan ayiriladi.
+    //
+    //  View ga qo'shilmadi: `unit_reservations` savdo jadvali va u
+    //  migratsiyada `register.sql` dan KEYIN yaratiladi — toza bazada
+    //  view uni topa olmasdi (migrate.js dagi tartib).
+    text: `SELECT r.*, COALESCE(b.qty, 0)::int AS booked_qty,
+                  (r.qty - COALESCE(b.qty, 0))::int AS free_qty
+             FROM v_unit_register r
+             LEFT JOIN LATERAL (SELECT SUM(x.qty) AS qty
+                                  FROM unit_reservations x
+                                 WHERE x.unit_id = r.id) b ON true
       -- Jurnal — ISHLAB CHIQARISH jurnali. Ombor qabul qilgan konver
       -- undan chiqadi: u endi ishlab chiqarishning ishi emas. Bekor
       -- qilinganlar ham shunday. Ikkalasini ham status filtri bilan
@@ -288,8 +303,10 @@ const EXPORT_COLUMNS = [
   ['T/M ombor',        (r) => csvDate(r.fg_on)],
   ['T/M manbasi',      (r) => srcCell(r, r.fg_src)],
   ['Mijoz nomi',       (r) => r.customer_name],
-  ['Narx, $',          (r) => csvNum(r.unit_price)],
-  ['Summa, $',         (r) => csvNum(r.total_amount)],
+  //  Narx va summa jurnalda yo'q — ishlab chiqarish jurnali pul emas,
+  //  dona hisobi. Fayl ham ekran bilan bir xil bo'lsin.
+  ['Bronda',           (r) => csvNum(r.booked_qty)],
+  ["Bo'sh",            (r) => csvNum(r.free_qty)],
   ['Holat',            (r) => STATUS_UZ[r.status] || r.status],
 ];
 
