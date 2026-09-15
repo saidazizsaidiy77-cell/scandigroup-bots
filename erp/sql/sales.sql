@@ -218,7 +218,11 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        COALESCE(a.in_wh, 0) AS in_warehouse_qty,
        -- Pul kirim sanasi ham OXIRIDA: CREATE OR REPLACE VIEW ustunni
        -- faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
-       o.payment_on
+       o.payment_on,
+       -- Nakladnoyda «yetkazib beruvchi» tomonida menejerning telefoni
+       -- turadi: mijoz mashina yo'lda bo'lganda kimga qo'ng'iroq
+       -- qilishini bilsin. Ustun OXIRIDA — yuqoridagi sabab bilan.
+       w.phone AS manager_phone
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id

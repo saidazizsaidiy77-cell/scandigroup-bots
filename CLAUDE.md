@@ -301,12 +301,29 @@ ro'yxatida shu qatorga allaqachon olingan konverlar eng tepada turadi va
 yonida «Qaytarish» tugmasi bo'ladi (`CANDIDATE_WHERE` da `mine`).
 
 **Yopilgan buyurtma NAKLADNOY bo'lib o'qiladi** (omborga yuborilgan,
-chiqib ketgan yoki bekor qilingan): sarlavhada o'chirilgan kataklar
-emas, **yorliq va qiymat** (bo'sh maydon umuman yozilmaydi), qatorlarda
-esa bitta matn — «Milano · Penal / Venge / Velvet», keyin soni, narxi va
-summasi, ostida «Jami». Tanlash tugagan, endi u hujjat. Ro'yxatda ham
-tugmasi boshqa: tahrirlanadiganda ✎, yopilganda 👁 — qatorning o'zi ham
-bosiladi.
+chiqib ketgan yoki bekor qilingan) — qog'ozdagi hujjat kabi:
+
+    tepada    korxona nomi (`FIRMA`) va «Nakladnoy № 515 · 15.09.26»
+    chapda    MIJOZ: nomi, regioni, qayerga, kutib oluvchi raqami
+    o'ngda    YETKAZIB BERUVCHI: korxona, menejer va uning telefoni
+    qatorlar  mahsulot · rangi · matosi · soni · narxi · summasi, «Jami»
+    pastda    ikki imzo joyi: chiqarib yuboruvchi va qabul qilib oluvchi
+
+Ikki tomon bir xil kenglikda — nakladnoy shunday o'qiladi. Bo'sh maydon
+umuman yozilmaydi. **«Chop etish»** tugmasi bor: qog'ozga faqat hujjat
+tushadi (ro'yxat ham, tugmalar ham chiqmaydi). Korxona nomi kodda bitta
+qator (`FIRMA`) — u mijoz ma'lumoti emas, zavodning o'z nomi.
+
+Ro'yxatda ham tugmasi boshqa: tahrirlanadiganda ✎, yopilganda 👁 —
+qatorning o'zi ham bosiladi.
+
+**«Qayerda» ustuni** (tahrir ko'rinishida, qator oxirida) — biriktirilgan
+konver hozir qayerda: «T/M ombor» yoki «Arra · Korpus tsexi», yonida
+nechtaligi. Savdo xodimi mijozga «qayerda ekan» degan savolga shu
+ustundan javob beradi. Konver keyingi bo'limga o'tsa **o'zi
+yangilanadi**: ochiq buyurtma har daqiqada qayta o'qiladi — faqat
+kutilayotgani (ishlab chiqarishda koneri bori), faqat oyna ochiq
+turganda va BITTA zanjir bilan (izoh: `planTick`).
 
 Server xabarlarida ham «bron» so'zi yo'q: «N tasi buyurtmada — avval
 konverni qaytaring».
@@ -551,7 +568,10 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   kelmaguncha chiqarib bo'lmaydi.
 
 **Kassa**
-- Kirim hujjatida nima bo'ladi — kimdan, qaysi buyurtma uchun, valyuta,
+- ✅ HAL BO'LDI: pulni **savdo bo'limi o'zi kiritadi** (alohida kassir
+  emas) va u mijozning qarzidan ayriladi — ya'ni balans
+  `boshlang'ich + chiqib ketgan mahsulot − to'lovlar` bo'ladi.
+- Kirim hujjatida yana nima bo'ladi — qaysi buyurtma uchun, valyuta,
   kurs, to'lov turi (naqd / plastik / o'tkazma)?
 
 ---

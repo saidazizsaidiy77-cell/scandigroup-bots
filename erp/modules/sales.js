@@ -251,6 +251,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
             u.color, u.fabric, u.status, u.is_stock,
             s.name AS section, sh.name AS shop,
             CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse,
+            CASE WHEN u.status = 'fg' THEN wh.code END AS warehouse_code,
             --  Hali yo'ldagi konver omborga qachon tushadi: buyurtma
             --  «kutmoqda» deb turganda menejer mijozga shu kunni aytadi.
             reg.fg_on AS eta, reg.fg_src AS eta_src
