@@ -216,7 +216,31 @@ function stockParams() {
   const q = $('sQ')?.value.trim();     if (q) p.set('q', q);
   const f = $('sFrom')?.value;         if (f) p.set('from', f);
   const t = $('sTo')?.value;           if (t) p.set('to', t);
+  const g = $('sType')?.value;         if (g) p.set('product_type', g);
+  const m = $('sProd')?.value;         if (m) p.set('product_id', m);
   return p.toString();
+}
+
+//  Mahsulot ro'yxati turga qarab qisqaradi: «Stul» tanlangach penal
+//  nomlari ro'yxatda turishi ortiqcha. Yonida qoldig'i turadi — qaysi
+//  biri bor, qaysi biri bo'sh ekani tanlashdan oldin ko'rinsin.
+function prodOptions(d) {
+  const t = d.product_type;
+  return (d.facets || [])
+    .filter(f => !t || f.product_type === t)
+    .map(f => `<option value="${f.product_id}"
+      ${String(d.product_id) === String(f.product_id) ? 'selected' : ''}
+      >${esc(f.product)}${t ? '' : ' \u00b7 ' + esc(f.product_type)} (${f.qty})</option>`)
+    .join('');
+}
+
+//  Tur o'zgarsa tanlangan mahsulot boshqa turdan bo'lib qolishi mumkin —
+//  shunda ro'yxat bo'sh chiqardi. Mahsulot tozalanadi.
+function pickType() {
+  const t = $('sType').value;
+  const cur = stock.facets.find(f => String(f.product_id) === $('sProd').value);
+  if (cur && t && cur.product_type !== t) $('sProd').value = '';
+  loadStock();
 }
 
 function drawStock() {
@@ -224,8 +248,18 @@ function drawStock() {
   $('body').innerHTML = `
     <div class="card">
       <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-        <div style="flex:1;min-width:180px"><label>Qidiruv</label>
-          <input id="sQ" placeholder="maxsulot, rang, mato, konveyer \u2116"
+        <div style="min-width:150px"><label>Mahsulot</label>
+          <select id="sProd" onchange="loadStock()">
+            <option value="">— hammasi —</option>
+            ${prodOptions(d)}</select></div>
+        <div style="min-width:130px"><label>Turi</label>
+          <select id="sType" onchange="pickType()">
+            <option value="">— hammasi —</option>
+            ${[...new Set((d.facets || []).map(f => f.product_type))].map(t =>
+              `<option value="${esc(t)}" ${d.product_type === t ? 'selected' : ''}
+                >${esc(t)}</option>`).join('')}</select></div>
+        <div style="flex:1;min-width:150px"><label>Qidiruv</label>
+          <input id="sQ" placeholder="rang, mato, konveyer \u2116"
                  value="${esc(d.q || '')}" oninput="debStock()"></div>
         <div><label>Omborga kirgan, dan</label>
           <input id="sFrom" type="date" value="${d.from || ''}" onchange="loadStock()"></div>
@@ -252,13 +286,14 @@ function drawStock() {
 
     ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
       <p class="muted" style="margin-top:8px">${d.q || d.from || d.to
+        || d.product_id || d.product_type
         ? 'Tanlangan shart bo\'yicha mahsulot topilmadi.'
         : 'Qabul qilingan mahsulot shu yerda turadi.'}</p></div>`
     : `<div class="card" style="margin-top:16px">
       <div style="overflow:auto;max-height:64vh">
       <table class="stock">
         <thead><tr>
-          <th class="s-type">Turi</th><th class="s-name">Mahsulot</th>
+          <th class="s-name">Mahsulot</th><th class="s-type">Turi</th>
           <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
           <th class="s-qty">Soni</th><th class="s-units">Konver</th>
           <th class="s-days">Kun</th>
@@ -276,8 +311,8 @@ function drawStockRow(r) {
   const units = openRows.get(k);
   return `
     <tr onclick="toggleRow('${k}',${r.product_id})">
-      <td class="s-type muted">${esc(r.product_type || '')}</td>
       <td class="s-name"><b>${esc(r.product)}</b></td>
+      <td class="s-type muted">${esc(r.product_type || '')}</td>
       <td class="s-color muted">${esc(r.color || '\u2014')}</td>
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
       <td class="s-qty"><b>${r.qty}</b> <span class="muted"
@@ -365,7 +400,10 @@ async function doMove(id) {
 
 let t1 = null;
 const debStock = () => { clearTimeout(t1); t1 = setTimeout(loadStock, 350); };
-function clearStock() { ['sQ','sFrom','sTo'].forEach(i => { if ($(i)) $(i).value = ''; }); loadStock(); }
+function clearStock() {
+  ['sQ','sFrom','sTo','sProd','sType'].forEach(i => { if ($(i)) $(i).value = ''; });
+  loadStock();
+}
 function period2(days) {
   $('sFrom').value = isoDay(new Date(Date.now() - days * 864e5));
   $('sTo').value = isoDay(new Date());
@@ -382,7 +420,8 @@ async function loadStock() {
   openRows.clear();
   const d = await App.api('/api/warehouse/fg/summary' + (q ? '?' + q : ''));
   const p = new URLSearchParams(q);
-  stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to') };
+  stock = { ...d, q: p.get('q'), from: p.get('from'), to: p.get('to'),
+            product_type: p.get('product_type'), product_id: p.get('product_id') };
   if (d.warehouse) setTitle(d.warehouse.name);
   drawStock();
   if (focus && $(focus)) { $(focus).focus(); if ($(focus).setSelectionRange)

@@ -102,18 +102,27 @@ const FROM_TO = `($1::date IS NULL OR fg_on >= $1)
 // ko'rinadi va «nechta qoldi» degan savolga ikki xil javob chiqadi.
 const NORM = (col) => `NULLIF(TRIM(COALESCE(${col}, '')), '')`;
 
+//  Mahsulot va turi bo'yicha filtr. Qidiruv maydoni matn izlaydi,
+//  bular esa ro'yxatdan tanlanadi: ombor mudiri «Penal» deb yozishda
+//  xato qilmasin va «nimalar bor» degan savolga ro'yxatning o'zi javob
+//  bersin. Ro'yxat SHU OMBORDA turganlaridan tuziladi — bo'sh
+//  bo'ladigan variant tanlanib, mudir «hech nima yo'q» deb o'ylamasin.
+const PICK = `($5::int IS NULL OR product_id = $5)
+          AND ($6::text IS NULL OR product_type = $6)`;
+
 router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);
   const params = [req.query.from || null, req.query.to || null, req.query.q || null,
-                  wh.id];
+                  wh.id, req.query.product_id || null, req.query.product_type || null];
   const search = `($3::text IS NULL OR product ILIKE '%' || $3 || '%'
                    OR product_type ILIKE '%' || $3 || '%'
                    OR color ILIKE '%' || $3 || '%'
                    OR fabric ILIKE '%' || $3 || '%'
                    OR conveyor_no ILIKE '%' || $3 || '%')
-                  AND warehouse_id = $4`;
+                  AND warehouse_id = $4
+                  AND ${PICK}`;
 
-  const [rows, total, byUom] = await Promise.all([
+  const [rows, total, byUom, facets] = await Promise.all([
     db.query(
       `SELECT product_type, product_id, product, sku, uom,
               ${NORM('color')}  AS color,
@@ -127,7 +136,9 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
         WHERE ${FROM_TO} AND ${search}
         GROUP BY product_type, product_id, product, sku, uom,
                  ${NORM('color')}, ${NORM('fabric')}
-        ORDER BY product_type, product, color NULLS FIRST, fabric NULLS FIRST`,
+        -- Birinchi ustun bo'yicha: jadvalda Mahsulot birinchi turadi va
+        -- ko'z shundan qidiradi. Tur bo'yicha ajratish endi filtrda.
+        ORDER BY product, product_type, color NULLS FIRST, fabric NULLS FIRST`,
       params),
     db.query(
       `SELECT COUNT(*)::int AS units, COALESCE(SUM(qty), 0)::int AS qty,
@@ -140,9 +151,22 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
       `SELECT uom, COALESCE(SUM(qty), 0)::int AS qty
          FROM v_fg_units WHERE ${FROM_TO} AND ${search}
         GROUP BY uom ORDER BY uom`, params),
+    //  Tanlov ro'yxatlari filtrning O'ZIDAN qat'i nazar tuziladi: aks
+    //  holda «Penal» tanlangach ro'yxatda faqat Penal qolib, boshqasiga
+    //  o'tish uchun avval filtrni tozalash kerak bo'lardi.
+    db.query(
+      `SELECT product_id, product, product_type,
+              COALESCE(SUM(qty), 0)::int AS qty
+         FROM v_fg_units
+        WHERE warehouse_id = $1 AND ($2::date IS NULL OR fg_on >= $2)
+          AND ($3::date IS NULL OR fg_on <= $3)
+        GROUP BY product_id, product, product_type
+        ORDER BY product_type, product`,
+      [wh.id, req.query.from || null, req.query.to || null]),
   ]);
   res.json({ warehouse: wh, rows: rows.rows,
-             total: { ...total.rows[0], by_uom: byUom.rows } });
+             total: { ...total.rows[0], by_uom: byUom.rows },
+             facets: facets.rows });
 }));
 
 // Jamlanma qatorini ochish: aynan shu mahsulot + rang + mato bo'yicha
