@@ -130,15 +130,24 @@ let ref = null, rows = [], customers = [], timer = null;
 let sort = { col: 'started_on', dir: 'desc' };
 const deb = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
 
-//  Tayyor mahsulot omborlari — xato kiritilgan konverni to'g'rilash
-//  uchun (izoh: `toWarehouse`). Faqat tuzatish huquqi borlarga
-//  so'raladi: qolganlarga ro'yxat baribir kerak emas.
+//  ★ «Omborga o'tkazish» tugmasi YASHIRILGAN.
+//
+//  Boshlang'ich qoldiq kiritilayotganda ombor o'rniga tsex tanlanib
+//  ketgan qatorlarni to'g'rilash uchun yozilgan edi. Kiritish tugagach
+//  yashirildi: kundalik ishda kerak emas, bexosdan bosilsa esa konverni
+//  ishlab chiqarishdan olib chiqib ketadi.
+//
+//  Qaytarish uchun — shu qatorda `true`, boshqa hech narsaga tegilmaydi.
+//  API va uning testi joyida: `POST /api/units/:id/to-warehouse`.
+const FIX_TO_WAREHOUSE = false;
+
+//  Tayyor mahsulot omborlari — o'sha tugma uchun (izoh: `toWarehouse`).
 let fgHouses = [];
 
 async function boot(){
   const [r, c, sg] = await Promise.all([App.api('/api/ref'),
     App.api('/api/units/customers'), App.api('/api/units/suggest')]);
-  if (App.can('production.manage')) {
+  if (FIX_TO_WAREHOUSE && App.can('production.manage')) {
     try { fgHouses = (await App.api('/api/warehouse/list')).rows
             .filter(w => w.kind === 'fg' && w.is_active); }
     catch { fgHouses = []; }
@@ -329,7 +338,7 @@ function render(){
   const canMove = App.can('production.entry');
   // Xato kiritilgan qatorni omborga o'tkazish — tarixga tegadigan
   // tuzatish, shuning uchun faqat boshqaruvchida.
-  const canFix = App.can('production.manage');
+  const canFix = FIX_TO_WAREHOUSE && App.can('production.manage');
   const inProd = rows.filter(r => r.status === 'production').length;
   const inFg   = rows.filter(r => r.status === 'fg').length;
   const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);

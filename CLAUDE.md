@@ -95,13 +95,15 @@ mudiri ko'rmagan mahsulot hisobga tushib qolardi.
      vitrinada turgan mahsulot to'g'ridan-to'g'ri o'sha yerga kiritiladi.
      Fayldan yuklashda ham shu — `warehouse_code` ustuni.
 
-Kiritishda adashilsa — ombor o'rniga tsex tanlanib ketsa — jurnaldagi
-🏠 tugmasi konverni o'sha zahoti omborga o'tkazadi
-(`POST /api/units/:id/to-warehouse`, faqat `production.manage`). Bu
+Kiritishda adashilsa — ombor o'rniga tsex tanlanib ketsa — konverni
+o'sha zahoti omborga o'tkazadigan tuzatish bor:
+`POST /api/units/:id/to-warehouse` (faqat `production.manage`). Bu
 qabul qilish EMAS: marshrut bo'ylab haydab chiqarish yolg'on harakat
 yozardi, o'chirib qayta kiritish esa konveyer raqamini yo'qotardi.
 Turgan bo'limi saqlanadi, shuning uchun ombordan qaytarilsa o'z joyiga
-qaytadi.
+qaytadi. **Jurnaldagi tugmasi yashirilgan** — boshlang'ich qoldiq
+kiritilib bo'lgach kundalik ishda kerak emas. Qaytarish:
+`public/jurnal.html` dagi `FIX_TO_WAREHOUSE` ni `true` qilish.
 
 Omborlar aro ko'chirish `warehouse_moves` ga yoziladi va ombor tarixida
 IKKI qator bo'lib chiqadi: berganida chiqim, olganida kirim. Ishlab
