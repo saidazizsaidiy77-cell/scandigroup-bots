@@ -465,11 +465,21 @@ const exportFeed = () => {
                `harakatlar-${$('fFrom').value || isoDay(new Date())}.csv`);
 };
 
+//  Sahifa ikki xil odam uchun ochiq:
+//    · tsex boshlig'i (`production.entry`) — konverni o'zi o'tkazadi;
+//    · rahbariyat (`production.reports`) — faqat qaraydi.
+//
+//  `canMove` ikkinchisiga false bo'ladi, ya'ni o'tkazish, jo'natish va
+//  qaytarish tugmalari umuman chizilmaydi. Tekshiruv serverda ham bor:
+//  tugmani yashirish himoya emas.
+//
+//  `production.view` YETMAYDI — u savdoda ham bor, zavod bo'limlaridagi
+//  yuklama esa uning ishi emas (CLAUDE.md, «Kim nima ko'radi»).
 App.start(async () => {
   canMove = App.can('production.entry');
   drawTabs();
   await loadBoard();
-}, 'production.entry');
+}, 'production.entry', 'production.reports');
 </script>
 </body>
 </html>

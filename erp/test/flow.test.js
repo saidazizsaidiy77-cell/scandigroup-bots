@@ -857,6 +857,46 @@ test('xato kiritilgan konver jurnaldan omborga o\'tkaziladi', async () => {
                    ['production', null, ARRA]);
 });
 
+test('direktor bo\'limlarni va bugungi harakatlarni ko\'radi, o\'zgartirmaydi', async () => {
+  const dir = H.api(base, await H.sessionFor('Direktor'));
+
+  // Bo'limlar ekrani: doirasi yo'q, hamma tsexni ko'radi
+  const b = await dir('GET', '/api/units/board');
+  assert.equal(b.status, 200, b.text);
+  assert.ok(b.body.shops.length > 1, 'tsexlar orasida tanlash mumkin');
+
+  // Bugungi harakatlar lentasi, filtrlari bilan
+  const f = await dir('GET', '/api/units/feed');
+  assert.equal(f.status, 200, f.text);
+  assert.ok(Array.isArray(f.body.moves));
+  assert.ok(f.body.shops.length && f.body.workers.length,
+    'tsex va xodim filtri uchun ro\'yxatlar keladi');
+  const shopId = b.body.shops[0].id;
+  assert.equal((await dir('GET', '/api/units/feed?shop_id=' + shopId)).status, 200);
+  assert.equal((await dir('GET',
+    '/api/units/feed?from=2026-09-01&to=2026-09-30')).status, 200);
+
+  // Lekin qimirlata olmaydi — bu tsex boshlig'ining ishi
+  const u = await newUnit();
+  assert.equal((await dir('POST', '/api/units/move',
+    { items: [{ unit_id: u.id }] })).status, 403);
+  assert.equal((await dir('POST', '/api/units/handover',
+    { items: [u.id] })).status, 403);
+
+  //  Sahifa qaysi huquq bilan ochilishi klientda (`public/app.js`,
+  //  `production.entry` yoki `production.reports`), shuning uchun shu
+  //  yerda huquqlarning o'zi tekshiriladi.
+  const huquq = async (api) => (await api('GET', '/api/auth/me')).body.permissions;
+  assert.ok((await huquq(dir)).includes('production.reports'),
+    'direktorda hisobot huquqi bor — sahifa unga ochiladi');
+
+  // Savdoda esa yo'q: zavod bo'limlaridagi yuklama uning ishi emas
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  const s = await huquq(savdo);
+  assert.ok(!s.includes('production.reports') && !s.includes('production.entry'),
+    'savdoga bo\'limlar ekrani ochilmaydi');
+});
+
 // ══════════════════════════════════════════════════════════════ VITRINALAR
 
 test('mahsulot T/M ombordan vitrinaga ko\'chiriladi, bir qismi ham', async () => {
