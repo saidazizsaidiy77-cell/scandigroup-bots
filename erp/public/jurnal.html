@@ -397,8 +397,6 @@ function render(){
     </tr>${openBron.has(r.id) ? bronRow(r) : ''}`).join('')
     : '<tr><td class="muted" colspan="16">Jurnal bo\'sh. Boshlang\'ich qoldiqni kiriting.</td></tr>';
 
-  // Ochilgan qatorlar qayta chiziladi (bron ro'yxati)
-  for (const id of openBron.keys()) if (rows.some(r => r.id === id)) drawBron(id);
 
   $('rowCount').textContent = rows.length
     ? (rows.length >= 500
@@ -764,16 +762,21 @@ function toggleBron(id, ev) {
   if (ev && ev.target.closest('button, input, a')) return;
   if (openBron.has(id)) { openBron.delete(id); return render(); }
   openBron.set(id, undefined);
-  render();
-  drawBron(id);
+  render();                       // «Yuklanmoqda…»
+  drawBron(id);                   // keyin ro'yxatning o'zi
 }
 
+//  Ro'yxat FAQAT shu yerdan so'raladi — qator ochilganda. `render()`
+//  dan chaqirilmaydi: `drawBron` oxirida `render()` chaqiradi, ya'ni
+//  ikkalasi bir-birini cheksiz chaqirib, brauzer serverni to'xtovsiz
+//  so'rovga ko'mardi. Qator chizilganda ma'lumot xotiradan olinadi.
 async function drawBron(id) {
   try {
     const d = await App.api(`/api/units/${id}/bron`);
     openBron.set(id, d);
   } catch { openBron.set(id, { rows: [], reserved: 0, free: null }); }
-  render();
+  // Qator yopilib ulgurgan bo'lsa qayta chizish shart emas
+  if (openBron.has(id)) render();
 }
 
 function bronRow(r) {
