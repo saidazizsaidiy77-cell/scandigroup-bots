@@ -300,17 +300,21 @@ qaytarish ham bitta oynadan** — qatordagi «Konver» tugmasi. Nomzodlar
 ro'yxatida shu qatorga allaqachon olingan konverlar eng tepada turadi va
 yonida «Qaytarish» tugmasi bo'ladi (`CANDIDATE_WHERE` da `mine`).
 
-**Yopilgan buyurtma NAKLADNOY bo'lib o'qiladi** (omborga yuborilgan,
+**Yopilgan buyurtma YUK XATI bo'lib o'qiladi** (omborga yuborilgan,
 chiqib ketgan yoki bekor qilingan) — qog'ozdagi hujjat kabi:
 
-    tepada    korxona nomi (`FIRMA`) va «Nakladnoy № 515 · 15.09.26»
-    chapda    MIJOZ: nomi, regioni, qayerga, kutib oluvchi raqami
-    o'ngda    YETKAZIB BERUVCHI: korxona, menejer va uning telefoni
+    tepada    korxona nomi (`FIRMA`) va «Yuk xati № 515 · 15.09.26»
+    chapda    YETKAZIB BERUVCHI: korxona, menejer va uning telefoni
+    o'ngda    MIJOZ: nomi, regioni, qayerga, kutib oluvchi raqami
     qatorlar  mahsulot · rangi · matosi · soni · narxi · summasi, «Jami»
-    pastda    ikki imzo joyi: chiqarib yuboruvchi va qabul qilib oluvchi
+    pastda    imzo joylari — chapda **chiqarib yuboruvchi: ombor mudiri**
+              (mahsulotni zavoddan u chiqarib beradi; tasdiqlagan bo'lsa
+              ismi va telefoni chiziq ustida turadi), o'ngda qabul qilib
+              oluvchi
 
-Ikki tomon bir xil kenglikda — nakladnoy shunday o'qiladi. Bo'sh maydon
-umuman yozilmaydi. **«Chop etish»** tugmasi bor: qog'ozga faqat hujjat
+Ikki tomon bir xil kenglikda — yuk xati shunday o'qiladi. Bo'sh maydon
+umuman yozilmaydi. Ism ham, telefon ham BAZADAN keladi
+(`shipped_by_name`, `shipped_by_phone`) — kodga yozilmaydi (4-qoida). **«Chop etish»** tugmasi bor: qog'ozga faqat hujjat
 tushadi (ro'yxat ham, tugmalar ham chiqmaydi). Korxona nomi kodda bitta
 qator (`FIRMA`) — u mijoz ma'lumoti emas, zavodning o'z nomi.
 
