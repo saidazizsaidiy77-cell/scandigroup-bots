@@ -620,6 +620,16 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
       }
 
       if (nextQty != null && nextQty !== u.qty) {
+        //  Bron qo'yilgan donadan kam qilib bo'lmaydi: mijozga va'da
+        //  qilingan mahsulot jimgina yo'qolib qolardi. Avval bron
+        //  olinadi, keyin soni to'g'rilanadi.
+        const bron = (await client.query(
+          `SELECT COALESCE(SUM(qty), 0)::int AS n FROM unit_reservations
+            WHERE unit_id = $1`, [req.params.id])).rows[0].n;
+        if (nextQty < bron)
+          throw new Error(`${u.conveyor_no}: ${bron} tasi bronda — ` +
+            `sonini ${bron} tadan kam qilib bo'lmaydi`);
+
         await client.query(
           `UPDATE production_units SET qty = $2 WHERE id = $1`, [req.params.id, nextQty]);
 

@@ -219,6 +219,21 @@ function draw(){
             <button onclick="sendToWh()">Omborga yuborish</button>
             <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
         </div>`}
+        <!--  PUL KIRIM SANASI — savdo menejeriniki. Buyurtma olinayotganda
+              so'ralmaydi: o'shanda hali gap bo'lmaydi. Saqlangan
+              buyurtmada esa istalgan payt yoziladi va tuzatiladi,
+              jo'natilgandan keyin ham. -->
+        ${!isNew && canWrite ? `
+          <div class="row" style="gap:10px;align-items:flex-end;margin-top:22px;
+               border-top:1px solid var(--line);padding-top:18px">
+            <div style="max-width:190px"><label>Pul kirim sanasi</label>
+              <input id="oPay" type="date" value="${
+                (o.payment_on || '').slice(0, 10)}"></div>
+            <button onclick="savePayment()">Saqlash</button>
+            <span class="muted" style="font-size:12px">pul qachon keladi \u2014
+              to'lovning o'zi kassada hisoblanadi</span>
+          </div>` : ''}
+
         ${o.status === 'to_ship' && canWrite ? `
           <div class="row" style="gap:10px;margin-top:22px;align-items:center">
             <span class="tag ok">Ombor mudirida</span>
@@ -380,6 +395,16 @@ async function save(){
 
 //  Buyurtmani ombor mudiriga topshirish. Shundan keyin mahsulotni
 //  zavoddan chiqarish uning ishi: u ko'zi bilan ko'rib tasdiqlaydi.
+async function savePayment(){
+  try{
+    await App.api(`/api/sales/orders/${cur.order.id}/payment`, { method: 'PATCH',
+      body: JSON.stringify({ payment_on: $('oPay').value || null }) });
+    cur.order.payment_on = $('oPay').value || null;
+    alert($('oPay').value ? 'Pul kirim sanasi saqlandi' : 'Sana tozalandi');
+    load();
+  }catch(e){ alert(e.message); }
+}
+
 async function sendToWh(){
   if (!confirm('Buyurtma ombor mudiriga yuborilsinmi?\n\n' +
     'Shundan keyin u tahrirlanmaydi — kerak bo\'lsa qaytarib olasiz.')) return;

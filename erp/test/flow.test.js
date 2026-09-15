@@ -1299,6 +1299,46 @@ test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
   assert.equal(Number(keyin.balance), Number(oldin.opening_debt || 0) + 1000);
 });
 
+test('omborga xato kiritilgan soni to\'g\'rilanadi', async () => {
+  //  2 talik mahsulot 4 ta bo'lib kiritilgan
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Moki', unit_price: 100,
+      is_opening: true, fg_on: '2026-09-07' },
+  ] })).body.created[0];
+  const qoldiq = async () => (await admin(
+    'GET', '/api/warehouse/fg/summary?q=Moki')).body.total;
+  assert.equal((await qoldiq()).qty, 4);
+
+  // To'g'rilash: qoldiq ham, summa ham darrov o'zgaradi
+  assert.equal((await admin('PATCH', '/api/units/' + u.id, { qty: 2 })).status, 200);
+  const t = await qoldiq();
+  assert.equal(t.qty, 2);
+  assert.equal(Number(t.amount), 200, 'summa yangi soni bilan');
+  assert.equal((await H.id(`SELECT qty FROM fg_stock WHERE product_id=$1`,
+    [PENAL])).qty >= 0, true);
+
+  // Bron qo'yilgan donadan kam qilib bo'lmaydi
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2, color: 'Moki' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 2 })).status, 200);
+
+  const kam = await admin('PATCH', '/api/units/' + u.id, { qty: 1 });
+  assert.equal(kam.status, 400);
+  assert.match(kam.body.error, /bronda/);
+  assert.equal((await qoldiq()).qty, 2, 'soni o\'zgarmadi');
+
+  // Ko'paytirish ishlayveradi
+  assert.equal((await admin('PATCH', '/api/units/' + u.id, { qty: 5 })).status, 200);
+  assert.equal((await qoldiq()).qty, 5);
+
+  // Soni — tarixga tegadigan maydon: ombor mudiri o'zgartira olmaydi
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  assert.equal((await mudir('PATCH', '/api/units/' + u.id, { qty: 3 })).status, 403);
+});
+
 test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
@@ -1351,16 +1391,35 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('POST', `/api/units/${yolda.id}/to-warehouse`,
     { warehouse_code: 'TM' })).status, 200);
 
-  // Endi chiqadi — nakladnoy bilan birga pul kirim sanasi ham yoziladi
+  // Endi chiqadi. Mudir faqat chiqqan kunni qo'yadi — pul kirim
+  // sanasi savdoniki va ombordan yozilmaydi.
   const r = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-04', payment_on: '2026-10-20' });
   assert.equal(r.status, 200, r.text);
 
-  const o = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
+  let o = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
   assert.equal(o.status, 'shipped');
   assert.equal(String(o.shipped_on).slice(0, 10), '2026-10-04');
-  assert.equal(String(o.payment_on).slice(0, 10), '2026-10-20');
+  assert.equal(o.payment_on, null, 'ombordan yuborilgan sana yozilmaydi');
   assert.equal(o.shipped_by_name, 'Sinov ombor mudiri');
+
+  //  Pul kirim sanasini SAVDO qo'yadi — jo'natilgandan keyin ham.
+  assert.equal((await admin('PATCH', `/api/sales/orders/${z.id}/payment`,
+    { payment_on: '2026-10-20' })).status, 200);
+  o = (await admin('GET', '/api/sales/orders/' + z.id)).body.order;
+  assert.equal(String(o.payment_on).slice(0, 10), '2026-10-20');
+
+  // Tuzatish ham, tozalash ham mumkin
+  assert.equal((await admin('PATCH', `/api/sales/orders/${z.id}/payment`,
+    { payment_on: null })).status, 200);
+  assert.equal((await admin('GET', '/api/sales/orders/' + z.id)).body.order.payment_on,
+    null);
+  assert.equal((await admin('PATCH', `/api/sales/orders/${z.id}/payment`,
+    { payment_on: '2026-11-01' })).status, 200);
+
+  // Ombor mudiri qo'ya olmaydi — bu savdoning ishi
+  assert.equal((await mudir('PATCH', `/api/sales/orders/${z.id}/payment`,
+    { payment_on: '2026-12-01' })).status, 403);
 
   // Konverlar chiqib ketdi va ombor qoldig'idan ayrildi
   const holat = await H.id(

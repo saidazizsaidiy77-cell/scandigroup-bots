@@ -206,9 +206,13 @@ har konver qayerda turgani. **Bronning hammasi omborga yetib kelmaguncha
 tugma ishlamaydi** — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
 mijoz qarzini ham noto'g'ri oshirardi.
 
-Tasdiqlashda nakladnoy yoziladi: **chiqib ketgan sana** va **pul kirim
-sanasi** (`orders.payment_on`). Ikkinchisi — pul qachon keladi yoki
-qachon olindi; mudir mijoz bilan shu yerda kelishadi. Bu SANA, summa
+Tasdiqlashda mudir **chiqib ketgan sanani** qo'yadi.
+
+**Pul kirim sanasi** (`orders.payment_on`) — SAVDONIKI, ombor mudiriniki
+emas: pul masalasini mijoz bilan menejer kelishadi. Buyurtma
+OLINAYOTGANDA so'ralmaydi — o'shanda hali gap bo'lmaydi; saqlangan
+buyurtma kartochkasida istalgan payt yoziladi va tuzatiladi,
+jo'natilgandan keyin ham (`PATCH /orders/:id/payment`). Bu SANA, summa
 emas: mijoz balansiga tegmaydi, to'lovning o'zini kassa moduli yozadi.
 
 Tasdiqlangach konverlar `shipped` bo'ladi, `ship_on` yoziladi, ombor
@@ -279,6 +283,16 @@ klient uni o'chira olmaydi.
 **Tarixga tegadigan maydonlar** faqat `production.manage` da: konveyer
 raqami, soni, turgan joyi, FAKT sanalar. Tekshiruv **serverda**
 (`modules/units.js`, `RESTRICTED`) — katakni yashirish himoya emas.
+
+**Ombordagi konverning sonini to'g'rilash.** Kiritishda adashish
+bo'ladi: 2 talik mahsulot 4 ta bo'lib yozilib ketadi. Omborga tushgan
+konver jurnaldan chiqadi, ya'ni uni tahrirlaydigan joy qolmasdi —
+shuning uchun ombor qoldig'ida konver raqamini bosganda «Sonini
+to'g'rilash» turadi. Yo'l o'sha: `PATCH /api/units/:id` bilan `qty`,
+ya'ni qoldiq, jamlanma hisobot va audit birga yangilanadi. Ombor
+mudirida bu ko'rinmaydi — soni tarixga tegadi. **Bron qo'yilgan donadan
+kam qilib bo'lmaydi**: mijozga va'da qilingan mahsulot jimgina
+yo'qolib qolardi.
 
 ---
 

@@ -58,7 +58,7 @@ const isPhone = window.matchMedia('(max-width: 620px)').matches;
 const WH = new URLSearchParams(location.search).get('w') || '';
 const wq = (p) => { if (WH) p.set('w', WH); return p; };
 let whName = '';
-let canMove = false, targets = [];
+let canMove = false, canFixQty = false, targets = [];
 //  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
 //  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
 //
@@ -348,18 +348,22 @@ function drawStockRow(r) {
     ${!open ? '' : `<tr class="more"><td colspan="7" style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? `<span class="muted">\u2014</span>`
-      : units.map(u => `<span class="tag" style="margin:2px 6px 2px 0${
-          canMove && !u.reserved_qty ? ';cursor:pointer' : ''}"
-          title="${esc(u.customer_name || whName)} \u00b7 ${d8(u.fg_on)} \u00b7 ${
-            u.days_in_stock} kun${canMove && !u.reserved_qty
-              ? ' \u00b7 bosib boshqa omborga ko\'chiriladi' : ''}"
-          ${canMove && !u.reserved_qty
-            ? `onclick="event.stopPropagation();openMove(${u.id},'${
-                esc(u.conveyor_no)}',${u.qty})"` : ''}
-          >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}${
-            u.reserved_qty ? ` \u00b7 ${u.reserved_qty} bron` : ''}</span>`).join('') + (canMove
+      : units.map(u => {
+          // Yorliq bosilsa oyna ochiladi: ko'chirish va/yoki sonini
+          // to'g'rilash — qaysinisi huquqda bor bo'lsa.
+          const ochiladi = (canMove && !u.reserved_qty) || canFixQty;
+          return `<span class="tag" style="margin:2px 6px 2px 0${
+            ochiladi ? ';cursor:pointer' : ''}"
+            title="${esc(u.customer_name || whName)} \u00b7 ${d8(u.fg_on)} \u00b7 ${
+              u.days_in_stock} kun"
+            ${ochiladi ? `onclick="event.stopPropagation();openMove(${u.id},'${
+                esc(u.conveyor_no)}',${u.qty},${u.reserved_qty || 0})"` : ''}
+            >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}${
+              u.reserved_qty ? ` \u00b7 ${u.reserved_qty} bron` : ''}</span>`;
+        }).join('') + ((canMove || canFixQty)
         ? `<div class="muted" style="font-size:12px;margin-top:6px">Konver
-             raqamini bosing \u2014 boshqa omborga ko'chiriladi</div>` : '')}
+             raqamini bosing \u2014 ${[canMove ? "boshqa omborga ko'chirish" : '',
+               canFixQty ? 'sonini to\'g\'rilash' : ''].filter(Boolean).join(', ')}</div>` : '')}
     </td></tr>`}`;
 }
 
@@ -383,17 +387,20 @@ async function toggleRow(k, productId) {
 //  Vitrinaga mahsulot shu yerdan chiqariladi. Konverning bir qismi ham
 //  ko'chadi: 10 talikdan 3 tasi vitrinaga qo'yiladi, 7 tasi omborda
 //  qoladi — shunda konver ikkita qator bo'ladi, raqami bir xil.
-function openMove(id, no, qty) {
+function openMove(id, no, qty, bron) {
   const other = targets.filter(t => t.code !== (WH || 'TM'));
-  if (!other.length) return toast('Ko\'chiradigan boshqa ombor yo\'q', true);
+  //  Ko'chirish faqat bo'sh konverda: bron qo'yilgani mijozniki bo'lib
+  //  turibdi. Sonini to'g'rilash esa ikkalasida ham ochiq.
+  const koch = canMove && !bron && other.length;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)closeMove()">
-      <div class="modal" style="max-width:420px">
+      <div class="modal" style="max-width:430px">
         <div class="row" style="justify-content:space-between;margin-bottom:16px">
           <h1 style="margin:0">${esc(no)}</h1>
           <button onclick="closeMove()">Yopish</button></div>
-        <div class="stack">
-          <div><label>Qayerga</label>
+
+        ${koch ? `<div class="stack">
+          <div><label>Qayerga ko'chirish</label>
             <select id="mvTo">${other.map(t =>
               `<option value="${esc(t.code)}">${esc(t.name)}</option>`).join('')}</select></div>
           <div class="row" style="gap:12px">
@@ -404,8 +411,42 @@ function openMove(id, no, qty) {
           </div>
           <div><label>Izoh</label><input id="mvNote" placeholder="ixtiyoriy"></div>
           <button class="primary" onclick="doMove(${id})">Ko'chirish</button>
-        </div>
+        </div>` : bron && canMove
+          ? `<p class="muted">${bron} tasi bronda — ko'chirish uchun avval
+               savdo bronni olishi kerak.</p>` : ''}
+
+        <!--  Kiritishda adashish bo'ladi: 2 talik mahsulot 4 ta bo'lib
+              yozilib ketadi. Soni tarixga tegadigan maydon (hisobot,
+              qoldiq, ishbay oylik shundan) — shuning uchun faqat
+              boshqaruvchida. -->
+        ${canFixQty ? `<div class="stack" style="${koch
+            ? 'margin-top:20px;border-top:1px solid var(--line);padding-top:18px' : ''}">
+          <div><label>Sonini to'g'rilash</label>
+            <div class="row" style="gap:10px">
+              <input id="fxQty" type="number" min="1" value="${qty}" style="max-width:110px">
+              <button onclick="doFixQty(${id}, ${qty})">Saqlash</button>
+            </div></div>
+          <p class="muted" style="font-size:12px;margin:0">Hozir <b>${qty}</b> ta${
+            bron ? `, shundan <b>${bron}</b> tasi bronda` : ''}. Qoldiq va
+            hisobotlar darrov to'g'rilanadi.</p>
+        </div>` : ''}
       </div></div>`;
+}
+
+//  Soni jurnaldagi tahrir bilan bir xil yo'ldan o'tadi (`PATCH /api/units/:id`):
+//  qoldiq, jamlanma hisobot va audit o'sha yerda birga yangilanadi.
+async function doFixQty(id, eski) {
+  const n = Number($('fxQty').value);
+  if (!Number.isInteger(n) || n < 1) return toast('Soni noto\'g\'ri', true);
+  if (n === eski) return closeMove();
+  if (!confirm(`Soni ${eski} \u2192 ${n} qilib to'g'rilansinmi?`)) return;
+  try {
+    await App.api('/api/units/' + id, { method: 'PATCH',
+      body: JSON.stringify({ qty: n }) });
+    closeMove();
+    toast(`Soni ${n} ta qilib to'g'rilandi`);
+    await loadStock();
+  } catch (e) { toast(e.message, true); }
 }
 const closeMove = () => { $('modalRoot').innerHTML = ''; };
 
@@ -520,12 +561,10 @@ function drawShip() {
   }).join('');
 }
 
-//  Nakladnoy yozilayotgan payt: chiqarilgan kun va PUL KIRIM SANASI.
-//  Ikkinchisi — pul qachon keladi yoki qachon olindi; mudir mijoz bilan
-//  shu yerda kelishadi va keyin qidirib yurilmasin.
-//
-//  Pul kirim sanasi mijoz balansiga TEGMAYDI: sana — summa emas,
-//  to'lovning o'zini kassa moduli yozadi (hali yo'q).
+//  Nakladnoy yozilayotgan payt mudir faqat CHIQQAN KUNNI qo'yadi.
+//  Pul kirim sanasi — savdo menejerining ishi: pul masalasini mijoz
+//  bilan u kelishadi, mudir esa mahsulot chiqqanini tasdiqlaydi
+//  (buyurtma kartochkasida, `public/buyurtmalar.html`).
 function doShip(id) {
   const o = ship.find(x => x.id === id);
   const bugun = isoDay(new Date());
@@ -538,15 +577,8 @@ function doShip(id) {
         <p class="muted" style="margin-bottom:18px">${esc(o.customer_name)} \u00b7
           <b>${o.assigned_qty}</b> dona \u00b7 ${esc(o.ship_to_name || '—')}</p>
         <div class="stack">
-          <div class="row" style="gap:12px">
-            <div style="flex:1"><label>Chiqib ketgan sana</label>
-              <input id="shOn" type="date" value="${bugun}"></div>
-            <div style="flex:1"><label>Pul kirim sanasi</label>
-              <input id="shPay" type="date" value="${
-                (o.payment_on || '').slice(0, 10)}"></div>
-          </div>
-          <p class="muted" style="font-size:12px;margin:0">Pul kirim sanasi
-            yozib qo'yiladi — to'lovning o'zi kassada hisoblanadi.</p>
+          <div><label>Chiqib ketgan sana</label>
+            <input id="shOn" type="date" value="${bugun}"></div>
           <button class="primary" onclick="okShip(${id})">Chiqarib yubordim</button>
         </div>
       </div></div>`;
@@ -557,8 +589,7 @@ const closeShip = () => { $('modalRoot').innerHTML = ''; };
 async function okShip(id) {
   try {
     await App.api(`/api/sales/orders/${id}/ship`, { method: 'POST',
-      body: JSON.stringify({ ship_on: $('shOn').value || null,
-                             payment_on: $('shPay').value || null }) });
+      body: JSON.stringify({ ship_on: $('shOn').value || null }) });
     closeShip();
     toast('Jo\'natildi');
     await loadShip();
@@ -633,6 +664,9 @@ App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
   canMove = App.can('warehouse.move', 'warehouse.manage', 'production.manage');
   canShip = canMove;
+  //  Soni — tarixga tegadigan maydon (CLAUDE.md): faqat administrator
+  //  va ishlab chiqarish boshlig'i to'g'rilaydi. Tekshiruv serverda ham.
+  canFixQty = App.can('production.manage');
   // Ko'chiriladigan omborlar ro'yxati bir marta o'qiladi: har konver
   // uchun so'rov yuborilsa, ro'yxat ochilganda o'nlab so'rov ketardi.
   if (canMove) {

@@ -593,6 +593,31 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+//  ─────────────────────────────────────────────── PUL KIRIM SANASI
+//
+//  Pul qachon keladi yoki qachon olindi. Buyurtma OLINAYOTGANDA
+//  so'ralmaydi — o'shanda hali gap bo'lmaydi; menejer keyin, mijoz bilan
+//  kelishgach yozadi. Shuning uchun alohida yo'l: buyurtma omborga
+//  yuborilgan yoki jo'natilgan bo'lsa ham yoziladi va tuzatiladi.
+//
+//  Bu SANA, summa emas: mijoz balansiga tegmaydi, to'lovning o'zini
+//  kassa moduli yozadi (hali yo'q).
+router.patch('/orders/:id/payment', need(...WRITE), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `UPDATE orders o SET payment_on = $2::date
+       FROM customers c
+      WHERE o.id = $1 AND c.id = o.customer_id
+        AND ($3::text[] IS NULL OR c.channel = ANY($3))
+      RETURNING o.order_no, o.payment_on`,
+    [req.params.id, req.body.payment_on || null, channelsOf(req)]);
+  if (!rows[0]) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+  await audit(req, { module: 'sales', action: 'payment-date', entity: 'order',
+                     entity_id: Number(req.params.id),
+                     payload: { order_no: rows[0].order_no,
+                                payment_on: rows[0].payment_on } });
+  res.json({ ok: true, payment_on: rows[0].payment_on });
+}));
+
 //  Qaytarib olish: ombor hali chiqarmagan bo'lsa savdo o'zgartira oladi.
 router.post('/orders/:id/unsend', need(...WRITE), wrap(async (req, res) => {
   const { rows } = await db.query(
@@ -698,13 +723,13 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
       await refreshStock(client, u.product_id);
     }
 
-    //  Pul kirim sanasi nakladnoy yozilayotganda qo'yiladi. Balansga
-    //  tegmaydi: sana — summa emas, to'lovning o'zini kassa yozadi.
+    //  Pul kirim sanasi bu yerda qo'yilmaydi — u savdoniki
+    //  (`PATCH /orders/:id/payment`): pul masalasini mijoz bilan menejer
+    //  kelishadi, ombor mudiri mahsulot chiqqanini tasdiqlaydi.
     await client.query(
       `UPDATE orders SET status = 'shipped',
-              shipped_on = COALESCE($2::date, CURRENT_DATE), shipped_by = $3,
-              payment_on = COALESCE($4::date, payment_on)
-        WHERE id = $1`, [o.id, shipOn, req.user.id, req.body.payment_on || null]);
+              shipped_on = COALESCE($2::date, CURRENT_DATE), shipped_by = $3
+        WHERE id = $1`, [o.id, shipOn, req.user.id]);
     await audit(req, { module: 'warehouse', action: 'ship', entity: 'order',
                        entity_id: o.id,
                        payload: { order_no: o.order_no,
