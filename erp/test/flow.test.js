@@ -797,6 +797,66 @@ test('mijozning boshlang\'ich qarzi kiritiladi va qayta yuklashda o\'chmaydi', a
   assert.equal(Number(c.opening_debt), 300);
 });
 
+test('xato kiritilgan konver jurnaldan omborga o\'tkaziladi', async () => {
+  // Boshlang'ich qoldiq omborga tushishi kerak edi, lekin tsex tanlangan
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Krem', is_opening: true, section_id: ARRA },
+  ] })).body.created[0];
+  assert.equal((await H.id(`SELECT status FROM production_units WHERE id=$1`,
+    [u.id])).status, 'production');
+
+  const r = await admin('POST', `/api/units/${u.id}/to-warehouse`,
+    { warehouse_code: 'VITR-ABU', fg_on: '2026-09-04' });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.warehouse, 'Abu-Saxiy vitrina');
+
+  const holat = await H.id(
+    `SELECT u.status, to_char(u.fg_on,'YYYY-MM-DD') AS fg_on, w.code,
+            u.current_section_id
+       FROM production_units u LEFT JOIN warehouses w ON w.id = u.warehouse_id
+      WHERE u.id = $1`, [u.id]);
+  assert.equal(holat.status, 'fg');
+  assert.equal(holat.code, 'VITR-ABU');
+  assert.equal(holat.fg_on, '2026-09-04');
+  assert.equal(holat.current_section_id, ARRA,
+    'turgan bo\'limi saqlanadi — ombordan qaytarilsa o\'z joyiga qaytsin');
+
+  // Jurnaldan chiqdi, vitrina qoldig'iga tushdi
+  assert.equal((await admin('GET', '/api/units/?conveyor_no=' + u.conveyor_no)).body.length, 0);
+  assert.equal((await admin(
+    'GET', '/api/warehouse/fg/summary?w=VITR-ABU&q=Krem')).body.total.qty, 4);
+
+  // Ikkinchi marta o'tkazib bo'lmaydi
+  const yana = await admin('POST', `/api/units/${u.id}/to-warehouse`,
+    { warehouse_code: 'VITR-ABU' });
+  assert.equal(yana.status, 400);
+  assert.match(yana.body.error, /allaqachon/);
+
+  // Xom ashyo omboriga ham, mavjud bo'lmagan omborga ham emas
+  const ish = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, section_id: ARRA },
+  ] })).body.created[0];
+  for (const kod of ['XOM', 'YO-Q'])
+    assert.equal((await admin('POST', `/api/units/${ish.id}/to-warehouse`,
+      { warehouse_code: kod })).status, 400, kod);
+
+  // Bu TUZATISH — kirituvchida ham, ustada ham yo'q
+  const kirituvchi = H.api(base, await H.sessionFor('Sinov kirituvchi'));
+  assert.equal((await kirituvchi('POST', `/api/units/${ish.id}/to-warehouse`,
+    { warehouse_code: 'TM' })).status, 403);
+  assert.equal((await korpus('POST', `/api/units/${ish.id}/to-warehouse`,
+    { warehouse_code: 'TM' })).status, 403);
+
+  // Qaytarish ishlaydi: ombordan chiqib, o'z bo'limiga qaytadi
+  assert.equal((await admin('POST', '/api/units/stock/accept',
+    { items: [u.id], undo: true })).status, 200);
+  const q = await H.id(
+    `SELECT status, warehouse_id, current_section_id FROM production_units WHERE id=$1`,
+    [u.id]);
+  assert.deepEqual([q.status, q.warehouse_id, q.current_section_id],
+                   ['production', null, ARRA]);
+});
+
 // ══════════════════════════════════════════════════════════════ VITRINALAR
 
 test('mahsulot T/M ombordan vitrinaga ko\'chiriladi, bir qismi ham', async () => {

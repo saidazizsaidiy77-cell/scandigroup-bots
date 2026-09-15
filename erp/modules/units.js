@@ -696,6 +696,58 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ────────────────────────────────── XATO KIRITILGANNI OMBORGA O'TKAZISH
+//
+//  Boshlang'ich qoldiq kiritilayotganda «Tseh» ustunidan ombor o'rniga
+//  tsex tanlanib ketishi mumkin — shunda omborda turgan mahsulot ishlab
+//  chiqarishda paydo bo'ladi. Uni marshrut bo'ylab oxirigacha haydab
+//  chiqarish ham, o'chirib qayta kiritish ham to'g'ri emas: birinchisi
+//  yolg'on harakat yozadi, ikkinchisi konveyer raqamini yo'qotadi.
+//
+//  Shuning uchun TUZATISH: konver o'sha zahoti omborga o'tadi. Bu
+//  qabul qilish EMAS — qadoqlash tsexidan kelgan mahsulot eskicha,
+//  ombor mudirining «qabul qildim» tugmasi bilan o'tadi (`/stock/accept`).
+//  Bu yerda faqat noto'g'ri kiritilgan qator to'g'rilanadi, shuning
+//  uchun huquqi ham boshqa: `production.manage`.
+//
+//  Turgan bo'limi O'ZGARMAY qoladi — qabul qilishda ham shunday: konver
+//  ombordan qaytarilsa (`undo`) o'z joyiga qaytishi kerak.
+router.post('/:id/to-warehouse', need('production.manage'), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const u = (await client.query(
+      `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+    if (u.status === 'fg') throw new Error(`${u.conveyor_no}: allaqachon omborda`);
+    if (u.status !== 'production')
+      throw new Error(`${u.conveyor_no}: ishlab chiqarishda emas`);
+
+    const w = (await client.query(
+      `SELECT id, name FROM warehouses
+        WHERE code = $1 AND kind = 'fg' AND is_active`,
+      [req.body.warehouse_code || 'TM'])).rows[0];
+    if (!w) throw new Error('Ombor topilmadi');
+
+    await client.query(
+      `UPDATE production_units
+          SET status = 'fg', warehouse_id = $2,
+              fg_on = COALESCE($3::date, fg_on, CURRENT_DATE)
+        WHERE id = $1`, [u.id, w.id, req.body.fg_on || null]);
+    await refreshStock(client, u.product_id);
+    await audit(req, { module: 'warehouse', action: 'fg-fix', entity: 'unit',
+                       entity_id: u.id,
+                       payload: { conveyor_no: u.conveyor_no, to: w.name } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, conveyor_no: u.conveyor_no, warehouse: w.name });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    if (!e.status) e.status = 400;
+    throw e;
+  } finally { client.release(); }
+}));
+
 // ─────────────────────────────────── BIRLIK QAYERDA TURGANINI TUZATISH
 //
 //  Bu O'TKAZISH EMAS. O'tkazish — zavodda bo'lib o'tgan voqea, unga yangi

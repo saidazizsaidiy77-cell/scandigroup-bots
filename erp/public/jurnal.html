@@ -130,9 +130,19 @@ let ref = null, rows = [], customers = [], timer = null;
 let sort = { col: 'started_on', dir: 'desc' };
 const deb = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
 
+//  Tayyor mahsulot omborlari — xato kiritilgan konverni to'g'rilash
+//  uchun (izoh: `toWarehouse`). Faqat tuzatish huquqi borlarga
+//  so'raladi: qolganlarga ro'yxat baribir kerak emas.
+let fgHouses = [];
+
 async function boot(){
   const [r, c, sg] = await Promise.all([App.api('/api/ref'),
     App.api('/api/units/customers'), App.api('/api/units/suggest')]);
+  if (App.can('production.manage')) {
+    try { fgHouses = (await App.api('/api/warehouse/list')).rows
+            .filter(w => w.kind === 'fg' && w.is_active); }
+    catch { fgHouses = []; }
+  }
   document.getElementById('dlColor').innerHTML =
     sg.colors.map(v => `<option value="${esc(v)}">`).join('');
   document.getElementById('dlFabric').innerHTML =
@@ -317,6 +327,9 @@ function render(){
   // ishlab chiqarishniki.
   const canEdit = App.can('production.units', 'production.manage');
   const canMove = App.can('production.entry');
+  // Xato kiritilgan qatorni omborga o'tkazish — tarixga tegadigan
+  // tuzatish, shuning uchun faqat boshqaruvchida.
+  const canFix = App.can('production.manage');
   const inProd = rows.filter(r => r.status === 'production').length;
   const inFg   = rows.filter(r => r.status === 'fg').length;
   const amount = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0);
@@ -366,6 +379,9 @@ function render(){
         ${canMove && r.section && r.status !== 'shipped'
           ? `<button class="ic" onclick="undo(${r.id})"
                title="Oxirgi o'tkazishni qaytarish">↩</button>` : ''}
+        ${canFix && r.status === 'production' && fgHouses.length
+          ? `<button class="ic" onclick="toWarehouse(${r.id})"
+               title="Omborga o'tkazish \u2014 xato kiritilgan bo'lsa">\u{1F3E0}</button>` : ''}
         ${canEdit ? `<button class="ic" onclick="edit(${r.id})" title="Tahrirlash">✎</button>` : ''}
         ${canEdit && r.status !== 'cancelled'
           ? `<button class="ic" onclick="cancel_(${r.id})" title="Bekor qilish">×</button>` : ''}</td>
@@ -680,6 +696,50 @@ async function edit(id){
           : '<p class="muted">Harakat yozilmagan</p>'}
       </div></div>`;
 }
+// ────────────────────────────── XATO KIRITILGANNI OMBORGA O'TKAZISH
+//
+//  Boshlang'ich qoldiq kiritilayotganda «Tseh» ustunidan ombor o'rniga
+//  tsex tanlanib ketishi mumkin. Shunda mahsulot omborda turibdi, lekin
+//  tizimda ishlab chiqarishda ko'rinadi.
+//
+//  Marshrut bo'ylab haydab chiqarish ham, o'chirib qayta kiritish ham
+//  to'g'ri emas: birinchisi yolg'on harakat yozadi, ikkinchisi konveyer
+//  raqamini yo'qotadi. Shuning uchun konver shu yerdan omborga o'tadi.
+function toWarehouse(id){
+  const r = rows.find(x => x.id === id);
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:440px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <h1 style="margin:0">${esc(r.conveyor_no)}</h1>
+          <button onclick="close_()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:18px">Hozir: ${r.section
+          ? esc(r.section) + ' \u00b7 ' + esc(r.shop || '')
+          : 'boshlanmagan'}. Omborga o'tkazilgach jurnaldan chiqadi va
+          ombor qoldig'iga tushadi.</p>
+        <div class="stack">
+          <div><label>Qaysi omborga</label>
+            <select id="fwWh">${fgHouses.map(w =>
+              `<option value="${esc(w.code)}">${esc(w.name)}</option>`).join('')}</select></div>
+          <div><label>Omborga kirgan sana</label>
+            <input id="fwOn" type="date" value="${(r.fg_on || '').slice(0, 10)
+              || new Date().toISOString().slice(0, 10)}"></div>
+          <button class="primary" onclick="doToWarehouse(${id})">O'tkazish</button>
+        </div>
+      </div></div>`;
+}
+
+async function doToWarehouse(id){
+  try{
+    const d = await App.api(`/api/units/${id}/to-warehouse`, { method: 'POST',
+      body: JSON.stringify({ warehouse_code: $('fwWh').value,
+                             fg_on: $('fwOn').value || null }) });
+    close_();
+    await load();
+    alert(`${d.conveyor_no} \u2192 ${d.warehouse}`);
+  }catch(e){ alert(e.message); }
+}
+
 const close_ = () => { $('modalRoot').innerHTML = ''; };
 
 const dateVal = (id, kind) => {
