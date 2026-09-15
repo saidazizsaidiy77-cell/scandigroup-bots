@@ -178,7 +178,20 @@ bilan bir xil: menejer faqat o'z yo'nalishidagi mijozlarni ko'radi.
 **Boshlang'ich qarzdorlik** (`customers.opening_debt`, `$`) — tizim ishga
 tushgan kundagi mijoz qarzi. Bir martalik raqam, hisoblanmaydi: kassa
 yozilganda qarz shundan davom etadi (`boshlang'ich + sotuvlar − to'lovlar`).
-Mijoz kartochkasidan yoki fayldan («Boshlang'ich qarz» ustuni) kiritiladi.
+Maydon ISHORALI: musbat — mijoz korxonaga qarzdor, **manfiy — korxona
+mijozga qarzdor** (haqdor, ya'ni oldindan to'lov). Ikkita maydon
+qilinmadi: bittasi to'ldirilib ikkinchisi unutilsa qarz ikki joyda yotib
+qolardi; hisobot uni o'zi tomonga ajratadi.
+
+Ikki yo'ldan kiritiladi:
+  1. **Mijoz kartochkasidan** — «Boshlang'ich qarz» va «Qarz sanasi».
+     Haqdor minus bilan yoziladi va maydon ostida yozayotganda qaysi
+     tomon ekani chiqib turadi.
+  2. **Fayldan** — «Qarzdor» va «Haqdor» ALOHIDA ustun (zavod ro'yxati
+     shunday yuritiladi va minus qo'yishni hech kim unutmaydi), ustiga
+     «Qarz sanasi». Bitta ustunda minus bilan yozilgani ham o'qiladi:
+     `opening_debt = qarzdor − haqdor` (`modules/import.js`).
+
 Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh bo'lsa to'ladi —
 kartochkadan esa tuzatish ham, tozalash ham mumkin.
 

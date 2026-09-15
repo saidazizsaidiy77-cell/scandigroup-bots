@@ -170,6 +170,16 @@ function render(){
     ? `Ko'rsatish (${rows.length})` : `Yashirish (${rows.length})`;
 }
 
+//  Kiritilayotgan raqam qaysi tomon ekanini aytadi. «-400» ni yozgan odam
+//  uni haqdor deb tushunganini shu yerda ko'radi.
+function debtSide() {
+  const v = Number($('cDebt').value);
+  $('cDebtHint').innerHTML = !$('cDebt').value || !v
+    ? "Haqdor bo'lsa minus bilan yozing: <b>-400</b> \u2014 biz mijozga qarzdormiz"
+    : v > 0 ? `<b>${money(v)} $ qarzdor</b> \u2014 mijoz korxonaga qarzdor`
+            : `<b>${money(-v)} $ haqdor</b> \u2014 korxona mijozga qarzdor`;
+}
+
 function openForm(id){
   const c = id ? customers.find(x => x.id === id) : null;
   $('modalRoot').innerHTML = `
@@ -207,20 +217,27 @@ function openForm(id){
                 ${c?.channel === ch.code ? 'selected' : ''}>${esc(ch.name)}</option>`).join('')}
             </select></div>
           <!-- Boshlang'ich qarzdorlik: tizim ishga tushgan kundagi qarz.
-               Bir marta kiritiladi, keyin kassa moduli undan davom etadi. -->
+               Bir marta kiritiladi, keyin kassa moduli undan davom etadi.
+               Maydon ISHORALI: musbat — mijoz bizga qarzdor, manfiy —
+               biz mijozga (oldindan to'lov). Ikkita maydon qilinmadi:
+               bittasi to'ldirilib ikkinchisi unutilsa qarz ikki xil
+               joyda yotib qolardi. Qaysi tomon ekani yozayotganda
+               ostida chiqadi. -->
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Boshlang'ich qarz, $</label>
               <input id="cDebt" type="number" step="0.01" placeholder="—"
-                     value="${c?.opening_debt ?? ''}"></div>
+                     oninput="debtSide()" value="${c?.opening_debt ?? ''}"></div>
             <div style="flex:1"><label>Qarz sanasi</label>
               <input id="cDebtOn" type="date"
                      value="${(c?.opening_debt_on || '').slice(0, 10)}"></div>
           </div>
+          <p class="muted" style="font-size:12px;margin:-6px 0 0" id="cDebtHint"></p>
           <div><label>Izoh</label><input id="cNote"></div>
           <button class="primary" onclick="save(${id || 'null'})">Saqlash</button>
         </div>
       </div></div>`;
   fillRegions();
+  debtSide();
 }
 
 // Region ro'yxati respublikaga qarab o'zgaradi. Maydon matnli — ro'yxatda
@@ -239,7 +256,14 @@ function openImport(){
         <p class="muted" style="margin-bottom:8px">Zavod ro'yxatini Excel yoki CSV
           faylda bering — ustunlar tartibi muhim emas, sarlavhasiga qarab
           o'qiladi: <code>Mijoz</code>, <code>Tel</code>, <code>Region</code>,
-          <code>Kanal</code>, <code>Menejer</code>.</p>
+          <code>Kanal</code>, <code>Menejer</code>, <code>Qarzdor</code>,
+          <code>Haqdor</code>, <code>Qarz sanasi</code>.</p>
+        <p class="muted" style="margin-bottom:8px;font-size:13px">
+          <b>Qarzdor</b> — mijozning bizga qarzi, <b>Haqdor</b> — bizning
+          mijozga qarzimiz (oldindan to'lov). Ikkovi alohida ustun; bitta
+          ustunda minus bilan yozilgani ham o'qiladi. <b>Qarz sanasi</b> —
+          shu qarz qaysi kun holatiga; bo'sh qolsa hisobotda eng boshida
+          turadi.</p>
         <div class="row" style="gap:10px;margin-bottom:16px">
           <button class="primary" onclick="$('impFile').click()">Fayl tanlash</button>
           <button onclick="ctemplate()">Namuna fayl</button>
@@ -277,11 +301,17 @@ Mebel Savdo MCHJ ; Qozog'iston ; Almati ; +77015554433 ; EXPORT ; Jomonqulov Sha
 let cpicked = null;
 
 function ctemplate() {
+  //  Qarzdor va haqdor ALOHIDA ustun: zavod ro'yxati shunday yuritiladi
+  //  va minus qo'yishni hech kim unutmaydi. Ikkalasi ham o'qiladi.
   const head = ['Mijoz nomi', 'Tel raqami', 'Davlat', 'Region', 'Kanal',
-                'Savdo menejeri', 'Boshlang\'ich qarz', 'Izoh'];
+                'Savdo menejeri', 'Qarzdor', 'Haqdor', 'Qarz sanasi', 'Izoh'];
   const rows = [
-    ['Sardor Alimov', '+998901112233', "O'zbekiston", 'Toshkent shahri', 'B2C', '', '', ''],
-    ['Mebel Savdo MCHJ', '+77015554433', 'Qozog\'iston', 'Almati', 'EXPORT', '', '1250', ''],
+    ['Sardor Alimov', '+998901112233', "O'zbekiston", 'Toshkent shahri', 'B2C',
+     '', '', '', '', ''],
+    ['Mebel Savdo MCHJ', '+77015554433', 'Qozog\'iston', 'Almati', 'EXPORT',
+     '', '1250', '', '01.09.2026', ''],
+    ['Oq Saroy mebel', '+998907778899', "O'zbekiston", 'Samarqand', 'B2B',
+     '', '', '400', '01.09.2026', 'oldindan to\'lagan'],
   ];
   const csv = '\uFEFF' + [head, ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

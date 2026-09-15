@@ -795,6 +795,31 @@ test('mijozning boshlang\'ich qarzi kiritiladi va qayta yuklashda o\'chmaydi', a
   const c = (await admin('GET', '/api/units/customers')).body.customers
     .find((x) => x.name === 'Qarzsiz mijoz');
   assert.equal(Number(c.opening_debt), 300);
+
+  //  HAQDOR alohida ustunda: korxona mijozga qarzdor. Bitta ishorali
+  //  maydonga manfiy bo'lib yoziladi, sanasi bilan birga.
+  const haq = [
+    'Mijoz nomi;Tel raqami;Qarzdor;Haqdor;Qarz sanasi',
+    'Haqdor mijoz;+998901110002;;400;01.09.2026',
+    'Ikki tomon;+998901110003;1000;250;01.09.2026',
+    'Minus bilan;+998901110004;-150;;',
+  ];
+  const ol = await post('/api/import/customers?save=1', haq);
+  assert.equal(ol.status, 200, ol.text);
+  assert.equal(await qarz('Haqdor mijoz'), -400, 'haqdor manfiy bo\'lib yoziladi');
+  assert.equal(await qarz('Ikki tomon'), 750, 'qarzdor - haqdor');
+  assert.equal(await qarz('Minus bilan'), -150, 'bitta ustunda minus ham ishlaydi');
+  assert.equal((await H.id(
+    `SELECT to_char(opening_debt_on,'YYYY-MM-DD') AS d FROM customers
+      WHERE name = 'Haqdor mijoz'`)).d, '2026-09-01', 'qarz sanasi fayldan');
+
+  //  Hisobotda haqdor tomonda turadi, qarzdor ustunida minus bo'lib emas
+  const hisobot = (await admin('GET',
+    '/api/sales/debts?from=1900-01-01&to=2030-01-01')).body.rows
+    .find((x) => x.name === 'Haqdor mijoz');
+  assert.equal(Number(hisobot.closing_credit), 400);
+  assert.equal(Number(hisobot.closing_debit), 0);
+  assert.equal(Number(hisobot.debit), 0, 'qarzdor aylanmada minus turmaydi');
 });
 
 test('xato kiritilgan konver jurnaldan omborga o\'tkaziladi', async () => {

@@ -394,8 +394,18 @@ const CFIELDS = {
             'masulsavdoxodimi', 'savdoxodimi', 'менеджер'],
   note:    ['izoh', 'izohi', 'примечание', 'комментарий'],
   // Boshlang'ich qarzdorlik: tizim ishga tushgan kundagi qarz, $ da.
-  debt:    ['qarz', 'qarzi', 'qarzdorlik', 'boshlangichqarz', 'boshlangichqarzdorlik',
-            'долг', 'задолженность'],
+  //
+  //  IKKI TOMON. `debt` — QARZDOR, mijozning korxonaga qarzi; `credit` —
+  //  HAQDOR, korxonaning mijozga qarzi (oldindan to'lov). Zavod ro'yxatida
+  //  ikkovi odatda alohida ustun bo'ladi, shuning uchun ikkalasi ham
+  //  o'qiladi va `opening_debt = qarzdor − haqdor` bo'lib yoziladi.
+  //  Bitta ustunda minus bilan yozilgani ham ishlaydi.
+  debt:    ['qarz', 'qarzi', 'qarzdor', 'qarzdorlik', 'boshlangichqarz',
+            'boshlangichqarzdorlik', 'долг', 'задолженность', 'дебет'],
+  credit:  ['haqdor', 'haq', 'xaqdor', 'oldindantolov', 'oldindantulov', 'avans',
+            'аванс', 'переплата', 'кредит'],
+  debt_on: ['qarzsanasi', 'qarzsana', 'boshlangichqarzsanasi', 'qarzholatisanasi',
+            'датадолга', 'дата'],
 };
 
 router.post('/customers', need('production.units', 'sales.manage', 'production.manage'),
@@ -491,11 +501,23 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
         else { it.manager_id = hit.id; if (hit.as) matched.set(mgr, hit.as); }
       }
 
-      const debt = at('debt');
-      if (debt) {
-        const n = toNum(debt);
-        if (n === undefined) errors.push(`Qarz raqam emas: «${debt}»`);
-        else it.opening_debt = n;
+      //  Qarzdor va haqdor bitta raqamga yig'iladi: `opening_debt` ishorali
+      //  maydon, manfiysi haqdorni anglatadi (hisobot uni o'z tomoniga
+      //  ajratadi — `v_customer_ledger`).
+      const debt = at('debt'), credit = at('credit');
+      if (debt || credit) {
+        const d = debt   ? toNum(debt)   : 0;
+        const k = credit ? toNum(credit) : 0;
+        if (d === undefined) errors.push(`Qarz raqam emas: «${debt}»`);
+        else if (k === undefined) errors.push(`Haqdor raqam emas: «${credit}»`);
+        else it.opening_debt = (d || 0) - (k || 0);
+      }
+
+      const debtOn = at('debt_on');
+      if (debtOn) {
+        const d = toDate(debtOn);
+        if (d === undefined) errors.push(`Qarz sanasi tushunarsiz: «${debtOn}»`);
+        else it.opening_debt_on = d;
       }
 
       it.phone   = at('phone')   || null;
@@ -530,8 +552,8 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
       for (const r of rows) {
         await client.query(
           `INSERT INTO customers (name, phone, country, region, channel, manager_id,
-                                  note, opening_debt)
-           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8)
+                                  note, opening_debt, opening_debt_on)
+           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8,$9)
            ON CONFLICT (lower(name)) DO UPDATE SET
              phone      = COALESCE(EXCLUDED.phone,      customers.phone),
              country    = COALESCE(EXCLUDED.country,    customers.country),
@@ -540,10 +562,12 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
              manager_id = COALESCE(EXCLUDED.manager_id, customers.manager_id),
              note       = COALESCE(EXCLUDED.note,       customers.note),
              -- Qarz bir marta: kiritilgani qayta yuklashda o'chmaydi
-             opening_debt = COALESCE(customers.opening_debt, EXCLUDED.opening_debt)`,
+             opening_debt = COALESCE(customers.opening_debt, EXCLUDED.opening_debt),
+             opening_debt_on = COALESCE(customers.opening_debt_on,
+                                        EXCLUDED.opening_debt_on)`,
           [r.it.name, r.it.phone, r.it.country, r.it.region,
            r.it.channel || null, r.it.manager_id || null, r.it.note,
-           r.it.opening_debt ?? null]);
+           r.it.opening_debt ?? null, r.it.opening_debt_on || null]);
       }
       await audit(req, { module: 'sales', action: 'import', entity: 'customers',
                          entity_id: rows.length, payload: { count: rows.length } }, client);
