@@ -313,7 +313,11 @@ chiqib ketgan yoki bekor qilingan) — qog'ozdagi hujjat kabi:
               oluvchi
 
 Ikki tomon bir xil kenglikda — yuk xati shunday o'qiladi. Bo'sh maydon
-umuman yozilmaydi. Ism ham, telefon ham BAZADAN keladi
+umuman yozilmaydi. **Mijoz balansi ekranda turadi, qog'ozga chiqmaydi**
+(`.no-print`): yuk xati mijozning qo'liga beriladi va u yerda korxonaning
+ichki hisobi yozilib turishi shart emas. Pul kirim sanasi, «Omborga
+yuborildi» qatori va «Qaytarib olish» tugmasi ham shunday — ular ish
+qurollari, hujjatning o'zi emas. Ism ham, telefon ham BAZADAN keladi
 (`shipped_by_name`, `shipped_by_phone`) — kodga yozilmaydi (4-qoida). **«Chop etish»** tugmasi bor: qog'ozga faqat hujjat
 tushadi (ro'yxat ham, tugmalar ham chiqmaydi). Korxona nomi kodda bitta
 qator (`FIRMA`) — u mijoz ma'lumoti emas, zavodning o'z nomi.
