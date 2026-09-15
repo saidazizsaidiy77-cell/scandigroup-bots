@@ -282,7 +282,10 @@ deyishi uchun.
 biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
 
   · **Tayyor** — hammasi T/M omborda, chiqarishga tayyor;
-  · **Kutmoqda** — bir qismi hali ishlab chiqarishda, omborga kelmagan.
+  · **Kutmoqda** — bir qismi hali ishlab chiqarishda, omborga kelmagan;
+  · **Omborda** — savdo ombor mudiriga yubordi, u chiqarishni kutmoqda;
+  · **Chiqib ketdi** — mudir tasdiqladi, mahsulot zavoddan chiqdi va
+    mijoz balansiga qo'shildi.
 
 Ikkalasi ham saqlanadigan holat EMAS, har safar bronlardan hisoblanadi
 (`assigned_qty > in_warehouse_qty` bo'lsa «Kutmoqda»): saqlangan belgi
@@ -314,8 +317,8 @@ bron bo'lmaydi.
 **★ CHIQARISHNI OMBOR MUDIRI NAZORAT QILADI.** Savdo buyurtmani yozadi
 va bron qo'yadi, lekin mahsulotni zavoddan CHIQARIB YUBORMAYDI:
 
-    yangi → bron qilingan → **omborda** → jo'natilgan
-            (savdo)          (savdo yubordi)  (mudir tasdiqladi)
+    yangi → tayyor/kutmoqda → **omborda** → chiqib ketdi
+            (savdo biriktirdi)  (savdo yubordi) (mudir tasdiqladi)
 
 «Omborga yuborish» dan keyin buyurtma savdo uchun YOPILADI — mudir
 ko'rib turgan ro'yxat ostidan o'zgarib ketmasin. Kerak bo'lsa savdo

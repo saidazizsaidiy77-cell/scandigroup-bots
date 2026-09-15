@@ -83,14 +83,16 @@ const money = (v) => {
 //  Holat nomlarida «bron» so'zi yo'q: u ichki mexanizm (konverni
 //  qatorga biriktirish), menejer esa buyurtma qay ahvolda ekanini
 //  o'qiydi — «tayyor» yoki «kutmoqda».
+//  «Chiqib ketdi» — ombor mudiri tasdiqlagandan keyin: mahsulot
+//  zavoddan jismonan chiqdi, mijoz balansiga qo'shildi.
 const STATUS = { new: 'Yangi', reserved: 'Tayyor',
-                 to_ship: 'Omborda', shipped: "Jo'natilgan",
+                 to_ship: 'Omborda', shipped: 'Chiqib ketdi',
                  cancelled: 'Bekor qilingan' };
 //  «Kutmoqda» — alohida holat emas, hisoblanadi: bron qo'yilgan, lekin
 //  bir qismi hali ishlab chiqarishda (server: `status=waiting`).
 const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['waiting', 'Kutmoqda'],
                  ['reserved', 'Tayyor'], ['to_ship', 'Omborda'],
-                 ['shipped', "Jo'natilgan"], ['cancelled', 'Bekor']];
+                 ['shipped', 'Chiqib ketdi'], ['cancelled', 'Bekor']];
 
 //  Buyurtma holati EKRANDA: bronning bir qismi hali omborga kelmagan
 //  bo'lsa «Kutmoqda» deb ko'rsatiladi — mijozga aytiladigan gap shu.
@@ -303,7 +305,7 @@ function draw(){
           <button onclick="unsendWh()">Qaytarib olish</button>
         </div>` : ''}
       ${o.status === 'shipped' ? `
-        <p class="muted" style="margin-top:26px">Jo'natilgan: ${
+        <p class="muted" style="margin-top:26px">Chiqib ketdi: ${
           (o.shipped_on || '').slice(0, 10)}${o.shipped_by_name
             ? ' · ' + esc(o.shipped_by_name) : ''}${o.payment_on
             ? ` · pul kirimi: <b>${(o.payment_on).slice(0, 10)}</b>` : ''}</p>` : ''}
