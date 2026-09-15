@@ -581,8 +581,9 @@ function drawShip() {
             ? `<div class="muted" style="font-size:12px">${esc(u.color)}${
                 u.fabric ? ' · ' + esc(u.fabric) : ''}</div>` : ''}</td>
           <td class="c-type muted">${esc(u.product_type || '')}</td>
-          <td class="c-qty num">${u.qty}${u.unit_qty > u.qty
-            ? `<span class="muted" style="font-size:11px"> / ${u.unit_qty}</span>` : ''}</td>
+          <!--  Faqat SHU buyurtmaga olingan soni: konverning umumiy hajmi
+                yozilsa mudir «48 ta chiqarish kerak» deb o'qib qolardi. -->
+          <td class="c-qty num">${u.qty}</td>
           <td>${u.status === 'fg'
             ? `<span class="tag ok">${esc(u.warehouse || 'T/M ombor')}</span>`
             : `<span class="tag warn">${esc(u.section || 'boshlanmagan')}</span>`}</td>

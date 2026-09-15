@@ -393,8 +393,8 @@ function cell(i, key, rows, val, dis, zahira) {
   const grp = ([src, label]) => {
     const g = list.filter(x => x.src === src);
     return g.length ? `<optgroup label="${label}">${g.map(x =>
-      `<option value="${esc(x.v)}"${sel(x.v)}>${esc(nameOf(x, key))} · ${
-        x.free} ta</option>`).join('')}</optgroup>` : '';
+      `<option value="${esc(x.v)}"${sel(x.v)}>${esc(nameOf(x, key))}</option>`)
+      .join('')}</optgroup>` : '';
   };
   //  ZAHIRAGA RANG TANLANADI: konverning rangi hali yo'q, mijoz aytgan
   //  rangga bo'yaladi. Shuning uchun bu yerda zavodda ishlatilgan
@@ -423,18 +423,18 @@ function drawItems(){
     const p = products.find(x => x.id === Number(it.product_id));
     const need = Number(it.qty) || 0, got = Number(it.assigned_qty) || 0;
     const z = hasZahira(it);
-    //  Aniq mahsulot · rang · mato ombordagi bo'sh soni
-    const fg = rowsFor(it, 4).filter(r => r.src === 'fg')
-      .reduce((a, r) => a + r.free, 0);
-    const zn = rowsFor(it, 2).filter(r => r.src === 'stock')
-      .reduce((a, r) => a + r.free, 0);
+    //  Mahsulot QAYERDAN keladi — soni emas. Bo'sh dona soni tanlash
+    //  paytida chalg'itadi: menejer mijoz so'ragan miqdorni yozadi,
+    //  konverdagi qolgan dona esa boshqa mijozniki. Aniq soni bron
+    //  oynasida, har konverning yonida turadi.
+    const bor = rowsFor(it, 4).some(r => r.src === 'fg');
 
     return `<tr data-i="${i}">
       <td>${cell(i, 'product_id', stock, it.product_id, dis, false)}
         ${it.product_id ? `<div class="muted" style="font-size:11px">${
-          fg ? `T/M omborda ${fg} ta bo'sh`
-             : z ? `Zahirada ${zn} ta — rangi tanlanadi`
-             : 'Omborda yo\'q — ishlab chiqarishdan'}</div>` : ''}</td>
+          bor ? 'T/M omborda bor'
+              : z ? 'Zahirada — rangi tanlanadi'
+              : 'Omborda yo\'q — ishlab chiqarishdan'}</div>` : ''}</td>
       <td>${cell(i, 'color',  rowsFor(it, 2), it.color, dis, z)}</td>
       <td>${cell(i, 'fabric', rowsFor(it, 3), it.fabric, dis, z)}</td>
       <td class="num"><input type="number" min="1" value="${it.qty ?? 1}" ${dis}
@@ -478,9 +478,11 @@ function drawUnits(){
           <td class="muted">${it ? esc(it.product) : '—'}</td>
           <td class="muted">${u.color ? esc(u.color) : '—'}</td>
           <td class="muted">${u.fabric ? esc(u.fabric) : '—'}</td>
-          <!-- Konverning o'zi kattaroq bo'lsa yonida turadi: 6 / 10 -->
-          <td class="num"><b>${u.qty}</b>${u.unit_qty > u.qty
-            ? `<span class="muted" style="font-size:11px"> / ${u.unit_qty}</span>` : ''}</td>
+          <!--  Faqat SHU buyurtmaga olingan soni. Konverning umumiy
+                hajmi yozilmaydi: «4 / 48» ni o'qigan odam buyurtma 48 ta
+                deb tushunib qolardi — konverning qolgani boshqa
+                mijozniki va bu buyurtmaga aloqasi yo'q. -->
+          <td class="num"><b>${u.qty}</b></td>
           <td>${where(u)}</td>
           <td>${u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
             : u.eta ? `${d8(u.eta)}${u.eta_src && u.eta_src !== 'fakt'

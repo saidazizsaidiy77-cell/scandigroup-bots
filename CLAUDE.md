@@ -218,8 +218,16 @@ Qatorda **Mahsulot → Rangi → Matosi**, har biri alohida katak.
 menejer mijozdan «Milano penal» deb eshitadi, «penal» deb emas.
 **Hammasi ro'yxatdan — qo'lda yozish yo'q**: zavodda mahsulot, rangi va
 matosi birgalikda bitta narsa, ro'yxatda bo'lmagan rang esa hech qachon
-konver topmasdi. Har qiymat yonida nechta bo'sh qolgani turadi
-(«Venge · 5 ta»).
+konver topmasdi.
+
+**Ro'yxatda dona soni yozilmaydi.** Tanlash paytida u chalg'itadi:
+menejer mijoz so'ragan miqdorni yozadi, konverdagi qolgan dona esa
+boshqa mijozniki. Mahsulot ostida faqat QAYERDAN kelishi turadi
+(«T/M omborda bor» / «Zahirada — rangi tanlanadi» / «Omborda yo'q —
+ishlab chiqarishdan»), aniq soni esa bron oynasida, har konverning
+yonida. Shu sababdan bron qilingan konver yonida ham konverning umumiy
+hajmi ko'rsatilmaydi (ilgari «4 / 48» edi va buyurtma 48 ta deb
+o'qilardi) — faqat SHU buyurtmaga olingan soni.
 
 Ro'yxat **uch manbadan**, shu tartibda:
 
