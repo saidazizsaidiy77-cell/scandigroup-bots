@@ -1211,7 +1211,7 @@ test('konver bo\'linmaydi — ustiga bron qo\'yiladi, bir nechta mijozdan', asyn
   const koch = await mudir('POST', '/api/warehouse/fg/transfer',
     { unit_id: u.id, to_code: 'VITR-ABU' });
   assert.equal(koch.status, 400);
-  assert.match(koch.body.error, /bronda/);
+  assert.match(koch.body.error, /buyurtmada/);
 
   // Bron qo'yilgan qator o'chirilmaydi, buyurtma bekor qilinmaydi
   assert.equal((await admin('PATCH', '/api/sales/orders/' + z1.id,
@@ -1219,7 +1219,7 @@ test('konver bo\'linmaydi — ustiga bron qo\'yiladi, bir nechta mijozdan', asyn
   const bekor = await admin('PATCH', '/api/sales/orders/' + z1.id,
     { status: 'cancelled' });
   assert.equal(bekor.status, 400);
-  assert.match(bekor.body.error, /bronni olib tashlang/);
+  assert.match(bekor.body.error, /konverni qaytaring/);
 
   // Bronni olish: konver yana bo'shaydi, buyurtma "yangi" bo'ladi
   assert.equal((await admin('POST', `/api/sales/orders/${z1.id}/unassign`,
@@ -1367,7 +1367,7 @@ test('omborga xato kiritilgan soni to\'g\'rilanadi', async () => {
 
   const kam = await admin('PATCH', '/api/units/' + u.id, { qty: 1 });
   assert.equal(kam.status, 400);
-  assert.match(kam.body.error, /bronda/);
+  assert.match(kam.body.error, /buyurtmada/);
   assert.equal((await qoldiq()).qty, 2, 'soni o\'zgarmadi');
 
   // Ko'paytirish ishlayveradi
@@ -1401,7 +1401,7 @@ test('noto\'g\'ri kiritilgan konver ombordan bekor qilinadi', async () => {
     { item_id: qator.id, unit_id: u.id, qty: 3 })).status, 200);
   const band = await admin('PATCH', '/api/units/' + u.id, { status: 'cancelled' });
   assert.equal(band.status, 400);
-  assert.match(band.body.error, /bronda/);
+  assert.match(band.body.error, /buyurtmada/);
   assert.equal((await qoldiq()).qty, 3, 'qoldiq o\'zgarmadi');
 
   // Bron olingach bekor qilinadi va qoldiqdan chiqadi

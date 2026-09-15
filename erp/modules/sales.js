@@ -320,7 +320,7 @@ async function saveItems(client, orderId, items) {
                      WHERE r.order_item_id = i.id AND u.status <> 'cancelled')`,
     [orderId, keep])).rows;
   if (busy.length)
-    throw new Error(`Bron qo'yilgan qatorni o'chirib bo'lmaydi: ` +
+    throw new Error(`Konver biriktirilgan qatorni o'chirib bo'lmaydi: ` +
                     busy.map((b) => b.name).join(', '));
 
   await client.query(
@@ -384,7 +384,7 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
            JOIN production_units u ON u.id = r.unit_id
           WHERE i.order_id = $1 AND u.status <> 'cancelled'`,
         [req.params.id])).rows[0].n;
-      if (busy) throw new Error(`Avval ${busy} ta bronni olib tashlang`);
+      if (busy) throw new Error(`Avval ${busy} ta konverni qaytaring`);
     }
 
     await client.query(
@@ -652,7 +652,7 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
         WHERE r.unit_id = $1 AND i.order_id = $2
           AND ($3::int IS NULL OR r.order_item_id = $3)`,
       [req.body.unit_id, req.params.id, req.body.item_id || null])).rows[0];
-    if (!r) throw new Error('Bu buyurtmada bunday bron yo\'q');
+    if (!r) throw new Error('Bu buyurtmada bunday konver yo\'q');
 
     await client.query(`DELETE FROM unit_reservations WHERE id = $1`, [r.id]);
     await stampUnit(client, r.unit_id);
@@ -706,7 +706,7 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     if (o.status === 'shipped') throw new Error('Allaqachon jo\'natilgan');
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
     if (o.status === 'to_ship') throw new Error('Allaqachon omborga yuborilgan');
-    if (!o.bron) throw new Error('Avval konver bron qiling');
+    if (!o.bron) throw new Error('Avval konver biriktiring');
     if (!o.ship_to) throw new Error('«Qayerga» tanlanmagan');
 
     await client.query(

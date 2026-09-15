@@ -32,6 +32,9 @@
 /*  Katak ostidagi izoh joyi oldindan ajratilgan — matn chiqqanda
     qo'shni maydon sakramaydi. */
 .hint{font-size:12px;color:var(--muted);margin-top:6px;min-height:17px}
+/*  Hujjat ko'rinishidagi qiymat: katak emas, matn. Balandligi maydon
+    bilan bir xil — qatorlar tekis tursin. */
+.val{padding:11px 0;font-size:15px;line-height:1.35}
 /*  Bo'limlar kartochkada: fon ustida maydonning o'z foni deyarli
     ko'rinmaydi va katak qayerda tugashi bilinmaydi. */
 .order-view .card{margin-bottom:16px}
@@ -146,7 +149,11 @@ async function load(){
     // Muddat o'tgan va hali yopilmagan buyurtma qizarib turadi.
     const late = o.days_left != null && o.days_left < 0
       && o.status !== 'shipped' && o.status !== 'cancelled';
-    return `<tr>
+    //  Qatorning O'ZI bosiladi: buyurtmani ochish uchun kichkina
+    //  qalamchani nishonga olish shart emas.
+    const yopiq = o.status === 'shipped' || o.status === 'cancelled'
+               || o.status === 'to_ship' || !canWrite;
+    return `<tr onclick="openOrder(${o.id})" style="cursor:pointer">
       <td><strong>${esc(o.order_no)}</strong></td>
       <td>${esc(o.customer_name)}${o.region
         ? `<div class="muted" style="font-size:12px">${esc(o.region)}</div>` : ''}</td>
@@ -160,7 +167,10 @@ async function load(){
       <td class="num">${money(o.amount)}</td>
       <td><span class="tag${o.status === 'cancelled' ? ' warn' : ''}"
         >${esc(statusOf(o))}</span></td>
-      <td class="num"><button onclick="openOrder(${o.id})">${canWrite ? '✎' : '→'}</button></td>
+      <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
+            «ko'rish». Ochilganda u hujjat bo'lib chiqadi. -->
+      <td class="num"><button onclick="openOrder(${o.id})"
+        title="${yopiq ? 'Ko\'rish' : 'Tahrirlash'}">${yopiq ? '👁' : '✎'}</button></td>
     </tr>`;
   }).join('') : '<tr><td class="muted" colspan="10">Buyurtma yo\'q</td></tr>';
 }
@@ -179,6 +189,40 @@ async function openOrder(id){
             items: [], units: [] };
   }
   draw();
+}
+
+//  ── YOPILGAN BUYURTMA: HUJJAT KO'RINISHI ──────────────────────────────
+//
+//  Omborga yuborilgan, chiqib ketgan yoki bekor qilingan buyurtma
+//  TAHRIRLANMAYDI, shuning uchun uni kiritish shaklida ko'rsatish
+//  noto'g'ri: o'chirilgan ochilma ro'yxatlar va kulrang kataklar
+//  «buzilgan forma» bo'lib ko'rinadi. Bu yerda u NAKLADNOY bo'lib
+//  o'qiladi — yorliq va qiymat, bo'sh maydonlar esa umuman yozilmaydi.
+function docRow(label, value) {
+  return value ? `<div><label>${label}</label>
+    <div class="val">${value}</div></div>` : '';
+}
+
+function docHead(o) {
+  const c = customers.find(x => x.id === o.customer_id);
+  const bal = Number(c?.balance) || 0;
+  const d = dests.find(x => x.code === o.ship_to);
+  return `<div class="card"><div class="fields">
+    ${docRow('Zakaz &#8470;', `<b>${esc(o.order_no)}</b>`)}
+    ${docRow('Mijoz', `${esc(o.customer_name || c?.name || '')}${
+      o.region ? ` <span class="muted">· ${esc(o.region)}</span>` : ''}${
+      c ? `<div class="muted" style="font-size:12px;margin-top:2px">${
+        bal > 0 ? `balans: ${money(bal)} $ qarz` : 'qarzi yo\'q'}${
+        o.phone || c.phone ? ' · ' + esc(o.phone || c.phone) : ''}</div>` : ''}`)}
+    ${docRow('Menejer', esc(o.manager_name || ''))}
+    ${docRow('Buyurtma sanasi', d8(o.ordered_on))}
+    ${docRow('Chiqib ketish sanasi', o.due_on ? d8(o.due_on) : '')}
+    ${docRow('Qayerga', esc(d?.name || o.ship_to_name || ''))}
+    ${docRow('Manzil', esc(o.address || ''))}
+    ${docRow('Kutib oluvchi raqami', esc(o.receiver_phone || ''))}
+    ${o.note ? `<div style="grid-column:1/-1">${
+      docRow('Izoh', esc(o.note))}</div>` : ''}
+  </div></div>`;
 }
 
 function draw(){
@@ -201,6 +245,7 @@ function draw(){
         </div>
       </div>
 
+      ${ro ? docHead(o) : `
       <div class="card"><div class="fields">
         <!--  Zakaz raqami qo'lda ham yoziladi: zavod o'z daftarida raqam
               yuritadi va nakladnoyda o'sha raqam turishi kerak. Bo'sh
@@ -252,7 +297,7 @@ function draw(){
         <!-- Izoh butun kenglikda: u yozma gap, bitta ustunga sig'maydi -->
         <div style="grid-column:1/-1"><label>Izoh</label>
           <input id="oNote" ${dis} value="${esc(o.note || '')}"></div>
-      </div></div>
+      </div></div>`}
 
       <div class="card">
       <h2>Qatorlar</h2>

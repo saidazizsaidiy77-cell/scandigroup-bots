@@ -301,9 +301,15 @@ ro'yxatida shu qatorga allaqachon olingan konverlar eng tepada turadi va
 yonida «Qaytarish» tugmasi bo'ladi (`CANDIDATE_WHERE` da `mine`).
 
 **Yopilgan buyurtma NAKLADNOY bo'lib o'qiladi** (omborga yuborilgan,
-jo'natilgan yoki bekor qilingan): ochilma ro'yxatlar o'rniga bitta qator
-matn — «Milano · Penal / Venge / Velvet», keyin soni, narxi va summasi,
-ostida «Jami». Tanlash tugagan, endi u hujjat.
+chiqib ketgan yoki bekor qilingan): sarlavhada o'chirilgan kataklar
+emas, **yorliq va qiymat** (bo'sh maydon umuman yozilmaydi), qatorlarda
+esa bitta matn — «Milano · Penal / Venge / Velvet», keyin soni, narxi va
+summasi, ostida «Jami». Tanlash tugagan, endi u hujjat. Ro'yxatda ham
+tugmasi boshqa: tahrirlanadiganda ✎, yopilganda 👁 — qatorning o'zi ham
+bosiladi.
+
+Server xabarlarida ham «bron» so'zi yo'q: «N tasi buyurtmada — avval
+konverni qaytaring».
 
 Bitta bron bo'lsa konverga mijoz va zakaz raqami yoziladi — jurnalda
 tsex boshlig'i «bu Alisherniki» deb ko'radi. Bir nechta bo'lsa bo'sh

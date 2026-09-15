@@ -627,7 +627,7 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
           `SELECT COALESCE(SUM(qty), 0)::int AS n FROM unit_reservations
             WHERE unit_id = $1`, [req.params.id])).rows[0].n;
         if (nextQty < bron)
-          throw new Error(`${u.conveyor_no}: ${bron} tasi bronda — ` +
+          throw new Error(`${u.conveyor_no}: ${bron} tasi buyurtmada — ` +
             `sonini ${bron} tadan kam qilib bo'lmaydi`);
 
         await client.query(
@@ -689,8 +689,8 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
           WHERE unit_id = $1`, [req.params.id])).rows[0].n;
       if (bron)
         return res.status(400).json({
-          error: `${oldUnit.conveyor_no}: ${bron} tasi bronda — ` +
-                 `avval bronni oling` });
+          error: `${oldUnit.conveyor_no}: ${bron} tasi buyurtmada — ` +
+                 `avval konverni qaytaring` });
     }
   }
 

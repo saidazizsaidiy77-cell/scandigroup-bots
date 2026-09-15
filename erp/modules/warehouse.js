@@ -271,7 +271,8 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
     //  Bron qo'yilgan dona ko'chmaydi: u mijozniki bo'lib turibdi va
     //  boshqa omborga chiqib ketsa sotuvchi topa olmasdi.
     if (u.reserved)
-      throw new Error(`${u.conveyor_no}: ${u.reserved} tasi bronda — avval bronni oling`);
+      throw new Error(`${u.conveyor_no}: ${u.reserved} tasi buyurtmada — ` +
+        `avval konverni qaytaring`);
     if (u.at_wh === to.id) throw new Error(`${u.conveyor_no}: allaqachon shu omborda`);
 
     // Berayotgan omborni ham tekshiramiz: xodim ko'rmaydigan ombordan
