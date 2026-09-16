@@ -15,7 +15,7 @@
 --  Tomon beshta turdan biri:
 --
 --    account   — kassa yoki bank hisobi
---    worker    — XODIMNING QO'LIDA (podotchyot): menejer mijozdan olgan,
+--    worker    — XODIMNING QO'LIDAGI PUL: menejer mijozdan olgan,
 --                lekin kassirga topshirmagan pul ham shu yerda
 --    customer  — mijoz
 --    supplier  — ta'minotchi
@@ -26,7 +26,7 @@
 --    menejer mijozdan pul oldi      mijoz    → menejer
 --    kassir menejerdan qabul qildi  menejer  → asosiy kassa
 --    mijoz to'g'ridan kassaga to'ladi mijoz  → asosiy kassa
---    xodimga podotchyot berildi     kassa    → xodim
+--    xodim qo'liga pul berildi      kassa    → xodim
 --    xodim qoldiqni qaytardi        xodim    → kassa
 --    ta'minotchiga to'lov           kassa    → ta'minotchi
 --    harajat                        kassa    → harajat moddasi
@@ -241,7 +241,7 @@ SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active,
 
 -- ─────────────────────────────────────────────── XODIM QO'LIDAGI PUL
 --
---  PODOTCHYOT. Ikki yo'ldan to'ladi: xodimga kassadan berilgan pul va
+--  Ikki yo'ldan to'ladi: xodimga kassadan berilgan pul va
 --  menejer mijozdan olib, hali kassirga topshirmagani. Ikkalasi ham
 --  bitta narsa — xodimning qo'lidagi, korxonaga qarz pul.
 DROP VIEW IF EXISTS v_worker_cash CASCADE;
@@ -284,7 +284,7 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
 --  To'lov mijozdan chiqqan zahoti hisobga oladi — menejer olganda ham,
 --  kassaga to'g'ridan to'langanda ham. Mijoz uchun farqi yo'q: u to'ladi
 --  va qarzi kamaydi. Pulning kassaga yetib borishi KORXONANING ichki
---  ishi (menejer podotchyoti) va mijozning qarziga aloqasi yo'q.
+--  ishi (pul menejerning qo'lida) va mijozning qarziga aloqasi yo'q.
 DROP VIEW IF EXISTS v_customer_sales CASCADE;
 CREATE VIEW v_customer_sales AS
 SELECT c.id, c.name, c.country, c.region, c.phone,

@@ -9,7 +9,7 @@
 //  `cash.entry`  — SAVDO MENEJERI. U mijozdan pul oladi, xolos: bitta
 //                  yo'l (`mijoz → o'zi`), o'z qo'lidagi pul va o'z
 //                  kirimlari. Kassa qoldig'i ham, boshqa xodimning
-//                  podotchyoti ham unga ko'rinmaydi.
+//                  qo'lidagi puli ham unga ko'rinmaydi.
 //  `cash.manage` — KASSIR va BUXGALTER. Hammasi: qabul qilish, chiqim,
 //                  kassalar aro ko'chirish, bekor qilish.
 //  `cash.view`   — faqat o'qish (rahbariyat).
@@ -186,7 +186,7 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
   const b = req.body || {};
   const boss = isBoss(req);
   //  Menejerning yagona yo'li. `to_id` ham o'zi: boshqa xodimning
-  //  podotchyotiga pul yozib qo'yib bo'lmaydi.
+  //  qo'liga pul yozib qo'yib bo'lmaydi.
   const from_kind = boss ? b.from_kind : 'customer';
   const to_kind   = boss ? b.to_kind   : 'worker';
   const from_id   = Number(b.from_id) || null;

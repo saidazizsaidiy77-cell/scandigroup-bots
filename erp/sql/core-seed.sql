@@ -110,7 +110,7 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('sotuvchi',     'warehouse.view'), ('sotuvchi', 'production.view'),
   --  Pulni mijozdan MENEJER oladi: dasturda mijozni tanlab kirim
   --  qiladi va mijozning qarzi o'sha zahoti kamayadi. `cash.entry`
-  --  unga faqat SHUNI beradi — pul o'z podotchyotiga tushadi, kassa
+  --  unga faqat SHUNI beradi — pul o'z qo'lida qoladi, kassa
   --  qoldig'i va boshqa operatsiyalar ko'rinmaydi ham (modules/cash.js).
   ('sotuvchi',     'cash.entry'),
 

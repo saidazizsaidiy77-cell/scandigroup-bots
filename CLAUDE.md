@@ -509,12 +509,12 @@ operatsiyada pulni kiritayotgan odam yozadi** (zavod qarori).
 **★ HAR OPERATSIYA — QAYERDAN → QAYERGA.** Pul o'zidan-o'zi paydo
 bo'lmaydi va yo'qolmaydi. Shuning uchun bitta jadval (`cash_ops`) va har
 qatorda ikki tomon; tomon beshta turdan biri: `account` (kassa),
-`worker` (xodimning qo'lida — podotchyot), `customer`, `supplier`,
+`worker` (xodimning qo'lidagi pul), `customer`, `supplier`,
 `expense` (harajat). Zavoddagi hamma harakat shu ikkilik bilan yoziladi:
 
     menejer mijozdan pul oldi         mijoz    → menejer
     kassir menejerdan qabul qildi     menejer  → asosiy kassa
-    xodimga podotchyot berildi        kassa    → xodim
+    xodim qo'liga pul berildi         kassa    → xodim
     ta'minotchiga to'lov              kassa    → ta'minotchi
     harajat                           kassa    → harajat moddasi
     kassalar aro / valyuta almashish  kassa    → kassa
@@ -534,7 +534,7 @@ pul asosiy kassaga qo'shiladi. Ikki bosqich tsexdagi topshirish bilan
 bir xil sababdan: hech kimning qo'l ko'tarishisiz pul kassaga kirib
 qolmasin.
 
-Xodimga berilgan podotchyot ham shu balansda: ikkalasi ham bitta narsa —
+Xodim qo'liga berilgan pul ham shu balansda: ikkalasi ham bitta narsa —
 xodimning qo'lidagi, korxonaga qarz pul.
 
 **★ HARAJAT QAYSI OYNING FOYDA-ZARARIDA.** To'lov bugun ketadi, harajat
@@ -596,7 +596,7 @@ tugmasida.
 
   · **`cash.entry`** — SAVDO MENEJERI. Bitta yo'l (`mijoz → o'zi`), o'z
     qo'lidagi pul va o'z kirimlari; sahifa unga «Mening pulim» bo'lib
-    ochiladi. Kassa qoldig'i ham, boshqa xodimning podotchyoti ham unga
+    ochiladi. Kassa qoldig'i ham, boshqa xodimning qo'lidagi puli ham unga
     ko'rinmaydi — serverda ham tomonlarni o'zi qo'yadi, klient
     boshqasini yuborsa qabul qilinmaydi. O'z qo'lidagi pulni sarflay
     olmaydi ham: chiqim tugmasi faqat kassada va faqat kassirda.
@@ -796,7 +796,7 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    nazorat qilishi va oraliq bo'yicha qarzdorlik.
 4. **Kassa** — YOZILDI (`sql/cash.sql`, `modules/cash.js`,
    `public/kassa.html`): ikkita hisob, so'm va dollar, menejer
-   podotchyoti, harajat foyda-zarar oyi bilan. Mijoz balansi to'ldi.
+   qo'lidagi puli, harajat foyda-zarar oyi bilan. Mijoz balansi to'ldi.
    Qolgani: **harajat moddalari** va **ta'minotchilar** ro'yxati —
    ikkalasi ham zavoddan keladi va kiritilmaguncha tegishli ro'yxat
    bo'sh turadi.
@@ -821,7 +821,7 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 
 **Kassa** — ✅ HAL BO'LDI va yozildi. Zavod qarorlari: pulni savdo
 menejeri o'zi kiritadi va mijozning qarzi o'sha zahoti kamayadi; pul
-kassirga topshirilguncha menejerning podotchyotida turadi; kursni har
+kassirga topshirilguncha menejerning qo'lida turadi; kursni har
 operatsiyada kiritayotgan odam yozadi; harajatda foyda-zarar oyi
 so'raladi.
 - Hali yo'q: **to'lov turi** (naqd / plastik / o'tkazma) alohida ustun

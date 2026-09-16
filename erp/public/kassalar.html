@@ -65,7 +65,8 @@ function draw(d) {
           a.last_on ? `oxirgi harakat ${d8(a.last_on)}` : 'harakat yo\'q',
           a, a.kind === 'bank' ? 'hisob raqami' : 'ok')).join('')}
       ${card(d.me.href, d.boss ? "Mening qo'limdagi pul" : 'Mening pulim',
-          d.boss ? 'podotchyot' : "kassirga topshirilmagani", d.me, 'podotchyot')}
+          d.boss ? "kassaga topshirilmagani" : "kassirga topshirilmagani",
+          d.me, "qo'ldagi pul")}
     </div>`;
 }
 

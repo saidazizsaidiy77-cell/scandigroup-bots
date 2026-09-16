@@ -2003,7 +2003,7 @@ test('tsex ustasiga savdo yopiq', async () => {
 //
 //  Zavod qoidasi: pulni MENEJER oladi — mijozning qarzi o'sha zahoti
 //  kamayadi, lekin pul kassaga tushmaydi. U menejerning qo'lida
-//  (podotchyot) va kassir sanab olgandan keyingina kassaga qo'shiladi.
+//  (qo'lidagi pul) va kassir sanab olgandan keyingina kassaga qo'shiladi.
 test('menejer mijozdan pul oladi, kassa esa kassir qabul qilgach to\'ladi', async () => {
   const { db } = require('../db');
   //  Kassir va menejer — haqiqiy rollar bilan, admin bilan emas:
