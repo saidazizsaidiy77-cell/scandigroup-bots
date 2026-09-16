@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bank va kassa · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Bank va kassa</h1></div>
+  <div class="row" id="erpUser"></div>
+</div>
+
+<div id="body"></div>
+
+<script>
+// ============================================================================
+//  KASSALAR RO'YXATI
+//
+//  Zavodda ikkita pul joyi bor — ASOSIY KASSA (naqd) va BANK HISOB
+//  RAQAMI — va ular bir-biriga o'xshamaydi: birida pul sanaladi,
+//  ikkinchisida ko'chma. Shuning uchun bo'limga kirilganda avval SHU
+//  ro'yxat chiqadi, kassa tanlangach uning ichi ochiladi. Omborlar
+//  sahifasi bilan bir xil idiom.
+//
+//  Ro'yxat kodda emas, bazada (`cash_accounts`): yangi hisob raqami
+//  ochilsa shu sahifaga tegilmaydi.
+// ============================================================================
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const d8 = v => !v ? '—'
+  : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+const uzs = v => (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function draw(d) {
+  const card = (href, nom, izoh, b, tag) => `
+    <a class="card" href="${href}" style="text-decoration:none;color:inherit;display:block">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <h2 style="margin:0">${esc(nom)}</h2>
+        <span class="tag${tag === 'ok' ? ' ok' : ''}">${
+          tag === 'ok' ? 'naqd' : tag}</span>
+      </div>
+      <div class="kpi" style="margin-top:10px">${usd(b.total_usd)}<small> $</small></div>
+      <div class="muted" style="font-size:13px;margin-top:4px">
+        ${uzs(b.uzs)} so'm · ${usd(b.usd)} $</div>
+      <p class="muted" style="font-size:12.5px;margin-top:10px">${esc(izoh)}</p>
+    </a>`;
+
+  $('body').innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
+      ${d.rows.map(a => card(a.href, a.name,
+          a.last_on ? `oxirgi harakat ${d8(a.last_on)}` : 'harakat yo\'q',
+          a, a.kind === 'bank' ? 'hisob raqami' : 'ok')).join('')}
+      ${card(d.me.href, d.boss ? "Mening qo'limdagi pul" : 'Mening pulim',
+          d.boss ? 'podotchyot' : "kassirga topshirilmagani", d.me, 'podotchyot')}
+    </div>`;
+}
+
+App.start(async () => {
+  const d = await App.api('/api/cash/list');
+  //  Menejerda kassa yo'q — uning yagona «joyi» o'z qo'lidagi pul.
+  //  Bitta qatorli ro'yxat ortiqcha bosish bo'lardi (omborlar bilan
+  //  bir xil qoida).
+  if (!d.rows.length) { location.replace(d.me.href); return; }
+  draw(d);
+}, 'cash.view', 'cash.entry', 'cash.manage');
+</script>
+</body>
+</html>

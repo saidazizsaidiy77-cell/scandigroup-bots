@@ -1,124 +1,121 @@
 // ============================================================================
-//  OPERATSIYA SHAKLI
+//  ORDER — BANKDAGI TO'LOV TOPSHIRIQNOMASIGA O'XSHASH OYNA
 //
-//  Oltita tugma — bitta shakl. Farqi faqat qaysi tomon qayerda turishida:
-//  «Mijozdan pul olindi» da chap tomonda mijoz, o'ngda xodim; «Harajat»
-//  da chapda kassa, o'ngda harajat moddasi. Shuning uchun tomon tanlash
-//  ham bitta funksiyadan chiqadi (`sidePicker`) va yangi operatsiya turi
-//  qo'shilsa `FORMS` ga bitta qator yoziladi, shakl o'zgarmaydi.
+//  Kassir qog'ozdagi hujjatni to'ldirgandek to'ldiradi: tepada hujjat
+//  nomi va qaysi kassa, ostida sana, kimdan/kimga, summa va kurs, eng
+//  pastda dollardagi raqam. Shuning uchun uchta shakl bor, oltita emas:
 //
-//  Tomon qiymati «tur:id» bo'lib yuriladi (`account:3`) — ikkita maydon
-//  o'rniga bitta, va ro'yxatda kassa ham, xodim ham birga tursa
-//  guruhlanib chiqadi.
+//    KIRIM       kimdan keldi → SHU kassaga
+//    CHIQIM      SHU kassadan → kimga ketdi (yoki harajatga)
+//    KO'CHIRISH  SHU kassadan → boshqa kassaga (valyuta almashish ham)
+//
+//  Ikkinchi tomon ro'yxati aralash bo'ladi (mijoz, xodim, ta'minotchi) —
+//  zavodda pul shu uchovidan keladi va shu uchoviga ketadi, va kassir
+//  «qaysi turdagi tomon» degan savol bilan ovora bo'lmasligi kerak.
 let form = null;
 
 const SIDE_LABEL = { account: 'Kassa', worker: 'Xodim',
                      customer: 'Mijoz', supplier: "Ta'minotchi" };
 
-//  Qaysi turdagi tomonlar tanlanishi mumkin — shakl turiga qarab.
-//  Menejerda «qayerga» umuman so'ralmaydi: pul faqat uning qo'liga
-//  tushadi va serverda ham shunday (modules/cash.js).
 const SIDE_LIST = (kind) => ({
-  account:  (refs.accounts  || []).map(a => [`account:${a.id}`, a.name]),
+  account:  (refs.accounts  || []).filter(a => isMe() || a.code !== A)
+              .map(a => [`account:${a.id}`, a.name]),
   worker:   (refs.workers   || []).map(w => [`worker:${w.id}`, w.name]),
   customer: (refs.customers || []).map(c =>
               [`customer:${c.id}`, c.name + (c.region ? ` · ${c.region}` : '')]),
   supplier: (refs.suppliers || []).map(s => [`supplier:${s.id}`, s.name]),
 }[kind] || []);
 
-function sidePicker(id, kinds, val) {
+function sidePicker(id, kinds, extra) {
   const groups = kinds.map(k => [SIDE_LABEL[k], SIDE_LIST(k)])
                       .filter(([, list]) => list.length);
-  if (!groups.length)
+  if (!groups.length && !extra)
     return `<select id="${id}" disabled><option>— ro'yxat bo'sh —</option></select>`;
-  const opts = groups.length === 1
-    ? groups[0][1].map(([v, t]) =>
-        `<option value="${esc(v)}"${v === val ? ' selected' : ''}>${esc(t)}</option>`).join('')
-    : groups.map(([lab, list]) => `<optgroup label="${esc(lab)}">${list.map(([v, t]) =>
-        `<option value="${esc(v)}"${v === val ? ' selected' : ''}>${esc(t)}</option>`)
-        .join('')}</optgroup>`).join('');
+  const grp = ([lab, list]) => `<optgroup label="${esc(lab)}">${list.map(([v, t]) =>
+    `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</optgroup>`;
   return `<select id="${id}" onchange="calc()">
-    <option value="">— tanlang —</option>${opts}</select>`;
+    <option value="">— tanlang —</option>
+    ${extra || ''}${groups.map(grp).join('')}</select>`;
 }
 
-function openForm(kind, sideId) {
+//  Shakl turiga qarab ikkinchi tomon kim bo'lishi mumkin.
+const FORMS = {
+  in:   { t: 'Kirim orderi',  who: 'Kimdan',
+          kinds: () => isMe() ? ['customer'] : ['customer', 'worker', 'supplier'] },
+  out:  { t: 'Chiqim orderi', who: 'Kimga',
+          kinds: () => ['worker', 'supplier'] },
+  move: { t: "Ko'chirish", who: 'Qaysi kassaga', kinds: () => ['account'] },
+};
+
+function openForm(kind) {
   const F = FORMS[kind];
   if (!F) return;
   form = kind;
   const bugun = isoDay(new Date());
-  const oy = bugun.slice(0, 7);
-  //  «Qayerdan» ba'zi shakllarda bitta bo'ladi (kassa), ba'zisida
-  //  ikkita tur aralashadi: harajatni kassa ham, xodim ham qo'lidagi
-  //  puldan to'lashi mumkin.
-  const fromKinds = kind === 'expense' ? ['account', 'worker'] : [F.from];
-  const toKinds   = kind === 'in' ? ['worker', 'account'] : [F.to];
+  //  Harajat — chiqimning bir turi, alohida tugma emas: kassir «kimga»
+  //  o'rniga harajat moddasini tanlaydi va shu zahoti foyda-zarar oyi
+  //  so'raladi.
+  const harajat = kind === 'out'
+    ? `<optgroup label="Harajat">${refs.groups.map(g => {
+         const list = refs.items.filter(i => i.group_code === g.code);
+         return list.map(i =>
+           `<option value="expense:${i.id}">${esc(g.name)} · ${esc(i.name)}</option>`).join('');
+       }).join('')}</optgroup>` : '';
 
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)closeForm()">
-      <div class="modal" style="max-width:640px">
-        <div class="row" style="justify-content:space-between;margin-bottom:18px">
-          <h1 style="margin:0">${esc(F.t)}</h1>
+      <div class="modal" style="max-width:600px">
+        <div class="row" style="justify-content:flex-end;margin-bottom:4px">
           <button onclick="closeForm()">Yopish</button></div>
+
+        <!--  Hujjat boshi: bu qanaqa order va qaysi kassaga. Raqamni
+              tizim saqlashda beradi (P26-0004) — oldindan band qilib
+              qo'yilsa, bekor qilingan oynadan bo'sh raqam qolardi. -->
+        <div class="ord-head">
+          <div class="t">${esc(F.t)}</div>
+          <div class="n">${esc(here.title || here.name)}</div>
+        </div>
 
         <div class="fields">
           <div><label>Sana</label>
             <input id="fDate" type="date" value="${bugun}"><div class="hint"></div></div>
 
-          <div><label>Qayerdan</label>
-            ${sidePicker('fFrom', fromKinds, sideId && kind === 'accept'
-              ? `worker:${sideId}` : '')}<div class="hint"></div></div>
+          <div class="wide"><label>${esc(F.who)}</label>
+            ${sidePicker('fSide', F.kinds(), harajat)}
+            <div class="hint" id="fSideHint"></div></div>
 
-          ${kind === 'expense' ? '' : `
-          <div><label>Qayerga</label>
-            ${boss ? sidePicker('fTo', toKinds, '')
-                   : `<input value="${esc(refs.me.name)} — mening qo'limga" disabled>
-                      <input type="hidden" id="fTo" value="worker:${refs.me.id}">`}
-            <div class="hint"></div></div>`}
+          <div><label>Summa</label>
+            <input id="fAmt" type="number" min="0" step="0.01" inputmode="decimal"
+              oninput="calc()"><div class="hint"></div></div>
 
           <div><label>Valyuta</label>
             <select id="fCur" onchange="calc()">
               <option value="UZS">So'm</option><option value="USD">Dollar</option>
             </select><div class="hint"></div></div>
 
-          <div><label>Summa</label>
-            <input id="fAmt" type="number" min="0" step="0.01" inputmode="decimal"
-              oninput="calc()"><div class="hint"></div></div>
-
           <!--  Kurs HAR OPERATSIYADA: pulni kiritayotgan odam o'sha
                 to'lovning kursini yozadi va u operatsiya bilan birga
-                qotib qoladi — ertaga kurs o'zgarsa kechagi to'lov
-                qayta hisoblanmaydi. -->
+                qotib qoladi. -->
           <div id="fRateBox"><label>Kurs, 1$ = so'm</label>
             <input id="fRate" type="number" min="0" step="0.01" inputmode="decimal"
-              oninput="calc()"><div class="hint" id="fCalc"></div></div>
+              oninput="calc()"><div class="hint"></div></div>
 
-          ${kind === 'expense' ? `
-          <div class="wide"><label>Harajat moddasi</label>
-            ${refs.items.length ? `<select id="fItem">
-              <option value="">— tanlang —</option>
-              ${refs.groups.map(g => {
-                const list = refs.items.filter(i => i.group_code === g.code);
-                return list.length ? `<optgroup label="${esc(g.name)}">${list.map(i =>
-                  `<option value="${i.id}">${esc(i.name)}</option>`).join('')}</optgroup>` : '';
-              }).join('')}</select>`
-              : `<select id="fItem" disabled><option>— moddalar kiritilmagan —</option></select>`}
-            <div class="hint">guruh → kichik guruh</div></div>
-
-          <!--  ★ QAYSI OYNING FOYDA-ZARARIGA. To'lov bugun ketadi,
-                harajat esa boshqa oyniki bo'lishi mumkin: sentabrda
-                to'langan avgust ijarasi AVGUST foydasini kamaytiradi. -->
-          <div><label>Foyda-zarar oyi</label>
-            <input id="fMonth" type="month" value="${oy}">
-            <div class="hint">qaysi oyning hisobotiga tushsin</div></div>` : ''}
+          <!--  ★ QAYSI OYNING FOYDA-ZARARIGA: to'lov bugun ketadi,
+                harajat esa boshqa oyniki bo'lishi mumkin. -->
+          <div id="fMonthBox" hidden><label>Foyda-zarar oyi</label>
+            <input id="fMonth" type="month" value="${bugun.slice(0, 7)}">
+            <div class="hint">qaysi oy hisobotiga tushsin</div></div>
 
           <div class="wide"><label>Izoh</label>
             <input id="fNote" placeholder="ixtiyoriy"></div>
         </div>
 
-        <div class="row" style="gap:10px;margin-top:22px">
-          <button class="primary" onclick="saveOp()">Saqlash</button>
-          <button onclick="closeForm()">Bekor qilish</button>
-          <span class="muted" id="fSum" style="font-size:13px"></span>
+        <div class="ord-sum">
+          <div><span class="muted" style="font-size:13px">Dollarda</span>
+            <div class="big" id="fSum">—</div></div>
+          <div class="row" style="gap:10px">
+            <button class="primary" onclick="saveOp()">Saqlash</button>
+            <button onclick="closeForm()">Bekor qilish</button></div>
         </div>
       </div>
     </div>`;
@@ -127,73 +124,74 @@ function openForm(kind, sideId) {
 
 const closeForm = () => { $('modalRoot').innerHTML = ''; form = null; };
 
-//  Kurs katagi faqat SO'M da kerak: dollarda to'langan pul dollarda
-//  qoladi. Yonida darrov dollardagi summa chiqib turadi — kassir
-//  raqamni ko'zi bilan tekshiradi.
+//  Kurs katagi faqat SO'M da kerak; harajat oyi esa faqat harajatda.
+//  Ikkalasi ham tanlangan zahoti ochiladi — kassir bo'sh katakni
+//  qidirib o'tirmasin.
 function calc() {
   if (!$('fCur')) return;
   const so = $('fCur').value === 'UZS';
   $('fRateBox').hidden = !so;
+  const side = String($('fSide') ? $('fSide').value : '');
+  $('fMonthBox').hidden = !side.startsWith('expense:');
   const a = Number($('fAmt').value) || 0;
   const r = Number($('fRate').value) || 0;
   const d = so ? (r > 0 ? a / r : 0) : a;
-  $('fSum').innerHTML = d
-    ? `= <b>${usd(d)} $</b>${so && r ? ` (kurs ${uzs(r)})` : ''}` : '';
+  $('fSum').innerHTML = d ? `${usd(d)} <span class="muted">$</span>`
+    : '<span class="muted">—</span>';
 }
 
 async function saveOp() {
-  const side = (v) => {
-    const [kind, id] = String(v || '').split(':');
-    return { kind, id: Number(id) || null };
-  };
-  const F = FORMS[form];
-  const from = side($('fFrom').value);
-  const to = form === 'expense' ? { kind: 'expense', id: null }
-                                : side($('fTo').value);
+  const raw = String($('fSide').value || '');
+  const [kind, id] = raw.split(':');
+  if (!kind) return toast('Tomon tanlanmagan', true);
+  //  SHU kassa doim bir tomonda: kirimda oluvchi, chiqimda beruvchi.
+  //  Menejerda esa u o'zi (`me`) — serverda ham shunday qo'yiladi.
+  const meSide = { kind: 'worker', id: refs.me.id };
+  const acc = isMe() ? meSide
+    : { kind: 'account', id: (refs.accounts.find(a => a.code === A) || {}).id };
+  const other = kind === 'expense' ? { kind: 'expense', id: null }
+                                   : { kind, id: Number(id) };
   const body = {
     op_date: $('fDate').value || null,
-    from_kind: from.kind, from_id: from.id,
-    to_kind: to.kind,     to_id: to.id,
     currency: $('fCur').value,
     amount: $('fAmt').value,
-    rate: $('fRate') ? $('fRate').value : null,
+    rate: $('fRate').value || null,
     note: $('fNote').value,
-    ...(form === 'expense'
-      ? { expense_item_id: $('fItem').value, pl_month: $('fMonth').value } : {}),
+    ...(form === 'in' ? { from_kind: other.kind, from_id: other.id,
+                          to_kind: acc.kind, to_id: acc.id }
+                      : { from_kind: acc.kind, from_id: acc.id,
+                          to_kind: other.kind, to_id: other.id }),
+    ...(kind === 'expense'
+      ? { expense_item_id: Number(id), pl_month: $('fMonth').value } : {}),
   };
   try {
     const r = await App.api('/api/cash/ops',
       { method: 'POST', body: JSON.stringify(body) });
     toast(`${r.doc_no} · ${usd(r.amount_usd)} $`);
     closeForm();
-    tab === 'ops' ? loadOps() : loadBalance();
+    reload();
   } catch (e) { toast(e.message, true); }
 }
-
-App.start(async () => {
-  refs = await App.api('/api/cash/refs');
-  boss = refs.boss;
-  drawButtons();
-  drawTabs();
-  await loadBalance();
-}, 'cash.view', 'cash.entry', 'cash.manage');
 
 // ────────────────────────────────────────────── BOSHLANG'ICH QOLDIQ
 //
 //  Tizim ishga tushgan kundagi pul. Operatsiya EMAS: uning «qayerdan» i
 //  yo'q — pul tizimdan oldin ham bor edi. Shuning uchun kassaning o'z
-//  maydoni, mijozning `opening_debt` i bilan bir xil mantiq.
-function openOpening(id) {
-  const a = bal.accounts.find(x => x.id === id);
-  if (!a) return;
+//  maydoni, mijozning `opening_debt` i bilan bir xil mantiq. Shusiz
+//  kassa birinchi kundanoq minusda turardi.
+function openOpening() {
+  const a = here;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)closeForm()">
-      <div class="modal" style="max-width:520px">
-        <div class="row" style="justify-content:space-between;margin-bottom:6px">
-          <h1 style="margin:0">${esc(a.name)}</h1>
+      <div class="modal" style="max-width:560px">
+        <div class="row" style="justify-content:flex-end;margin-bottom:4px">
           <button onclick="closeForm()">Yopish</button></div>
-        <p class="muted" style="margin-bottom:18px">Boshlang'ich qoldiq —
-          tizim ishga tushgan kundagi pul.</p>
+        <div class="ord-head">
+          <div class="t">Boshlang'ich qoldiq</div>
+          <div class="n">${esc(a.name)}</div>
+        </div>
+        <p class="muted" style="margin:-8px 0 16px">Tizim ishga tushgan kundagi pul.
+          Bir martalik raqam: undan keyingi hammasi operatsiyalardan chiqadi.</p>
         <div class="fields">
           <div><label>Sana</label>
             <input id="oDate" type="date" value="${(a.opening_on || '').slice(0, 10)}">
@@ -210,19 +208,24 @@ function openOpening(id) {
               value="${Number(a.opening_usd) || ''}"><div class="hint"></div></div>
         </div>
         <div class="row" style="gap:10px;margin-top:22px">
-          <button class="primary" onclick="saveOpening(${id})">Saqlash</button>
+          <button class="primary" onclick="saveOpening()">Saqlash</button>
           <button onclick="closeForm()">Bekor qilish</button></div>
       </div></div>`;
 }
 
-async function saveOpening(id) {
+async function saveOpening() {
   try {
-    await App.api('/api/cash/accounts/' + id, { method: 'PATCH', body: JSON.stringify({
+    await App.api('/api/cash/accounts/' + here.id, { method: 'PATCH', body: JSON.stringify({
       opening_on: $('oDate').value || null,
       opening_uzs: $('oUzs').value || 0,
       opening_usd: $('oUsd').value || 0,
       opening_rate: $('oRate').value || null,
     }) });
-    toast('Saqlandi'); closeForm(); loadBalance();
+    toast('Saqlandi'); closeForm(); reload();
   } catch (e) { toast(e.message, true); }
 }
+
+App.start(async () => {
+  refs = await App.api('/api/cash/refs');
+  await reload();
+}, 'cash.view', 'cash.entry', 'cash.manage');

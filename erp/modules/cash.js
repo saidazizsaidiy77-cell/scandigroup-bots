@@ -76,6 +76,29 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
   });
 }));
 
+// ────────────────────────────────────────────────────── KASSALAR RO'YXATI
+//
+//  Bo'limga kirilganda avval SHU ro'yxat chiqadi, kassa tanlangach uning
+//  ichi ochiladi — omborlar bilan bir xil: zavodda ikkita pul joyi bor va
+//  ular bir-biriga o'xshamaydi, qoldig'i ham alohida sanaladi.
+//
+//  Menejerda kassa yo'q: uning «joyi» — o'z qo'lidagi pul. Shuning uchun
+//  unga bitta qator qaytadi va ro'yxat sahifasi to'g'ridan-to'g'ri
+//  o'shanga o'tkazadi (bitta ombor qolganda ham shunday bo'ladi).
+router.get('/list', need(...ANY), wrap(async (req, res) => {
+  const boss = isBoss(req);
+  const rows = boss ? (await db.query(
+    `SELECT * FROM v_cash_balance WHERE is_active ORDER BY sort, name`)).rows : [];
+  const me = (await db.query(
+    `SELECT * FROM v_worker_cash WHERE id = $1`, [req.user.id])).rows[0]
+    || { id: req.user.id, name: req.user.name, uzs: 0, usd: 0, total_usd: 0 };
+  res.json({
+    boss,
+    rows: rows.map((a) => ({ ...a, href: `/kassa.html?a=${encodeURIComponent(a.code)}` })),
+    me: { ...me, href: '/kassa.html?a=me' },
+  });
+}));
+
 // ──────────────────────────────────────────────────────────── QOLDIQLAR
 //
 //  Kassalar va xodimlar qo'lidagi pul. Menejerga faqat O'ZINIKI:
@@ -93,22 +116,40 @@ router.get('/balance', need(...ANY), wrap(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────── OPERATSIYALAR LENTASI
+//  Lenta bitta JOY haqida: kassa (`?a=MAIN`) yoki xodimning qo'li
+//  (`?a=me`). `dir` esa o'sha joyga nisbatan yo'nalish — kirim unga
+//  kelgani, chiqim undan ketgani. Shuning uchun bitta operatsiya ikki
+//  joyda ikki xil ko'rinadi va bu to'g'ri: menejerdan kassaga o'tgan pul
+//  menejerda chiqim, kassada kirim.
 router.get('/ops', need(...ANY), wrap(async (req, res) => {
   const boss = isBoss(req);
+  const kod = String(req.query.a || '').trim();
+  let sideKind = null, sideId = null;
+  if (kod === 'me') { sideKind = 'worker'; sideId = req.user.id; }
+  else if (kod) {
+    if (!boss) return res.status(403).json({ error: 'Ruxsat yo\'q' });
+    const a = (await db.query(
+      `SELECT id FROM cash_accounts WHERE code = $1`, [kod])).rows[0];
+    if (!a) return res.status(404).json({ error: 'Kassa topilmadi' });
+    sideKind = 'account'; sideId = a.id;
+  } else if (!boss) { sideKind = 'worker'; sideId = req.user.id; }
+
+  const dir = ['in', 'out'].includes(req.query.dir) ? req.query.dir : null;
   const { rows } = await db.query(
     `SELECT * FROM v_cash_ops
-      WHERE ($1::boolean OR (from_kind = 'worker' AND from_id = $2)
-                         OR (to_kind   = 'worker' AND to_id   = $2))
+      WHERE ($1::text IS NULL
+             OR (($6::text IS NULL OR $6 = 'out')
+                 AND from_kind = $1 AND from_id = $2)
+             OR (($6::text IS NULL OR $6 = 'in')
+                 AND to_kind = $1 AND to_id = $2))
         AND ($3::date IS NULL OR op_date >= $3)
         AND ($4::date IS NULL OR op_date <= $4)
         AND ($5::text IS NULL OR doc_no ILIKE '%' || $5 || '%'
              OR from_name ILIKE '%' || $5 || '%' OR to_name ILIKE '%' || $5 || '%')
-        AND ($6::int IS NULL OR (from_kind = 'account' AND from_id = $6)
-                             OR (to_kind   = 'account' AND to_id   = $6))
       ORDER BY op_date DESC, id DESC
       LIMIT 500`,
-    [boss, req.user.id, req.query.from || null, req.query.to || null,
-     req.query.q || null, req.query.account_id || null]);
+    [sideKind, sideId, req.query.from || null, req.query.to || null,
+     req.query.q || null, dir]);
   res.json({ rows, boss });
 }));
 

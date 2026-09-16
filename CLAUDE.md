@@ -535,14 +535,49 @@ turardi. So'mdagi qoldiq uchun o'sha kundagi kurs ham yoziladi.
 qoldiqdan chiqadi, tarixda qoladi. Pulda o'chirilgan qator eng yomon
 narsa.
 
-**Ikki xil odam, ikki xil ekran** (`public/kassa.html`):
+**Avval KASSALAR ro'yxati, keyin kassaning ichi** — omborlar bilan bir
+xil idiom: zavodda ikkita pul joyi bor va ular bir-biriga o'xshamaydi,
+qoldig'i ham alohida sanaladi. `/kassalar.html` — ro'yxat (har kassa
+kartochkasida so'm, dollar va jami $, yonida xodimning o'z puli);
+`/kassa.html?a=MAIN` — bitta kassaning ichi. `a=me` — xodimning O'Z
+qo'lidagi puli: menejer uchun bu uning yagona «kassasi», shuning uchun
+ro'yxat unga to'g'ridan-to'g'ri o'sha sahifani ochadi (bitta ombor
+qolganda ham shunday).
+
+Kassa ichida **uchta tab** — bu yerga nima KELDI, bu yerdan nima KETDI,
+va hammasi. Yo'nalish SHU joyga nisbatan: menejerdan kassaga o'tgan pul
+menejerda chiqim, kassada kirim, va ikkalasi ham to'g'ri. Lentada
+ikkinchi tomon yoziladi, o'zi emas — har qatorda bittasi baribir
+«Asosiy kassa» bo'lardi.
+
+**Order — bankdagi to'lov topshiriqnomasiga o'xshash oyna.** Kassir
+qog'ozdagi hujjatni to'ldirgandek to'ldiradi: tepada hujjat nomi va
+qaysi kassa, ostida sana, kimdan/kimga, summa, valyuta va kurs, eng
+pastda dollardagi raqam yirik shrift bilan. Shakl uchtа — **Kirim**,
+**Chiqim**, **Ko'chirish** — oltita emas: ikkinchi tomon ro'yxati
+aralash bo'ladi (mijoz, xodim, ta'minotchi), chunki zavodda pul shu
+uchovidan keladi va kassir «qaysi turdagi tomon» degan savol bilan ovora
+bo'lmasligi kerak. **Harajat ham chiqimning bir turi**: «Kimga»
+ro'yxatidan harajat moddasi tanlansa foyda-zarar oyi shu zahoti
+so'raladi.
+
+Hujjat raqami SAQLASHDA beriladi (`P26-0004`) — oldindan band qilib
+qo'yilsa, bekor qilingan oynadan bo'sh raqam qolardi.
+
+**Boshlang'ich qoldiq** kassa ichidagi **«✎ Boshlang'ich qoldiq»**
+tugmasida.
+
+**Ikki xil odam, ikki xil ekran**:
 
   · **`cash.entry`** — SAVDO MENEJERI. Bitta yo'l (`mijoz → o'zi`), o'z
-    qo'lidagi pul va o'z kirimlari. Kassa qoldig'i ham, boshqa xodimning
-    podotchyoti ham unga ko'rinmaydi — serverda ham tomonlarni o'zi
-    qo'yadi, klient boshqasini yuborsa qabul qilinmaydi.
-  · **`cash.manage`** — KASSIR va BUXGALTER: oltita operatsiya, kassalar
-    qoldig'i, butun lenta, bekor qilish.
+    qo'lidagi pul va o'z kirimlari; sahifa unga «Mening pulim» bo'lib
+    ochiladi. Kassa qoldig'i ham, boshqa xodimning podotchyoti ham unga
+    ko'rinmaydi — serverda ham tomonlarni o'zi qo'yadi, klient
+    boshqasini yuborsa qabul qilinmaydi. O'z qo'lidagi pulni sarflay
+    olmaydi ham: chiqim tugmasi faqat kassada va faqat kassirda.
+  · **`cash.manage`** — KASSIR va BUXGALTER: kassalar ro'yxati, har
+    kassaning kirim/chiqimi, ko'chirish, boshlang'ich qoldiq, bekor
+    qilish.
   · **`cash.view`** — faqat o'qish (rahbariyat).
 
 Savdo yo'nalishi chegarasi bu yerda ham: B2B menejeri eksport mijozidan
@@ -668,6 +703,7 @@ erp/
   modules/             express router'lar
   public/              sahifalar; app.js — menyu va sessiya
                        yukxati.js — yuk xati hujjati (ikki sahifa chizadi)
+                       kassa-form.js — kirim/chiqim orderi oynasi
   test/                node:test, HTTP orqali
 ```
 

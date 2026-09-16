@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bank va kassa · ZELTA</title>
+<title>Kassa · ZELTA</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#f3f2ef">
@@ -13,46 +13,54 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="stylesheet" href="/style.css">
 <style>
-/*  Maydonlar bir xil kenglikdagi panjarada va TEPADAN tekislanadi:
-    sana katagi ochilma ro'yxatdan bir necha piksel baland, pastdan
+/*  Maydonlar bir xil kenglikdagi panjarada va TEPADAN tekislanadi: sana
+    katagi ochilma ro'yxatdan bir necha piksel baland va pastdan
     tekislansa sarlavhalar siljib qolardi. */
 .fields{display:grid;gap:14px;align-items:start;
   grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 .fields .wide{grid-column:1/-1}
-/*  Katak ostidagi izoh joyi oldindan ajratilgan — matn chiqqanda
-    qo'shni maydon sakramaydi. */
 .hint{font-size:12px;color:var(--muted);margin-top:6px;min-height:17px}
+
+/*  ORDER — bankdagi to'lov topshiriqnomasiga o'xshash oyna: tepada
+    hujjat nomi va kassa, ostida maydonlar, pastda dollardagi summa.
+    Kassir qog'ozdagi hujjatni to'ldirgandek to'ldiradi. */
+.ord-head{text-align:center;padding:2px 0 16px;border-bottom:1px solid var(--line);
+  margin-bottom:18px}
+.ord-head .t{font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--muted)}
+.ord-head .n{font-size:18px;font-weight:600;margin-top:5px}
+.ord-sum{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  flex-wrap:wrap}
+.ord-sum .big{font-size:26px;font-weight:600}
 </style>
 <script src="/app.js"></script>
 </head>
 <body>
 
 <div class="top">
-  <div class="brand"><span class="dot"></span><h1>Bank va kassa</h1></div>
+  <div class="brand"><span class="dot"></span><h1 id="title">Kassa</h1></div>
   <div class="row" id="erpUser"></div>
 </div>
 
-<!--  Amallar sarlavhada emas, alohida qatorda: kassirda oltitasi bor va
-      telefonda sarlavhaga sig'maydi. Bu yerda o'ralib tushadi. -->
+<div id="kpis" class="grid" style="margin-bottom:16px"></div>
 <div class="row" id="btnBar" style="gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
 <div class="row" id="tabs" style="margin-bottom:16px;gap:8px;flex-wrap:wrap"></div>
-<div id="kpis" class="grid" style="margin-bottom:16px"></div>
 <div id="body"></div>
 <div id="modalRoot"></div>
 
 <script>
 // ============================================================================
-//  KASSA EKRANI
+//  BITTA KASSANING ICHI
 //
-//  Ikki xil odam ochadi va ikki xil narsa ko'radi:
+//  Manzil kassani aytadi: `/kassa.html?a=MAIN`. `a=me` — xodimning O'Z
+//  qo'lidagi pul: menejer uchun bu uning yagona «kassasi», kassir uchun
+//  esa oddiy podotchyot.
 //
-//    SAVDO MENEJERI (`cash.entry`) — o'z qo'lidagi pul va o'z kirimlari.
-//      Bitta tugma: «Mijozdan pul olindi». Kassa qoldig'i unga
-//      ko'rinmaydi va ko'rinishi ham kerak emas.
-//    KASSIR (`cash.manage`) — kassalar qoldig'i, xodimlar qo'lidagi pul,
-//      butun lenta va oltita operatsiya.
-//
-//  Chegara SERVERDA (modules/cash.js): bu yerda faqat ekran.
+//  Uchta tab bitta savolning uch tomoni: bu yerga nima KELDI, bu yerdan
+//  nima KETDI, va hammasi birga. Yo'nalish SHU joyga nisbatan — menejerdan
+//  kassaga o'tgan pul menejerda chiqim, kassada kirim, va ikkalasi ham
+//  to'g'ri.
 // ============================================================================
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
@@ -61,14 +69,14 @@ const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const d8 = v => !v ? '—'
   : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
-
-//  So'm butun sanaladi, dollar tiyinigacha: kassada 12 500 000 so'm va
-//  960.50 $ deb yoziladi, teskarisi emas.
+//  So'm butun sanaladi, dollar tiyinigacha.
 const uzs = v => (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
 const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-let refs = null, bal = null, ops = [], tab = 'balance', boss = false;
+const A = new URLSearchParams(location.search).get('a') || 'me';
+const isMe = () => A === 'me';
+let refs = null, here = null, ops = [], tab = 'in', boss = false;
 const f = { from: '', to: '', q: '' };
 
 function toast(msg, bad) {
@@ -79,107 +87,39 @@ function toast(msg, bad) {
   setTimeout(() => el.remove(), bad ? 5000 : 2600);
 }
 
-//  ── TUGMALAR ──────────────────────────────────────────────────────────
-//
-//  Menejerda bitta yo'l bor, kassirda oltita. Har tugma bitta OPERATSIYA
-//  SHAKLINI ochadi — shakllar bir xil endpointga boradi, farqi faqat
-//  qaysi tomon qayerda turishida (izoh: sql/cash.sql).
-const FORMS = {
-  in:       { t: 'Mijozdan pul olindi', from: 'customer', to: 'worker' },
-  accept:   { t: 'Xodimdan qabul qilish', from: 'worker', to: 'account' },
-  give:     { t: 'Xodimga berish',        from: 'account', to: 'worker' },
-  supplier: { t: "Ta'minotchiga to'lov",  from: 'account', to: 'supplier' },
-  expense:  { t: 'Harajat',               from: 'account', to: 'expense' },
-  move:     { t: "Ko'chirish / valyuta",  from: 'account', to: 'account' },
-};
-
-function drawButtons() {
-  const keys = boss ? Object.keys(FORMS) : ['in'];
-  $('btnBar').innerHTML = keys.map((k, i) =>
-    `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')"
-      >${esc(FORMS[k].t)}</button>`).join('');
-}
-
-function drawTabs() {
-  const T = [['balance', 'Qoldiq'], ['ops', 'Operatsiyalar']];
-  if (boss) T.push(['pl', 'Harajatlar']);
-  $('tabs').innerHTML = T.map(([k, t]) =>
-    `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}</button>`).join('');
-}
-
-async function go(k) {
-  tab = k; drawTabs();
-  $('body').innerHTML = `<p class="muted">Yuklanmoqda…</p>`;
-  if (k === 'balance') return loadBalance();
-  if (k === 'ops')     return loadOps();
-  return loadPL();
-}
-
-// ═════════════════════════════════════════════════════════════ QOLDIQ
-async function loadBalance() {
-  bal = await App.api('/api/cash/balance');
-  drawBalance();
-}
-
-//  Kassada so'm ham, dollar ham JISMONAN turadi va mudir ikkalasini
-//  alohida sanaydi — shuning uchun ikkita raqam. Uchinchisi (dollardagi
-//  jami) so'm KELGAN KUNIDAGI kursi bilan: «hozir sotsam qancha» degani
-//  emas, «qancha kirgan» degani.
-const money2 = b => `${uzs(b.uzs)} <span class="muted">so'm</span>
-  <span style="margin-left:10px">${usd(b.usd)} <span class="muted">$</span></span>`;
-
-function drawBalance() {
-  const jami = bal.accounts.reduce((s, a) => s + Number(a.total_usd || 0), 0);
-  const qolda = bal.workers.reduce((s, w) => s + Number(w.total_usd || 0), 0);
-  $('kpis').innerHTML = (boss ? [
-    ['Kassalarda', usd(jami) + ' $', 'kirgan kurs bilan'],
-    ["Xodimlar qo'lida", usd(qolda) + ' $', 'podotchyot'],
-  ] : [["Mening qo'limdagi pul", usd(qolda) + ' $', 'kassirga topshirilmagan']])
-    .map(([t, v, s]) => `<div class="card"><h2>${t}</h2><div class="kpi">${v}</div>
+// ─────────────────────────────────────────────────────────── SARLAVHA
+function drawHead() {
+  here.title = isMe() ? 'Mening pulim' : here.name;
+  $('title').textContent = here.title;
+  document.title = here.title + ' · ZELTA';
+  $('kpis').innerHTML = [
+    ["So'm", uzs(here.uzs), 'naqd so\'m'],
+    ['Dollar', usd(here.usd), 'naqd dollar'],
+    ['Jami', usd(here.total_usd) + ' $', 'kirgan kurs bilan'],
+  ].map(([t, v, s]) => `<div class="card"><h2>${t}</h2><div class="kpi">${v}</div>
       <div class="muted" style="font-size:13px">${s}</div></div>`).join('');
 
-  $('body').innerHTML = (boss ? `<div class="card" style="margin-bottom:16px">
-      <h2>Kassalar</h2>
-      <div style="overflow-x:auto"><table style="margin-top:10px">
-        <thead><tr><th>Kassa</th><th class="num">So'm</th><th class="num">Dollar</th>
-          <th class="num">Jami, $</th><th>Oxirgi harakat</th><th></th></tr></thead>
-        <tbody>${bal.accounts.map(a => `<tr>
-          <td><b>${esc(a.name)}</b><div class="muted" style="font-size:12px">${
-            a.kind === 'bank' ? 'hisob raqami' : 'naqd'}</div></td>
-          <td class="num">${uzs(a.uzs)}</td>
-          <td class="num">${usd(a.usd)}</td>
-          <td class="num"><b>${usd(a.total_usd)}</b></td>
-          <td class="muted">${a.last_on ? d8(a.last_on) : '—'}</td>
-          <td class="num"><button class="ic" title="Boshlang'ich qoldiq"
-            onclick="openOpening(${a.id})">✎</button></td>
-        </tr>`).join('')}</tbody></table></div>
-      <p class="muted" style="font-size:12.5px;margin-top:10px">
-        ✎ \u2014 tizim ishga tushgan kundagi qoldiq. Bir martalik raqam:
-        undan keyingi hammasi operatsiyalardan chiqadi.</p></div>` : '')
-    + `<div class="card">
-      <h2>${boss ? "Xodimlar qo'lida" : "Mening qo'limda"}</h2>
-      <p class="muted" style="font-size:12.5px;margin:6px 0 10px">
-        Menejer mijozdan olgan, kassirga hali topshirmagan puli ham shu yerda.</p>
-      ${bal.workers.length ? `<div style="overflow-x:auto"><table>
-        <thead><tr><th>Xodim</th><th class="num">So'm</th><th class="num">Dollar</th>
-          <th class="num">Jami, $</th><th>Oxirgi harakat</th>${
-          boss ? '<th></th>' : ''}</tr></thead>
-        <tbody>${bal.workers.map(w => `<tr>
-          <td><b>${esc(w.name)}</b></td>
-          <td class="num">${uzs(w.uzs)}</td>
-          <td class="num">${usd(w.usd)}</td>
-          <td class="num"><b>${usd(w.total_usd)}</b></td>
-          <td class="muted">${w.last_on ? d8(w.last_on) : '—'}</td>
-          ${boss ? `<td class="num"><button onclick="openForm('accept', ${w.id})"
-            >Qabul qilish</button></td>` : ''}
-        </tr>`).join('')}</tbody></table></div>`
-        : `<p class="muted">Hech kimning qo'lida pul yo'q.</p>`}
-    </div>`;
+  //  Kirim har doim bor. Chiqim va ko'chirish faqat KASSADA va faqat
+  //  kassirda: menejer o'z qo'lidagi pulni faqat kassirga topshiradi,
+  //  uni o'zi sarflay olmaydi.
+  const btn = [['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']];
+  if (!isMe() && boss) btn.push(['out', 'Chiqim'], ['move', "Ko'chirish / valyuta"]);
+  $('btnBar').innerHTML = btn.map(([k, t], i) =>
+    `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')
+    + (!isMe() && boss ? `<button class="ic" title="Boshlang'ich qoldiq"
+         onclick="openOpening()" style="margin-left:6px">✎ Boshlang'ich qoldiq</button>` : '');
+
+  $('tabs').innerHTML = [['in', 'Kirim'], ['out', 'Chiqim'], ['all', 'Hammasi']]
+    .map(([k, t]) => `<button ${k === tab ? 'class="primary"' : ''}
+      onclick="go('${k}')">${t}</button>`).join('');
 }
 
-// ══════════════════════════════════════════════════════ OPERATSIYALAR
+async function go(k) { tab = k; drawHead(); await loadOps(); }
+
+// ───────────────────────────────────────────────────────────── LENTA
 async function loadOps() {
-  const q = new URLSearchParams();
+  const q = new URLSearchParams({ a: A });
+  if (tab !== 'all') q.set('dir', tab);
   Object.entries(f).forEach(([k, v]) => v && q.set(k, v));
   ops = (await App.api('/api/cash/ops?' + q)).rows;
   drawOps();
@@ -187,11 +127,15 @@ async function loadOps() {
 function setF(k, v) { f[k] = v; loadOps(); }
 function clearF() { Object.keys(f).forEach(k => f[k] = ''); loadOps(); }
 
-//  Lenta: har qator «qayerdan → qayerga». Harajat bo'lsa moddasi va
-//  qaysi oyning foyda-zarariga tushgani ham yoziladi — to'lov sanasi
-//  bilan bir xil bo'lmasligi mumkin.
+//  «Kim» ustuni — SHU joyga nisbatan ikkinchi tomon: kirimda kimdan
+//  keldi, chiqimda kimga ketdi. Ikkala ustunni chiqarish qatorni
+//  cho'zardi va har qatorda bittasi baribir «Asosiy kassa» bo'lardi.
+const other = o => (o.to_kind === 'account' && o.to_name === here.name)
+  || (o.to_kind === 'worker' && isMe()) ? o.from_name : o.to_name;
+const kirimmi = o => (isMe() ? o.to_kind === 'worker' : o.to_kind === 'account')
+  && (isMe() || o.to_name === here.name);
+
 function drawOps() {
-  $('kpis').innerHTML = '';
   const bor = f.from || f.to || f.q;
   $('body').innerHTML = `<div class="card" style="margin-bottom:16px">
     <div class="fields">
@@ -207,22 +151,20 @@ function drawOps() {
     </div></div>
     <div class="card">
     ${ops.length ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>№</th><th>Sana</th><th>Qayerdan</th><th>Qayerga</th>
-        <th class="num">Summa</th><th class="num">$</th><th>Izoh</th>
-        ${boss ? '<th></th>' : ''}</tr></thead>
-      <tbody>${ops.map(o => `<tr${o.status === 'cancelled'
-          ? ' style="opacity:.5"' : ''}>
+      <thead><tr><th>№</th><th>Sana</th><th>Kim</th><th class="num">Summa</th>
+        <th class="num">$</th><th>Izoh</th>${boss ? '<th></th>' : ''}</tr></thead>
+      <tbody>${ops.map(o => `<tr${o.status === 'cancelled' ? ' style="opacity:.5"' : ''}>
         <td><b>${esc(o.doc_no)}</b>${o.status === 'cancelled'
           ? ' <span class="tag warn">bekor</span>' : ''}</td>
         <td class="muted">${d8(o.op_date)}</td>
-        <td>${esc(o.from_name || '')}</td>
-        <td>${esc(o.to_name || '')}${o.expense_group
-          ? `<div class="muted" style="font-size:11.5px">${esc(o.expense_group)}${
-              o.pl_month ? ' · ' + String(o.pl_month).slice(0, 7) : ''}</div>` : ''}</td>
+        <td>${kirimmi(o) ? '' : '<span class="muted">→ </span>'}${esc(other(o) || '')}${
+          o.expense_group ? `<div class="muted" style="font-size:11.5px">${
+            esc(o.expense_group)}${o.pl_month
+              ? ' · ' + String(o.pl_month).slice(0, 7) : ''}</div>` : ''}</td>
         <td class="num">${o.currency === 'UZS'
           ? `${uzs(o.amount)} <span class="muted" style="font-size:11px">so'm</span>`
           : `${usd(o.amount)} <span class="muted" style="font-size:11px">$</span>`}</td>
-        <td class="num"><b>${usd(o.amount_usd)}</b>${o.rate
+        <td class="num"><b>${kirimmi(o) ? '' : '&minus;'}${usd(o.amount_usd)}</b>${o.rate
           ? `<div class="muted" style="font-size:11px">${uzs(o.rate)}</div>` : ''}</td>
         <td class="muted" style="font-size:12.5px">${esc(o.note || '')}${o.order_no
           ? ` <span class="tag">${esc(o.order_no)}</span>` : ''}</td>
@@ -230,45 +172,23 @@ function drawOps() {
           ? `<button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
           : ''}</td>` : ''}
       </tr>`).join('')}</tbody></table></div>`
-      : `<p class="muted">Operatsiya yo'q.</p>`}
+      : `<p class="muted">${tab === 'in' ? 'Kirim' : tab === 'out' ? 'Chiqim' : 'Harakat'} yo'q.</p>`}
     </div>`;
 }
 
 async function cancelOp(id) {
   if (!confirm('Operatsiya bekor qilinsinmi? Tarixda qoladi, qoldiqdan chiqadi.')) return;
-  try { await App.api('/api/cash/ops/' + id, { method: 'PATCH' }); toast('Bekor qilindi'); loadOps(); }
+  try { await App.api('/api/cash/ops/' + id, { method: 'PATCH' }); toast('Bekor qilindi'); reload(); }
   catch (e) { toast(e.message, true); }
 }
 
-// ══════════════════════════════════════ HARAJAT: FOYDA-ZARAR KESIMIDA
-//
-//  To'lov sanasi bo'yicha emas, HISOBOT OYI bo'yicha: sentabrda
-//  to'langan avgust ijarasi avgust foydasini kamaytiradi.
-async function loadPL() {
-  const rows = (await App.api('/api/cash/expenses')).rows;
-  $('kpis').innerHTML = '';
-  if (!rows.length) {
-    $('body').innerHTML = `<div class="card"><h2>Harajat yozilmagan</h2>
-      <p class="muted" style="margin-top:8px">Harajat moddalari ro'yxati
-      kiritilgach, «Harajat» tugmasi bilan yoziladi.</p></div>`;
-    return;
-  }
-  const oylar = [...new Set(rows.map(r => String(r.pl_month).slice(0, 7)))].sort().reverse();
-  $('body').innerHTML = oylar.map(oy => {
-    const list = rows.filter(r => String(r.pl_month).startsWith(oy));
-    const jami = list.reduce((s, r) => s + Number(r.amount_usd), 0);
-    return `<div class="card" style="margin-bottom:16px">
-      <div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">${oy}</h2>
-        <div class="kpi" style="font-size:22px">${usd(jami)} $</div></div>
-      <div style="overflow-x:auto"><table style="margin-top:10px">
-        <thead><tr><th>Guruh</th><th>Modda</th><th class="num">Summa, $</th></tr></thead>
-        <tbody>${list.map(r => `<tr>
-          <td class="muted">${esc(r.group_name)}</td>
-          <td>${esc(r.item_name)}</td>
-          <td class="num"><b>${usd(r.amount_usd)}</b></td></tr>`).join('')}</tbody>
-      </table></div></div>`;
-  }).join('');
+async function reload() {
+  const d = await App.api('/api/cash/list');
+  boss = d.boss;
+  here = isMe() ? d.me : d.rows.find(a => a.code === A);
+  if (!here) { $('body').innerHTML = `<div class="card"><h2>Kassa topilmadi</h2></div>`; return; }
+  drawHead();
+  await loadOps();
 }
 </script>
 <script src="/kassa-form.js"></script>

@@ -204,9 +204,18 @@ const App = (() => {
     //  Kassa: pul harakati. Savdo menejeri ham shu sahifani ochadi,
     //  lekin unga faqat O'Z qo'lidagi pul va bitta tugma ko'rinadi —
     //  chegara serverda (`modules/cash.js`).
-    { href: '/kassa.html', mod: 'cash', nav: 'Kassa',
-      title: 'Bank va kassa', lead: 'Pul harakati',
-      text: "Asosiy kassa va bank \u00b7 so'm va dollar \u00b7 mijozdan kirim, podotchyot, harajat \u00b7 foyda-zarar oyi bo'yicha",
+    //  Bo'limga kirilganda avval KASSALAR ro'yxati chiqadi, kassa
+    //  tanlangach uning ichi ochiladi — omborlar bilan bir xil.
+    { href: '/kassalar.html', mod: 'cash', nav: 'Kassalar',
+      title: 'Bank va kassa', lead: 'Pul joylari',
+      text: "Asosiy kassa va bank hisob raqami \u00b7 so'm va dollar \u00b7 xodimlar qo'lidagi pul",
+      perm: ['cash.view', 'cash.entry', 'cash.manage'] },
+    //  Menyuda ko'rinmaydi: kassaga faqat ro'yxat orqali kiriladi.
+    //  Ro'yxatda qoladi — shusiz uning ustida turganda yuqoridagi
+    //  bo'lim yonib turmaydi (ombor bilan bir xil).
+    { href: '/kassa.html', mod: 'cash', nav: 'Kassa', hidden: true,
+      title: 'Kassa', lead: 'Kirim, chiqim, qoldiq',
+      text: "Bitta kassaning ichi \u00b7 kirim orderi \u00b7 chiqim va harajat \u00b7 boshlang'ich qoldiq",
       perm: ['cash.view', 'cash.entry', 'cash.manage'] },
     { href: '/qarzdorlik.html', mod: 'sales', nav: 'Qarzdorlik',
       title: 'Qarzdorlik', lead: 'Oraliq bo\'yicha',
