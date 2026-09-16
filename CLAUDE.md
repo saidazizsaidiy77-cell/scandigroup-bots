@@ -137,6 +137,31 @@ ustunga joy yo'q, shuning uchun raqam SONI katagining ichida turadi.
 yo'q, lekin o'z konverini kim kutayotganini bilishi kerak. Tsex doirasi
 u yerda ham CHEGARA — boshqa tsexning konveri so'ralsa 403.
 
+**Yangi buyurtma oltin nuqta bilan turadi** (`unit_bron_seen`). «N
+buyurtmada» yozuvining o'zi yetarli emas: u har kuni turadi va ko'z unga
+o'rganib qoladi — boshliq 10 talik konverni bir hafta ko'rib yurib,
+bugun unga mijoz biriktirilganini sezmay qolardi. Shuning uchun har
+xodim uchun «shu konverni qachon ochib ko'rdim» yozib boriladi: undan
+keyin tushgan bron YANGI bo'lib turadi. Bo'lim sarlavhasida ham soni
+chiqadi («2 ta yangi buyurtma») — telefonda bir bo'limga o'nlab qator
+tushadi va ularni birma-bir ko'zdan kechirish kerak bo'lardi.
+
+Belgi xodimga bog'langan: bir tsexda ikki boshliq bo'lsa, birining
+ko'rgani ikkinchisiniki hisoblanmaydi. **Alohida «o'qildi» tugmasi
+yo'q** — qatorni ochish ro'yxatni o'qish demak, va `/:id/bron` o'sha
+so'rovning o'zida belgini o'chiradi (ikkinchi so'rov yozilmadi).
+
+Bron SONI oshirilsa ham yangi — mijozga va'da qilingan dona o'zgardi;
+`created_at` bunda qimirlamaydi, shuning uchun alohida `changed_at`.
+Belgi ishga tushgan kungacha qo'yilgan bronlar yangi hisoblanmaydi
+(`migration_flags`: `bron-korildi`): aks holda birinchi deploy'dan keyin
+har tsexda o'nlab belgi chiqib, haqiqiy yangi buyurtma o'sha to'da
+orasida ko'rinmay ketardi.
+
+Telegram xabari **hozircha yozilmadi** (zavod qarori): ekrandagi belgi
+yetarli. Navbat jadvali (`notifications`) va `erp/notify.js` bazada
+tayyor turibdi — kerak bo'lganda yuboruvchi ulanadi, sahifaga tegilmaydi.
+
 **Boshlanmagan konver** — bo'limsiz kiritilgan. U marshrutining BIRINCHI
 qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
 stul tsexi. Tsex ekranining tepasida «Boshlanmagan» ro'yxati bo'lib

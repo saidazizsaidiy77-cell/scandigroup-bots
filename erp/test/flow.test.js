@@ -2124,6 +2124,54 @@ test('harajat moddasiz va oysiz yozilmaydi', async () => {
     `SELECT status FROM cash_ops WHERE id=$1`, [c.body.id])).status, 'cancelled');
 });
 
+//  YANGI BUYURTMA BELGISI — savdo konverni olsa tsex boshlig'i buni
+//  ekranda ko'radi. Belgi xodimga bog'liq: yonidagi boshliq ochgani
+//  buniki hisoblanmaydi, aks holda ikki kishilik tsexda xabar bitta
+//  odamga yetib, ikkinchisi bexabar qolardi.
+test('yangi buyurtma bo\'limlar ekranida belgilanadi va ko\'rilgach o\'chadi', async () => {
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 5, color: 'Oq', section_id: ARRA } ] })).body.created[0];
+
+  const qator = async () => {
+    const b = await korpus('GET', '/api/units/board');
+    assert.equal(b.status, 200, b.text);
+    for (const sc of b.body.sections) {
+      const x = sc.units.find((y) => y.id === u.id);
+      if (x) return x;
+    }
+    throw new Error('konver ekranda yo\'q');
+  };
+
+  assert.equal((await qator()).new_bron, false, 'broni yo\'q konverda belgi yo\'q');
+
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2, color: 'Oq' }] })).body;
+  const it = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: it.id, unit_id: u.id, qty: 2 })).status, 200);
+
+  const yangi = await qator();
+  assert.equal(yangi.new_bron, true, 'buyurtma tushdi — belgi chiqadi');
+  assert.equal(yangi.booked_qty, 2);
+
+  //  Boshqa xodim ochgani belgini o'chirmaydi
+  assert.equal((await admin('GET', `/api/units/${u.id}/bron`)).status, 200);
+  assert.equal((await qator()).new_bron, true, 'boshqa xodim ko\'rgani hisoblanmaydi');
+
+  //  O'zi ochsa — o'chadi. Alohida «o'qildi» tugmasi yo'q: qatorni
+  //  ochish ro'yxatni o'qish demak.
+  assert.equal((await korpus('GET', `/api/units/${u.id}/bron`)).status, 200);
+  assert.equal((await qator()).new_bron, false, 'ko\'rilgach belgi o\'chadi');
+
+  //  Soni o'zgarsa yana yangi: mijozga va'da qilingan dona boshqacha bo'ldi
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: it.id, unit_id: u.id, qty: 4 })).status, 200);
+  const oshdi = await qator();
+  assert.equal(oshdi.new_bron, true, 'bron soni o\'zgarsa yana belgilanadi');
+  assert.equal(oshdi.booked_qty, 4);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

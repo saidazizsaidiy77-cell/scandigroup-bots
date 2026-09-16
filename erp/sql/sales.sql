@@ -151,6 +151,52 @@ CREATE TABLE IF NOT EXISTS unit_reservations (
 CREATE INDEX IF NOT EXISTS idx_bron_unit ON unit_reservations(unit_id);
 CREATE INDEX IF NOT EXISTS idx_bron_item ON unit_reservations(order_item_id);
 
+--  Bronning soni oshirilsa ham bu YANGI xabar: mijozga va'da qilingan
+--  dona o'zgardi. `created_at` bunda qimirlamaydi — u konver birinchi
+--  marta olingan kun — shuning uchun alohida ustun.
+ALTER TABLE unit_reservations
+  ADD COLUMN IF NOT EXISTS changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+--  ── YANGI BUYURTMA BELGISI ───────────────────────────────────────────
+--
+--  Savdo konverni buyurtmaga olsa tsex boshlig'i buni BILISHI kerak:
+--  partiya endi mijozniki va navbat shunga qarab tuziladi. Ekrandagi
+--  «N buyurtmada» yozuvi buni aytadi, lekin u doim turadi — ko'z
+--  o'rganib qoladi va yangisi eskisidan ajralmaydi.
+--
+--  Shuning uchun har xodim uchun «shu konverni qachon ochib ko'rdim»
+--  yozib boriladi: undan keyin tushgan bron YANGI bo'lib turadi, qator
+--  ochilganda belgi o'chadi. Xodimga bog'langani muhim — bir tsexda ikki
+--  boshliq bo'lsa, birining ko'rgani ikkinchisiniki hisoblanmaydi.
+CREATE TABLE IF NOT EXISTS unit_bron_seen (
+  worker_id INT NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+  unit_id   INT NOT NULL REFERENCES production_units(id) ON DELETE CASCADE,
+  seen_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (worker_id, unit_id)
+);
+
+--  Belgi ishga tushgan kun. Shu kunga qadar qo'yilgan bronlar YANGI
+--  emas: ular allaqachon ekranda turgan va ko'rilgan. Bo'lmasa birinchi
+--  deploy'dan keyin har tsexda o'nlab oltin belgi chiqib, boshliq
+--  ularni birma-bir ochib tozalashga majbur bo'lardi — va o'sha kuni
+--  haqiqiy yangi buyurtma shu to'da orasida ko'rinmay ketardi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'bron-korildi') THEN
+    -- Eski bronning `changed_at` i ustun qo'shilgan kun emas, olingan kun
+    UPDATE unit_reservations SET changed_at = created_at;
+    INSERT INTO unit_bron_seen (worker_id, unit_id)
+    SELECT w.id, r.unit_id
+      FROM workers w
+      JOIN v_worker_permissions vp ON vp.worker_id = w.id
+                                  AND vp.permission_code = 'production.entry'
+      JOIN (SELECT DISTINCT unit_id FROM unit_reservations) r ON true
+     WHERE w.active
+    ON CONFLICT DO NOTHING;
+    INSERT INTO migration_flags (key) VALUES ('bron-korildi');
+  END IF;
+END $$;
+
 --  Eski biriktirishlar bron jadvaliga ko'chiriladi — bir marta, bayroq
 --  bilan. Keyin ustunning o'zi olib tashlanadi: ikki joyda turgan
 --  «band» belgisi bir kun bir-biriga zid javob berardi.

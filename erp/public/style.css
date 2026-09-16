@@ -71,6 +71,14 @@ tr:last-child td{border-bottom:none}
 .tag.ok{background:rgba(46,125,81,.12);color:var(--ok)}
 .tag.warn{background:rgba(167,112,26,.12);color:var(--warn)}
 .tag.bad{background:rgba(178,60,60,.10);color:var(--bad)}
+/* Yangi buyurtma — tsex boshlig'i hali ochib ko'rmagan bron. Qator
+   ochilganda o'chadi (unit_bron_seen). Oltin rang «e'tibor ber» degani:
+   bo'limlar ekranida boshqa hech narsa bu rangda emas, shuning uchun
+   ko'z uni ro'yxatni o'qimasdan ham topadi. Nuqta rang bilan birga —
+   tsexdagi ekran yorug'da turadi va faqat rangga ishonib bo'lmaydi. */
+.tag.yangi{background:rgba(168,130,28,.16);color:var(--accent-ink);font-weight:600}
+.new-bron{color:var(--accent-ink);font-weight:600}
+.new-bron::before{content:'\25CF';font-size:9px;vertical-align:2px;margin-right:5px}
 button{font:inherit;color:var(--text);background:var(--surface-2);
   border:1px solid var(--line);border-radius:10px;padding:12px 18px;cursor:pointer;
   transition:.15s}

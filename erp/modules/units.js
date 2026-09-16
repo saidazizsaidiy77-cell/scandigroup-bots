@@ -793,6 +793,16 @@ router.get('/:id/bron', need('production.view', 'production.entry'),
         ORDER BY created_at`, [req.params.id]),
   ]);
   if (!unit.rows[0]) return res.status(404).json({ error: 'Konver topilmadi' });
+
+  //  KO'RDIM belgisi. Qatorni ochish — ro'yxatni o'qish demak, shuning
+  //  uchun «yangi buyurtma» belgisi shu yerda o'chadi va alohida tugma
+  //  ham, ikkinchi so'rov ham yozilmadi: boshliq bosgan joyi o'qigan
+  //  joyi. Belgi xodimga bog'liq — yonidagi boshliqniki o'chmaydi.
+  await db.query(
+    `INSERT INTO unit_bron_seen (worker_id, unit_id) VALUES ($1,$2)
+     ON CONFLICT (worker_id, unit_id) DO UPDATE SET seen_at = NOW()`,
+    [req.user.id, req.params.id]);
+
   const reserved = rows.rows.reduce((n, r) => n + r.qty, 0);
   res.json({ unit: unit.rows[0], rows: rows.rows,
              reserved, free: unit.rows[0].qty - reserved });
@@ -1631,6 +1641,14 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             --  unga ochilmaydi. Qator bosilsa ostida kim, nechta va
             --  qachonga ekani chiqadi (/:id/bron).
             COALESCE(bk.qty, 0)::int AS booked_qty,
+            --  YANGI BUYURTMA — shu xodim qatorni ochib ko'rganidan
+            --  KEYIN tushgan bron. «N buyurtmada» yozuvi doim turadi va
+            --  ko'z unga o'rganib qoladi: boshliq 10 talik konverni
+            --  har kuni ko'rib yurib, bugun unga mijoz biriktirilganini
+            --  sezmay qolardi. Belgi qator ochilganda o'chadi
+            --  (unit_bron_seen, /:id/bron).
+            (bk.last_at IS NOT NULL
+             AND bk.last_at > COALESCE(sn.seen_at, '-infinity'::timestamptz)) AS new_bron,
             -- Hali hech bir bo'limda turmagan konverning egasi yo'q:
             -- u marshrutining BIRINCHI qadamiga qarab aniqlanadi.
             -- Aks holda kiritilgan konver hech kimning ekranida
@@ -1670,8 +1688,10 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             d.due_src
        FROM v_unit_register r
        JOIN production_units pu ON pu.id = r.id
-       LEFT JOIN LATERAL (SELECT SUM(x.qty) AS qty FROM unit_reservations x
+       LEFT JOIN LATERAL (SELECT SUM(x.qty) AS qty, MAX(x.changed_at) AS last_at
+                            FROM unit_reservations x
                            WHERE x.unit_id = r.id) bk ON true
+       LEFT JOIN unit_bron_seen sn ON sn.unit_id = r.id AND sn.worker_id = $2
        -- Guruhga javobgar tsex: oldinda turgan bo'lim boshqa odamning
        -- qo'liga o'tishini shu hal qiladi, bo'limning tsexi emas.
        JOIN product_groups g    ON g.id = r.group_id
@@ -1715,7 +1735,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
                  AND pu.handover_shop_id = r.owner_shop_id))
       -- Eng shoshilinchi yuqorida. Muddatsizlari oxirida: ular kutmayapti,
       -- ular haqida hali ma'lumot yo'q.
-      ORDER BY d.due_on NULLS LAST, r.conveyor_no`, [shopId])).rows;
+      ORDER BY d.due_on NULLS LAST, r.conveyor_no`, [shopId, req.user.id])).rows;
 
   // Ekrandagi bo'limlar: o'z tsexining bo'limlari, USTIGA shu tsex
   // boshqaradigan mahsulot marshrutidagi begona bo'limlar. Stul tsexi

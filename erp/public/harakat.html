@@ -138,6 +138,12 @@ function row(u, mine, isExit) {
   //  Buyurtmaga olingan konver BOSILADI: ostida kim, nechta va qachonga
   //  kutayotgani chiqadi. Savdo ekrani tsex boshlig'iga ochilmaydi va
   //  ochilishi ham kerak emas — u yerda narx va mijoz balansi turadi.
+  //
+  //  YANGISI oltin nuqta bilan ajraladi (`new_bron`): «6 buyurtmada»
+  //  yozuvining o'zi yetarli emas — u har kuni turadi va ko'z unga
+  //  o'rganib qoladi, bugun biriktirilgani esa sezilmay qolardi.
+  //  Qator ochilishi bilan belgi o'chadi, ya'ni boshliq ko'rgan narsa
+  //  ikkinchi marta e'tibor talab qilmaydi.
   return `<tr${u.booked_qty ? ` onclick="toggleBron(${u.id}, event)"
       style="cursor:pointer"` : ''}>
     <td class="c-sel">${sel}</td>
@@ -147,8 +153,9 @@ function row(u, mine, isExit) {
     <!--  Soni — JISMONAN nechta; ostida nechtasi mijozga va'da
           qilingani. Alohida ustun qilinmadi: telefonda qator panjaraga
           aylanadi va yettinchi ustunga joy yo'q. -->
-    <td class="c-qty num">${u.qty}${u.booked_qty ? `<div class="muted"
-      style="font-size:11.5px;font-weight:400">${u.booked_qty} buyurtmada</div>` : ''}</td>
+    <td class="c-qty num">${u.qty}${u.booked_qty ? `<div class="${
+      u.new_bron ? 'new-bron' : 'muted'}"
+      style="font-size:11.5px">${u.booked_qty} buyurtmada</div>` : ''}</td>
     <td class="c-due">${due(u)}${mine ? '' :
       `<div class="muted" style="font-size:12px">${esc(u.shop)} · ${esc(u.section)}</div>`}</td>
     <td class="c-act">${act}</td></tr>${openBron.has(u.id) ? bronRow(u) : ''}`;
@@ -216,7 +223,14 @@ function block(title, units, mine, note, hideEmpty, isExit) {
       <div class="row" style="gap:10px">
         <h2 style="margin:0">${esc(title)}</h2>
         <span class="muted" style="font-size:13px">${units.length} ta${
-          note ? ' · ' + esc(note) : ''}</span>
+          note ? ' · ' + esc(note) : ''}</span>${(() => {
+          //  Bo'limda nechta yangi buyurtma borligi SARLAVHADA: telefonda
+          //  bir bo'limga o'nlab qator tushadi va ularni birma-bir
+          //  ko'zdan kechirish kerak bo'lardi. Boshliq ekranni ochishi
+          //  bilan qaysi bo'limda yangilik borligini ko'radi.
+          const n = units.filter(u => u.new_bron).length;
+          return n ? `<span class="tag yangi">${n} ta yangi buyurtma</span>` : '';
+        })()}
       </div>
       ${canMove && ids.length > 1 ? `<button ${sel ? 'class="primary"' : ''}
         onclick="bulk([${ids}])">${sel ? `${sel} tasini o'tkazish` : 'Hammasini tanlash'}</button>` : ''}

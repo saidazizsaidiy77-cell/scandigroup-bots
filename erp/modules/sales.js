@@ -642,7 +642,8 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
     await client.query(
       `INSERT INTO unit_reservations (unit_id, order_item_id, qty, created_by)
        VALUES ($1,$2,$3,$4)
-       ON CONFLICT (unit_id, order_item_id) DO UPDATE SET qty = $3`,
+       ON CONFLICT (unit_id, order_item_id)
+       DO UPDATE SET qty = $3, changed_at = NOW()`,
       [u.id, it.id, n, req.user.id]);
     await stampUnit(client, u.id);
 
