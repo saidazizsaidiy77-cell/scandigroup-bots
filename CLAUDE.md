@@ -121,20 +121,21 @@ Bo'sh bo'lsa (penal, kamod, sp, stol) — eskicha: turgan joyining tsexi
 boshqaradi. Doira, topshirish va ekran — hammasi shu ustunga tayanadi
 (`v_unit_register.owner_shop_id`).
 
-**Tsex boshlig'i buyurtmalarni ko'radi** — «Bo'limlar aro harakat»
-sahifasidagi uchinchi tab (`/api/units/shop-orders`). Uning savoli
-bitta: «qaysi konver mijozga va'da qilingan va qachonga». Savdo ekrani
-unga ochilmaydi (savdo huquqi yo'q) va ochilishi ham kerak emas — u
-yerda narx, mijoz balansi va manzil turadi, bular boshqa odamning ishi.
+**Tsex boshlig'i konverni kim kutayotganini ko'radi** — bo'limlar
+ekranining O'ZIDA, alohida oyna emas. Konver yonida ikkita raqam turadi:
+soni (jismonan nechta) va ostida «N buyurtmada». Qator bosilsa ostida
+kim, nechta va qachonga kutayotgani chiqadi (`GET /api/units/:id/bron` —
+jurnalda ham shu yo'l, ikkinchi so'rov yozilmadi). **Pul yo'q.**
 
-Kartochkada: mijoz, zakaz raqami, muddat (KUN SONI bilan, bo'limlar
-ekranidagi kabi — kechikkani qizil va tepada) va SHU TSEXDAGI konverlar
-o'z bo'limi bilan. **Pul yo'q.** Doira — tsex doirasi, hamma joydagi
-kabi CHEGARA: boshqa tsexning `shop_id` si so'ralsa server 403 beradi.
-Javobgar tsex bo'yicha (`owner_shop_id`), turgan bo'limning tsexi
-bo'yicha emas: stul lak kabinasida tursa ham uni stul tsexi boshlig'i
-yuritadi. Omborga tushgan konver ro'yxatdan chiqadi — u endi ombor
-mudirining ishi.
+Alohida tab qilinmadi: boshliq kun bo'yi bo'limlar ro'yxatida turadi va
+javob o'sha yerda, ish qilayotgan joyida bo'lishi kerak — ikkinchi
+ekranga o'tib, qaytib kelib o'tirmasin. Alohida ustun ham qilinmadi:
+telefonda qator panjaraga aylanadi (`.board`, `style.css`) va yettinchi
+ustunga joy yo'q, shuning uchun raqam SONI katagining ichida turadi.
+
+`/:id/bron` huquqi `production.entry` ni ham oladi: tsex ustasida jurnal
+yo'q, lekin o'z konverini kim kutayotganini bilishi kerak. Tsex doirasi
+u yerda ham CHEGARA — boshqa tsexning konveri so'ralsa 403.
 
 **Boshlanmagan konver** — bo'limsiz kiritilgan. U marshrutining BIRINCHI
 qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
