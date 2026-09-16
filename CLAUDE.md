@@ -578,13 +578,22 @@ ikkinchi tomon yoziladi, o'zi emas — har qatorda bittasi baribir
 **Order — bankdagi to'lov topshiriqnomasiga o'xshash oyna.** Kassir
 qog'ozdagi hujjatni to'ldirgandek to'ldiradi: tepada hujjat nomi va
 qaysi kassa, ostida sana, kimdan/kimga, summa, valyuta va kurs, eng
-pastda dollardagi raqam yirik shrift bilan. Shakl uchtа — **Kirim**,
-**Chiqim**, **Ko'chirish** — oltita emas: ikkinchi tomon ro'yxati
-aralash bo'ladi (mijoz, xodim, ta'minotchi), chunki zavodda pul shu
-uchovidan keladi va kassir «qaysi turdagi tomon» degan savol bilan ovora
-bo'lmasligi kerak. **Harajat ham chiqimning bir turi**: «Kimga»
-ro'yxatidan harajat moddasi tanlansa foyda-zarar oyi shu zahoti
-so'raladi.
+pastda dollardagi raqam yirik shrift bilan. **Harajat ham chiqimning bir
+turi**: «Kimga» ro'yxatidan harajat moddasi tanlansa foyda-zarar oyi shu
+zahoti so'raladi.
+
+**Kirim va chiqim ro'yxatida XODIM YO'Q** (zavod qarori): korxonaga pul
+mijozdan keladi, ta'minotchiga va harajatga ketadi. Xodimning qo'lidagi
+pul korxonaning O'Z puli — uning kassaga kelishi kirim emas,
+TOPSHIRISH. Shuning uchun u alohida oynada: **«Xodimdan qabul qilish»**.
+
+Tugma faqat qo'lida korxona puli bor xodim bo'lganda chiqadi va
+ro'yxatda faqat o'shalar turadi — yonida qo'lidagi summa bilan («Alisher
+· 400,00 $»), kassir sanab olgan pulini shu raqam bilan solishtiradi.
+Zavodning yigirmata xodimini ro'yxatga chiqarish «kimdan pul olsam
+bo'ladi» degan savolga javob bermasdi. Topshirilgach xodim ro'yxatdan
+o'zi chiqadi: qo'lida hech narsa qolmadi, ikkinchi marta qabul qilib
+bo'lmaydi.
 
 Hujjat raqami SAQLASHDA beriladi (`P26-0004`) — oldindan band qilib
 qo'yilsa, bekor qilingan oynadan bo'sh raqam qolardi.

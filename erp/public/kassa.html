@@ -102,8 +102,14 @@ function drawHead() {
   //  Kirim har doim bor. Chiqim va ko'chirish faqat KASSADA va faqat
   //  kassirda: menejer o'z qo'lidagi pulni faqat kassirga topshiradi,
   //  uni o'zi sarflay olmaydi.
+  //  «Xodimdan qabul qilish» faqat qo'lida korxona puli bor xodim
+  //  bo'lganda chiqadi (`refs.workers` — shularning ro'yxati): topshiradigan
+  //  odam yo'q bo'lsa tugma ham kerak emas.
   const btn = [['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']];
-  if (!isMe() && boss) btn.push(['out', 'Chiqim'], ['move', "Ko'chirish / valyuta"]);
+  if (!isMe() && boss) {
+    if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
+    btn.push(['out', 'Chiqim'], ['move', "Ko'chirish / valyuta"]);
+  }
   $('btnBar').innerHTML = btn.map(([k, t], i) =>
     `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')
     + (!isMe() && boss ? `<button class="ic" title="Boshlang'ich qoldiq"
@@ -183,7 +189,13 @@ async function cancelOp(id) {
 }
 
 async function reload() {
-  const d = await App.api('/api/cash/list');
+  //  Ro'yxatlar ham qayta o'qiladi: xodim pulni topshirgach uning qo'lida
+  //  hech narsa qolmaydi va u «Xodimdan qabul qilish» ro'yxatidan
+  //  chiqishi kerak — aks holda kassir yo'q pulni ikkinchi marta
+  //  qabul qilib qo'yardi.
+  const [d, r] = await Promise.all([
+    App.api('/api/cash/list'), App.api('/api/cash/refs')]);
+  refs = r;
   boss = d.boss;
   here = isMe() ? d.me : d.rows.find(a => a.code === A);
   if (!here) { $('body').innerHTML = `<div class="card"><h2>Kassa topilmadi</h2></div>`; return; }

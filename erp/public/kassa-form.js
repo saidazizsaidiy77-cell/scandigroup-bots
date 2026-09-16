@@ -9,9 +9,10 @@
 //    CHIQIM      SHU kassadan → kimga ketdi (yoki harajatga)
 //    KO'CHIRISH  SHU kassadan → boshqa kassaga (valyuta almashish ham)
 //
-//  Ikkinchi tomon ro'yxati aralash bo'ladi (mijoz, xodim, ta'minotchi) —
-//  zavodda pul shu uchovidan keladi va shu uchoviga ketadi, va kassir
-//  «qaysi turdagi tomon» degan savol bilan ovora bo'lmasligi kerak.
+//  Ikkinchi tomon ro'yxatida XODIM YO'Q (zavod qarori): korxonaga pul
+//  mijozdan keladi va ta'minotchiga hamda harajatga ketadi. Xodim
+//  qo'lidagi pul — bu korxonaning O'Z puli, uning kassaga qaytishi
+//  «kirim» emas, topshirish; shuning uchun umumiy ro'yxatda turmaydi.
 let form = null;
 
 const SIDE_LABEL = { account: 'Kassa', worker: 'Xodim',
@@ -20,7 +21,10 @@ const SIDE_LABEL = { account: 'Kassa', worker: 'Xodim',
 const SIDE_LIST = (kind) => ({
   account:  (refs.accounts  || []).filter(a => isMe() || a.code !== A)
               .map(a => [`account:${a.id}`, a.name]),
-  worker:   (refs.workers   || []).map(w => [`worker:${w.id}`, w.name]),
+  //  Xodim faqat TOPSHIRISH oynasida, va yonida qo'lidagi pul turadi:
+  //  kassir sanab olgan pulini shu raqam bilan solishtiradi.
+  worker:   (refs.workers   || []).map(w => [`worker:${w.id}`,
+              w.name + (Number(w.total_usd) ? ` · ${usd(w.total_usd)} $` : '')]),
   customer: (refs.customers || []).map(c =>
               [`customer:${c.id}`, c.name + (c.region ? ` · ${c.region}` : '')]),
   supplier: (refs.suppliers || []).map(s => [`supplier:${s.id}`, s.name]),
@@ -40,10 +44,16 @@ function sidePicker(id, kinds, extra) {
 
 //  Shakl turiga qarab ikkinchi tomon kim bo'lishi mumkin.
 const FORMS = {
-  in:   { t: 'Kirim orderi',  who: 'Kimdan',
-          kinds: () => isMe() ? ['customer'] : ['customer', 'worker', 'supplier'] },
+  in:   { t: 'Kirim orderi',  who: 'Kimdan', into: true,
+          kinds: () => isMe() ? ['customer'] : ['customer', 'supplier'] },
   out:  { t: 'Chiqim orderi', who: 'Kimga',
-          kinds: () => ['worker', 'supplier'] },
+          kinds: () => ['supplier'] },
+  //  TOPSHIRISH — kirim emas. Menejer mijozdan olgan pul korxonaniki,
+  //  u shunchaki menejerning qo'lida turibdi; kassaga kelishi yangi
+  //  pul emas, o'sha pulning joyi o'zgarishi. Shuning uchun alohida
+  //  oyna va alohida nom: «Kirim» ro'yxatida xodim turmaydi.
+  take: { t: 'Xodimdan qabul qilish', who: 'Kim topshirdi', into: true,
+          kinds: () => ['worker'] },
   move: { t: "Ko'chirish", who: 'Qaysi kassaga', kinds: () => ['account'] },
 };
 
@@ -157,10 +167,10 @@ async function saveOp() {
     amount: $('fAmt').value,
     rate: $('fRate').value || null,
     note: $('fNote').value,
-    ...(form === 'in' ? { from_kind: other.kind, from_id: other.id,
-                          to_kind: acc.kind, to_id: acc.id }
-                      : { from_kind: acc.kind, from_id: acc.id,
-                          to_kind: other.kind, to_id: other.id }),
+    ...(FORMS[form].into ? { from_kind: other.kind, from_id: other.id,
+                             to_kind: acc.kind, to_id: acc.id }
+                         : { from_kind: acc.kind, from_id: acc.id,
+                             to_kind: other.kind, to_id: other.id }),
     ...(kind === 'expense'
       ? { expense_item_id: Number(id), pl_month: $('fMonth').value } : {}),
   };

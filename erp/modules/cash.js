@@ -66,7 +66,16 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
                ORDER BY name`, [chans]),
     boss ? db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`)
          : { rows: [] },
-    boss ? db.query(`SELECT id, name FROM workers WHERE active ORDER BY name`)
+    //  Xodim ro'yxati — QO'LIDA KORXONA PULI BORLARI. Kassir uchun
+    //  bu «kimdan pul olsam bo'ladi» degan savolning to'la javobi:
+    //  qolgan xodimlar bu ro'yxatda turishi kerak emas, ular pul
+    //  topshirmaydi. Qoldig'i ham birga keladi — kassir sanab olayotgan
+    //  pulini ekrandagi raqam bilan solishtiradi.
+    boss ? db.query(`SELECT c.id, c.name, c.uzs, c.usd, c.total_usd
+                       FROM v_worker_cash c
+                       JOIN workers w ON w.id = c.id
+                      WHERE w.active AND (c.uzs <> 0 OR c.usd <> 0)
+                      ORDER BY c.name`)
          : { rows: [] },
   ]);
   res.json({
