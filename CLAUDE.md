@@ -438,7 +438,13 @@ ko'rib turgan ro'yxat ostidan o'zgarib ketmasin. Kerak bo'lsa savdo
 qaytarib oladi (`/unsend`), mudir hali chiqarmagan bo'lsa.
 
 Mudirning «Jo'natish» tabida: nima, qancha, qayerga, kim kutib oladi va
-har konver qayerda turgani. **Bronning hammasi omborga yetib kelmaguncha
+har konver qayerda turgani. Tepasida **filtr**: chiqib ketish sanasi
+(dan–gacha), mijoz va zakaz raqami (`shipF`, `shipRows`). Sana —
+CHIQIB KETISH sanasi bo'yicha, savdo qachon yuborganiga qarab emas:
+mudir kunini «bugun nima ketadi» deb tuzadi. Mijozlar ro'yxati SHU
+ro'yxatdan yig'iladi — unga zavodning barcha mijozi emas, hozir
+chiqishni kutayotganlari kerak. Filtr KLIENTDA: ro'yxat kichik (faqat
+chiqarilishi kerak bo'lganlar) va yozgan zahoti javob beradi. **Bronning hammasi omborga yetib kelmaguncha
 tugma ishlamaydi** — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
 mijoz qarzini ham noto'g'ri oshirardi.
 

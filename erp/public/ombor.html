@@ -73,6 +73,11 @@ let rows = [], tab = 'stock', canAccept = false, canLedger = false;
 //  Chiqariladigan buyurtmalar: savdo omborga yuborganlari. Mudir
 //  mashinaga ortilganini ko'zi bilan ko'rib tasdiqlaydi.
 let ship = [], canShip = false;
+//  Jo'natish ro'yxatining filtri. Mudirda ertalab o'nlab buyurtma
+//  turadi va savoli aniq: «bugun nima chiqadi», «falonchining zakazi
+//  qaysi», «Z-638 qayerda». Ro'yxat kichik — filtr KLIENTDA ishlaydi,
+//  serverga qayta so'rov ketmaydi va yozgan zahoti javob beradi.
+const shipF = { from: '', to: '', customer: '', q: '' };
 const picked = new Set();
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -565,6 +570,52 @@ async function loadShip() {
   drawShip();
 }
 
+//  Sana — CHIQIB KETISH sanasi bo'yicha: mudir kunini shunga qarab
+//  tuzadi («bugun nima ketadi»), savdo qachon yuborganiga qarab emas.
+//  Sanasi qo'yilmagan buyurtma oraliq tanlanganda chiqmaydi: u hali
+//  kunga bog'lanmagan.
+const shipRows = () => ship.filter(o => {
+  const d = (o.due_on || '').slice(0, 10);
+  const q = shipF.q.trim().toLowerCase();
+  return (!shipF.from || (d && d >= shipF.from))
+      && (!shipF.to   || (d && d <= shipF.to))
+      && (!shipF.customer || String(o.customer_id) === shipF.customer)
+      && (!q || String(o.order_no || '').toLowerCase().includes(q));
+});
+
+function setShipF(k, v) { shipF[k] = v; drawShip(); }
+function clearShipF() { Object.keys(shipF).forEach(k => shipF[k] = ''); drawShip(); }
+
+function shipFilter() {
+  //  Mijozlar ro'yxati SHU ro'yxatdan yig'iladi: mudirga zavodning
+  //  barcha mijozi emas, hozir chiqishni kutayotganlari kerak.
+  const mijozlar = [...new Map(ship.map(o => [o.customer_id, o.customer_name]))]
+    .sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'uz'));
+  const bor = shipF.from || shipF.to || shipF.customer || shipF.q;
+  return `<div class="card" style="margin-bottom:16px">
+    <div style="display:grid;gap:12px;align-items:start;
+         grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+      <div><label>Chiqib ketish \u2014 dan</label>
+        <input type="date" value="${esc(shipF.from)}"
+          onchange="setShipF('from', this.value)"></div>
+      <div><label>gacha</label>
+        <input type="date" value="${esc(shipF.to)}"
+          onchange="setShipF('to', this.value)"></div>
+      <div><label>Mijoz</label>
+        <select onchange="setShipF('customer', this.value)">
+          <option value="">\u2014 barchasi \u2014</option>
+          ${mijozlar.map(([id, nom]) => `<option value="${id}"${
+            shipF.customer === String(id) ? ' selected' : ''}>${esc(nom)}</option>`).join('')}
+        </select></div>
+      <div><label>Zakaz &#8470;</label>
+        <input value="${esc(shipF.q)}" placeholder="Z-638"
+          oninput="setShipF('q', this.value)"></div>
+      <div>${bor ? `<label>&nbsp;</label><button style="width:100%"
+        onclick="clearShipF()">Tozalash</button>` : ''}</div>
+    </div>
+  </div>`;
+}
+
 function drawShip() {
   if (!ship.length) {
     $('body').innerHTML = `<div class="card"><h2>Chiqariladigan buyurtma yo'q</h2>
@@ -572,7 +623,18 @@ function drawShip() {
       «Omborga yuborish» deganda u shu yerda paydo bo'ladi.</p></div>`;
     return;
   }
-  $('body').innerHTML = ship.map(o => {
+  const list = shipRows();
+  if (!list.length) {
+    $('body').innerHTML = shipFilter() + `<div class="card">
+      <h2>Filtrga mos buyurtma yo'q</h2>
+      <p class="muted" style="margin-top:8px">Jami ${ship.length} ta buyurtma
+      chiqishni kutmoqda \u2014 filtrni kengaytiring.</p></div>`;
+    return;
+  }
+  $('body').innerHTML = shipFilter() + (list.length < ship.length
+    ? `<p class="muted" style="font-size:13px;margin-bottom:12px">${
+        list.length} ta \u00b7 jami ${ship.length} tadan</p>` : '')
+    + list.map(o => {
     const tayyor = o.in_warehouse_qty >= o.assigned_qty;
     return `<div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
