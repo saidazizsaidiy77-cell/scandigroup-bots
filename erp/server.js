@@ -33,7 +33,7 @@ app.use('/api/purchasing', require('./modules/purchasing'));
 app.use('/api/import', require('./modules/import'));
 app.use('/api/warehouse', require('./modules/warehouse'));
 app.use('/api/sales', require('./modules/sales'));
-// app.use('/api/cash',       require('./modules/cash'));        // kassa
+app.use('/api/cash', require('./modules/cash'));
 // app.use('/api/payroll',    require('./modules/payroll'));     // maosh
 
 // Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:

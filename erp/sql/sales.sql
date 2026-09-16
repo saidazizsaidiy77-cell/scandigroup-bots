@@ -261,51 +261,6 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
 DROP VIEW IF EXISTS v_fg_units CASCADE;
 ALTER TABLE production_units DROP COLUMN IF EXISTS order_item_id;
 
--- ═══════════════════════════════════════════════════ QARZDORLIK LENTASI
---
---  `v_customer_sales.balance` — mijozning BUGUNGI qarzi, bitta raqam.
---  Zavodga esa oraliq kerak: «1-sentabr holatiga qancha edi, oy ichida
---  qancha qo'shildi, 30-sentabrda qancha bo'ldi». Buning uchun balansni
---  emas, uni hosil qiladigan HARAKATLARNI sanasi bilan berish kerak —
---  shu view o'sha lenta.
---
---  Har qator bitta harakat:
---    `debit`  — QARZDOR: mijozning qarzi oshdi (mahsulot unga chiqdi)
---    `credit` — HAQDOR:  qarzi kamaydi (to'lov). Kassa moduli hali
---                        yozilmagan, shuning uchun ustun hozircha bo'sh —
---                        u yozilganda shu yerga UNION bilan bitta shox
---                        qo'shiladi va hisobot o'zi to'ladi.
---
---  Sanasi yo'q harakat 1900-01-01 bo'ladi: u har qanday oraliqdan OLDIN
---  bo'lgan hisoblanadi, ya'ni «boshiga» ustuniga tushadi va yig'indidan
---  yo'qolib qolmaydi. Boshlang'ich qarz ham lentada, o'z sanasi bilan
---  (`opening_debt_on` — tizim ishga tushgan kun).
-DROP VIEW IF EXISTS v_customer_ledger CASCADE;
-CREATE VIEW v_customer_ledger AS
-SELECT c.id                                           AS customer_id,
-       COALESCE(c.opening_debt_on, DATE '1900-01-01') AS on_date,
-       'opening'::text                                AS kind,
-       'Boshlang''ich qarz'::text                     AS note,
-       NULL::text                                     AS conveyor_no,
-       NULL::text                                     AS order_no,
-       --  Tomonga shu yerda ajratiladi: manfiy boshlang'ich qarz —
-       --  QARZDOR ustunidagi minus emas, HAQDOR (korxona mijozga
-       --  qarzdor, ya'ni oldindan to'lov). Aks holda aylanma ustunida
-       --  manfiy raqam turib, yig'indi ham shuni yutib yuborardi.
-       GREATEST(c.opening_debt, 0)::numeric(16,2)     AS debit,
-       GREATEST(-c.opening_debt, 0)::numeric(16,2)    AS credit
-  FROM customers c
- WHERE COALESCE(c.opening_debt, 0) <> 0
-UNION ALL
-SELECT u.customer_id,
-       COALESCE(u.ship_on, DATE '1900-01-01'),
-       'ship'::text,
-       (COALESCE(p.name, 'Mahsulot') || ' — ' || u.qty || ' ta')::text,
-       u.conveyor_no::text,
-       u.order_no::text,
-       GREATEST(COALESCE(u.total_amount, 0), 0)::numeric(16,2),
-       GREATEST(-COALESCE(u.total_amount, 0), 0)::numeric(16,2)
-  FROM production_units u
-  LEFT JOIN products p ON p.id = u.product_id
- WHERE u.status = 'shipped' AND u.customer_id IS NOT NULL
-   AND COALESCE(u.total_amount, 0) <> 0;
+-- Qarzdorlik lentasi (`v_customer_ledger`) KASSA faylida: unga to'lovlar
+-- ham tushadi, to'lovlar esa `cash_ops` da — u migratsiyada shu fayldan
+-- KEYIN yaratiladi (sql/cash.sql).

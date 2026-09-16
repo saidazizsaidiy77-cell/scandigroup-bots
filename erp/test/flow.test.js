@@ -1999,6 +1999,131 @@ test('tsex ustasiga savdo yopiq', async () => {
   assert.equal((await korpus('POST', '/api/sales/orders', { customer_id: 1 })).status, 403);
 });
 
+// ══════════════════════════════════════════════════════════════ KASSA
+//
+//  Zavod qoidasi: pulni MENEJER oladi — mijozning qarzi o'sha zahoti
+//  kamayadi, lekin pul kassaga tushmaydi. U menejerning qo'lida
+//  (podotchyot) va kassir sanab olgandan keyingina kassaga qo'shiladi.
+test('menejer mijozdan pul oladi, kassa esa kassir qabul qilgach to\'ladi', async () => {
+  const { db } = require('../db');
+  //  Kassir va menejer — haqiqiy rollar bilan, admin bilan emas:
+  //  huquq to'g'ri berilganini faqat shu ko'rsatadi.
+  for (const [nom, rol] of [['Sinov kassir', 'kassir'], ['Sinov menejer', 'sotuvchi']]) {
+    await db.query(`INSERT INTO workers (name) SELECT $1
+                     WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name = $1)`, [nom]);
+    await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                    SELECT id, $2 FROM workers WHERE name = $1
+                    ON CONFLICT DO NOTHING`, [nom, rol]);
+  }
+  const kassir  = H.api(base, await H.sessionFor('Sinov kassir'));
+  const menejer = H.api(base, await H.sessionFor('Sinov menejer'));
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const oldin = Number((await H.id(
+    `SELECT balance FROM v_customer_sales WHERE id=$1`, [mijoz])).balance);
+
+  //  Menejerda faqat BITTA yo'l: kassalar ro'yxati ham kelmaydi
+  const refs = (await menejer('GET', '/api/cash/refs')).body;
+  assert.equal(refs.boss, false);
+  assert.equal(refs.accounts.length, 0, 'kassa qoldig\'i menejerning ishi emas');
+  assert.ok(refs.customers.length);
+
+  //  12 500 000 so'm, kurs 12 500 → 1 000 $
+  const r = await menejer('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: mijoz,
+    currency: 'UZS', amount: 12500000, rate: 12500, note: 'Naqd' });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(Number(r.body.amount_usd), 1000, 'kurs bo\'yicha dollarga aylandi');
+
+  //  Mijozning qarzi DARROV kamaydi — u to'ladi, uning oldida savol yo'q
+  const keyin = Number((await H.id(
+    `SELECT balance FROM v_customer_sales WHERE id=$1`, [mijoz])).balance);
+  assert.equal(keyin, oldin - 1000);
+
+  //  Pul esa MENEJERNING qo'lida, kassada emas
+  const menejerId = (await H.id(`SELECT id FROM workers WHERE name='Sinov menejer'`)).id;
+  const qolda = await H.id(`SELECT total_usd FROM v_worker_cash WHERE id=$1`, [menejerId]);
+  assert.equal(Number(qolda.total_usd), 1000);
+  const kassa1 = await H.id(`SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`);
+  assert.equal(Number(kassa1.total_usd), 0, 'kassir sanab olmaguncha kassada yo\'q');
+
+  //  Kassir sanab oldi
+  const acc = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const q = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'worker', from_id: menejerId, to_kind: 'account', to_id: acc,
+    currency: 'UZS', amount: 12500000, rate: 12500 });
+  assert.equal(q.status, 200, q.text);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd), 1000);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [menejerId])).total_usd), 0);
+  //  Mijozning qarzi ikki marta kamaymadi: pul ko'chdi, to'lov o'zgarmadi
+  assert.equal(Number((await H.id(
+    `SELECT balance FROM v_customer_sales WHERE id=$1`, [mijoz])).balance), oldin - 1000);
+});
+
+test('menejer boshqa operatsiya yoza olmaydi', async () => {
+  const menejer = H.api(base, await H.sessionFor('Sinov menejer'));
+  const acc = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  //  Kassadan chiqim qilmoqchi — server tomonni O'ZI qo'yadi va
+  //  natijada bu «mijozdan menejerga» bo'lib qoladi, kassaga tegmaydi.
+  const oldin = Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd);
+  await menejer('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: acc, to_kind: 'expense',
+    currency: 'USD', amount: 10 });
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd), oldin,
+    'kassa qoldig\'i o\'zgarmadi');
+  //  Bekor qilish ham unga yopiq
+  const op = (await H.id(`SELECT id FROM cash_ops ORDER BY id DESC LIMIT 1`)).id;
+  assert.equal((await menejer('PATCH', '/api/cash/ops/' + op)).status, 403);
+  await H.id(`DELETE FROM cash_ops WHERE id=$1`, [op]);
+});
+
+//  ── HARAJAT: MODDA VA FOYDA-ZARAR OYI ────────────────────────────────
+//
+//  To'lov bugun ketadi, harajat esa boshqa oyniki bo'lishi mumkin:
+//  sentabrda to'langan avgust ijarasi AVGUST foydasini kamaytiradi.
+//  Ikkalasisiz harajat hisobotda «boshqa» bo'lib yo'qolib ketardi.
+test('harajat moddasiz va oysiz yozilmaydi', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const acc = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  await db.query(`INSERT INTO expense_groups (code, name) VALUES ('TEST','Sinov guruh')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO expense_items (group_code, name) VALUES ('TEST','Ijara')
+                  ON CONFLICT DO NOTHING`);
+  const item = (await H.id(`SELECT id FROM expense_items WHERE name='Ijara'`)).id;
+  const body = { from_kind: 'account', from_id: acc, to_kind: 'expense',
+                 currency: 'USD', amount: 200 };
+
+  const a = await kassir('POST', '/api/cash/ops', body);
+  assert.equal(a.status, 400);
+  assert.match(a.body.error, /modda/i);
+  const b = await kassir('POST', '/api/cash/ops', { ...body, expense_item_id: item });
+  assert.equal(b.status, 400);
+  assert.match(b.body.error, /oy/i);
+
+  const c = await kassir('POST', '/api/cash/ops',
+    { ...body, expense_item_id: item, pl_month: '2026-08', op_date: '2026-09-16' });
+  assert.equal(c.status, 200, c.text);
+  //  Hisobotda TO'LOV oyida emas, ko'rsatilgan oyda turadi
+  const pl = (await kassir('GET', '/api/cash/expenses')).body.rows
+    .find((x) => x.item_name === 'Ijara');
+  assert.equal(String(pl.pl_month).slice(0, 7), '2026-08');
+  assert.equal(Number(pl.amount_usd), 200);
+
+  //  Bekor qilingan operatsiya qoldiqdan chiqadi, tarixda qoladi
+  const oldin = Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd);
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + c.body.id)).status, 200);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd), oldin + 200);
+  assert.equal((await H.id(
+    `SELECT status FROM cash_ops WHERE id=$1`, [c.body.id])).status, 'cancelled');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

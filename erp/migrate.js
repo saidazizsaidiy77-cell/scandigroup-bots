@@ -25,6 +25,10 @@ const FILES = [
   //  bazada tartib buzilsa migratsiya birinchi ishga tushishdayoq
   //  yiqiladi — ya'ni sayt umuman ko'tarilmaydi.
   'warehouse.sql',       // ombor: qoldiq va harakat, konveyer raqami bo'yicha
+  //  Kassa ENG OXIRIDA: mijoz balansi va qarzdorlik lentasi endi
+  //  to'lovlarni ham o'qiydi, ya'ni `cash_ops` dan keyin qurilishi
+  //  kerak. Shuning uchun o'sha ikki view ham shu faylda.
+  'cash.sql',            // kassa: hisoblar, harajat moddalari, pul harakati
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

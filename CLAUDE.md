@@ -468,6 +468,94 @@ stul → Lak). Zahiraga muddat bashorat qilinmaydi.
 
 ---
 
+## Kassa
+
+**Ikkita pul joyi** (`cash_accounts`): **Asosiy kassa** (naqd) va **Bank
+hisob raqami**. Ikkalasida ham so'm va dollar yuriydi. Ro'yxat bazada —
+yangi hisob raqami ochilsa `sql/cash.sql` ga bitta qator, sahifaga
+tegilmaydi (omborlar bilan bir xil).
+
+**Hisob-kitob DOLLARDA.** So'mda kelgan pul o'sha operatsiyaning kursi
+bilan dollarga aylanadi (`amount_usd`) va mijozning yoki ta'minotchining
+qarzidan SHU dollar ayiriladi. Kurs operatsiya bilan birga qotib qoladi:
+ertaga kurs o'zgarsa kechagi to'lov qayta hisoblanmaydi. **Kursni har
+operatsiyada pulni kiritayotgan odam yozadi** (zavod qarori).
+
+**★ HAR OPERATSIYA — QAYERDAN → QAYERGA.** Pul o'zidan-o'zi paydo
+bo'lmaydi va yo'qolmaydi. Shuning uchun bitta jadval (`cash_ops`) va har
+qatorda ikki tomon; tomon beshta turdan biri: `account` (kassa),
+`worker` (xodimning qo'lida — podotchyot), `customer`, `supplier`,
+`expense` (harajat). Zavoddagi hamma harakat shu ikkilik bilan yoziladi:
+
+    menejer mijozdan pul oldi         mijoz    → menejer
+    kassir menejerdan qabul qildi     menejer  → asosiy kassa
+    xodimga podotchyot berildi        kassa    → xodim
+    ta'minotchiga to'lov              kassa    → ta'minotchi
+    harajat                           kassa    → harajat moddasi
+    kassalar aro / valyuta almashish  kassa    → kassa
+
+Har operatsiya `v_cash_flow` da IKKI QATOR bo'lib ochiladi (beruvchida
+minus, oluvchida plyus) — shundan keyin har qanday qoldiq bitta yig'indi
+bo'lib qoladi: kassaniki ham, xodim qo'lidagi puliki ham, mijozning
+to'lovi ham. Ikkita alohida hisob yozilmaydi va ular bir-biridan ajralib
+ketmaydi.
+
+**★ MENEJER OLGAN PUL DARROV KASSAGA TUSHMAYDI.** Menejer mijozdan pulni
+oldi — **mijozning qarzi o'sha zahoti kamayadi** (mijoz to'ladi, uning
+oldida savol qolmadi). Lekin pul hali kassada emas, MENEJERNING qo'lida:
+u kassirga topshirguncha korxonaga qarzdor bo'lib turadi
+(`v_worker_cash`). Kassir sanab olgach ikkinchi operatsiya yoziladi va
+pul asosiy kassaga qo'shiladi. Ikki bosqich tsexdagi topshirish bilan
+bir xil sababdan: hech kimning qo'l ko'tarishisiz pul kassaga kirib
+qolmasin.
+
+Xodimga berilgan podotchyot ham shu balansda: ikkalasi ham bitta narsa —
+xodimning qo'lidagi, korxonaga qarz pul.
+
+**★ HARAJAT QAYSI OYNING FOYDA-ZARARIDA.** To'lov bugun ketadi, harajat
+esa boshqa oyniki bo'lishi mumkin: sentabrda to'langan avgust ijarasi
+AVGUST foydasini kamaytiradi. Shuning uchun to'lov sanasi (`op_date`) va
+hisobot oyi (`pl_month`) ALOHIDA, va harajat yozilayotganda oy
+**so'raladi**. Modda ham, oy ham majburiy (`cash_ops_expense_needs`):
+ikkalasisiz harajat hisobotda «boshqa» bo'lib yo'qolib ketardi. Hisobot
+`v_expenses` — to'lov sanasi bo'yicha emas, hisobot oyi bo'yicha.
+
+**Harajat moddalari** (`expense_groups` → `expense_items`) — guruh va
+kichik guruh, ro'yxat zavoddan keladi. Bo'sh bo'lsa harajat yozib
+bo'lmaydi va bu to'g'ri: moddasiz harajat keyin hech qanday hisobotga
+tushmaydi.
+
+**Boshlang'ich qoldiq** (`cash_accounts.opening_*`) — tizim ishga
+tushgan kundagi pul. Bir martalik raqam, mijozning `opening_debt` i
+bilan bir xil mantiq: operatsiya EMAS, chunki uning «qayerdan» i yo'q —
+pul tizimdan oldin ham bor edi. Shusiz kassa birinchi kundanoq minusda
+turardi. So'mdagi qoldiq uchun o'sha kundagi kurs ham yoziladi.
+
+**Operatsiya O'CHMAYDI, bekor qilinadi** (`status='cancelled'`):
+qoldiqdan chiqadi, tarixda qoladi. Pulda o'chirilgan qator eng yomon
+narsa.
+
+**Ikki xil odam, ikki xil ekran** (`public/kassa.html`):
+
+  · **`cash.entry`** — SAVDO MENEJERI. Bitta yo'l (`mijoz → o'zi`), o'z
+    qo'lidagi pul va o'z kirimlari. Kassa qoldig'i ham, boshqa xodimning
+    podotchyoti ham unga ko'rinmaydi — serverda ham tomonlarni o'zi
+    qo'yadi, klient boshqasini yuborsa qabul qilinmaydi.
+  · **`cash.manage`** — KASSIR va BUXGALTER: oltita operatsiya, kassalar
+    qoldig'i, butun lenta, bekor qilish.
+  · **`cash.view`** — faqat o'qish (rahbariyat).
+
+Savdo yo'nalishi chegarasi bu yerda ham: B2B menejeri eksport mijozidan
+to'lov yozib qo'ya olmaydi (`channelsOf`).
+
+**Mijoz balansi to'ldi**: `boshlang'ich qarz + chiqib ketgan mahsulot −
+TO'LOVLAR`. Shu sababdan `v_customer_sales` va `v_customer_ledger`
+**`sql/cash.sql` ga ko'chirildi** — ular endi `cash_ops` ni o'qiydi, u
+esa migratsiyada eng oxirida yaratiladi. Eski joyida qolsa toza bazada
+yo'q jadvalni izlab yiqilardi, ya'ni sayt ko'tarilmasdi.
+
+---
+
 ## Kim nima ko'radi
 
 Huquqlar: `permissions` → `roles` → `role_permissions` → `worker_roles`.
@@ -585,8 +673,10 @@ erp/
 
 `sql/` tartibi: core → core-seed → production → production-seed →
 catalog-groups → production-sku → units → register → catalog → purchasing →
-routes → sales → warehouse. Yangi fayl qo'shsangiz `migrate.js` ga ham yozing.
-Ombor oxirida: uning view'i savdo qo'shadigan ustunni ham o'qiydi.
+routes → sales → warehouse → **cash**. Yangi fayl qo'shsangiz `migrate.js` ga
+ham yozing. Ombor savdodan keyin: uning view'i savdo qo'shadigan ustunni ham
+o'qiydi. Kassa eng oxirida: mijoz balansi va qarzdorlik lentasi endi
+to'lovlarni ham o'qiydi.
 
 **Menyuning yagona manbai** — `public/app.js` dagi `MODULES` va `PAGES`.
 Yangi sahifa faqat shu ro'yxatga qo'shiladi.
@@ -643,8 +733,12 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    `public/buyurtmalar.html`, `public/qarzdorlik.html`): buyurtma, bron
    (ombor, zahira va ishlab chiqarishdan), chiqarishni ombor mudiri
    nazorat qilishi va oraliq bo'yicha qarzdorlik.
-4. **Kassa** — kirim hujjatlari. Mahsulot narxi `$`, harajat `so'm` ham.
-   Balans shunda to'liq bo'ladi: hozir to'lovlar ayirilmaydi.
+4. **Kassa** — YOZILDI (`sql/cash.sql`, `modules/cash.js`,
+   `public/kassa.html`): ikkita hisob, so'm va dollar, menejer
+   podotchyoti, harajat foyda-zarar oyi bilan. Mijoz balansi to'ldi.
+   Qolgani: **harajat moddalari** va **ta'minotchilar** ro'yxati —
+   ikkalasi ham zavoddan keladi va kiritilmaguncha tegishli ro'yxat
+   bo'sh turadi.
 
 ## Ochiq savollar — zavoddan javob kutilmoqda
 
@@ -664,17 +758,19 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 - Buyurtma QISMAN chiqadimi? Hozir yo'q: bronning hammasi omborga
   kelmaguncha chiqarib bo'lmaydi.
 
-**Kassa**
-- ✅ HAL BO'LDI: pulni **savdo bo'limi o'zi kiritadi** (alohida kassir
-  emas) va u mijozning qarzidan ayriladi — ya'ni balans
-  `boshlang'ich + chiqib ketgan mahsulot − to'lovlar` bo'ladi.
-- Kirim hujjatida yana nima bo'ladi — qaysi buyurtma uchun, valyuta,
-  kurs, to'lov turi (naqd / plastik / o'tkazma)?
+**Kassa** — ✅ HAL BO'LDI va yozildi. Zavod qarorlari: pulni savdo
+menejeri o'zi kiritadi va mijozning qarzi o'sha zahoti kamayadi; pul
+kassirga topshirilguncha menejerning podotchyotida turadi; kursni har
+operatsiyada kiritayotgan odam yozadi; harajatda foyda-zarar oyi
+so'raladi.
+- Hali yo'q: **to'lov turi** (naqd / plastik / o'tkazma) alohida ustun
+  qilinmadi — kerak bo'lsa `cash_ops` ga bitta ustun va shakfga bitta
+  katak qo'shiladi.
 
 ---
 
 ## Hali yo'q
 
-Ombor (xom ashyo), kassa, ishbay oylik, sifat nazorati (brakda
+Ombor (xom ashyo), ishbay oylik, sifat nazorati (brakda
 aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline rejim,
 PIN uchun urinishlar cheklovi (ataylab — zavod qarori).

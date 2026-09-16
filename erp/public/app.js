@@ -201,6 +201,13 @@ const App = (() => {
       title: 'Buyurtmalar', lead: 'Mijoz nima so\'ragan',
       text: "Buyurtma qatorlari \u00b7 T/M ombordan va zahiradan konver biriktirish \u00b7 muddat va summa",
       perm: ['sales.view', 'sales.manage'] },
+    //  Kassa: pul harakati. Savdo menejeri ham shu sahifani ochadi,
+    //  lekin unga faqat O'Z qo'lidagi pul va bitta tugma ko'rinadi —
+    //  chegara serverda (`modules/cash.js`).
+    { href: '/kassa.html', mod: 'cash', nav: 'Kassa',
+      title: 'Bank va kassa', lead: 'Pul harakati',
+      text: "Asosiy kassa va bank \u00b7 so'm va dollar \u00b7 mijozdan kirim, podotchyot, harajat \u00b7 foyda-zarar oyi bo'yicha",
+      perm: ['cash.view', 'cash.entry', 'cash.manage'] },
     { href: '/qarzdorlik.html', mod: 'sales', nav: 'Qarzdorlik',
       title: 'Qarzdorlik', lead: 'Oraliq bo\'yicha',
       text: "Davr boshiga \u00b7 qarzdor/haqdor aylanmasi \u00b7 davr oxiriga \u00b7 mijoz kesimida harakatlari bilan",

@@ -341,36 +341,9 @@ LEFT JOIN customers c ON c.id = u.customer_id
 WHERE u.order_no IS NOT NULL AND u.status <> 'cancelled'
 GROUP BY u.order_no, COALESCE(c.name, 'T/M ombor');
 
--- Mijoz kesimi: nechta zakaz, qancha summa
-DROP VIEW IF EXISTS v_customer_sales CASCADE;
-CREATE VIEW v_customer_sales AS
-SELECT c.id, c.name, c.country, c.region, c.phone,
-       ch.name AS channel_name, c.channel,
-       c.manager_id, m.name AS manager_name,
-       c.opening_debt, c.opening_debt_on,
-       COUNT(u.id)                            AS units,
-       COALESCE(SUM(u.qty), 0)                AS qty,
-       COALESCE(SUM(u.total_amount), 0)       AS amount,
-       COUNT(DISTINCT u.order_no)             AS orders,
-       MAX(u.started_on)                      AS last_order_on,
-       --  BALANS. Zavod qoidasi: qarzga faqat CHIQIB KETGAN mahsulot
-       --  qo'shiladi. Buyurtma yozilgani yoki konver biriktirilgani hali
-       --  qarz emas — mahsulot mijozda emas.
-       --
-       --  To'lovlar ayirilmaydi: kassa moduli hali yo'q. U yozilganda
-       --  shu yerga bitta ayirma qo'shiladi va balans o'zi to'g'rilanadi.
-       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0)
-         AS shipped_amount,
-       COALESCE(c.opening_debt, 0)
-         + COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0)
-         AS balance
-FROM customers c
-LEFT JOIN customer_channels ch ON ch.code = c.channel
-LEFT JOIN workers m            ON m.id = c.manager_id
-LEFT JOIN production_units u   ON u.customer_id = c.id AND u.status <> 'cancelled'
-WHERE c.active
-GROUP BY c.id, c.name, c.country, c.region, c.phone, ch.name, c.channel,
-         c.manager_id, m.name, c.opening_debt, c.opening_debt_on;
+-- Mijoz kesimi (`v_customer_sales`) KASSA faylida: uning balansidan
+-- to'lovlar ayiriladi, to'lovlar esa `cash_ops` da — u migratsiyada
+-- shu fayldan KEYIN yaratiladi (sql/cash.sql).
 
 -- ★ Kanal kesimi: qaysi kanal qancha sotuv keltirdi.
 --   Reklama byudjetini taqsimlashda asosiy ko'rsatkich.

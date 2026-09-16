@@ -108,8 +108,17 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   -- kerak: nima sotishga tayyor turganini ko'rmasa savdo qila olmaydi.
   ('sotuvchi',     'sales.view'), ('sotuvchi', 'sales.manage'),
   ('sotuvchi',     'warehouse.view'), ('sotuvchi', 'production.view'),
+  --  Pulni mijozdan MENEJER oladi: dasturda mijozni tanlab kirim
+  --  qiladi va mijozning qarzi o'sha zahoti kamayadi. `cash.entry`
+  --  unga faqat SHUNI beradi — pul o'z podotchyotiga tushadi, kassa
+  --  qoldig'i va boshqa operatsiyalar ko'rinmaydi ham (modules/cash.js).
+  ('sotuvchi',     'cash.entry'),
 
+  --  Kassir pulni sanab oladi, chiqim qiladi va tuzatadi — ya'ni
+  --  `cash.manage`. `cash.entry` ning o'zi faqat «o'z qo'lidagi pul»
+  --  degani va kassirga yetmaydi.
   ('kassir',       'cash.view'), ('kassir', 'cash.entry'),
+  ('kassir',       'cash.manage'),
 
   ('buxgalter',    'cash.view'), ('buxgalter', 'cash.manage'),
   ('buxgalter',    'payroll.view'), ('buxgalter', 'payroll.manage'),
