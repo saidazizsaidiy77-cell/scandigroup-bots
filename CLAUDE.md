@@ -121,6 +121,21 @@ Bo'sh bo'lsa (penal, kamod, sp, stol) — eskicha: turgan joyining tsexi
 boshqaradi. Doira, topshirish va ekran — hammasi shu ustunga tayanadi
 (`v_unit_register.owner_shop_id`).
 
+**Tsex boshlig'i buyurtmalarni ko'radi** — «Bo'limlar aro harakat»
+sahifasidagi uchinchi tab (`/api/units/shop-orders`). Uning savoli
+bitta: «qaysi konver mijozga va'da qilingan va qachonga». Savdo ekrani
+unga ochilmaydi (savdo huquqi yo'q) va ochilishi ham kerak emas — u
+yerda narx, mijoz balansi va manzil turadi, bular boshqa odamning ishi.
+
+Kartochkada: mijoz, zakaz raqami, muddat (KUN SONI bilan, bo'limlar
+ekranidagi kabi — kechikkani qizil va tepada) va SHU TSEXDAGI konverlar
+o'z bo'limi bilan. **Pul yo'q.** Doira — tsex doirasi, hamma joydagi
+kabi CHEGARA: boshqa tsexning `shop_id` si so'ralsa server 403 beradi.
+Javobgar tsex bo'yicha (`owner_shop_id`), turgan bo'limning tsexi
+bo'yicha emas: stul lak kabinasida tursa ham uni stul tsexi boshlig'i
+yuritadi. Omborga tushgan konver ro'yxatdan chiqadi — u endi ombor
+mudirining ishi.
+
 **Boshlanmagan konver** — bo'limsiz kiritilgan. U marshrutining BIRINCHI
 qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
 stul tsexi. Tsex ekranining tepasida «Boshlanmagan» ro'yxati bo'lib

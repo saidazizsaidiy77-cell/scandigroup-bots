@@ -1946,6 +1946,46 @@ test('savdo yo\'nalishi buyurtmaga ham chegara bo\'ladi', async () => {
   assert.equal((await admin('GET', '/api/sales/orders/' + ok.body.id)).status, 200);
 });
 
+//  ── TSEX BOSHLIG'I O'Z BUYURTMALARINI KO'RADI ────────────────────────
+//
+//  Savdo ekrani unga yopiq, lekin «qaysi konver mijozga va'da qilingan»
+//  degan savolga javob kerak. Doira — tsex doirasi: boshqa tsexnikini
+//  ko'rmaydi.
+test('tsex boshlig\'i o\'z tsexidagi buyurtmalarni ko\'radi', async () => {
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 5, color: 'Tsex', section_id: ARRA }] })).body.created[0];
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: '2026-10-15',
+    items: [{ product_id: PENAL, qty: 5, color: 'Tsex', unit_price: 100 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 5 })).status, 200);
+
+  //  Korpus ustasi — konver uning tsexida (Arra)
+  const r = await korpus('GET', '/api/units/shop-orders');
+  assert.equal(r.status, 200, r.text);
+  const o = r.body.orders.find((x) => x.order_no === z.order_no);
+  assert.ok(o, 'buyurtma korpus ustasiga ko\'rinadi');
+  assert.equal(o.customer_name, 'Kanalsiz mijoz');
+  assert.equal(o.units.length, 1);
+  assert.equal(o.units[0].conveyor_no, u.conveyor_no);
+  assert.equal(o.units[0].qty, 5);
+  assert.equal(o.units[0].section, 'Arra');
+  //  Narx yo'q: ishlab chiqarish ekranida pul turmaydi
+  assert.equal(o.units[0].unit_price, undefined);
+  assert.equal(o.units[0].total_amount, undefined);
+
+  //  Doira CHEGARA: o'z doirasidan tashqaridagi tsexni so'rasa ham
+  const lak = (await H.id(`SELECT id FROM shops WHERE name = 'Lak tsexi'`)).id;
+  assert.equal((await korpus('GET', '/api/units/shop-orders?shop_id=' + lak)).status, 403);
+
+  //  Omborga tushgach ro'yxatdan chiqadi — endi ombor mudirining ishi
+  await admin('POST', `/api/units/${u.id}/to-warehouse`, { warehouse_code: 'TM' });
+  assert.ok(!(await korpus('GET', '/api/units/shop-orders')).body.orders
+    .some((x) => x.order_no === z.order_no), 'omborga tushgani chiqmaydi');
+});
+
 test('tsex ustasiga savdo yopiq', async () => {
   assert.equal((await korpus('GET', '/api/sales/orders')).status, 403);
   assert.equal((await korpus('POST', '/api/sales/orders', { customer_id: 1 })).status, 403);

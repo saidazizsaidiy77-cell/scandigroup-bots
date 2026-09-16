@@ -1591,6 +1591,85 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
 //
 //  Jurnalda sana qo'yilmagan bo'lsa eski hisob (marshrut va bo'lim
 //  tezligidan chiqqan taxmin) zaxira bo'lib qoladi.
+// ═══════════════════════════════════ TSEX BOSHLIG'INING BUYURTMALARI
+//
+//  Tsex boshlig'i telefonida ishlaydi va uning savoli bitta: «qaysi
+//  konver mijozga va'da qilingan va qachonga». Buyurtma ekrani unga
+//  ochilmaydi (savdo huquqi yo'q) va kerak ham emas: u yerda narx,
+//  mijoz balansi va manzil bor — bular boshqa odamning ishi.
+//
+//  Shuning uchun shu yerda faqat ishlab chiqarishga tegishlisi:
+//  qaysi buyurtma, qaysi mijoz, qachonga va'da qilingan va SHU TSEXDA
+//  turgan qaysi konverlar unga biriktirilgan. Pul yo'q.
+//
+//  Doira — tsex doirasi, hamma joydagi kabi CHEGARA: boshqa tsexning
+//  buyurtmasi ko'rinmaydi. Javobgar tsex bo'yicha (`owner_shop_id`),
+//  turgan bo'limning tsexi bo'yicha emas: stul lak kabinasida tursa ham
+//  uni stul tsexi boshlig'i yuritadi.
+//
+//  Omborga tushgan konver chiqadi: u endi ombor mudirining ishi.
+router.get('/shop-orders', need('production.view', 'production.entry'),
+  wrap(async (req, res) => {
+    const scope = scopeOf(req);
+    const shops = (await db.query(
+      `SELECT id, name, sort FROM shops
+        WHERE ($1::int[] IS NULL OR id = ANY($1))
+        ORDER BY sort, name`, [scope])).rows;
+    if (!shops.length) return res.json({ shops: [], shop: null, orders: [] });
+
+    const shopId = Number(req.query.shop_id) || shops[0].id;
+    if (!shops.some((s) => s.id === shopId))
+      return res.status(403).json({ error: 'Bu tsex sizning doirangizda emas' });
+
+    const rows = (await db.query(
+      `SELECT o.id AS order_id, o.order_no, o.due_on,
+              (o.due_on - CURRENT_DATE)::int AS days_left,
+              c.name AS customer_name, c.region,
+              u.id AS unit_id, u.conveyor_no, r.qty::int AS qty,
+              u.qty AS unit_qty, u.color, u.fabric, u.is_stock,
+              p.name AS product, g.name AS product_type, g.uom,
+              sc.name AS section, COALESCE(sc.is_hold, false) AS waiting,
+              reg.fg_on AS eta, reg.fg_src AS eta_src
+         FROM unit_reservations r
+         JOIN order_items i      ON i.id = r.order_item_id
+         JOIN orders o           ON o.id = i.order_id
+         JOIN customers c        ON c.id = o.customer_id
+         JOIN production_units u ON u.id = r.unit_id
+         JOIN products p         ON p.id = u.product_id
+         JOIN product_groups g   ON g.id = p.group_id
+         LEFT JOIN sections sc   ON sc.id = u.current_section_id
+         LEFT JOIN v_unit_register reg ON reg.id = u.id
+         --  Boshlanmagan konverning javobgari yo'q: u marshrutining
+         --  BIRINCHI qadamiga qarab topiladi — aks holda hech kimning
+         --  ekranida ko'rinmay qolardi (/board da ham shu qoida).
+         LEFT JOIN LATERAL (
+           SELECT s2.shop_id FROM v_product_route pr
+             JOIN sections s2 ON s2.id = pr.section_id
+            WHERE pr.product_id = u.product_id
+            ORDER BY pr.step_no LIMIT 1) first_step ON true
+        WHERE u.status = 'production'
+          AND o.status NOT IN ('shipped', 'cancelled')
+          AND COALESCE(reg.owner_shop_id, first_step.shop_id) = $1
+        --  Muddati yaqini tepada: boshliq kunini shunga qarab tuzadi.
+        ORDER BY o.due_on NULLS LAST, o.id, u.conveyor_no`, [shopId])).rows;
+
+    //  Qatorlar buyurtma bo'yicha yig'iladi: boshliq konverni emas,
+    //  BUYURTMANI ko'radi — bitta mijozning bir nechta konveri birga
+    //  tursin.
+    const orders = [];
+    for (const r of rows) {
+      let o = orders.find((x) => x.order_id === r.order_id);
+      if (!o) {
+        o = { order_id: r.order_id, order_no: r.order_no, due_on: r.due_on,
+              days_left: r.days_left, customer_name: r.customer_name,
+              region: r.region, units: [] };
+        orders.push(o);
+      }
+      o.units.push(r);
+    }
+    res.json({ shops, shop: shops.find((s) => s.id === shopId), orders });
+  }));
+
 router.get('/board', need('production.view', 'production.entry'), wrap(async (req, res) => {
   const scope = scopeOf(req);
 
