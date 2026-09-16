@@ -114,6 +114,19 @@ function openForm(id){
                    oninput="this.value = this.value.replace(/\D/g, '')"
                    value="${esc(w?.tg_id || '')}"></div>
 
+          <!--  Qo'liga pul beriladigan xodim. Zavodda pul hamma xodimga
+                berilmaydi — beshta odam oladi, shuning uchun kassada
+                ro'yxat shu belgi bilan qisqaradi. Belgi rolda emas,
+                XODIMDA: pul olish lavozimga emas, ishonchga bog'liq. -->
+          <div><label>Kassa</label>
+            <div class="row" style="gap:10px;align-items:center">
+              <input type="checkbox" id="wCash" style="width:auto"
+                     ${w?.can_hold_cash ? 'checked' : ''}>
+              <span style="flex:1">Qo'liga pul beriladi
+                <span class="muted" style="font-size:12px">· kassir shu xodimga
+                  chiqim yoza oladi</span></span>
+            </div></div>
+
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
               ${meta.roles.map(r => `
@@ -174,6 +187,7 @@ async function save(id){
     phone: $('wPhone').value.trim() || null,
     pin:   $('wPin').value.trim() || null,
     tg_id: $('wTg').value.trim() || null,
+    can_hold_cash: $('wCash').checked,
     roles,
   };
   if (id) body.active = $('wActive').checked;

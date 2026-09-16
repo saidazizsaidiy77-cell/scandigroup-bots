@@ -595,6 +595,18 @@ bo'ladi» degan savolga javob bermasdi. Topshirilgach xodim ro'yxatdan
 o'zi chiqadi: qo'lida hech narsa qolmadi, ikkinchi marta qabul qilib
 bo'lmaydi.
 
+**Pul hamma xodimga BERILMAYDI** — zavodda beshta odam oladi (zavod
+qarori). Shuning uchun berish ham alohida oynada: **«Xodimga pul
+berish»**, ro'yxatida faqat belgisi qo'yilganlar. Belgi XODIMDA
+(`workers.can_hold_cash`), Xodimlar sahifasida qo'yiladi — pul olish
+lavozimga emas, ishonchga bog'liq, va ro'yxat kodga yozilmaydi
+(4-qoida): oltinchi odam qo'shilsa bitta katakcha belgilanadi.
+
+Tekshiruv **serverda**: kassadan xodimga pul faqat belgisi bor odamga
+chiqadi, to'g'ridan-to'g'ri id yuborilsa ham qabul qilinmaydi. Faqat
+KASSADAN chiqqani tekshiriladi — menejer mijozdan olgan pul ham
+«xodimga» tushadi, lekin u berilgan pul emas, o'zi yig'ib olgani.
+
 Hujjat raqami SAQLASHDA beriladi (`P26-0004`) — oldindan band qilib
 qo'yilsa, bekor qilingan oynadan bo'sh raqam qolardi.
 

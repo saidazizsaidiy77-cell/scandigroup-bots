@@ -55,7 +55,8 @@ async function nextDocNo(client) {
 router.get('/refs', need(...ANY), wrap(async (req, res) => {
   const boss = isBoss(req);
   const chans = channelsOf(req);
-  const [accounts, groups, items, customers, suppliers, workers] = await Promise.all([
+  const [accounts, groups, items, customers, suppliers, workers, payable] =
+    await Promise.all([
     boss ? db.query(`SELECT id, code, name, kind FROM cash_accounts
                       WHERE is_active ORDER BY sort, name`) : { rows: [] },
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
@@ -77,10 +78,17 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
                       WHERE w.active AND (c.uzs <> 0 OR c.usd <> 0)
                       ORDER BY c.name`)
          : { rows: [] },
+    //  Qo'liga pul BERILADIGAN xodimlar — belgisi bor bo'lganlari
+    //  (izoh: sql/cash.sql). Yuqoridagi ro'yxat bilan ikki xil savol:
+    //  u «kimdan pul olsam bo'ladi», bu «kimga berish mumkin».
+    boss ? db.query(`SELECT id, name FROM workers
+                      WHERE active AND can_hold_cash ORDER BY name`)
+         : { rows: [] },
   ]);
   res.json({
     accounts: accounts.rows, groups: groups.rows, items: items.rows,
     customers: customers.rows, suppliers: suppliers.rows, workers: workers.rows,
+    payable: payable.rows,
     me: { id: req.user.id, name: req.user.name }, boss,
   });
 }));
@@ -234,6 +242,20 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
 
     await assertSide(client, from_kind, from_id, req);
     if (to_kind !== 'expense') await assertSide(client, to_kind, to_id, req);
+
+    //  ★ PUL HAMMA XODIMGA BERILMAYDI. Kassadan xodimning qo'liga pul
+    //  faqat belgisi qo'yilganlarga chiqadi (izoh: sql/cash.sql).
+    //  Tekshiruv SERVERDA: tugmani yashirish himoya emas.
+    //
+    //  Faqat KASSADAN chiqqani tekshiriladi — menejer mijozdan olgan
+    //  pul ham «xodimga» tushadi, lekin u berilgan pul emas, o'zi
+    //  yig'ib olgani: unga belgi shart emas.
+    if (to_kind === 'worker' && from_kind === 'account') {
+      const ok = await client.query(
+        `SELECT 1 FROM workers WHERE id = $1 AND active AND can_hold_cash`, [to_id]);
+      if (!ok.rowCount)
+        throw new Error('Bu xodimga pul berilmaydi — Xodimlar sahifasidan belgilang');
+    }
 
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('cash_doc_no'))`);
     const doc_no = await nextDocNo(client);

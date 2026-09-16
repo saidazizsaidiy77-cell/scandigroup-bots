@@ -239,6 +239,19 @@ SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active,
  GROUP BY a.id, a.code, a.name, a.kind, a.sort, a.is_active,
           a.opening_uzs, a.opening_usd, a.opening_rate, a.opening_on;
 
+-- ──────────────────────────────────────── KIMGA PUL BERISH MUMKIN
+--
+--  Zavodda pul hamma xodimga berilmaydi — beshta odam oladi (ta'minot,
+--  xo'jalik ishlari). Shuning uchun belgi XODIMDA turadi, kassa
+--  sahifasida emas: kassir ro'yxatdan tanlaydi, kimni tanlash mumkinligini
+--  esa administrator Xodimlar sahifasida hal qiladi. Ro'yxat kodga
+--  yozilmaydi (4-qoida) — ertaga oltinchi odam qo'shilsa katakcha
+--  belgilanadi, kod tegilmaydi.
+--
+--  Bu FAQAT berishni cheklaydi. Mijozdan pul olgan menejerning qo'lida
+--  pul baribir paydo bo'ladi va uni topshiradi — unga belgi kerak emas.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_hold_cash BOOLEAN NOT NULL DEFAULT false;
+
 -- ─────────────────────────────────────────────── XODIM QO'LIDAGI PUL
 --
 --  Ikki yo'ldan to'ladi: xodimga kassadan berilgan pul va

@@ -108,7 +108,12 @@ function drawHead() {
   const btn = [['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']];
   if (!isMe() && boss) {
     if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
-    btn.push(['out', 'Chiqim'], ['move', "Ko'chirish / valyuta"]);
+    btn.push(['out', 'Chiqim']);
+    //  «Xodimga pul berish» — belgisi qo'yilgan xodim bo'lsa. Zavodda
+    //  pul beshta odamga beriladi; belgi Xodimlar sahifasida qo'yiladi
+    //  va u yerdan boshqariladi (izoh: sql/cash.sql).
+    if ((refs.payable || []).length) btn.push(['give', 'Xodimga pul berish']);
+    btn.push(['move', "Ko'chirish / valyuta"]);
   }
   $('btnBar').innerHTML = btn.map(([k, t], i) =>
     `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')

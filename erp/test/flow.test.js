@@ -2172,6 +2172,41 @@ test('yangi buyurtma bo\'limlar ekranida belgilanadi va ko\'rilgach o\'chadi', a
   assert.equal(oshdi.booked_qty, 4);
 });
 
+//  PUL HAMMA XODIMGA BERILMAYDI — faqat belgisi qo'yilganlarga.
+//  Belgi Xodimlar sahifasidan qo'yiladi, tekshiruv esa serverda:
+//  tugmani yashirish himoya emas.
+test('kassadan pul faqat belgilangan xodimga beriladi', async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const admin2 = admin;
+  const xodim = (await H.id(`SELECT id FROM workers WHERE name='Korpus ustasi'`)).id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const body = { from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: xodim,
+                 currency: 'USD', amount: 100 };
+
+  //  Belgisi yo'q — berib bo'lmaydi
+  const yoq = await kassir('POST', '/api/cash/ops', body);
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /berilmaydi/);
+
+  //  Ro'yxatda ham turmaydi
+  assert.ok(!(await kassir('GET', '/api/cash/refs')).body.payable.some(w => w.id === xodim));
+
+  //  Belgilangach — ham ro'yxatda, ham qabul qilinadi
+  assert.equal((await admin2('PATCH', '/api/admin/workers/' + xodim,
+    { can_hold_cash: true })).status, 200);
+  assert.ok((await kassir('GET', '/api/cash/refs')).body.payable.some(w => w.id === xodim));
+  const ok = await kassir('POST', '/api/cash/ops', body);
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [xodim])).total_usd), 100);
+
+  //  Boshqa maydon saqlansa belgi o'chib qolmaydi
+  assert.equal((await admin2('PATCH', '/api/admin/workers/' + xodim,
+    { phone: '+998900000000' })).status, 200);
+  assert.equal((await H.id(
+    `SELECT can_hold_cash FROM workers WHERE id=$1`, [xodim])).can_hold_cash, true);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

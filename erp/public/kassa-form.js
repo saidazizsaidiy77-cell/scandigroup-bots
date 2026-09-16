@@ -15,7 +15,7 @@
 //  «kirim» emas, topshirish; shuning uchun umumiy ro'yxatda turmaydi.
 let form = null;
 
-const SIDE_LABEL = { account: 'Kassa', worker: 'Xodim',
+const SIDE_LABEL = { account: 'Kassa', worker: 'Xodim', payable: 'Xodim',
                      customer: 'Mijoz', supplier: "Ta'minotchi" };
 
 const SIDE_LIST = (kind) => ({
@@ -28,6 +28,10 @@ const SIDE_LIST = (kind) => ({
   customer: (refs.customers || []).map(c =>
               [`customer:${c.id}`, c.name + (c.region ? ` · ${c.region}` : '')]),
   supplier: (refs.suppliers || []).map(s => [`supplier:${s.id}`, s.name]),
+  //  Qo'liga pul BERILADIGAN xodimlar: belgisi Xodimlar sahifasida
+  //  qo'yiladi. Qiymati baribir `worker:` — bazada bitta tur, farq
+  //  faqat kimni tanlash mumkinligida.
+  payable:  (refs.payable   || []).map(w => [`worker:${w.id}`, w.name]),
 }[kind] || []);
 
 function sidePicker(id, kinds, extra) {
@@ -54,6 +58,11 @@ const FORMS = {
   //  oyna va alohida nom: «Kirim» ro'yxatida xodim turmaydi.
   take: { t: 'Xodimdan qabul qilish', who: 'Kim topshirdi', into: true,
           kinds: () => ['worker'] },
+  //  BERISH — chiqimning bir turi, lekin ro'yxati boshqa: pul hamma
+  //  xodimga emas, belgisi qo'yilgan bir nechta odamga beriladi.
+  //  Shu sababdan «Chiqim» ro'yxatiga qo'shilmadi: u yerda ta'minotchi
+  //  va harajat turadi, ular esa boshqa savolning javobi.
+  give: { t: 'Xodimga pul berish', who: 'Kimga', kinds: () => ['payable'] },
   move: { t: "Ko'chirish", who: 'Qaysi kassaga', kinds: () => ['account'] },
 };
 

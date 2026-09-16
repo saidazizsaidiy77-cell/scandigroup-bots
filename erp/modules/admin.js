@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
   const { rows } = await db.query(
-    `SELECT w.id, w.name, w.phone, w.pin, w.tg_id, w.active,
+    `SELECT w.id, w.name, w.phone, w.pin, w.tg_id, w.active, w.can_hold_cash,
             COALESCE(json_agg(json_build_object(
               'code', wr.role_code, 'name', r.name, 'surface', r.surface,
               'scope_shop_id', wr.scope_shop_id, 'scope_shop', sh.name,
@@ -68,7 +68,7 @@ function tgId(v) {
 }
 
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
-  const { name, phone, pin, tg_id, roles = [] } = req.body;
+  const { name, phone, pin, tg_id, can_hold_cash, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   if (pin && !/^\d{4,6}$/.test(String(pin)))
@@ -79,8 +79,10 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const w = (await client.query(
-      `INSERT INTO workers (name, phone, pin, tg_id) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [name.trim(), phone || null, pin ? String(pin) : null, tg])).rows[0];
+      `INSERT INTO workers (name, phone, pin, tg_id, can_hold_cash)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [name.trim(), phone || null, pin ? String(pin) : null, tg,
+       can_hold_cash === true])).rows[0];
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
@@ -104,7 +106,7 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
 
 router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
-  const { name, phone, pin, tg_id, active, roles } = req.body;
+  const { name, phone, pin, tg_id, active, can_hold_cash, roles } = req.body;
   if (pin && !/^\d{4,6}$/.test(String(pin)))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
   const tg = tgId(tg_id);
@@ -118,10 +120,15 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          phone  = COALESCE($3, phone),
          pin    = COALESCE($4, pin),
          tg_id  = COALESCE($5, tg_id),
-         active = COALESCE($6, active)
+         active = COALESCE($6, active),
+         --  Qo'liga pul beriladigan xodim (izoh: sql/cash.sql). Belgi
+         --  yuborilmasa tegilmaydi: kartochka boshqa maydon uchun
+         --  saqlansa belgi o'chib qolmasin.
+         can_hold_cash = COALESCE($7, can_hold_cash)
        WHERE id = $1`,
       [id, name || null, phone || null, pin ? String(pin) : null,
-       tg, typeof active === 'boolean' ? active : null]);
+       tg, typeof active === 'boolean' ? active : null,
+       typeof can_hold_cash === 'boolean' ? can_hold_cash : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
