@@ -2255,6 +2255,61 @@ test('harajat foyda-zarar va pul oqimi hisobotiga tushadi', async () => {
     'bekor qilingani foyda-zarardan chiqadi');
 });
 
+//  OMBOR TARIXI: kim qabul qilgani yoziladi va kirim/chiqim bo'yicha
+//  filtrlanadi. Yig'indi esa filtrdan qat'i nazar oraliqning o'zi
+//  haqida gapiradi — «faqat kirim» tanlanganda chiqim nol bo'lib
+//  ko'rinsa, mudir o'sha kuni hech narsa chiqmagan deb o'qirdi.
+test('ombor harakatida kim qabul qilgani ko\'rinadi va filtr ishlaydi', async () => {
+  //  Chiqish bo'limiga TO'G'RIDAN-TO'G'RI kiritilgan konver omborga
+  //  tushib bo'lgan bo'ladi (boshlang'ich qoldiq yo'li, createOne):
+  //  shuning uchun oddiy yo'l — boshidan kiritib, marshrut bo'ylab
+  //  haydab chiqarish.
+  const u = await newUnit({ qty: 2 });
+  //  Marshrut tsexdan tsexga o'tadi, o'tish esa ikki bosqich: avval
+  //  jo'natish, keyin qabul qilish. Shuning uchun o'tkazish yiqilsa
+  //  topshirish yoziladi va qayta urinib ko'riladi.
+  for (let i = 0; i < 20; i++) {
+    const at = await H.id(
+      `SELECT s.is_exit FROM production_units u
+         JOIN sections s ON s.id = u.current_section_id WHERE u.id = $1`, [u.id]);
+    if (at && at.is_exit) break;
+    let mv = await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+    if (mv.status !== 200) {
+      assert.equal((await admin('POST', '/api/units/handover',
+        { items: [u.id] })).status, 200);
+      mv = await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+    }
+    assert.equal(mv.status, 200, mv.text);
+  }
+  const ho = await admin('POST', '/api/units/handover', { items: [u.id] });
+  assert.equal(ho.status, 200, JSON.stringify(ho.body));
+  //  Qabul qilgan odam — ADMIN emas, ombor mudiri: ismi o'shaniki
+  //  bo'lishi kerak.
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const ac = await mudir('POST', '/api/units/stock/accept', { items: [u.id] });
+  assert.equal(ac.status, 200, JSON.stringify(ac.body));
+
+  const bugun = new Date().toISOString().slice(0, 10);
+  const q = `from=${bugun}&to=${bugun}`;
+  const hammasi = (await mudir('GET', '/api/units/stock/moves?' + q)).body;
+  const qator = hammasi.rows.find((r) => r.unit_id === u.id && r.kind === 'kirim');
+  assert.ok(qator, 'kirim tarixda');
+  assert.equal(qator.by_name, 'Sinov ombor mudiri');
+
+  //  Filtr: faqat chiqim so'ralsa kirim qatorlari kelmaydi
+  const chiqim = (await mudir('GET', `/api/units/stock/moves?${q}&kind=chiqim`)).body;
+  assert.ok(!chiqim.rows.some((r) => r.kind === 'kirim'), 'filtrda kirim yo\'q');
+  //  ...lekin yig'indi o'zgarmaydi
+  assert.equal(chiqim.kirim, hammasi.kirim, 'yig\'indi filtrdan qat\'i nazar');
+
+  //  Qabul qaytarilsa belgi ham o'chadi: konver omborda emas, qabul
+  //  qilgan odam ham yo'q.
+  assert.equal((await mudir('POST', '/api/units/stock/accept',
+    { items: [u.id], undo: true })).status, 200);
+  assert.equal((await H.id(
+    `SELECT fg_by FROM production_units WHERE id=$1`, [u.id])).fg_by, null);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

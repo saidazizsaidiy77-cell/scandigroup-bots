@@ -727,6 +727,10 @@ async function okShip(id) {
 //  moduli ulanmaguncha bo'sh keladi; ko'rinish shundan qat'i nazar tayyor
 //  turadi, savdo ulanganda o'zi to'ladi.
 let moves = null;
+//  Tanlangan filtr o'zgaruvchida saqlanadi: jadval har safar qaytadan
+//  chiziladi va <select> ning qiymati shu bilan tiklanmasa, har
+//  yuklashda «Hammasi» ga qaytib ketardi.
+let mKind = '';
 
 function drawMoves() {
   const d = moves;
@@ -740,6 +744,17 @@ function drawMoves() {
         <button onclick="period(0)">Bugun</button>
         <button onclick="period(7)">7 kun</button>
         <button onclick="period(30)">30 kun</button>
+        <!--  Kirim/chiqim filtri: ombor mudirining savoli ko'pincha bitta
+              tomon haqida bo'ladi — «bugun nima keldi» yoki «bugun nima
+              chiqdi». Aralash ro'yxatdan buni sanab chiqarish kerak
+              bo'lardi. Filtr SERVERDA (?kind=): oraliq katta bo'lsa
+              qatorlar chegarasiga yetib, klientda yarmi yo'qolardi. -->
+        <div style="margin-left:auto"><label>Amal</label>
+          <select id="mKind" onchange="loadMoves()">
+            ${[['', 'Hammasi'], ['kirim', 'Faqat kirim'], ['chiqim', 'Faqat chiqim']]
+              .map(([v, t]) => `<option value="${v}"${
+                mKind === v ? ' selected' : ''}>${t}</option>`).join('')}
+          </select></div>
       </div>
     </div>
 
@@ -756,6 +771,10 @@ function drawMoves() {
       <table class="board"><thead><tr>
         <th>Sana</th><th>Amal</th><th class="c-no">Konveyer &#8470;</th>
         <th class="c-name">Nomi</th><th class="c-qty num">Soni</th><th>Mijoz</th>
+        <!--  Kirimda kim QABUL QILGAN, chiqimda kim CHIQARGAN. Dona
+              yetishmaganda savol aynan shu bo'ladi va javobi shu
+              ustunda turadi — audit jurnalini ochish kerak emas. -->
+        <th>Kim</th>
       </tr></thead>
       <tbody>${d.rows.map(r => `
         <tr>
@@ -766,6 +785,9 @@ function drawMoves() {
             style="font-size:12px">${esc(r.product_type || '')}</div></td>
           <td class="c-qty num">${r.qty}</td>
           <td class="muted">${esc(r.customer_name)}</td>
+          <td>${r.by_name ? esc(r.by_name)
+            : '<span class="muted">&mdash;</span>'}<div class="muted"
+            style="font-size:12px">${r.kind === 'kirim' ? 'qabul qildi' : 'chiqardi'}</div></td>
         </tr>`).join('')}</tbody></table></div>`}`;
 }
 
@@ -781,6 +803,8 @@ async function loadMoves() {
   const p = wq(new URLSearchParams());
   p.set('from', $('mFrom')?.value || isoDay(new Date(Date.now() - 7 * 864e5)));
   p.set('to', $('mTo')?.value || isoDay(new Date()));
+  if ($('mKind')) mKind = $('mKind').value;
+  if (mKind) p.set('kind', mKind);
   moves = await App.api('/api/units/stock/moves?' + p);
   drawMoves();
 }

@@ -105,6 +105,19 @@ qaytadi. **Jurnaldagi tugmasi yashirilgan** — boshlang'ich qoldiq
 kiritilib bo'lgach kundalik ishda kerak emas. Qaytarish:
 `public/jurnal.html` dagi `FIX_TO_WAREHOUSE` ni `true` qilish.
 
+**Ombor tarixida KIM ustuni** — kirimda kim qabul qilgan, chiqimda kim
+chiqargan (`production_units.fg_by` va `ship_by`, ko'chirishda esa
+allaqachon bor `warehouse_moves.worker_id`). Dona yetishmaganda savol
+aynan shu bo'ladi; audit jurnalida yozuv bor, lekin u ombor mudiriga
+ochilmaydi va konver bo'yicha izlash uchun mo'ljallanmagan ham.
+
+Yonida **kirim/chiqim filtri**: mudirning savoli ko'pincha bitta tomon
+haqida — «bugun nima keldi» yoki «bugun nima chiqdi». Filtr SERVERDA
+(`?kind=`), chunki oraliq katta bo'lsa qatorlar chegarasiga yetib,
+klientda yarmi yo'qolardi. **Yig'indi kartochkalari esa filtrdan QAT'I
+NAZAR** hisoblanadi: «faqat kirim» tanlangan kunda chiqim nol bo'lib
+ko'rinsa, mudir o'sha kuni hech narsa chiqmagan deb o'qirdi.
+
 Omborlar aro ko'chirish `warehouse_moves` ga yoziladi va ombor tarixida
 IKKI qator bo'lib chiqadi: berganida chiqim, olganida kirim. Ishlab
 chiqarishdan kirim esa mahsulot BIRINCHI tushgan omborga yoziladi, hozir

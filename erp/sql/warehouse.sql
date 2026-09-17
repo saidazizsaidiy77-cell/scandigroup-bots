@@ -242,6 +242,18 @@ WHERE u.status = 'fg';
 --  Chiqim hozircha bo'sh: jo'natmani savdo moduli yozadi, u hali yo'q.
 --  Ko'rinish shundan qat'i nazar tayyor turadi — savdo ulanganda o'zi
 --  to'ladi va hisobot qayta yozilmaydi.
+--  ★ KIM QABUL QILDI, KIM CHIQARDI
+--
+--  Ombor tarixi «nima bo'ldi» ni aytardi, «kim qildi» ni emas. Dona
+--  yetishmaganda savol aynan shu bo'ladi: kim qabul qilgan, kim
+--  chiqargan. Audit jurnalida yozuv bor, lekin u ombor mudiriga
+--  ochilmaydi va konver bo'yicha izlash uchun mo'ljallanmagan ham.
+--
+--  Omborlar aro ko'chirishda bu allaqachon bor (`warehouse_moves.worker_id`),
+--  shuning uchun faqat ikkita joy qo'shiladi.
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS fg_by   INT REFERENCES workers(id);
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS ship_by INT REFERENCES workers(id);
+
 CREATE OR REPLACE VIEW v_fg_moves AS
 SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        u.conveyor_no, u.order_no, p.name AS product, g.name AS product_type,
@@ -256,12 +268,14 @@ SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        --  bo'lib ko'rinardi: biri ko'chirishdan, ikkinchisi shu yerdan.
        COALESCE((SELECT m.from_warehouse_id FROM warehouse_moves m
                   WHERE m.unit_id = u.id ORDER BY m.moved_on, m.id LIMIT 1),
-                u.warehouse_id, tm.id) AS warehouse_id
+                u.warehouse_id, tm.id) AS warehouse_id,
+       fgw.name AS by_name
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
 LEFT JOIN customers c ON c.id = u.customer_id
 LEFT JOIN warehouses tm ON tm.code = 'TM'
+LEFT JOIN workers fgw ON fgw.id = u.fg_by
 WHERE u.fg_on IS NOT NULL AND u.status IN ('fg', 'shipped')
 
 UNION ALL
@@ -270,12 +284,14 @@ SELECT 'chiqim', u.ship_on, u.id,
        u.conveyor_no, u.order_no, p.name, g.name,
        u.qty, u.color, u.fabric,
        COALESCE(c.name, 'T/M ombor'), u.total_amount,
-       COALESCE(u.warehouse_id, tm.id)
+       COALESCE(u.warehouse_id, tm.id),
+       shw.name
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
 LEFT JOIN customers c ON c.id = u.customer_id
 LEFT JOIN warehouses tm ON tm.code = 'TM'
+LEFT JOIN workers shw ON shw.id = u.ship_by
 WHERE u.ship_on IS NOT NULL AND u.status = 'shipped'
 
 UNION ALL
@@ -290,12 +306,14 @@ SELECT 'chiqim', m.moved_on, m.unit_id,
        -- `NULL::numeric` esa ustun turini o'zgartiradi va eski baza
        -- ustida CREATE OR REPLACE VIEW yiqiladi (CLAUDE.md, 2-qoida).
        wt.name, NULL::numeric(16,2),
-       m.from_warehouse_id
+       m.from_warehouse_id,
+       mw1.name
 FROM warehouse_moves m
 JOIN production_units u ON u.id = m.unit_id
 JOIN products p         ON p.id = u.product_id
 JOIN product_groups g   ON g.id = p.group_id
 JOIN warehouses wt      ON wt.id = m.to_warehouse_id
+LEFT JOIN workers mw1   ON mw1.id = m.worker_id
 
 UNION ALL
 
@@ -303,9 +321,11 @@ SELECT 'kirim', m.moved_on, m.unit_id,
        m.conveyor_no, u.order_no, p.name, g.name,
        m.qty, u.color, u.fabric,
        wf.name, NULL::numeric(16,2),
-       m.to_warehouse_id
+       m.to_warehouse_id,
+       mw2.name
 FROM warehouse_moves m
 JOIN production_units u ON u.id = m.unit_id
 JOIN products p         ON p.id = u.product_id
 JOIN product_groups g   ON g.id = p.group_id
-JOIN warehouses wf      ON wf.id = m.from_warehouse_id;
+JOIN warehouses wf      ON wf.id = m.from_warehouse_id
+LEFT JOIN workers mw2   ON mw2.id = m.worker_id;

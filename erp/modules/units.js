@@ -1386,7 +1386,7 @@ async function acceptStock(client, req, unitId, undo) {
       throw new Error(`${u.conveyor_no}: T/M omborda emas`);
     await client.query(
       `UPDATE production_units SET status = 'production', fg_on = NULL,
-              warehouse_id = NULL WHERE id = $1`, [unitId]);
+              warehouse_id = NULL, fg_by = NULL WHERE id = $1`, [unitId]);
     await refreshStock(client, u.product_id);
     return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: false };
   }
@@ -1405,9 +1405,12 @@ async function acceptStock(client, req, unitId, undo) {
   await client.query(
     `UPDATE production_units
         SET status = 'fg', fg_on = COALESCE(fg_on, CURRENT_DATE),
+            --  KIM qabul qilgani yoziladi: ombor tarixida «dona
+            --  yetishmayapti» degan savolning birinchi javobi shu.
+            fg_by = $2,
             warehouse_id = COALESCE(warehouse_id,
                                     (SELECT id FROM warehouses WHERE code = 'TM'))
-      WHERE id = $1`, [unitId]);
+      WHERE id = $1`, [unitId, req.user.id]);
   await refreshStock(client, u.product_id);
   return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: true };
 }
@@ -1532,22 +1535,34 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
   wrap(async (req, res) => {
   const from = req.query.from || today();
   const to   = req.query.to || from;
-  const { rows } = await db.query(
-    `SELECT * FROM v_fg_moves
-      WHERE on_date BETWEEN $1::date AND $2::date
-        AND ($3::text IS NULL OR kind = $3)
+  const WHERE = `on_date BETWEEN $1::date AND $2::date
         AND warehouse_id = (SELECT w.id FROM warehouses w
-                             WHERE w.code = COALESCE($4, 'TM')
-                               AND (w.perm IS NULL OR w.perm = ANY($5::text[]))
-                               AND ($6::int[] IS NULL OR w.id = ANY($6)
-                                    OR w.code = 'TM'))
-      ORDER BY on_date DESC, kind, conveyor_no
-      LIMIT 2000`, [from, to, req.query.kind || null, req.query.w || null,
-                    req.user.permissions, whIds(req)]);
+                             WHERE w.code = COALESCE($3, 'TM')
+                               AND (w.perm IS NULL OR w.perm = ANY($4::text[]))
+                               AND ($5::int[] IS NULL OR w.id = ANY($5)
+                                    OR w.code = 'TM'))`;
+  const args = [from, to, req.query.w || null, req.user.permissions, whIds(req)];
+  const kind = req.query.kind === 'kirim' || req.query.kind === 'chiqim'
+    ? req.query.kind : null;
+
+  //  Yig'indi filtrdan QAT'I NAZAR hisoblanadi: «faqat kirim» tanlangan
+  //  kunda chiqim nol bo'lib ko'rinsa, mudir o'sha kuni hech narsa
+  //  chiqmagan deb o'qirdi. Jadval filtrlanadi, kartochkalar esa
+  //  oraliqning o'zi haqida gapiradi.
+  const [rows, jami] = await Promise.all([
+    db.query(
+      `SELECT * FROM v_fg_moves
+        WHERE ${WHERE} AND ($6::text IS NULL OR kind = $6)
+        ORDER BY on_date DESC, kind, conveyor_no
+        LIMIT 2000`, [...args, kind]),
+    db.query(
+      `SELECT kind, COALESCE(SUM(qty), 0)::int AS qty
+         FROM v_fg_moves WHERE ${WHERE} GROUP BY kind`, args),
+  ]);
+  const yig = (k) => Number(jami.rows.find((r) => r.kind === k)?.qty || 0);
   res.json({
-    from, to, rows,
-    kirim:  rows.filter((r) => r.kind === 'kirim').reduce((n, r) => n + r.qty, 0),
-    chiqim: rows.filter((r) => r.kind === 'chiqim').reduce((n, r) => n + r.qty, 0),
+    from, to, kind, rows: rows.rows,
+    kirim: yig('kirim'), chiqim: yig('chiqim'),
   });
 }));
 

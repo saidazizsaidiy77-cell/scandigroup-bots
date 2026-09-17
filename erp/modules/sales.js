@@ -931,8 +931,12 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
       await client.query(
         `UPDATE production_units
             SET status = 'shipped', ship_on = COALESCE($2::date, CURRENT_DATE),
+                --  KIM chiqarganini konverning o'ziga yozamiz: buyurtmada
+                --  ham bor (orders.shipped_by), lekin ombor tarixi konver
+                --  bo'yicha o'qiladi va buyurtmagacha bormaydi.
+                ship_by = $5,
                 customer_id = $3, order_no = $4
-          WHERE id = $1`, [id, shipOn, o.customer_id, o.order_no]);
+          WHERE id = $1`, [id, shipOn, o.customer_id, o.order_no, req.user.id]);
       //  Bron ko'chgan qatorga o'tadi, keyin o'chadi: mahsulot chiqib
       //  ketgach bron degan narsa qolmaydi, tarix `ship_on` da.
       await client.query(`DELETE FROM unit_reservations WHERE id = $1`, [b.id]);
