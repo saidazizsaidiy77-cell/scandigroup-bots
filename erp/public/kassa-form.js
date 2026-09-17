@@ -197,6 +197,14 @@ const FORMS = {
   //  oyna va alohida nom: «Kirim» ro'yxatida xodim turmaydi.
   take: { t: 'Xodimdan qabul qilish', who: 'Kim topshirdi', into: true,
           kinds: () => ['worker'] },
+  //  ★ PODOTCHYOT BERISH — o'z oynasi. Chiqimning ichida ham turadi
+  //  («Xodim qo'liga pul» guruhi), lekin kassir buni kuniga bir necha
+  //  marta qiladi va har safar guruh tanlab o'tirishi kerak bo'lardi.
+  //  Topshirish allaqachon alohida tugma — berish ham shunday bo'lishi
+  //  kerak: ikkalasi bitta ishning ikki tomoni.
+  //  Ro'yxatda faqat BELGISI bor xodimlar (`payable`).
+  give: { t: 'Xodimga podotchyot', who: 'Kimga beriladi',
+          kinds: () => ['payable'] },
   move: { t: "Ko'chirish", who: 'Qaysi kassaga', kinds: () => ['account'] },
   //  ★ HISOBOT: xodim qo'lidagi puldan nimaga sarflaganini O'ZI yozadi.
   //  Pul qo'lidan chiqadi va harajatga aylanadi — podotchyot shu bilan
@@ -301,6 +309,11 @@ function openForm(kind) {
         </div>
       </div>
     </div>`;
+  //  Bo'sh ro'yxat sababini AYTADI: «— ro'yxat bo'sh —» degan yozuv
+  //  kassirni nima qilish kerakligi haqida savol bilan qoldirardi.
+  if (kind === 'give' && !(refs.payable || []).length)
+    $('fSideHint').textContent =
+      "Xodimlar sahifasida «Qo'liga pul beriladi» katagini belgilang";
   calc();
 }
 

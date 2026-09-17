@@ -692,8 +692,7 @@ topguncha butun ro'yxatni o'qib chiqardi. Endi «Kimga» da avval
 to'qqizta harajat guruhi ko'rinadi, ustiga **Ta'minotchiga to'lov** va
 **Xodim qo'liga pul** — kassir uchun ular ham «qayerga» degan savolning
 javobi, guruhlardan farqi yo'q. Tanlangach ikkinchi katak ochiladi va
-faqat o'shaning ichidagilar turadi. Shu sababdan xodimga pul berish
-alohida tugma EMAS.
+faqat o'shaning ichidagilar turadi.
 
 **★ TA'MINOTCHIGA TO'LOVDA UCHINCHI BOSQICH.** «Ta'minotchilarga
 to'lov» moddasi tanlansa QAYSI ta'minotchi ekani so'raladi: pul ma'lum
@@ -770,8 +769,15 @@ olindi» tugmasi esa savdo huquqi bor xodimda — tsex boshlig'iga u
 tugma ko'rsatilmaydi.
 
 **Pul hamma xodimga BERILMAYDI** — zavodda beshta odam oladi (zavod
-qarori). Shuning uchun berish ham alohida oynada: **«Xodimga pul
-berish»**, ro'yxatida faqat belgisi qo'yilganlar. Belgi XODIMDA
+qarori). Shuning uchun berish ham alohida oynada: **«Xodimga
+podotchyot»**, ro'yxatida faqat belgisi qo'yilganlar.
+
+Tugmasi «Xodimdan qabul qilish» ning YONIDA turadi — ikkalasi bitta
+ishning ikki tomoni va kassir ularni kuniga bir necha marta qiladi.
+Chiqimning ichida ham qolaveradi («Xodim qo'liga pul» guruhi), lekin
+o'sha yo'l har safar ikki bosqichdan o'tishni talab qilardi. Ro'yxat
+bo'sh bo'lsa sababi yoziladi: «Xodimlar sahifasida «Qo'liga pul
+beriladi» katagini belgilang». Belgi XODIMDA
 (`workers.can_hold_cash`), Xodimlar sahifasida qo'yiladi — pul olish
 lavozimga emas, ishonchga bog'liq, va ro'yxat kodga yozilmaydi
 (4-qoida): oltinchi odam qo'shilsa bitta katakcha belgilanadi.

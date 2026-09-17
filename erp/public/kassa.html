@@ -134,9 +134,11 @@ function drawHead() {
   if (isMe() && refs.my && refs.my.hold) btn.push(['spend', 'Harajat yozish']);
   if (isAcc() && boss) {
     if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
-    //  Xodimga pul berish alohida tugma EMAS: u chiqimning bir turi va
-    //  «Kimga» ro'yxatining birinchi bosqichida guruh bo'lib turadi
-    //  (izoh: kassa-form.js, outGroups).
+    //  Berish va qabul qilish yonma-yon turadi — bitta ishning ikki
+    //  tomoni. Chiqimning ichida ham qolaveradi, lekin kassir buni
+    //  kuniga bir necha marta qiladi va har safar guruh tanlab
+    //  o'tirmasin (izoh: kassa-form.js, FORMS.give).
+    btn.push(['give', 'Xodimga podotchyot']);
     btn.push(['out', 'Chiqim'], ['move', "Ko'chirish / valyuta"]);
   }
   //  Boshlang'ich qoldiq kassada ham, xodimning qo'lida ham bor: tizim
