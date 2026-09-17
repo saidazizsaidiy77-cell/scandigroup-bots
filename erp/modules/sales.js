@@ -913,7 +913,13 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     //  qolgan qismi boshqa mijozniki bo'lishi mumkin — u omborda qoladi,
     //  shuning uchun konver kerak bo'lsa bo'linadi.
     const bron = (await client.query(
-      `SELECT r.id, r.unit_id, r.qty, u.qty AS unit_qty, u.conveyor_no
+      `SELECT r.id, r.unit_id, r.qty, u.qty AS unit_qty, u.conveyor_no,
+              --  ★ QATORNING NARXI. Mijoz YUK XATIDAGI summani to'laydi,
+              --  konver kartochkasidagini emas: kartochkadagi narx
+              --  ishlab chiqarish uchun qo'yilgan, qatordagi esa
+              --  menejer mijoz bilan kelishgani. Ikkalasi har xil
+              --  bo'lsa balans hujjatdan farq qilib qolardi.
+              i.unit_price AS item_price
          FROM unit_reservations r
          JOIN order_items i      ON i.id = r.order_item_id
          JOIN production_units u ON u.id = r.unit_id
@@ -935,8 +941,14 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
                 --  ham bor (orders.shipped_by), lekin ombor tarixi konver
                 --  bo'yicha o'qiladi va buyurtmagacha bormaydi.
                 ship_by = $5,
+                --  Sotilgan narx konverga KO'CHADI: mijoz balansi shundan
+                --  hisoblanadi va yuk xatidagi summa bilan bir xil
+                --  bo'lishi shart. Qatorda narx yozilmagan bo'lsa
+                --  kartochkadagisi qoladi — yolg'on nol yozilmaydi.
+                unit_price = COALESCE($6::numeric, unit_price),
                 customer_id = $3, order_no = $4
-          WHERE id = $1`, [id, shipOn, o.customer_id, o.order_no, req.user.id]);
+          WHERE id = $1`, [id, shipOn, o.customer_id, o.order_no, req.user.id,
+                           b.item_price]);
       //  Bron ko'chgan qatorga o'tadi, keyin o'chadi: mahsulot chiqib
       //  ketgach bron degan narsa qolmaydi, tarix `ship_on` da.
       await client.query(`DELETE FROM unit_reservations WHERE id = $1`, [b.id]);

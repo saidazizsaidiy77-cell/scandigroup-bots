@@ -310,3 +310,38 @@ ALTER TABLE production_units DROP COLUMN IF EXISTS order_item_id;
 -- Qarzdorlik lentasi (`v_customer_ledger`) KASSA faylida: unga to'lovlar
 -- ham tushadi, to'lovlar esa `cash_ops` da — u migratsiyada shu fayldan
 -- KEYIN yaratiladi (sql/cash.sql).
+
+-- ═════════════════════════ CHIQIB KETGAN KONVERGA SOTILGAN NARX
+--
+--  Mijoz YUK XATIDAGI summani to'laydi, konver kartochkasidagini emas:
+--  kartochkadagi narx ishlab chiqarish uchun qo'yilgan, buyurtma
+--  qatoridagi esa menejer mijoz bilan kelishgani. Ikkalasi har xil
+--  bo'lsa balans hujjatdan farq qilib qolardi — mijoz 2 100 imzolab,
+--  qarzdorlikda 2 160 turardi.
+--
+--  Bundan keyin narx chiqarishda ko'chadi (`modules/sales.js`), lekin
+--  ALLAQACHON chiqib ketganlarda eski narx qolgan. Bir martalik
+--  ko'chirish shuni to'g'rilaydi.
+--
+--  Faqat ANIQ holatda: buyurtmada shu mahsulotdan BITTA qator bo'lsa va
+--  narxi yozilgan bo'lsa. Ikkita qator bo'lsa (bir xil mahsulot ikki
+--  rangda, ikki narxda) qaysi biri ekanini bu yerdan bilib bo'lmaydi —
+--  taxmin qilib qo'yilgan narx yolg'on qarz yozardi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'sotilgan-narx') THEN
+    UPDATE production_units u SET unit_price = t.narx
+      FROM (SELECT o.order_no, i.product_id,
+                   MIN(i.unit_price) AS narx
+              FROM orders o
+              JOIN order_items i ON i.order_id = o.id
+             WHERE i.unit_price IS NOT NULL
+             GROUP BY o.order_no, i.product_id
+            HAVING COUNT(*) = 1) t
+     WHERE u.status = 'shipped'
+       AND u.order_no = t.order_no
+       AND u.product_id = t.product_id
+       AND COALESCE(u.unit_price, -1) <> t.narx;
+    INSERT INTO migration_flags (key) VALUES ('sotilgan-narx');
+  END IF;
+END $$;

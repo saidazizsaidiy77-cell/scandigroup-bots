@@ -1851,8 +1851,11 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
   //  Shu mijozdan avvalgi testlarda ham mahsulot chiqqan, shuning uchun
   //  aniq raqam emas: boshlang'ich qarz ICHIDA ekani tekshiriladi.
   assert.ok(Number(r.opening) >= 500, String(r.opening));
-  //  Oktabrda chiqib ketgani: 4 × 250 (narxsiz konver lentaga tushmaydi)
-  assert.equal(Number(r.debit), 1000, String(r.debit));
+  //  ★ Oktabrda chiqib ketgani: 6 × 250 = 1500 — buyurtma QATORINING
+  //  narxi bo'yicha. Konverning o'zida narx yo'q edi (tsexdan kelgan
+  //  ikkitasi), lekin mijoz yuk xatidagi summani to'laydi: sotilgan
+  //  narx chiqarishda konverga ko'chadi (modules/sales.js).
+  assert.equal(Number(r.debit), 1500, String(r.debit));
   assert.equal(Number(r.credit), 0, 'kassa yo\'q — haqdor bo\'sh');
   //  Saldo o'z TOMONIDA beriladi: qarzdor — mijozning korxonaga qarzi,
   //  haqdor — korxonaning mijozga qarzi. Bitta ishorali raqam bo'lsa

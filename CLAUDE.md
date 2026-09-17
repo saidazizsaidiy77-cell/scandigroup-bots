@@ -507,6 +507,21 @@ buyurtma kartochkasida istalgan payt yoziladi va tuzatiladi,
 jo'natilgandan keyin ham (`PATCH /orders/:id/payment`). Bu SANA, summa
 emas: mijoz balansiga tegmaydi, to'lovning o'zini kassa moduli yozadi.
 
+**★ SOTILGAN NARX CHIQARISHDA KONVERGA KO'CHADI.** Mijoz YUK XATIDAGI
+summani to'laydi, konver kartochkasidagini emas: kartochkadagi narx
+ishlab chiqarish uchun qo'yilgan, buyurtma qatoridagi esa menejer mijoz
+bilan kelishgani. Ikkalasi har xil bo'lsa balans hujjatdan farq qilib
+qolardi — mijoz 2 100 imzolab, qarzdorlikda 2 160 turardi. Tsexdan
+kelgan konverda narx umuman bo'lmasligi ham mumkin va o'shanda chiqib
+ketgan mahsulot qarzga UMUMAN tushmasdi.
+
+Qatorda narx yozilmagan bo'lsa kartochkadagisi qoladi — yolg'on nol
+yozilmaydi. Allaqachon chiqib ketganlar bir martalik ko'chirish bilan
+to'g'rilandi (`migration_flags`: `sotilgan-narx`), faqat ANIQ holatda:
+buyurtmada shu mahsulotdan bitta qator bo'lsa. Ikkita bo'lsa (bir xil
+mahsulot ikki rangda, ikki narxda) qaysi biri ekanini bilib bo'lmaydi
+va taxmin qilingan narx yolg'on qarz yozardi.
+
 Tasdiqlangach konverlar `shipped` bo'ladi, `ship_on` yoziladi, ombor
 qoldig'idan chiqadi va mijoz balansiga qo'shiladi. Konverning faqat
 BRON QILINGAN qismi chiqadi: qolgani boshqa mijozniki bo'lishi mumkin,
