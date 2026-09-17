@@ -519,6 +519,15 @@ hisob raqami**. Ikkalasida ham so'm va dollar yuriydi. Ro'yxat bazada —
 yangi hisob raqami ochilsa `sql/cash.sql` ga bitta qator, sahifaga
 tegilmaydi (omborlar bilan bir xil).
 
+**Har kassaning O'Z asosiy valyutasi** (`cash_accounts.main_ccy`):
+asosiy kassada naqd DOLLAR yuradi, bank hisob raqamida esa oldi-berdi
+SO'MDA bo'ladi. Hisob-kitob baribir dollarda, lekin ekrandagi KATTA
+raqam o'sha joyda kunda ishlatiladigan pulda turadi — dollarga
+aylantirilgan raqamni buxgalter bank ko'chirmasi bilan solishtira
+olmasdi. Ostida ikkalasi ham yoziladi, ya'ni hech narsa yashirilmaydi.
+Kassa ichida ham shu valyuta birinchi kartochka bo'lib turadi.
+Belgi KASSADA, kodda emas.
+
 **Hisob-kitob DOLLARDA.** So'mda kelgan pul o'sha operatsiyaning kursi
 bilan dollarga aylanadi (`amount_usd`) va mijozning yoki ta'minotchining
 qarzidan SHU dollar ayiriladi. Kurs operatsiya bilan birga qotib qoladi:

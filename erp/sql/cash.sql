@@ -75,6 +75,27 @@ INSERT INTO cash_accounts (code, name, kind, sort) VALUES
   ('BANK', 'Bank hisob raqami',  'bank', 2)
 ON CONFLICT (code) DO NOTHING;
 
+--  ★ HAR KASSANING O'Z ASOSIY VALYUTASI.
+--
+--  Hisob-kitob baribir dollarda, lekin EKRANDAGI katta raqam o'sha
+--  joyda kunda ishlatiladigan pulda bo'lishi kerak: asosiy kassada
+--  naqd dollar yuradi, bank hisob raqamida esa oldi-berdi so'mda
+--  bo'ladi. Dollarga aylantirilgan raqamni ko'rgan buxgalter uni
+--  bank ko'chirmasi bilan solishtira olmasdi.
+--
+--  Belgi KASSADA, kodda emas: yangi hisob raqami ochilsa shu qatorga
+--  valyutasi yoziladi, sahifaga tegilmaydi.
+ALTER TABLE cash_accounts ADD COLUMN IF NOT EXISTS main_ccy TEXT NOT NULL DEFAULT 'USD'
+  CHECK (main_ccy IN ('UZS', 'USD'));
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'kassa-valyuta') THEN
+    UPDATE cash_accounts SET main_ccy = 'UZS' WHERE code = 'BANK';
+    INSERT INTO migration_flags (key) VALUES ('kassa-valyuta');
+  END IF;
+END $$;
+
 -- ────────────────────────────────────────────────── HARAJAT MODDALARI
 --
 --  Guruh → kichik guruh. Ro'yxat zavoddan keladi; bo'sh bo'lsa harajat
@@ -297,7 +318,7 @@ SELECT o.id, o.doc_no, o.op_date, o.from_kind, o.from_id, o.to_kind, o.to_id,
 --  kirgan» degani.
 DROP VIEW IF EXISTS v_cash_balance CASCADE;
 CREATE VIEW v_cash_balance AS
-SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active,
+SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active, a.main_ccy,
        a.opening_uzs, a.opening_usd, a.opening_rate, a.opening_on,
        (a.opening_uzs + COALESCE(SUM(f.amount)
           FILTER (WHERE f.currency = 'UZS'), 0))::numeric(18,2) AS uzs,
@@ -310,7 +331,7 @@ SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active,
        MAX(f.op_date) AS last_on
   FROM cash_accounts a
   LEFT JOIN v_cash_flow f ON f.side_kind = 'account' AND f.side_id = a.id
- GROUP BY a.id, a.code, a.name, a.kind, a.sort, a.is_active,
+ GROUP BY a.id, a.code, a.name, a.kind, a.sort, a.is_active, a.main_ccy,
           a.opening_uzs, a.opening_usd, a.opening_rate, a.opening_on;
 
 -- ──────────────────────────────────────── KIMGA PUL BERISH MUMKIN

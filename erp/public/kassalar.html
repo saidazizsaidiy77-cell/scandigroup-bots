@@ -53,9 +53,16 @@ function draw(d) {
         <span class="tag${tag === 'ok' ? ' ok' : ''}">${
           tag === 'ok' ? 'naqd' : tag}</span>
       </div>
-      <div class="kpi" style="margin-top:10px">${usd(b.total_usd)}<small> $</small></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">
-        ${uzs(b.uzs)} so'm · ${usd(b.usd)} $</div>
+      <!--  Katta raqam — SHU kassaning o'z valyutasida: bank hisob
+            raqamida oldi-berdi so'mda bo'ladi va dollarga aylantirilgan
+            raqamni bank ko'chirmasi bilan solishtirib bo'lmasdi.
+            Ostida ikkalasi ham turadi, ya'ni hech narsa yashirilmaydi. -->
+      <div class="kpi" style="margin-top:10px">${b.main_ccy === 'UZS'
+        ? `${uzs(b.uzs)}<small> so'm</small>`
+        : `${usd(b.total_usd)}<small> $</small>`}</div>
+      <div class="muted" style="font-size:13px;margin-top:4px">${b.main_ccy === 'UZS'
+        ? `${usd(b.usd)} $ · jami ${usd(b.total_usd)} $`
+        : `${uzs(b.uzs)} so'm · ${usd(b.usd)} $`}</div>
       <p class="muted" style="font-size:12.5px;margin-top:10px">${esc(izoh)}</p>
     </a>`;
 

@@ -92,11 +92,17 @@ function drawHead() {
   here.title = isMe() ? 'Mening pulim' : here.name;
   $('title').textContent = here.title;
   document.title = here.title + ' · ZELTA';
-  $('kpis').innerHTML = [
+  //  Kassaning O'Z valyutasi birinchi turadi: bank hisob raqamida
+  //  oldi-berdi so'mda bo'ladi va ko'z avval o'sha raqamni qidiradi.
+  //  Ro'yxatning o'zi o'zgarmaydi — faqat tartibi.
+  const somOldin = here.main_ccy === 'UZS';
+  const kpi = [
     ["So'm", uzs(here.uzs), 'naqd so\'m'],
     ['Dollar', usd(here.usd), 'naqd dollar'],
-    ['Jami', usd(here.total_usd) + ' $', 'kirgan kurs bilan'],
-  ].map(([t, v, s]) => `<div class="card"><h2>${t}</h2><div class="kpi">${v}</div>
+  ];
+  $('kpis').innerHTML = (somOldin ? kpi : [kpi[1], kpi[0]])
+    .concat([['Jami', usd(here.total_usd) + ' $', 'kirgan kurs bilan']])
+    .map(([t, v, s]) => `<div class="card"><h2>${t}</h2><div class="kpi">${v}</div>
       <div class="muted" style="font-size:13px">${s}</div></div>`).join('');
 
   //  Kirim har doim bor. Chiqim va ko'chirish faqat KASSADA va faqat
