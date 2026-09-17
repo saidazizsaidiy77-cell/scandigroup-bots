@@ -139,7 +139,11 @@ const App = (() => {
     { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage'] },
     { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
     { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
-    { code: 'reports',    name: 'Hisobotlar',           perm: ['production.reports'] },
+    //  Hisobotlar ikki xil: ishlab chiqarishniki (`production.reports`)
+    //  va pulniki (`cash.*`). Buxgalterda ishlab chiqarish huquqi yo'q,
+    //  lekin foyda-zararni u ko'radi — shuning uchun ikkalasi ham.
+    { code: 'reports',    name: 'Hisobotlar',
+      perm: ['production.reports', 'cash.view', 'cash.manage'] },
     { code: 'refs',       name: "Ma'lumotnomalar",      perm: ['production.manage'] },
   ];
 
@@ -171,6 +175,20 @@ const App = (() => {
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',
       text: "Har mahsulot qaysi tsex va bo'limda \u00b7 qachon keyingi tsexga o'tadi \u00b7 qachon omborga kiradi",
       perm: ['production.reports'] },
+    //  MOLIYAVIY HISOBOTLAR — kassaga kiritilgan harajat shu ikkovida
+    //  ko'rinadi. Bittasi «qancha ishladik», ikkinchisi «pul qayerda»:
+    //  ikkalasi bir xil raqamni bermaydi va bermasligi ham kerak
+    //  (izoh: sql/cash.sql dagi v_pl_month va v_cash_month).
+    { href: '/foyda-zarar.html', mod: 'reports', nav: 'Foyda-zarar',
+      group: 'Moliyaviy hisobotlar',
+      title: 'Foyda-zarar', lead: 'Oy bo\'yicha',
+      text: "Tushum, harajat guruhlari va foyda \u00b7 har oy alohida ustun \u00b7 harajat hisobot oyi bo'yicha",
+      perm: ['cash.view', 'cash.manage'] },
+    { href: '/pul-oqimi.html', mod: 'reports', nav: 'Pul oqimi',
+      group: 'Moliyaviy hisobotlar',
+      title: 'Pul oqimi', lead: 'Kirim va chiqim',
+      text: "Mijozlardan kelgan va ta'minot bilan harajatga ketgan pul \u00b7 to'lov sanasi bo'yicha \u00b7 hozirgi qoldiq",
+      perm: ['cash.view', 'cash.manage'] },
     { href: '/dashboard.html', mod: 'reports', nav: 'Panel',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pul oqimi · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body class="wide">
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Pul oqimi</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div><label>Oydan</label><input id="fFrom" type="month" onchange="load()"></div>
+    <div><label>Oygacha</label><input id="fTo" type="month" onchange="load()"></div>
+    <button onclick="davr(0)">Shu yil</button>
+    <button onclick="davr(-1)">O'tgan yil</button>
+    <button onclick="exportCsv()">Excelga yuklash</button>
+  </div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Kirim</h2><div class="kpi" id="kIn">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Mijozlardan kelgan pul</p></div>
+  <div class="card"><h2>Chiqim</h2><div class="kpi" id="kOut">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Ta'minot va harajatlar</p></div>
+  <div class="card"><h2>Farq</h2><div class="kpi" id="kNet">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Kirim &minus; chiqim</p></div>
+  <div class="card"><h2>Hozirgi qoldiq</h2><div class="kpi" id="kBal">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kBalB"></p></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<script>
+//  PUL OQIMI — pul QACHON qimirlagani.
+//
+//  Foyda-zarardan farqi ikkita, va ikkalasi ham ataylab:
+//    · sanasi TO'LOV kuni, hisobot oyi emas — avgust ijarasi sentabrda
+//      to'lansa, pul sentabrda chiqqan;
+//    · sotuv emas, MIJOZDAN KELGAN PUL — mahsulot chiqib ketgani bilan
+//      pul kelgani bir kun emas.
+//  Shuning uchun foyda bor, pul yo'q degan holat shu ikki hisobotni
+//  yonma-yon qo'yganda ko'rinadi.
+//
+//  Ichki harakat hisobga olinmaydi: menejerdan kassaga topshirish ham,
+//  kassalar aro ko'chirish ham pulni korxonadan chiqarmaydi. Aks holda
+//  bitta to'lov ikki marta kirim bo'lib ko'rinardi (server: v_cash_month).
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const OY = ['Yan','Fev','Mar','Apr','May','Iyn','Iyl','Avg','Sen','Okt','Noy','Dek'];
+const oyNom = (m) => OY[Number(m.slice(5, 7)) - 1] + ' ' + m.slice(2, 4);
+const SIDE = { customer: 'Mijozlardan', supplier: "Ta'minotchilarga",
+               expense: 'Harajatlar' };
+
+const son = (v) => !v ? '<span class="muted">&mdash;</span>'
+  : v < 0 ? `<span style="color:var(--bad)">${usd(v)}</span>` : usd(v);
+
+let d = { rows: [], from: '', to: '', now: {} }, ochiq = new Set();
+
+function davr(n) {
+  const y = new Date().getFullYear() + n;
+  $('fFrom').value = y + '-01'; $('fTo').value = y + '-12';
+  load();
+}
+
+function oylar() {
+  const [y1, m1] = d.from.split('-').map(Number);
+  const [y2, m2] = d.to.split('-').map(Number);
+  const out = [];
+  for (let y = y1, m = m1; y < y2 || (y === y2 && m <= m2); m++) {
+    if (m > 12) { m = 1; y++; if (y > y2) break; }
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    if (out.length > 36) break;
+  }
+  return out;
+}
+
+const key = (r) => r.mon.slice(0, 7);
+
+function draw() {
+  const ms = oylar();
+  const sum = (f) => {
+    const m = {};
+    d.rows.filter(f).forEach(r => m[key(r)] = (m[key(r)] || 0) + Number(r.amount_usd));
+    return m;
+  };
+  const kirim = sum(r => r.dir === 'in');
+  const chiqim = sum(r => r.dir === 'out');
+  const jami = (m) => Object.values(m).reduce((a, b) => a + b, 0);
+  const farq = {}; ms.forEach(m => farq[m] = (kirim[m] || 0) - (chiqim[m] || 0));
+
+  $('kIn').innerHTML  = usd(jami(kirim)) + '<small> $</small>';
+  $('kOut').innerHTML = usd(jami(chiqim)) + '<small> $</small>';
+  $('kNet').innerHTML = usd(jami(kirim) - jami(chiqim)) + '<small> $</small>';
+  $('kBal').innerHTML = usd(Number(d.now.accounts) + Number(d.now.workers))
+    + '<small> $</small>';
+  $('kBalB').textContent = `kassalarda ${usd(d.now.accounts)} $ · `
+    + `xodimlar qo'lida ${usd(d.now.workers)} $`;
+
+  //  Chiqim harajat GURUHI bo'yicha ochiladi: «nimaga ketdi» degan
+  //  savolning javobi ta'minotchi bilan tugamaydi.
+  const guruh = [];
+  d.rows.filter(r => r.dir === 'out' && r.side === 'expense').forEach(r => {
+    let g = guruh.find(x => x.code === r.group_code);
+    if (!g) guruh.push(g = { code: r.group_code, name: r.group_name || 'Moddasiz',
+                             items: [] });
+    let i = g.items.find(x => x.id === r.item_id);
+    if (!i) g.items.push(i = { id: r.item_id, name: r.item_name || '—', by: {} });
+    i.by[key(r)] = (i.by[key(r)] || 0) + Number(r.amount_usd);
+  });
+  const tamin = sum(r => r.dir === 'out' && r.side === 'supplier');
+
+  const qator = (nom, by, bosh) => {
+    const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
+    if (!t && bosh === undefined) return '';
+    return `<tr${bosh || ''}><td>${nom}</td>
+      ${ms.map(m => `<td class="num">${son(by[m])}</td>`).join('')}
+      <td class="num"><b>${t < 0 ? `<span style="color:var(--bad)">${usd(t)}</span>` : usd(t)}</b></td></tr>`;
+  };
+
+  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Modda</th>
+      ${ms.map(m => `<th class="num">${oyNom(m)}</th>`).join('')}
+      <th class="num">Jami</th></tr></thead>
+    <tbody>
+      ${qator('<b>KIRIM</b> — mijozlardan', kirim, '')}
+      ${qator("Ta'minotchilarga to'lov", tamin)}
+      ${guruh.map(g => {
+        const by = {};
+        g.items.forEach(it => ms.forEach(m => {
+          if (it.by[m]) by[m] = (by[m] || 0) + it.by[m];
+        }));
+        return qator(`<span class="muted" style="margin-right:6px">${
+            ochiq.has(g.code) ? '&minus;' : '+'}</span>${esc(g.name)}`, by,
+          ` onclick="toggle('${g.code}')" style="cursor:pointer"`)
+          + (ochiq.has(g.code) ? g.items.map(it =>
+              qator(`<span style="padding-left:22px" class="muted">${esc(it.name)}</span>`,
+                    it.by)).join('') : '');
+      }).join('')}
+      ${qator('<b>CHIQIM</b> — jami', chiqim, '')}
+      ${qator('<b>FARQ</b>', farq, '')}
+    </tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-top:12px">
+      Sana — to'lov kuni. Menejerdan kassaga topshirish va kassalar aro
+      ko'chirish ichki harakat: hisobotga tushmaydi.</p>`;
+}
+
+function toggle(code) { ochiq.has(code) ? ochiq.delete(code) : ochiq.add(code); draw(); }
+
+function exportCsv() {
+  const ms = oylar();
+  const qat = [['Modda', ...ms, 'Jami']];
+  const by = {};
+  d.rows.forEach(r => {
+    const nom = r.dir === 'in' ? 'Kirim · ' + (SIDE[r.side] || r.side)
+      : 'Chiqim · ' + (r.side === 'expense'
+        ? `${r.group_name || 'Moddasiz'} · ${r.item_name || '—'}`
+        : (SIDE[r.side] || r.side));
+    (by[nom] = by[nom] || {})[key(r)] = (by[nom][key(r)] || 0) + Number(r.amount_usd);
+  });
+  Object.entries(by).forEach(([nom, m]) => qat.push([nom,
+    ...ms.map(x => (m[x] || 0).toFixed(2)),
+    ms.reduce((a, x) => a + (m[x] || 0), 0).toFixed(2)]));
+  const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)
+    .join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `pul-oqimi-${d.from}_${d.to}.csv`;
+  a.click();
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fFrom').value) q.set('from', $('fFrom').value);
+  if ($('fTo').value)   q.set('to', $('fTo').value);
+  d = await App.api('/api/cash/flow?' + q);
+  $('fFrom').value = d.from; $('fTo').value = d.to;
+  draw();
+}
+
+App.start(load, 'cash.view', 'cash.manage');
+</script>
+</body>
+</html>

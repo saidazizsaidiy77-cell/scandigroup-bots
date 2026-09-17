@@ -96,6 +96,59 @@ CREATE TABLE IF NOT EXISTS expense_items (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_expense_items_name
   ON expense_items(group_code, lower(name));
 
+--  Zavod ro'yxati. Kiritilgan modda O'CHIRILMAYDI — u operatsiyalarda
+--  ishlatilgan bo'lishi mumkin; keraksizi `active = false` qilinadi va
+--  eski hisobotda joyida qoladi. Qayta deploy'da nomi tiklanmaydi:
+--  saytdan tuzatilgan nom keyingi migratsiyada eskisiga qaytib qolmasin
+--  (ON CONFLICT DO NOTHING).
+INSERT INTO expense_groups (code, name, sort) VALUES
+  ('TAMIN', 'Ta''minot', 10),
+  ('ASOSIY', 'Asosiy vositalar', 20),
+  ('KOMUNAL', 'Kommunal to''lovlar', 30),
+  ('MAOSH', 'Xodimlar maoshi', 40),
+  ('XOJALIK', 'Xo''jalik xarajatlari', 50),
+  ('MARKET', 'Marketing va savdo xarajatlari', 60),
+  ('MOLIYA', 'Moliyaviy xarajatlar', 70),
+  ('XIZMAT', 'Xizmat ko''rsatish', 80),
+  ('BOSHQA', 'Boshqa xarajatlar', 90)
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO expense_items (group_code, name, sort) VALUES
+  ('TAMIN', 'Ta''minotchilarga to''lov', 10),
+  ('TAMIN', 'Yetkazib berish xarajati', 20),
+  ('ASOSIY', 'Asosiy vositalar uchun', 10),
+  ('ASOSIY', 'Asbob-anjom', 20),
+  ('ASOSIY', 'Tig'' charxlash', 30),
+  ('ASOSIY', 'Ta''mirlash xarajati', 40),
+  ('ASOSIY', 'Zavod qurilishi', 50),
+  ('KOMUNAL', 'Elektr energiya', 10),
+  ('KOMUNAL', 'Suv', 20),
+  ('KOMUNAL', 'Gaz', 30),
+  ('KOMUNAL', 'Internet', 40),
+  ('MAOSH', 'Oylik AUP', 10),
+  ('MAOSH', 'Oylik korpus', 20),
+  ('MAOSH', 'Oylik lak', 30),
+  ('MAOSH', 'Oylik qadoqlash', 40),
+  ('MAOSH', 'Oylik stul', 50),
+  ('MAOSH', 'Oylik savdo', 60),
+  ('MAOSH', 'Xodimlarga sarmoya', 70),
+  ('MAOSH', 'Tibbiy yordam', 80),
+  ('XOJALIK', 'Oziq-ovqat', 10),
+  ('XOJALIK', 'Tozalik mahsulotlari', 20),
+  ('XOJALIK', 'Bog'' xarajati', 30),
+  ('MARKET', 'Marketing', 10),
+  ('MARKET', 'Target', 20),
+  ('MARKET', 'Savdo', 30),
+  ('MARKET', 'Vistavka', 40),
+  ('MARKET', 'Yetkazib berish (savdo)', 50),
+  ('MOLIYA', 'Soliqlar', 10),
+  ('MOLIYA', 'Divident', 20),
+  ('XIZMAT', 'IT sarmoya', 10),
+  ('BOSHQA', 'Bank xizmati', 10),
+  ('BOSHQA', 'Bojxona xizmati', 20),
+  ('BOSHQA', 'Benzin', 30)
+ON CONFLICT (group_code, lower(name)) DO NOTHING;
+
 -- ──────────────────────────────────────────────────────── OPERATSIYA
 CREATE TABLE IF NOT EXISTS cash_ops (
   id        SERIAL PRIMARY KEY,
@@ -283,6 +336,72 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
   JOIN expense_groups eg ON eg.code = ei.group_code
  WHERE o.status = 'ok' AND o.to_kind = 'expense'
  GROUP BY o.pl_month, eg.code, eg.name, eg.sort, ei.id, ei.name;
+
+-- ════════════════════════════════════════════════ FOYDA-ZARAR (P&L)
+--
+--  Oy bo'yicha: TUSHUM minus HARAJAT. Ikki manba bitta jadvalda —
+--  sotuv konverlardan, harajat esa kassadan.
+--
+--  Tushum CHIQIB KETGAN mahsulotdan hisoblanadi (`ship_on`), buyurtma
+--  yozilgan kundan emas: buyurtma hali pul emas, mahsulot mijozda
+--  bo'lgandagina sotuv bo'ladi. Mijoz balansi ham shu qoida bilan
+--  yuritiladi, ya'ni hisobot va qarzdorlik bir-biriga mos tushadi.
+--
+--  Harajat esa TO'LOV sanasi bo'yicha emas, HISOBOT OYI bo'yicha
+--  (`pl_month`): sentabrda to'langan avgust ijarasi avgust foydasini
+--  kamaytiradi.
+--
+--  Tannarx yo'q: xom ashyo hisobi hali yozilmagan. Shuning uchun bu
+--  «yalpi foyda» emas — tushumdan zavodning pul harajatlari ayirilgani.
+DROP VIEW IF EXISTS v_pl_month CASCADE;
+CREATE VIEW v_pl_month AS
+SELECT date_trunc('month', u.ship_on)::date AS pl_month,
+       'income'::text AS kind,
+       'SOTUV'::text  AS group_code,
+       'Mahsulot sotuvi'::text AS group_name,
+       0 AS group_sort,
+       NULL::int AS item_id,
+       'Sotuv'::text AS item_name,
+       SUM(u.total_amount)::numeric(16,2) AS amount_usd,
+       COUNT(*)::int AS ops
+  FROM production_units u
+ WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+   AND u.total_amount IS NOT NULL
+ GROUP BY 1
+UNION ALL
+SELECT e.pl_month, 'expense', e.group_code, e.group_name, e.group_sort,
+       e.item_id, e.item_name, e.amount_usd, e.ops
+  FROM v_expenses e;
+
+-- ══════════════════════════════════════════════════════════ PUL OQIMI
+--
+--  Korxonaning puli IKKI joyda turadi: kassalarda va xodimlarning
+--  qo'lida. Shuning uchun oqim shu ikkoviga KIRGAN va undan CHIQQAN
+--  pul: menejerdan kassaga o'tkazish ichki harakat va hisobotga
+--  tushmaydi — aks holda bitta to'lov ikki marta kirim bo'lib
+--  ko'rinardi. Kassalar aro ko'chirish va valyuta almashish ham shunday.
+--
+--  Sana — TO'LOV kuni (`op_date`), harajatning foyda-zarar oyi emas:
+--  pul oqimi pul QACHON qimirlaganini sanaydi. Foyda-zarar boshqa
+--  savolga javob beradi va shuning uchun boshqa hisobot.
+DROP VIEW IF EXISTS v_cash_month CASCADE;
+CREATE VIEW v_cash_month AS
+SELECT date_trunc('month', o.op_date)::date AS mon,
+       CASE WHEN o.from_kind IN ('account', 'worker') THEN 'out' ELSE 'in' END AS dir,
+       --  Tashqi tomon: pul kimdan keldi yoki kimga ketdi
+       CASE WHEN o.from_kind IN ('account', 'worker') THEN o.to_kind
+            ELSE o.from_kind END AS side,
+       ei.group_code, eg.name AS group_name, eg.sort AS group_sort,
+       ei.id AS item_id, ei.name AS item_name,
+       SUM(o.amount_usd)::numeric(16,2) AS amount_usd,
+       COUNT(*)::int AS ops
+  FROM cash_ops o
+  LEFT JOIN expense_items  ei ON ei.id = o.expense_item_id
+  LEFT JOIN expense_groups eg ON eg.code = ei.group_code
+ WHERE o.status = 'ok'
+   AND NOT (o.from_kind IN ('account', 'worker')
+        AND o.to_kind   IN ('account', 'worker'))
+ GROUP BY 1, 2, 3, 4, 5, 6, 7, 8;
 
 -- ═══════════════════════════════════ MIJOZ BALANSI — TO'LOVLAR BILAN
 --

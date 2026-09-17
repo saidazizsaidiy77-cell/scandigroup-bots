@@ -546,9 +546,14 @@ ikkalasisiz harajat hisobotda «boshqa» bo'lib yo'qolib ketardi. Hisobot
 `v_expenses` — to'lov sanasi bo'yicha emas, hisobot oyi bo'yicha.
 
 **Harajat moddalari** (`expense_groups` → `expense_items`) — guruh va
-kichik guruh, ro'yxat zavoddan keladi. Bo'sh bo'lsa harajat yozib
-bo'lmaydi va bu to'g'ri: moddasiz harajat keyin hech qanday hisobotga
-tushmaydi.
+kichik guruh. Zavod ro'yxati **kiritilgan** (`sql/cash.sql`): to'qqizta
+guruh — ta'minot, asosiy vositalar, kommunal, maosh, xo'jalik,
+marketing, moliyaviy, xizmat va boshqa.
+
+Modda O'CHIRILMAYDI: u operatsiyalarda ishlatilgan bo'lishi mumkin va
+eski hisobotdan yo'qolib qolardi — keraksizi `active = false` qilinadi.
+Qayta deploy'da nomi ham tiklanmaydi (`ON CONFLICT DO NOTHING`):
+saytdan tuzatilgan nom keyingi migratsiyada eskisiga qaytib qolmasin.
 
 **Boshlang'ich qoldiq** (`cash_accounts.opening_*`) — tizim ishga
 tushgan kundagi pul. Bir martalik raqam, mijozning `opening_debt` i
@@ -634,6 +639,45 @@ TO'LOVLAR`. Shu sababdan `v_customer_sales` va `v_customer_ledger`
 **`sql/cash.sql` ga ko'chirildi** — ular endi `cash_ops` ni o'qiydi, u
 esa migratsiyada eng oxirida yaratiladi. Eski joyida qolsa toza bazada
 yo'q jadvalni izlab yiqilardi, ya'ni sayt ko'tarilmasdi.
+
+---
+
+## Moliyaviy hisobotlar
+
+Kassaga yozilgan harajat IKKI hisobotga boradi va ikkalasi bir xil
+raqamni bermaydi — bermasligi ham kerak:
+
+**Foyda-zarar** (`v_pl_month`, `/foyda-zarar.html`) — «qancha ishladik».
+Tushum CHIQIB KETGAN mahsulotdan (`ship_on`), buyurtma yozilgan kundan
+emas: buyurtma hali pul emas. Harajat esa HISOBOT OYI bo'yicha
+(`pl_month`) — sentabrda to'langan avgust ijarasi avgust foydasini
+kamaytiradi.
+
+**Pul oqimi** (`v_cash_month`, `/pul-oqimi.html`) — «pul qayerda».
+Sanasi TO'LOV kuni, kirimi esa sotuv emas, MIJOZDAN KELGAN PUL. Ichki
+harakat hisobga olinmaydi: menejerdan kassaga topshirish ham, kassalar
+aro ko'chirish ham pulni korxonadan chiqarmaydi — aks holda bitta to'lov
+ikki marta kirim bo'lib ko'rinardi.
+
+Shuning uchun «foyda bor, pul yo'q» degan holat aynan shu ikki hisobotni
+yonma-yon qo'yganda ko'rinadi.
+
+**Ustun — OY.** Direktorning savoli «qaysi oyda nima bo'ldi»: bitta
+yig'indi raqam unga javob bermaydi, oylar yonma-yon turgandagina o'sish
+ham, sakrash ham ko'rinadi. Oylar ORALIQdan chiqadi, ma'lumotdan emas —
+harajati yo'q oy ham bo'sh ustun bo'lib tursin: bo'sh ustun javob, yo'q
+ustun esa savol. Guruh qatori bosilsa ostidan moddalari chiqadi. Manfiy
+raqam qizil.
+
+**Tannarx yo'q** — xom ashyo hisobi hali yozilmagan, shuning uchun bu
+«yalpi foyda» emas: tushumdan zavodning PUL harajatlari ayirilgani.
+Sahifa buni o'zi aytib turadi, aks holda raqam boshqa narsa deb
+o'qilardi.
+
+Huquqi `cash.view` / `cash.manage`: pul hisoboti buxgalter va
+rahbariyatniki. Shu sababdan «Hisobotlar» moduli endi ikki huquqdan
+birini oladi — ishlab chiqarish hisobotlari `production.reports` da
+qolaveradi.
 
 ---
 
@@ -750,6 +794,7 @@ erp/
   public/              sahifalar; app.js — menyu va sessiya
                        yukxati.js — yuk xati hujjati (ikki sahifa chizadi)
                        kassa-form.js — kirim/chiqim orderi oynasi
+                       foyda-zarar.html, pul-oqimi.html — moliyaviy hisobot
   test/                node:test, HTTP orqali
 ```
 
@@ -818,9 +863,10 @@ keladi. Shuning uchun avval kiritish, keyin modul.
 4. **Kassa** — YOZILDI (`sql/cash.sql`, `modules/cash.js`,
    `public/kassa.html`): ikkita hisob, so'm va dollar, menejer
    qo'lidagi puli, harajat foyda-zarar oyi bilan. Mijoz balansi to'ldi.
-   Qolgani: **harajat moddalari** va **ta'minotchilar** ro'yxati —
-   ikkalasi ham zavoddan keladi va kiritilmaguncha tegishli ro'yxat
-   bo'sh turadi.
+   Harajat moddalari zavod ro'yxati bilan kiritildi; foyda-zarar va pul
+   oqimi hisobotlari yozildi.
+   Qolgani: **ta'minotchilar** ro'yxati — zavoddan keladi va
+   kiritilmaguncha «Kimga» ro'yxatida faqat harajat turadi.
 
 ## Ochiq savollar — zavoddan javob kutilmoqda
 

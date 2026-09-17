@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foyda-zarar · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body class="wide">
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Foyda-zarar</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div><label>Oydan</label><input id="fFrom" type="month" onchange="load()"></div>
+    <div><label>Oygacha</label><input id="fTo" type="month" onchange="load()"></div>
+    <button onclick="davr(0)">Shu yil</button>
+    <button onclick="davr(-1)">O'tgan yil</button>
+    <button onclick="exportCsv()">Excelga yuklash</button>
+  </div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Tushum</h2><div class="kpi" id="kIn">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Chiqib ketgan mahsulot</p></div>
+  <div class="card"><h2>Harajat</h2><div class="kpi" id="kOut">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Hisobot oyi bo'yicha</p></div>
+  <div class="card"><h2>Foyda</h2><div class="kpi" id="kPr">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Tushum &minus; harajat</p></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<script>
+//  FOYDA-ZARAR — oy bo'yicha ustunlar, ko'rsatkichlar qator.
+//
+//  Ustun OY bo'lgani muhim: direktorning savoli «qaysi oyda nima
+//  bo'ldi» — bitta yig'indi raqam unga javob bermaydi, oylar yonma-yon
+//  turgandagina o'sish ham, sakrash ham ko'rinadi.
+//
+//  Guruh qatori bosilsa ostidan moddalari chiqadi: ekranda to'qqizta
+//  qator turadi, tafsilot esa kerak bo'lganda ochiladi.
+//
+//  Tannarx yo'q (xom ashyo hisobi hali yozilmagan) — shuning uchun bu
+//  «yalpi foyda» emas, tushumdan zavodning pul harajatlari ayirilgani.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const OY = ['Yan','Fev','Mar','Apr','May','Iyn','Iyl','Avg','Sen','Okt','Noy','Dek'];
+const oyNom = (m) => OY[Number(m.slice(5, 7)) - 1] + ' ' + m.slice(2, 4);
+
+const son = (v) => !v ? '<span class="muted">&mdash;</span>'
+  : v < 0 ? `<span style="color:var(--bad)">${usd(v)}</span>` : usd(v);
+
+let d = { rows: [], from: '', to: '' }, ochiq = new Set();
+
+function davr(n) {
+  const y = new Date().getFullYear() + n;
+  $('fFrom').value = y + '-01';
+  $('fTo').value   = y + '-12';
+  load();
+}
+
+//  Oylar ro'yxati oraliqdan chiqadi, ma'lumotdan emas: harajati yo'q oy
+//  ham ustun bo'lib tursin — bo'sh ustun «u oyda hech narsa bo'lmagan»
+//  degan javob, yo'q ustun esa savol.
+function oylar() {
+  const [y1, m1] = d.from.split('-').map(Number);
+  const [y2, m2] = d.to.split('-').map(Number);
+  const out = [];
+  for (let y = y1, m = m1; y < y2 || (y === y2 && m <= m2); m++) {
+    if (m > 12) { m = 1; y++; if (y > y2) break; }
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    if (out.length > 36) break;
+  }
+  return out;
+}
+
+const key = (r) => r.pl_month.slice(0, 7);
+
+function yig(filter) {
+  const m = {};
+  d.rows.filter(filter).forEach(r => {
+    m[key(r)] = (m[key(r)] || 0) + Number(r.amount_usd);
+  });
+  return m;
+}
+
+function draw() {
+  const ms = oylar();
+  const inc = yig(r => r.kind === 'income');
+  const exp = yig(r => r.kind === 'expense');
+  const jami = (m) => Object.values(m).reduce((a, b) => a + b, 0);
+  $('kIn').innerHTML  = usd(jami(inc)) + '<small> $</small>';
+  $('kOut').innerHTML = usd(jami(exp)) + '<small> $</small>';
+  $('kPr').innerHTML  = usd(jami(inc) - jami(exp)) + '<small> $</small>';
+
+  //  Guruhlar — harajat qatorlari; tartibi server bergan `group_sort` da
+  const guruh = [];
+  d.rows.filter(r => r.kind === 'expense').forEach(r => {
+    let g = guruh.find(x => x.code === r.group_code);
+    if (!g) guruh.push(g = { code: r.group_code, name: r.group_name, items: [] });
+    let i = g.items.find(x => x.id === r.item_id);
+    if (!i) g.items.push(i = { id: r.item_id, name: r.item_name, by: {} });
+    i.by[key(r)] = (i.by[key(r)] || 0) + Number(r.amount_usd);
+  });
+
+  const qator = (nom, by, cls, bosh) => {
+    const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
+    return `<tr class="${cls || ''}"${bosh || ''}>
+      <td>${nom}</td>
+      ${ms.map(m => `<td class="num">${son(by[m])}</td>`).join('')}
+      <td class="num"><b>${t < 0 ? `<span style="color:var(--bad)">${usd(t)}</span>` : usd(t)}</b></td></tr>`;
+  };
+
+  const foyda = {};
+  ms.forEach(m => foyda[m] = (inc[m] || 0) - (exp[m] || 0));
+
+  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Ko'rsatkich</th>
+      ${ms.map(m => `<th class="num">${oyNom(m)}</th>`).join('')}
+      <th class="num">Jami</th></tr></thead>
+    <tbody>
+      ${qator('<b>Tushum</b> — mahsulot sotuvi', inc)}
+      ${guruh.map((g, i) => {
+        const by = {};
+        g.items.forEach(it => ms.forEach(m => {
+          if (it.by[m]) by[m] = (by[m] || 0) + it.by[m];
+        }));
+        return qator(`<span class="muted" style="margin-right:6px">${
+            ochiq.has(g.code) ? '&minus;' : '+'}</span>${esc(g.name)}`,
+          by, '', ` onclick="toggle('${g.code}')" style="cursor:pointer"`)
+          + (ochiq.has(g.code) ? g.items.map(it =>
+              qator(`<span style="padding-left:22px" class="muted">${esc(it.name)}</span>`,
+                    it.by)).join('') : '');
+      }).join('')}
+      ${qator('<b>Jami harajat</b>', exp)}
+      ${qator('<b>FOYDA</b>', foyda)}
+    </tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-top:12px">
+      Tushum chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
+      Tannarx hisobga olinmagan — xom ashyo hisobi hali yuritilmaydi.</p>`;
+}
+
+function toggle(code) {
+  ochiq.has(code) ? ochiq.delete(code) : ochiq.add(code);
+  draw();
+}
+
+function exportCsv() {
+  const ms = oylar();
+  const inc = yig(r => r.kind === 'income');
+  const exp = yig(r => r.kind === 'expense');
+  const qat = [["Ko'rsatkich", ...ms, 'Jami']];
+  const push = (nom, by) => qat.push([nom, ...ms.map(m => (by[m] || 0).toFixed(2)),
+    ms.reduce((a, m) => a + (by[m] || 0), 0).toFixed(2)]);
+  push('Tushum', inc);
+  d.rows.filter(r => r.kind === 'expense').forEach(() => {});
+  const g = {};
+  d.rows.filter(r => r.kind === 'expense').forEach(r => {
+    const k = r.group_name + ' · ' + r.item_name;
+    (g[k] = g[k] || {})[key(r)] = (g[k][key(r)] || 0) + Number(r.amount_usd);
+  });
+  Object.entries(g).forEach(([k, by]) => push(k, by));
+  push('Jami harajat', exp);
+  const f = {}; ms.forEach(m => f[m] = (inc[m] || 0) - (exp[m] || 0));
+  push('FOYDA', f);
+  const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)
+    .join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `foyda-zarar-${d.from}_${d.to}.csv`;
+  a.click();
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fFrom').value) q.set('from', $('fFrom').value);
+  if ($('fTo').value)   q.set('to', $('fTo').value);
+  d = await App.api('/api/cash/pl?' + q);
+  $('fFrom').value = d.from; $('fTo').value = d.to;
+  draw();
+}
+
+App.start(load, 'cash.view', 'cash.manage');
+</script>
+</body>
+</html>

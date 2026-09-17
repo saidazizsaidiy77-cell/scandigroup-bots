@@ -333,4 +333,55 @@ router.get('/expenses', need(...READ), wrap(async (req, res) => {
   res.json({ rows });
 }));
 
+// ═══════════════════════════════════════════════ FOYDA-ZARAR HISOBOTI
+//
+//  Oy bo'yicha tushum va harajat. Oraliq OY bilan beriladi (2026-01),
+//  kun bilan emas: hisobot oylik va yarim oyning foydasi degan narsa
+//  zavodda yo'q.
+//
+//  Qatorlar tayyor ko'rinishda emas, XOM holda qaytadi — sahifa ularni
+//  oylar bo'yicha yoyadi. Server pivot qilsa har yangi ustun uchun
+//  so'rov qayta yozilardi.
+const oyQ = (v, def) => {
+  const t = String(v || '').slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(t) ? t + '-01' : def;
+};
+
+router.get('/pl', need(...READ), wrap(async (req, res) => {
+  const bugun = new Date();
+  //  Sukut bo'yicha — joriy yil: direktor hisobotni «shu yil qanday»
+  //  deb ochadi, oraliqni har safar terib o'tirmaydi.
+  const from = oyQ(req.query.from, `${bugun.getFullYear()}-01-01`);
+  const to   = oyQ(req.query.to,   `${bugun.getFullYear()}-12-01`);
+  const { rows } = await db.query(
+    `SELECT * FROM v_pl_month
+      WHERE pl_month >= $1 AND pl_month <= $2
+      ORDER BY kind DESC, group_sort, group_name, item_name`, [from, to]);
+  res.json({ from: from.slice(0, 7), to: to.slice(0, 7), rows });
+}));
+
+// ═══════════════════════════════════════════════ PUL OQIMI HISOBOTI
+//
+//  Kirim, chiqim va ularning farqi — oy bo'yicha. Yonida BUGUNGI
+//  qoldiq: kassalarda va xodimlarning qo'lida turgan pul. Oqim
+//  o'sha qoldiqni hosil qiladi, shuning uchun ikkalasi bitta ekranda.
+router.get('/flow', need(...READ), wrap(async (req, res) => {
+  const bugun = new Date();
+  const from = oyQ(req.query.from, `${bugun.getFullYear()}-01-01`);
+  const to   = oyQ(req.query.to,   `${bugun.getFullYear()}-12-01`);
+  const [rows, kassa, qol] = await Promise.all([
+    db.query(
+      `SELECT * FROM v_cash_month
+        WHERE mon >= $1 AND mon <= $2
+        ORDER BY mon, dir, group_sort NULLS FIRST, group_name, item_name`,
+      [from, to]),
+    db.query(`SELECT COALESCE(SUM(total_usd), 0)::numeric(16,2) AS usd
+                FROM v_cash_balance`),
+    db.query(`SELECT COALESCE(SUM(total_usd), 0)::numeric(16,2) AS usd
+                FROM v_worker_cash`),
+  ]);
+  res.json({ from: from.slice(0, 7), to: to.slice(0, 7), rows: rows.rows,
+             now: { accounts: kassa.rows[0].usd, workers: qol.rows[0].usd } });
+}));
+
 module.exports = router;

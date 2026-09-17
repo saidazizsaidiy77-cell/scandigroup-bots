@@ -2207,6 +2207,54 @@ test('kassadan pul faqat belgilangan xodimga beriladi', async () => {
     `SELECT can_hold_cash FROM workers WHERE id=$1`, [xodim])).can_hold_cash, true);
 });
 
+//  KASSAGA YOZILGAN HARAJAT IKKI HISOBOTGA BORADI: foyda-zararga
+//  hisobot oyi bilan, pul oqimiga to'lov sanasi bilan. Ikki sana atay
+//  boshqa — sentabrda to'langan avgust ijarasi avgust foydasini
+//  kamaytiradi, lekin pul sentabrda chiqadi.
+test('harajat foyda-zarar va pul oqimi hisobotiga tushadi', async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const modda = (await H.id(`SELECT id FROM expense_items ORDER BY id LIMIT 1`)).id;
+
+  const r = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense',
+    currency: 'USD', amount: 250,
+    op_date: '2026-09-15', expense_item_id: modda, pl_month: '2026-08' });
+  assert.equal(r.status, 200, r.text);
+
+  //  Foyda-zararda — AVGUSTda
+  const pl = (await kassir('GET', '/api/cash/pl?from=2026-01&to=2026-12')).body;
+  const h = pl.rows.filter(x => x.kind === 'expense'
+    && x.pl_month.slice(0, 7) === '2026-08' && x.item_id === modda);
+  assert.equal(h.length, 1, 'harajat avgust qatorida');
+  assert.equal(Number(h[0].amount_usd), 250);
+  assert.ok(!pl.rows.some(x => x.kind === 'expense'
+    && x.pl_month.slice(0, 7) === '2026-09' && x.item_id === modda),
+    'sentabrga tushmaydi — u to\'lov oyi, hisobot oyi emas');
+
+  //  Pul oqimida — SENTABRda
+  const fl = (await kassir('GET', '/api/cash/flow?from=2026-01&to=2026-12')).body;
+  const o = fl.rows.filter(x => x.mon.slice(0, 7) === '2026-09'
+    && x.dir === 'out' && x.item_id === modda);
+  assert.equal(o.length, 1, 'chiqim sentabr qatorida');
+  assert.equal(Number(o[0].amount_usd), 250);
+
+  //  Menejerdan kassaga topshirish ICHKI harakat — oqimga tushmaydi,
+  //  aks holda bitta to'lov ikki marta kirim bo'lib ko'rinardi.
+  const ichki = fl.rows.filter(x => x.side === 'worker' || x.side === 'account');
+  assert.equal(ichki.length, 0, 'ichki harakat pul oqimida yo\'q');
+
+  //  Mijozdan kelgan pul esa KIRIM
+  assert.ok(fl.rows.some(x => x.dir === 'in' && x.side === 'customer'),
+    'mijoz to\'lovi kirimda');
+
+  //  Bekor qilingan operatsiya ikkala hisobotdan ham chiqadi
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + r.body.id)).status, 200);
+  const pl2 = (await kassir('GET', '/api/cash/pl?from=2026-01&to=2026-12')).body;
+  assert.ok(!pl2.rows.some(x => x.kind === 'expense' && x.item_id === modda),
+    'bekor qilingani foyda-zarardan chiqadi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
