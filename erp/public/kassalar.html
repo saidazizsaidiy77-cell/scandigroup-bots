@@ -20,9 +20,17 @@
     Shuning uchun uch ustun: kim · nimasi bor · jami. */
 .hands{max-width:760px}
 .hands table{font-size:15px}
-.hands th{font-size:11px;letter-spacing:.07em}
+.hands th{font-size:11px;letter-spacing:.07em;padding-top:16px}
 .hands td{padding:15px 18px}
-.hands .who{font-weight:600}
+/*  Kartochkaning o'z ichki bo'shlig'i nol (jadval chetigacha
+    cho'ziladi), style.css esa chetki katakning tashqi bo'shlig'ini
+    olib tashlaydi — kartochka ODATDA o'zi bo'shliq beradi. Ikkovi
+    qo'shilib raqamni chegaraga qisib qo'yardi, «JAMI $» sarlavhasi
+    esa chetdan kesilib turardi. Shuning uchun chekka shu yerda
+    qaytariladi. */
+.hands th:first-child,.hands td:first-child{padding-left:20px}
+.hands th:last-child,.hands td:last-child{padding-right:20px}
+.hands .who{font-weight:600;overflow-wrap:anywhere}
 .hands .when{font-size:12.5px;color:var(--muted);margin-top:3px}
 .hands .parts{font-size:13px;color:var(--muted);white-space:nowrap}
 .hands .sum{font-size:17px;font-weight:600;white-space:nowrap}
@@ -32,6 +40,8 @@
       javob esa «jami» da. Tafsilot ismning ostiga tushadi. */
   .hands .parts{display:none}
   .hands td{padding:13px 14px}
+  .hands th:first-child,.hands td:first-child{padding-left:14px}
+  .hands th:last-child,.hands td:last-child{padding-right:14px}
 }
 </style>
 <script src="/app.js"></script>
@@ -115,6 +125,10 @@ function draw(d) {
   //  raqam ikki marta, ko'z esa farqini qidirib qolardi. So'm bo'lsa
   //  boshqa: jami uni KURS bilan aylantirgan, ya'ni tafsilot qo'lida
   //  aslida nima turganini aytadi.
+  //  Hech kimda so'm bo'lmasa ustunning o'zi chizilmaydi: bo'sh
+  //  ustun sarlavhasi «bu yerda nimadir bo'lishi kerak edi» degan
+  //  savol qoldirardi, holbuki javob yo'qligi emas — so'm yo'qligi.
+  const somli = xodimlar.some(w => Number(w.uzs));
   const pul = (w) => {
     const som = Number(w.uzs), dol = Number(w.usd);
     if (!som) return '';
@@ -131,8 +145,9 @@ function draw(d) {
     + (xodimlar.length ? `
       <h2 style="margin:26px 0 12px">Xodimlar qo'lidagi pul</h2>
       <div class="card hands" style="padding:0;overflow:hidden">
-      <div style="overflow-x:auto"><table>
-        <thead><tr><th>Xodim</th><th class="num">Qo'lida</th>
+      <table>
+        <thead><tr><th>Xodim</th>${somli
+          ? '<th class="num">Qo\'lida</th>' : ''}
           <th class="num">Jami $</th></tr></thead>
         <tbody>${xodimlar.map(w => {
           const jami = Number(w.total_usd) || 0;
@@ -141,13 +156,13 @@ function draw(d) {
             <td><div class="who">${esc(w.name)}</div>
               <div class="when">${w.last_on
                 ? `oxirgi harakat ${d8(w.last_on)}` : 'harakat yo\'q'}</div></td>
-            <td class="num parts">${pul(w) || ''}</td>
+            ${somli ? `<td class="num parts">${pul(w) || ''}</td>` : ''}
             <!--  Jami — qo'lidagi pulning to'la javobi: so'mi ham,
                   dollari ham kirgan kursi bilan qo'shilgani. -->
             <td class="num"><span class="sum${jami ? '' : ' zero'}"
               >${usd(jami)} $</span></td></tr>`;
         }).join('')}</tbody>
-      </table></div></div>` : '');
+      </table></div>` : '');
 }
 
 App.start(async () => {
