@@ -60,7 +60,6 @@
     <thead>
       <tr>
         <th rowspan="2">Ta'minotchi</th><th rowspan="2">Nima yetkazadi</th>
-        <th rowspan="2">Mas'ul xodim</th>
         <th class="num" colspan="2" style="text-align:center">Davr boshiga, $</th>
         <th class="num" colspan="2" style="text-align:center">Davr ichida, $</th>
         <th class="num" colspan="2" style="text-align:center">Davr oxiriga, $</th>
@@ -153,7 +152,6 @@ function render() {
         ? `<div class="muted" style="font-size:12px">${esc(r.region)}</div>` : ''}</td>
       <td>${r.category_name ? `<span class="tag">${esc(r.category_name)}</span>`
         : '<span class="muted">\u2014</span>'}</td>
-      <td class="muted">${r.manager_name ? esc(r.manager_name) : '\u2014'}</td>
       <td class="num">${sum(r.opening_debit)}</td>
       <td class="num">${sum(r.opening_credit)}</td>
       <td class="num">${sum(r.debit)}</td>
@@ -161,10 +159,10 @@ function render() {
       <td class="num"><b>${sum(r.closing_debit)}</b></td>
       <td class="num"><b>${sum(r.closing_credit)}</b></td>
     </tr>${drawRows(r.id)}`).join('')
-    : `<tr><td class="muted" colspan="9">Tanlangan oraliqda ta'minot qarzdorligi yo'q</td></tr>`;
+    : `<tr><td class="muted" colspan="8">Tanlangan oraliqda ta'minot qarzdorligi yo'q</td></tr>`;
 
   $('tF').innerHTML = data.rows.length ? `
-    <tr><td colspan="3"><b>Jami</b></td>
+    <tr><td colspan="2"><b>Jami</b></td>
       <td class="num"><b>${money(t.opening_debit)}</b></td>
       <td class="num"><b>${money(t.opening_credit)}</b></td>
       <td class="num"><b>${money(t.debit)}</b></td>
@@ -189,9 +187,9 @@ async function toggle(id) {
 function drawRows(id) {
   if (!open.has(id)) return '';
   const d = open.get(id);
-  if (!d) return `<tr><td colspan="9" class="muted">Yuklanmoqda\u2026</td></tr>`;
-  if (d.error) return `<tr><td colspan="9" class="muted">${esc(d.error)}</td></tr>`;
-  if (!d.rows.length) return `<tr><td colspan="9" class="muted"
+  if (!d) return `<tr><td colspan="8" class="muted">Yuklanmoqda\u2026</td></tr>`;
+  if (d.error) return `<tr><td colspan="8" class="muted">${esc(d.error)}</td></tr>`;
+  if (!d.rows.length) return `<tr><td colspan="8" class="muted"
     style="padding-left:24px">Bu oraliqda harakat bo'lmagan \u00b7 davr boshiga
     ${money(Math.abs(d.opening))} $ ${Number(d.opening) < 0
       ? 'ta\'minotchi qarzdor' : 'biz qarzdormiz'}</td></tr>`;
@@ -209,7 +207,7 @@ function drawRows(id) {
       <td>${r.op_id
         ? `<a class="tag" href="/kirim-orderi.html?id=${r.op_id}" target="_blank"
              onclick="event.stopPropagation()">${esc(r.doc_no)}</a>` : ''}</td>
-      <td></td><td></td><td></td>
+      <td></td><td></td>
       <td class="num">${sum(r.debit)}</td>
       <td class="num">${sum(r.credit)}</td>
       <td class="num muted">${qoldiq < 0 ? money(-qoldiq) : ''}</td>
@@ -221,12 +219,12 @@ function drawRows(id) {
 //  Excel zavodda shu ko'rinishda kutiladi: bitta mijoz — bitta qator,
 //  to'rt ustun. Tafsilot kerak bo'lsa saytda qator ochiladi.
 function exportCsv() {
-  const head = ['Ta\'minotchi', 'Region', 'Telefon', 'Nima yetkazadi', 'Mas\'ul xodim',
+  const head = ['Ta\'minotchi', 'Region', 'Telefon', 'Nima yetkazadi',
                 'Boshiga qarzdor', 'Boshiga haqdor',
                 'Davr qarzdor', 'Davr haqdor',
                 'Oxiriga qarzdor', 'Oxiriga haqdor'];
   const rows = data.rows.map(r => [r.name, r.region || '', r.phone || '',
-    r.category_name || '', r.manager_name || '',
+    r.category_name || '',
     Number(r.opening_debit).toFixed(2), Number(r.opening_credit).toFixed(2),
     Number(r.debit).toFixed(2), Number(r.credit).toFixed(2),
     Number(r.closing_debit).toFixed(2), Number(r.closing_credit).toFixed(2)]
