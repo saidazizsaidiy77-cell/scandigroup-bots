@@ -656,9 +656,21 @@ javobi.
 joyi: qoldig'i yirik raqam bo'lib turishi kerak. Xodim esa o'ntacha va
 ko'pchiligining qo'lida nol turadi — o'nta kartochka butun ekranni
 egallab, javobi bor bittasi ularning orasida yo'qolib ketardi.
-Jadvalda ko'z bitta ustundan pastga yuguradi: xodim · so'm · dollar ·
-jami $ · oxirgi harakat, eng ko'p puli bori tepada. Qator bosilsa
-o'sha odamning sahifasi ochiladi. Sahifa u yerda faqat O'QIYDI: pul berish ham, qabul qilish ham
+
+Jadval UCH ustun: **kim · qo'lida · jami $**. Beshta ustun keng
+ekranda bir-biridan uzoqlashib, ismning javobi narigi chekkada
+qolardi; ustiga ko'pchilikning katagi bo'sh bo'lib, jadval siyrak
+ko'rinardi. Oxirgi harakat ismning OSTIDA, mayda yozuvda — u tafsilot,
+ustun emas. «Qo'lida» faqat QO'SHIMCHA gap aytganda yoziladi: dollari
+bo'lgan odamning yonida «630,00 $ · 630,00 $» turardi, so'm bo'lsa esa
+jami uni kurs bilan aylantirgan va tafsilot qo'lida aslida nima
+turganini aytadi. Eng ko'p puli bori tepada, qator bosilsa o'sha
+odamning sahifasi ochiladi.
+
+**«Mening qo'limdagi pul» kassirda alohida kartochka EMAS** — uning
+puli kassada, qo'lida emas, va kartochka baribir nol bo'lib turardi.
+Qo'liga pul olsa jadvalda o'zi chiqadi. Menejerda esa u yagona joy,
+shuning uchun unga kartochka bo'lib qoladi. Sahifa u yerda faqat O'QIYDI: pul berish ham, qabul qilish ham
 kassaning o'z oynasidan bo'ladi, chunki ikkinchi tomoni baribir kassa.
 Yozadigan odam — kassir (`cash.manage`), xodimning o'zi emas.
 
