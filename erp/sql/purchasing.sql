@@ -18,21 +18,25 @@ CREATE TABLE IF NOT EXISTS supplier_categories (
   sort INT  NOT NULL DEFAULT 0
 );
 
+--  Nomlar ZAVOD ro'yxatidagidek: ta'minotchini kiritayotgan odam uni
+--  o'z daftaridagi so'z bilan qidiradi. «Yog'och, LDSP, MDF» degan
+--  uchlik to'g'ri, lekin zavod uni bitta so'z bilan ataydi — MDF.
 INSERT INTO supplier_categories (code, name, sort) VALUES
-  ('LDSP',      'Yog''och, LDSP, MDF',   1),
+  ('MDF',       'MDF',                   1),
   ('FURNITURA', 'Furnitura',             2),
-  ('MATO',      'Mato va teri',          3),
-  ('LAK',       'Lak, bo''yoq, yelim',   4),
+  ('MATO',      'Mato',                  3),
+  ('LAK',       'Lak',                   4),
   ('QADOQ',     'Qadoqlash materiali',   5),
-  ('OYNA',      'Oyna va ko''zgu',       6),
+  ('OYNA',      'Oyna',                  6),
   --  Zavod ro'yxatidagi eng katta guruhlardan biri: po'kak, rezina,
   --  plastmas oyoq, stul karkasi, smala — zavodga TAYYOR bo'lib
   --  keladigan, lekin o'zi mahsulot bo'lmagan qism. «Boshqa» ga
   --  qo'shilsa zavodning o'z bo'linishi yo'qolardi.
   ('YARIM',     'Yarim tayyor mahsulot', 7),
-  ('XIZMAT',    'Xizmat (tashish, ta''mir)', 7),
+  ('XIZMAT',    'Xizmat (tashish, ta''mir)', 8),
   ('BOSHQA',    'Boshqa',               99)
 ON CONFLICT (code) DO NOTHING;
+
 
 CREATE TABLE IF NOT EXISTS suppliers (
   id         SERIAL PRIMARY KEY,
@@ -56,6 +60,22 @@ CREATE TABLE IF NOT EXISTS suppliers (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_suppliers_name     ON suppliers(lower(name));
 CREATE INDEX        IF NOT EXISTS idx_suppliers_category ON suppliers(category);
 CREATE INDEX        IF NOT EXISTS idx_suppliers_manager  ON suppliers(manager_id);
+
+--  Eski baza uchun bir martalik: kodi ham, nomi ham zavodnikiga
+--  keltiriladi. `ON CONFLICT DO NOTHING` nomni yangilamaydi (saytdan
+--  tuzatilgani qaytib qolmasin), shuning uchun bu alohida o'tadi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'taminot-turlari') THEN
+    UPDATE suppliers SET category = 'MDF' WHERE category = 'LDSP';
+    DELETE FROM supplier_categories WHERE code = 'LDSP';
+    UPDATE supplier_categories SET name = 'Mato' WHERE code = 'MATO';
+    UPDATE supplier_categories SET name = 'Lak'  WHERE code = 'LAK';
+    UPDATE supplier_categories SET name = 'Oyna' WHERE code = 'OYNA';
+    UPDATE supplier_categories SET sort = 8 WHERE code = 'XIZMAT';
+    INSERT INTO migration_flags (key) VALUES ('taminot-turlari');
+  END IF;
+END $$;
 
 -- DROP + CREATE, CREATE OR REPLACE emas: replace ustunni faqat oxiriga
 -- qo'sha oladi. Jadvalga ustun qo'shilganda view qaytadan qurilsin.
