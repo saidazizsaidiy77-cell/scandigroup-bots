@@ -2520,6 +2520,60 @@ test('xodim qo\'lidagi boshlang\'ich qoldiq kassaga tegmaydi', async () => {
     `SELECT total_usd FROM v_cash_balance WHERE id=$1`, [kassa])).total_usd), oldin + 200);
 });
 
+//  ★ PODOTCHYOT OLGAN XODIM TA'MINOTCHIGA HAM TO'LAYDI: ombor mudiri
+//  bozorda naqd to'laydi va o'sha odamning qarzi kamayishi kerak.
+//  Ilgari ta'minotchilar ro'yxati faqat kassirga kelardi va uchinchi
+//  bosqich xodimda bo'sh chiqardi.
+test('podotchyot olgan xodim ta\'minotchiga to\'lay oladi', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const bosh = H.api(base, await H.sessionFor('Sinov tsex boshlig\'i'));
+  const b = (await H.id(`SELECT id FROM workers WHERE name='Sinov tsex boshlig''i'`)).id;
+
+  //  Cheklovi olinadi: bu xodim hamma guruhga sarflay oladi
+  await db.query(`DELETE FROM worker_expense_groups WHERE worker_id=$1`, [b]);
+
+  const tam = (await H.id(`SELECT id FROM suppliers WHERE active ORDER BY id LIMIT 1`)).id;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE needs_supplier AND active LIMIT 1`)).id;
+
+  //  Ro'yxat XODIMGA ham keladi — u ham tanlashi kerak
+  const refs = (await bosh('GET', '/api/cash/refs')).body;
+  assert.ok((refs.suppliers || []).some((x) => x.id === tam),
+    'ta\'minotchilar ro\'yxati xodimga ham keladi');
+
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: b,
+    currency: 'USD', amount: 300 })).status, 200);
+  const oldin = Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [b])).total_usd);
+
+  //  Moddasiz o'tmaydi: harajat foyda-zarardan yo'qolib ketardi
+  assert.equal((await bosh('POST', '/api/cash/ops', {
+    to_kind: 'supplier', to_id: tam, currency: 'USD', amount: 40 })).status, 400);
+
+  const r = await bosh('POST', '/api/cash/ops', {
+    to_kind: 'supplier', to_id: tam, currency: 'USD', amount: 40,
+    op_date: '2026-09-22', expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(r.status, 200, r.text);
+
+  //  Pul XODIMNING qo'lidan chiqdi, kassadan emas
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [b])).total_usd), oldin - 40);
+  const op = await H.id(
+    `SELECT from_kind, from_id, to_kind, to_id FROM cash_ops ORDER BY id DESC LIMIT 1`);
+  assert.equal(op.from_kind, 'worker');
+  assert.equal(op.from_id, b);
+  assert.equal(op.to_kind, 'supplier');
+  assert.equal(op.to_id, tam);
+
+  //  Foyda-zararda o'z moddasida turadi
+  const pl = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
+  assert.ok(pl.rows.some((x) => x.kind === 'expense' && x.item_id === modda),
+    'xodim yozgan to\'lov foyda-zararda');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

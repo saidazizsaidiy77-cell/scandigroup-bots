@@ -132,8 +132,13 @@ function supFilter() {
   $('fSup').innerHTML = `<option value="">— tanlang —</option>` +
     list.map(x => `<option value="supplier:${x.id}"${
       `supplier:${x.id}` === bor ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
-  $('fSupHint').textContent = q
-    ? `${list.length} ta topildi` : `${(refs.suppliers || []).length} ta ta'minotchi`;
+  //  Bo'sh ro'yxat sababini AYTADI: kassir «tizim ishlamayapti» deb
+  //  o'ylab, to'lovni yozmay qo'yardi. Ro'yxat Ta'minot bo'limidan
+  //  to'ladi — bir marta import qilinadi.
+  const bori = (refs.suppliers || []).length;
+  $('fSupHint').textContent = q ? `${list.length} ta topildi`
+    : bori ? `${bori} ta ta'minotchi`
+           : "Ro'yxat bo'sh — Ta'minot → Ta'minotchilar sahifasidan kiriting";
   calc();
 }
 

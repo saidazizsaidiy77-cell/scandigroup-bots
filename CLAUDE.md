@@ -707,6 +707,15 @@ Belgi MODDADA (`expense_items.needs_supplier`), kodda emas: ertaga
 «Yetkazib berish xarajati» ham ta'minotchiga bog'lansa, o'sha qatorga
 bitta `true` yoziladi.
 
+**Ta'minotchiga to'lovni PODOTCHYOT OLGAN XODIM ham yozadi**: ombor
+mudiri bozorda naqd to'laydi va o'sha odamning qarzi kamayishi kerak.
+Pul xodimning qo'lidan chiqadi (`worker → supplier`), modda esa
+foyda-zararda o'z qatorida qoladi va **majburiy**: xodim qaysi guruhga
+sarflay olishi shundan tekshiriladi. Shu sababdan ta'minotchilar
+ro'yxati `/refs` da HAMMAGA keladi — u spravochnik, unda na qarz bor,
+na to'lov. Ilgari faqat kassirga kelardi va xodimda uchinchi bosqich
+bo'sh chiqardi.
+
 **Qirqta ta'minotchi ro'yxatdan ko'z bilan qidirilmaydi** — uzun
 ro'yxat ustida qidiruv katagi turadi (o'ntadan oshsa o'zi chiqadi).
 **Foyda-zarar oyi ham yozilmaydi, TANLANADI**: «2026-09» ni terish

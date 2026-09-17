@@ -65,8 +65,12 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     db.query(`SELECT id, name, region FROM customers
                WHERE active AND ($1::text[] IS NULL OR channel = ANY($1))
                ORDER BY name`, [chans]),
-    boss ? db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`)
-         : { rows: [] },
+    //  Ta'minotchi ro'yxati HAMMAGA: podotchyot olgan xodim ham
+    //  ta'minotchiga to'lov qiladi (ombor mudiri bozorda naqd
+    //  to'laydi) va uchinchi bosqichda uni tanlashi kerak. Ilgari
+    //  ro'yxat faqat kassirga kelardi va xodimda bo'sh chiqardi.
+    //  Bu SPRAVOCHNIK — qarz ham, to'lov ham unda yo'q.
+    db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`),
     //  Xodim ro'yxati — QO'LIDA KORXONA PULI BORLARI. Kassir uchun
     //  bu «kimdan pul olsam bo'ladi» degan savolning to'la javobi:
     //  qolgan xodimlar bu ro'yxatda turishi kerak emas, ular pul
@@ -251,13 +255,20 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
   //  Ikkalasida ham bir tomon MAJBURAN o'zi: boshqa xodimning qo'liga
   //  ham, kassaga ham yozib qo'yib bo'lmaydi. Klient boshqasini
   //  yuborsa e'tiborga olinmaydi — tekshiruv shu yerda.
-  const sarf = !boss && b.to_kind === 'expense';
+  //  Sarf ikki xil bo'ladi va ikkalasi ham pulni xodimning qo'lidan
+  //  chiqaradi: to'g'ridan-to'g'ri harajat va TA'MINOTCHIGA to'lov —
+  //  ombor mudiri bozorda naqd to'laydi va o'sha odamning qarzi
+  //  kamayishi kerak. Modda ikkalasida ham yoziladi, ya'ni harajat
+  //  foyda-zarardan yo'qolmaydi.
+  const sarf = !boss && (b.to_kind === 'expense' || b.to_kind === 'supplier');
   const from_kind = boss ? b.from_kind : (sarf ? 'worker' : 'customer');
-  const to_kind   = boss ? b.to_kind   : (sarf ? 'expense' : 'worker');
+  const to_kind   = boss ? b.to_kind   : (sarf ? b.to_kind : 'worker');
   const from_id   = boss ? (Number(b.from_id) || null)
                          : (sarf ? req.user.id : (Number(b.from_id) || null));
   const to_id     = boss ? (b.to_id == null ? null : Number(b.to_id))
-                         : (sarf ? null : req.user.id);
+                         : (sarf ? (b.to_kind === 'supplier'
+                                    ? Number(b.to_id) || null : null)
+                                 : req.user.id);
 
   const client = await db.connect();
   try {
@@ -304,6 +315,10 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     //  etilgan guruhdan bo'lsin (izoh: sql/cash.sql). Cheklov
     //  belgilanmagan bo'lsa — hamma guruh.
     if (sarf) {
+      //  Ta'minotchiga to'lovda ham modda majburiy: xodim qaysi
+      //  harajat guruhiga sarflay olishi shundan tekshiriladi va
+      //  moddasiz to'lov foyda-zarardan yo'qolib ketardi.
+      if (!item_id) throw new Error('Harajat moddasi tanlanmagan');
       const w = (await client.query(
         `SELECT can_hold_cash FROM workers WHERE id = $1 AND active`,
         [req.user.id])).rows[0];
