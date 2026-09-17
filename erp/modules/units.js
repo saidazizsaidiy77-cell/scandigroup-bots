@@ -1421,13 +1421,29 @@ router.get('/stock/inbox', need('warehouse.view', 'production.view'), wrap(async
     `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.qty,
             r.color, r.fabric, r.customer_name, r.shop, r.section,
             u.handover_on, w.name AS sent_by,
-            (CURRENT_DATE - u.handover_on)::int AS days_waiting
+            (CURRENT_DATE - u.handover_on)::int AS days_waiting,
+            --  ★ NECHTASI BUYURTMADA. Qabul qiluvchining ishi navbat
+            --  tuzish: ichida mijoz kutayotgan mahsulot bor konver
+            --  avval qabul qilinsa, o'sha kuniyoq chiqarib yuboriladi.
+            --  Jurnalda ham shu raqam turadi (registerQuery) — ikkalasi
+            --  bitta jadvaldan hisoblanadi, ya'ni bir-biriga zid
+            --  javob bermaydi.
+            COALESCE(b.qty, 0)::int AS booked_qty,
+            b.kim
        FROM v_unit_register r
        JOIN production_units u ON u.id = r.id
        JOIN sections sc        ON sc.id = u.current_section_id AND sc.is_exit
        LEFT JOIN workers w     ON w.id = u.handover_by
+       LEFT JOIN LATERAL (
+         SELECT SUM(v.qty)::int AS qty,
+                --  Bitta mijoz bo'lsa ismi yoziladi, ko'p bo'lsa soni:
+                --  qatorga uchta ism sig'maydi va baribir o'qilmasdi.
+                CASE WHEN COUNT(DISTINCT v.customer_id) = 1
+                     THEN MIN(v.customer_name) END AS kim
+           FROM v_unit_bron v WHERE v.unit_id = r.id) b ON true
       WHERE r.status = 'production' AND u.handover_on IS NOT NULL
-      ORDER BY u.handover_on, r.conveyor_no`);
+      --  Buyurtmada turgani TEPADA: navbat shu bilan tuziladi.
+      ORDER BY COALESCE(b.qty, 0) DESC, u.handover_on, r.conveyor_no`);
   res.json(rows);
 }));
 

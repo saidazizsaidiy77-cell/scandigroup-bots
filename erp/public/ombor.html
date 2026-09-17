@@ -167,6 +167,10 @@ function draw() {
           <th class="c-name">Nomi</th><th class="c-type">Turi</th>
           <th class="c-qty num">Soni</th><th class="c-due">Kutmoqda</th><th class="c-act"></th>
         </tr></thead>
+        <!--  Soni katagida «N buyurtmada» turadi — jurnaldagi bilan bir
+              xil, bitta jadvaldan hisoblanadi. Qabul qiluvchining ishi
+              navbat tuzish: ichida mijoz kutayotgan konver avval qabul
+              qilinsa, o'sha kuniyoq chiqarib yuboriladi. -->
         <tbody>${rows.map(r => `
           <tr>
             <td class="c-sel">${canAccept ? `<input type="checkbox" style="width:auto"
@@ -175,9 +179,14 @@ function draw() {
             <td class="c-name">${esc(r.product)}${r.color
               ? `<div class="muted" style="font-size:12px">${esc(r.color)}</div>` : ''}</td>
             <td class="c-type muted">${esc(r.product_type || '')}</td>
-            <td class="c-qty num">${r.qty}</td>
-            <td class="c-due">${waited(r.days_waiting)}${r.sent_by
-              ? `<div class="muted" style="font-size:12px">${esc(r.sent_by)}</div>` : ''}</td>
+            <td class="c-qty num">${r.qty}${r.booked_qty
+              ? `<div class="new-bron" style="font-size:11.5px">${
+                  r.booked_qty} buyurtmada</div>` : ''}</td>
+            <td class="c-due">${waited(r.days_waiting)}${r.booked_qty && r.kim
+              ? `<div style="font-size:12px"><b>${esc(r.kim)}</b> kutmoqda</div>` : ''}
+              <div class="muted" style="font-size:12px">${
+                r.handover_on ? d8(r.handover_on) + " jo'natilgan" : ''}${
+                r.sent_by ? ' \u00b7 ' + esc(r.sent_by) : ''}</div></td>
             <td class="c-act">${canAccept
               ? `<button class="primary" onclick="accept([${r.id}])">Qabul qildim</button>`
               : ''}</td>
@@ -271,7 +280,11 @@ function drawStock() {
         <div style="flex:1;min-width:150px"><label>Qidiruv</label>
           <input id="sQ" placeholder="rang, mato, konveyer \u2116"
                  value="${esc(d.q || '')}" oninput="debStock()"></div>
-        <div><label>Omborga kirgan, dan</label>
+        <!--  Sana endi HARAKAT sanasi: kirdi/chiqdi shu oraliqniki.
+              Bronda va qoldiq esa hozirgi holat va oraliqqa bog'liq
+              emas — «kelajakdagi oraliq» tanlansa ombor bo'shab
+              qolmaydi, faqat aylanma nolga tushadi. -->
+        <div><label>Harakat sanasi, dan</label>
           <input id="sFrom" type="date" value="${d.from || ''}" onchange="loadStock()"></div>
         <div><label>gacha</label>
           <input id="sTo" type="date" value="${d.to || ''}" onchange="loadStock()"></div>
@@ -282,6 +295,8 @@ function drawStock() {
           ? `<button onclick="location.href='/qoldiq.html'">Fayldan kiritish</button>` : ''}
       </div>
 
+      <p class="muted" style="font-size:12px;margin-top:10px">Kirdi va chiqdi —
+        tanlangan oraliq bo'yicha &middot; Bronda va qoldiq — hozirgi holat</p>
       ${typeChips(d) ? `<div style="margin-top:14px">
         <label>Turi</label>
         <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
@@ -320,15 +335,26 @@ function drawStock() {
         : 'Qabul qilingan mahsulot shu yerda turadi.'}</p></div>`
     : `<div class="card" style="margin-top:16px">
       <div style="overflow:auto;max-height:64vh">
-      <table class="stock">
+      <!--  ★ AYLANMA. Sana ikki xil ishlaydi va buni bilib qo'yish kerak:
+            KIRDI/CHIQDI tanlangan oraliqniki, BRONDA/QOLDIQ esa hozirgi
+            holat. «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
+            filtri bilan aralashtirib bo'lmaydi. -->
+      <table class="stock ${isTM() ? 'tm' : 'shop'}">
         <thead><tr>
           <th class="s-name">Mahsulot</th><th class="s-type">Turi</th>
           <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
-          <th class="s-qty">Soni</th>
-          ${isTM() ? `<th class="s-bron">Bronda</th><th class="s-free">Bo'sh</th>`
-                   : `<th class="s-price">Narx, $</th><th class="s-amount">Summa, $</th>`}
+          <th class="s-in">Kirdi</th><th class="s-out">Chiqdi</th>
+          ${isTM() ? `<th class="s-bron">Bronda</th>` : ''}
+          <th class="s-free">Qoldiq</th>
+          ${isTM() ? '' : `<th class="s-price">Narx, $</th>
+                           <th class="s-amount">Summa, $</th>`}
         </tr></thead>
         <tbody>${d.rows.map(r => drawStockRow(r)).join('')}</tbody>
+        <!--  JAMI eng ostida, ustunlar bilan bir chiziqda: alohida
+              kartochka qilinsa ko'z jadvaldan chiqib, qaysi raqam qaysi
+              ustunniki ekanini qidirib qolardi. O'lchov birligi bo'yicha
+              ajratiladi — dona bilan komplektni qo'shib bo'lmaydi. -->
+        <tfoot>${jamiRows(d)}</tfoot>
       </table></div></div>`}`;
 }
 
@@ -347,6 +373,29 @@ function price(r) {
     : ` <span class="muted" style="font-size:11px">o'rt.</span>`);
 }
 
+//  Jadval ostidagi JAMI. O'lchov birligi bo'yicha ajratiladi: stul
+//  DONA bilan, penal/kamod/sp/stol KOMPLEKT bilan sanaladi va ularni
+//  bitta raqamga qo'shib bo'lmaydi — «22» degan yig'indi nimani
+//  anglatishi noma'lum bo'lib qolardi (CLAUDE.md).
+function jamiRows(d) {
+  const u = (d.total.by_uom || []).filter(x => x.qty || x.kirdi || x.chiqdi);
+  if (!u.length) return '';
+  const son = (v) => v ? `<b>${v}</b>` : '<span class="muted">\u2014</span>';
+  return u.map((x, i) => `<tr>
+    <td class="s-name">${i === 0 ? 'JAMI' : ''}</td>
+    <td class="s-type muted">${esc(x.uom)}</td>
+    <td class="s-color"></td><td class="s-fabric"></td>
+    <td class="s-in">${son(x.kirdi)}</td>
+    <td class="s-out">${son(x.chiqdi)}</td>
+    ${isTM() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}
+    <td class="s-free"><b>${x.qty}</b> <span class="muted"
+      style="font-size:11px">${esc(x.uom)}</span></td>
+    ${isTM() ? '' : `<td class="s-price"></td>
+      <td class="s-amount">${i === 0 && Number(d.total.amount)
+        ? `<b>${money(d.total.amount)}</b>` : ''}</td>`}
+  </tr>`).join('');
+}
+
 function drawStockRow(r) {
   const k = rowKey(r);
   const open = openRows.has(k);
@@ -357,16 +406,19 @@ function drawStockRow(r) {
       <td class="s-type muted">${esc(r.product_type || '')}</td>
       <td class="s-color muted">${esc(r.color || '\u2014')}</td>
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
-      <td class="s-qty"><b>${r.qty}</b> <span class="muted"
-        style="font-size:11px">${esc(r.uom || '')}</span></td>
+      <td class="s-in">${r.kirdi ? `<b>${r.kirdi}</b>`
+        : '<span class="muted">\u2014</span>'}</td>
+      <td class="s-out">${r.chiqdi ? `<b>${r.chiqdi}</b>`
+        : '<span class="muted">\u2014</span>'}</td>
       ${isTM()
       //  Bronda turgan mahsulot OMBORDA: u hali chiqib ketmagan,
-      //  shuning uchun «Soni» dan ayrilmaydi — sotib bo'lmasligi
+      //  shuning uchun qoldiqdan ayrilmaydi — sotib bo'lmasligi
       //  alohida ustunda turadi.
       ? `<td class="s-bron">${r.bron
-            ? `<b>${r.bron}</b>` : '<span class="muted">\u2014</span>'}</td>
-         <td class="s-free">${r.free
-            ? `<b>${r.free}</b>` : '<span class="muted">0</span>'}</td>`
+            ? `<b>${r.bron}</b>` : '<span class="muted">\u2014</span>'}</td>` : ''}
+      <td class="s-free"><b>${r.qty}</b> <span class="muted"
+        style="font-size:11px">${esc(r.uom || '')}</span></td>
+      ${isTM() ? ''
       //  Vitrinada narx va summa: u yerda nuqta hisobi yuritiladi.
       //  Narxi yo'q konverning summasi 0 emas, NOMA'LUM: nol raqam
       //  «bepul» degan ma'no beradi. Baza matn qaytaradi ("0.00"),
@@ -375,7 +427,8 @@ function drawStockRow(r) {
          <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
             : '<span class="muted">\u2014</span>'}</td>`}
     </tr>
-    ${!open ? '' : `<tr class="more"><td colspan="7" style="background:var(--bg);padding:10px 14px">
+    ${!open ? '' : `<tr class="more"><td colspan="${isTM() ? 8 : 9}"
+      style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? `<span class="muted">\u2014</span>`
       : units.map(u => {
@@ -780,7 +833,14 @@ function drawMoves() {
         <tr>
           <td>${d8(r.on_date)}</td>
           <td><span class="tag ${r.kind === 'kirim' ? 'ok' : ''}">${r.kind}</span></td>
-          <td class="c-no"><b>${esc(r.conveyor_no)}</b></td>
+          <!--  Konver raqami ostida ZAKAZ raqami: «kim chiqargan» degan
+                savoldan keyingi savol «qaysi hujjat bilan» bo'ladi.
+                Bosilsa o'sha yuk xati ochiladi. -->
+          <td class="c-no"><b>${esc(r.conveyor_no)}</b>${r.order_no
+            ? `<div style="font-size:12px">${r.order_id
+                ? `<a href="/yukxati.html?id=${r.order_id}" target="_blank"
+                     onclick="event.stopPropagation()">${esc(r.order_no)}</a>`
+                : `<span class="muted">${esc(r.order_no)}</span>`}</div>` : ''}</td>
           <td class="c-name">${esc(r.product)}<div class="muted"
             style="font-size:12px">${esc(r.product_type || '')}</div></td>
           <td class="c-qty num">${r.qty}</td>

@@ -254,6 +254,21 @@ WHERE u.status = 'fg';
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS fg_by   INT REFERENCES workers(id);
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS ship_by INT REFERENCES workers(id);
 
+--  Ustun qo'shilgunga qadar chiqib ketgan konverlarda «kim» bo'sh
+--  qolardi. Buyurtmada esa yozuv bor (`orders.shipped_by`) — mudir
+--  tasdiqlaganda o'sha yerga tushgan. Bir martalik ko'chirish shuni
+--  konverga qaytaradi, ya'ni eski tarix ham to'ladi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'ship-by-eski') THEN
+    UPDATE production_units u SET ship_by = o.shipped_by
+      FROM orders o
+     WHERE u.ship_by IS NULL AND u.status = 'shipped'
+       AND o.order_no = u.order_no AND o.shipped_by IS NOT NULL;
+    INSERT INTO migration_flags (key) VALUES ('ship-by-eski');
+  END IF;
+END $$;
+
 CREATE OR REPLACE VIEW v_fg_moves AS
 SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        u.conveyor_no, u.order_no, p.name AS product, g.name AS product_type,
@@ -269,7 +284,15 @@ SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        COALESCE((SELECT m.from_warehouse_id FROM warehouse_moves m
                   WHERE m.unit_id = u.id ORDER BY m.moved_on, m.id LIMIT 1),
                 u.warehouse_id, tm.id) AS warehouse_id,
-       fgw.name AS by_name
+       fgw.name AS by_name,
+       --  Jamlanma aylanma shu ikkovi bo'yicha guruhlanadi: mahsulot
+       --  nomi takrorlanishi mumkin, id esa yagona; o'lchov birligi esa
+       --  dona bilan komplektni bir yig'indiga qo'shib yubormaslik uchun.
+       u.product_id, g.uom,
+       --  Qaysi hujjat bilan chiqqani: yuk xati BUYURTMAga tegishli va
+       --  tarixdan unga o'tish uchun id kerak. Konverda zakaz raqami
+       --  MATN bo'lib turadi, shuning uchun nomi bo'yicha bog'lanadi.
+       (SELECT o.id FROM orders o WHERE o.order_no = u.order_no) AS order_id
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
@@ -285,7 +308,8 @@ SELECT 'chiqim', u.ship_on, u.id,
        u.qty, u.color, u.fabric,
        COALESCE(c.name, 'T/M ombor'), u.total_amount,
        COALESCE(u.warehouse_id, tm.id),
-       shw.name
+       shw.name, u.product_id, g.uom,
+       (SELECT o.id FROM orders o WHERE o.order_no = u.order_no)
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
@@ -307,7 +331,7 @@ SELECT 'chiqim', m.moved_on, m.unit_id,
        -- ustida CREATE OR REPLACE VIEW yiqiladi (CLAUDE.md, 2-qoida).
        wt.name, NULL::numeric(16,2),
        m.from_warehouse_id,
-       mw1.name
+       mw1.name, u.product_id, g.uom, NULL::int
 FROM warehouse_moves m
 JOIN production_units u ON u.id = m.unit_id
 JOIN products p         ON p.id = u.product_id
@@ -322,7 +346,7 @@ SELECT 'kirim', m.moved_on, m.unit_id,
        m.qty, u.color, u.fabric,
        wf.name, NULL::numeric(16,2),
        m.to_warehouse_id,
-       mw2.name
+       mw2.name, u.product_id, g.uom, NULL::int
 FROM warehouse_moves m
 JOIN production_units u ON u.id = m.unit_id
 JOIN products p         ON p.id = u.product_id

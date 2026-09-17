@@ -139,6 +139,19 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);
   const params = [req.query.from || null, req.query.to || null, req.query.q || null,
                   wh.id, req.query.product_type || null];
+  //  Qoldiq so'rovlarida sana ISHLATILMAYDI (u hozirgi holat), shuning
+  //  uchun ular uchun alohida ro'yxat: bog'lanmagan parametr qolsa
+  //  Postgres «could not determine data type of parameter» deb yiqiladi.
+  const nowParams = [req.query.q || null, wh.id, req.query.product_type || null];
+  const nowSearch = `($1::text IS NULL OR product ILIKE '%' || $1 || '%'
+                   OR product_type ILIKE '%' || $1 || '%'
+                   OR color ILIKE '%' || $1 || '%'
+                   OR fabric ILIKE '%' || $1 || '%'
+                   OR conveyor_no ILIKE '%' || $1 || '%')
+                  AND warehouse_id = $2
+                  AND ($3::text IS NULL
+                       OR product_type = ANY(string_to_array($3, ',')))`;
+
   const search = `($3::text IS NULL OR product ILIKE '%' || $3 || '%'
                    OR product_type ILIKE '%' || $3 || '%'
                    OR color ILIKE '%' || $3 || '%'
@@ -147,68 +160,137 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
                   AND warehouse_id = $4
                   AND ${PICK}`;
 
+  //  ★ AYLANMA: davr ichida KIRDI va CHIQDI, hozir esa QOLDIQ.
+  //
+  //  Ikki xil savolga bitta jadval javob beradi, shuning uchun sana
+  //  ikki xil ishlaydi va buni bilib qo'yish kerak:
+  //    kirdi / chiqdi — tanlangan ORALIQ bo'yicha harakat;
+  //    bron / qoldiq  — HOZIRGI holat, sanaga bog'liq emas.
+  //  Boshqacha bo'lishi mumkin emas: «1-sentabrdagi qoldiq» degan savol
+  //  boshqa hisobot, uni oraliq filtri bilan aralashtirib bo'lmaydi.
+  //
+  //  Qator ikki manbadan tushadi: hozir omborda turgani (v_fg_units) va
+  //  davr ichida qimirlagani (v_fg_moves). Shuning uchun FULL JOIN —
+  //  kelib, o'sha davrning o'zida chiqib ketgan mahsulot ham qatorda
+  //  ko'rinishi kerak, garchi undan omborda hech narsa qolmagan bo'lsa ham.
+  const mFrom = req.query.from || null, mTo = req.query.to || null;
+  const AYL = `
+    SELECT m.product_id, ${NORM('m.color')} AS color, ${NORM('m.fabric')} AS fabric,
+           COALESCE(SUM(m.qty) FILTER (WHERE m.kind = 'kirim'), 0)::int  AS kirdi,
+           COALESCE(SUM(m.qty) FILTER (WHERE m.kind = 'chiqim'), 0)::int AS chiqdi
+      FROM v_fg_moves m
+     WHERE m.warehouse_id = $4
+       AND ($1::date IS NULL OR m.on_date >= $1)
+       AND ($2::date IS NULL OR m.on_date <= $2)
+       AND ($3::text IS NULL OR m.product ILIKE '%' || $3 || '%'
+            OR m.product_type ILIKE '%' || $3 || '%'
+            OR m.color ILIKE '%' || $3 || '%'
+            OR m.fabric ILIKE '%' || $3 || '%'
+            OR m.conveyor_no ILIKE '%' || $3 || '%')
+       AND ($5::text IS NULL OR m.product_type = ANY(string_to_array($5, ',')))
+     GROUP BY m.product_id, ${NORM('m.color')}, ${NORM('m.fabric')}`;
+
   const [rows, total, byUom, facets] = await Promise.all([
     db.query(
-      `SELECT product_type, product_id, product, sku, uom,
-              ${NORM('color')}  AS color,
-              ${NORM('fabric')} AS fabric,
-              COUNT(*)::int          AS units,
-              COALESCE(SUM(qty), 0)::int AS qty,
-              --  Qoldiq UCH raqam bo'lib turadi:
-              --    qty  — omborda jismonan turgani (bronda turgani ham
-              --           shu yerda: u hali chiqib ketmagan);
-              --    bron — buyurtmaga olingani;
-              --    free — sotish mumkin bo'lgani.
-              --  Inventarizatsiyada sanaladigan raqam — qty: mahsulot
-              --  chiqib ketmagan bo'lsa u javonda turibdi.
-              COALESCE(SUM(reserved_qty), 0)::int AS bron,
-              COALESCE(SUM(qty - reserved_qty), 0)::int AS free,
-              COALESCE(SUM(total_amount), 0) AS amount,
-              MIN(fg_on) AS first_on,
-              MAX(days_in_stock)::int AS oldest_days,
-              -- Narx qatorda BITTA raqam bo'lib turadi. Bir xil mahsulot
-              -- turli narxda kirgan bo'lishi mumkin, shuning uchun eng
-              -- kichigi va eng kattasi ham keladi: farq bo'lsa ekranda
-              -- «o'rt.» deb belgilanadi va o'rtacha ko'rsatiladi —
-              -- yolg'on aniq raqamdan ko'ra ochiq o'rtacha yaxshi.
-              MIN(unit_price) AS price_min,
-              MAX(unit_price) AS price_max
-         FROM v_fg_units
-        WHERE ${FROM_TO} AND ${search}
-        GROUP BY product_type, product_id, product, sku, uom,
-                 ${NORM('color')}, ${NORM('fabric')}
-        -- Birinchi ustun bo'yicha: jadvalda Mahsulot birinchi turadi va
-        -- ko'z shundan qidiradi. Tur bo'yicha ajratish endi filtrda.
-        ORDER BY product, product_type, color NULLS FIRST, fabric NULLS FIRST`,
-      params),
+      `WITH qold AS (
+         SELECT product_type, product_id, product, sku, uom,
+                ${NORM('color')}  AS color,
+                ${NORM('fabric')} AS fabric,
+                COUNT(*)::int              AS units,
+                COALESCE(SUM(qty), 0)::int AS qty,
+                COALESCE(SUM(reserved_qty), 0)::int AS bron,
+                COALESCE(SUM(qty - reserved_qty), 0)::int AS free,
+                COALESCE(SUM(total_amount), 0) AS amount,
+                MIN(fg_on) AS first_on,
+                MAX(days_in_stock)::int AS oldest_days,
+                --  Narx qatorda BITTA raqam bo'lib turadi. Bir xil mahsulot
+                --  turli narxda kirgan bo'lishi mumkin, shuning uchun eng
+                --  kichigi va eng kattasi ham keladi: farq bo'lsa ekranda
+                --  «o'rt.» deb belgilanadi — yolg'on aniq raqamdan ko'ra
+                --  ochiq o'rtacha yaxshi.
+                MIN(unit_price) AS price_min,
+                MAX(unit_price) AS price_max
+           FROM v_fg_units
+          WHERE ${search}
+          GROUP BY product_type, product_id, product, sku, uom,
+                   ${NORM('color')}, ${NORM('fabric')}
+       ), ayl AS (${AYL})
+       SELECT COALESCE(q.product_id, a.product_id) AS product_id,
+              COALESCE(q.product, p.name)          AS product,
+              COALESCE(q.product_type, g.name)     AS product_type,
+              COALESCE(q.sku, p.sku)               AS sku,
+              COALESCE(q.uom, g.uom)               AS uom,
+              COALESCE(q.color, a.color)   AS color,
+              COALESCE(q.fabric, a.fabric) AS fabric,
+              COALESCE(q.units, 0)  AS units,
+              COALESCE(q.qty, 0)    AS qty,
+              COALESCE(q.bron, 0)   AS bron,
+              COALESCE(q.free, 0)   AS free,
+              COALESCE(q.amount, 0) AS amount,
+              q.first_on, q.oldest_days, q.price_min, q.price_max,
+              COALESCE(a.kirdi, 0)  AS kirdi,
+              COALESCE(a.chiqdi, 0) AS chiqdi
+         FROM qold q
+         FULL JOIN ayl a
+           ON a.product_id = q.product_id
+          AND a.color  IS NOT DISTINCT FROM q.color
+          AND a.fabric IS NOT DISTINCT FROM q.fabric
+         LEFT JOIN products p       ON p.id = COALESCE(q.product_id, a.product_id)
+         LEFT JOIN product_groups g ON g.id = p.group_id
+        -- Mahsulot birinchi ustunda turadi va ko'z shundan qidiradi.
+        ORDER BY 2, 3, 6 NULLS FIRST, 7 NULLS FIRST`, params),
+
+    //  Yuqoridagi kartochkalar. Qoldiq HOZIRGI holat (sanasiz), aylanma
+    //  esa tanlangan oraliqniki — jadvaldagi ikki xil sana mantig'i shu
+    //  yerda ham bir xil bo'lishi kerak.
     db.query(
       `SELECT COUNT(*)::int AS units, COALESCE(SUM(qty), 0)::int AS qty,
               COALESCE(SUM(reserved_qty), 0)::int AS bron,
               COALESCE(SUM(qty - reserved_qty), 0)::int AS free,
               COALESCE(SUM(total_amount), 0) AS amount
-         FROM v_fg_units WHERE ${FROM_TO} AND ${search}`, params),
+         FROM v_fg_units WHERE ${nowSearch}`, nowParams),
+
     // Stul DONA bilan, penal/kamod/sp/stol KOMPLEKT bilan sanaladi —
     // ularni bitta yig'indiga qo'shib bo'lmaydi: «22» degan raqam nimani
-    // anglatishi noma'lum bo'lib qolardi.
+    // anglatishi noma'lum bo'lib qolardi. Shuning uchun jadval ostidagi
+    // «Jami» ham o'lchov birligi bo'yicha ajratiladi.
     db.query(
-      `SELECT uom, COALESCE(SUM(qty), 0)::int AS qty,
-              COALESCE(SUM(reserved_qty), 0)::int AS bron,
-              COALESCE(SUM(qty - reserved_qty), 0)::int AS free
-         FROM v_fg_units WHERE ${FROM_TO} AND ${search}
-        GROUP BY uom ORDER BY uom`, params),
+      `SELECT u.uom,
+              COALESCE(SUM(q.qty), 0)::int  AS qty,
+              COALESCE(SUM(q.bron), 0)::int AS bron,
+              COALESCE(SUM(q.free), 0)::int AS free,
+              COALESCE(SUM(m.kirdi), 0)::int  AS kirdi,
+              COALESCE(SUM(m.chiqdi), 0)::int AS chiqdi
+         FROM (SELECT DISTINCT uom FROM product_groups WHERE uom IS NOT NULL) u
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(qty), 0) AS qty,
+                  COALESCE(SUM(reserved_qty), 0) AS bron,
+                  COALESCE(SUM(qty - reserved_qty), 0) AS free
+             FROM v_fg_units WHERE uom = u.uom AND ${search}) q ON true
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(qty) FILTER (WHERE kind = 'kirim'), 0) AS kirdi,
+                  COALESCE(SUM(qty) FILTER (WHERE kind = 'chiqim'), 0) AS chiqdi
+             FROM v_fg_moves m2
+            WHERE m2.uom = u.uom AND m2.warehouse_id = $4
+              AND ($1::date IS NULL OR m2.on_date >= $1)
+              AND ($2::date IS NULL OR m2.on_date <= $2)
+              AND ($5::text IS NULL
+                   OR m2.product_type = ANY(string_to_array($5, ',')))) m ON true
+        WHERE q.qty <> 0 OR m.kirdi <> 0 OR m.chiqdi <> 0
+        GROUP BY u.uom ORDER BY u.uom`, params),
+
     //  Tanlov ro'yxati filtrning O'ZIDAN qat'i nazar tuziladi: aks holda
     //  «Penal» tanlangach ro'yxatda faqat Penal qolib, boshqasiga o'tish
     //  uchun avval filtrni tozalash kerak bo'lardi.
     db.query(
       `SELECT product_type, COALESCE(SUM(qty), 0)::int AS qty
-         FROM v_fg_units
-        WHERE warehouse_id = $1 AND ($2::date IS NULL OR fg_on >= $2)
-          AND ($3::date IS NULL OR fg_on <= $3)
-        GROUP BY product_type ORDER BY product_type`,
-      [wh.id, req.query.from || null, req.query.to || null]),
+         FROM v_fg_units WHERE warehouse_id = $1
+        GROUP BY product_type ORDER BY product_type`, [wh.id]),
   ]);
+  const ayl = byUom.rows.reduce((a, r) =>
+    ({ kirdi: a.kirdi + r.kirdi, chiqdi: a.chiqdi + r.chiqdi }), { kirdi: 0, chiqdi: 0 });
   res.json({ warehouse: wh, rows: rows.rows,
-             total: { ...total.rows[0], by_uom: byUom.rows },
+             total: { ...total.rows[0], ...ayl, by_uom: byUom.rows },
              facets: facets.rows });
 }));
 

@@ -335,10 +335,17 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   assert.equal(det.status, 200, det.text);
   assert.ok(det.body.rows.some((r) => r.conveyor_no === u.conveyor_no));
 
-  // Sana oralig'i: omborga kirgan kun bo'yicha. Kelajakdagi oraliqda bo'sh
-  const none = await mudir('GET', '/api/warehouse/fg/summary?from=2099-01-01');
-  assert.equal(none.body.rows.length, 0);
-  assert.equal(none.body.total.units, 0);
+  //  ★ SANA ORALIG'I FAQAT AYLANMAGA TEGADI. Qoldiq — hozirgi holat va
+  //  oraliqqa bog'liq emas: «kelajakdagi oraliq» tanlansa omborda
+  //  turgan mahsulot yo'qolib qolmaydi, faqat kirdi/chiqdi nolga
+  //  tushadi. Aks holda mudir «ombor bo'shab qolibdi» deb o'qirdi.
+  assert.equal(row.kirdi, 1, 'bugun kirgani aylanmada');
+  const kel = await mudir('GET', '/api/warehouse/fg/summary?from=2099-01-01');
+  const kelRow = kel.body.rows.find((r) => r.color === 'Venge');
+  assert.ok(kelRow, 'qoldiq oraliqdan qat\'i nazar turadi');
+  assert.equal(kelRow.qty, 1);
+  assert.equal(kelRow.kirdi, 0, 'o\'sha oraliqda harakat yo\'q');
+  assert.equal(kel.body.total.kirdi, 0);
 });
 
 const post = (path, csv) => fetch(base + path, {

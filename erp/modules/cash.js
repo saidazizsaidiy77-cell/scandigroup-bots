@@ -55,7 +55,7 @@ async function nextDocNo(client) {
 router.get('/refs', need(...ANY), wrap(async (req, res) => {
   const boss = isBoss(req);
   const chans = channelsOf(req);
-  const [accounts, groups, items, customers, suppliers, workers, payable] =
+  const [accounts, groups, items, customers, suppliers, workers, payable, kurs] =
     await Promise.all([
     boss ? db.query(`SELECT id, code, name, kind FROM cash_accounts
                       WHERE is_active ORDER BY sort, name`) : { rows: [] },
@@ -84,11 +84,20 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     boss ? db.query(`SELECT id, name FROM workers
                       WHERE active AND can_hold_cash ORDER BY name`)
          : { rows: [] },
+    //  ★ OXIRGI KURS. Zavod qoidasi o'zgarmaydi — kursni har
+    //  operatsiyada odam yozadi — lekin uni har safar noldan terib
+    //  o'tirish shart emas: oxirgi ishlatilgani katakda tayyor turadi
+    //  va kerak bo'lsa ustidan yoziladi. Kurs kunda bir marta
+    //  o'zgaradi, operatsiya esa kuniga o'nlab bo'ladi.
+    db.query(`SELECT rate FROM cash_ops
+               WHERE rate IS NOT NULL AND status = 'ok'
+               ORDER BY op_date DESC, id DESC LIMIT 1`),
   ]);
   res.json({
     accounts: accounts.rows, groups: groups.rows, items: items.rows,
     customers: customers.rows, suppliers: suppliers.rows, workers: workers.rows,
     payable: payable.rows,
+    rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null,
     me: { id: req.user.id, name: req.user.name }, boss,
   });
 }));

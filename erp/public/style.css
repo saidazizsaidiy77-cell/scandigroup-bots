@@ -168,14 +168,26 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
 .stock thead th{position:sticky;top:0;z-index:2;background:var(--surface);
   box-shadow:inset 0 -1px 0 var(--line)}
 .stock .s-qty,.stock .s-price,.stock .s-amount,
-.stock .s-bron,.stock .s-free{text-align:right}
+.stock .s-bron,.stock .s-free,.stock .s-in,.stock .s-out{text-align:right}
+/* Aylanma: kirdi yashil, chiqdi kulrang — ko'z qaysi tomon ekanini
+   raqamni o'qimasdan oldin biladi. */
+.stock .s-in b{color:var(--ok)}
+/* Jadval ostidagi JAMI qatori: ustunlar bilan bir chiziqda turadi,
+   shuning uchun alohida kartochka emas — pastda, o'z joyida. */
+.stock tfoot td{border-top:2px solid var(--line);font-weight:600;
+  position:sticky;bottom:0;background:var(--surface)}
 @media (max-width:620px){
   .stock thead{display:none}
   .stock td{border:0;padding:0}
   .stock tbody tr{display:grid;gap:3px 12px;
     grid-template-columns:1fr auto;
-    grid-template-areas:"name qty" "color price" "fabric amount" "type type";
     padding:14px 0;border-bottom:1px solid var(--line)}
+  /* Telefonda ustun yo'q — har qator kartochkaga aylanadi. T/M omborda
+     to'rtta raqam (qoldiq, kirdi, chiqdi, bronda), vitrinada esa narx
+     va summa: shuning uchun ikki xil panjara. */
+  .stock.tm   tbody tr{grid-template-areas:"name qty" "color in" "fabric out" "type bron"}
+  .stock.shop tbody tr{grid-template-areas:"name qty" "color in" "fabric out"
+                                           "price amount" "type type"}
   .stock tbody tr:last-child{border-bottom:0}
   .stock .s-name  {grid-area:name;font-size:15px}
   .stock .s-qty   {grid-area:qty;font-size:15px}
@@ -186,11 +198,16 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   .stock .s-amount{grid-area:amount;font-size:13px}
   .stock .s-price::before {content:'narx $';color:var(--muted)}
   .stock .s-amount::before{content:'summa $';color:var(--muted)}
-  /* T/M omborda o'sha ikki uyaga bron va bo'sh qoldiq tushadi */
-  .stock .s-bron {grid-area:price;font-size:13px}
-  .stock .s-free {grid-area:amount;font-size:13px}
+  .stock .s-in  {grid-area:in;font-size:13px}
+  .stock .s-out {grid-area:out;font-size:13px}
+  .stock .s-bron{grid-area:bron;font-size:13px}
+  .stock .s-in::before  {content:'kirdi ';color:var(--muted)}
+  .stock .s-out::before {content:'chiqdi ';color:var(--muted)}
   .stock .s-bron::before{content:'bronda ';color:var(--muted)}
-  .stock .s-free::before{content:"bo'sh ";color:var(--muted)}
+  /* Telefonda katta raqam — QOLDIQ: mudirning kunlik savoli shu */
+  .stock .s-free{grid-area:qty;font-size:15px}
+  .stock tfoot tr{display:grid;grid-template-columns:1fr auto;
+    gap:3px 12px;padding:12px 0}
   /* Ochilgan qator — konver raqamlari: kartochka tarmog'iga kirmaydi */
   .stock tr.more{display:block;border:0;padding:0 0 14px}
   .stock tr.more td{display:block}

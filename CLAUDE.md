@@ -111,6 +111,12 @@ allaqachon bor `warehouse_moves.worker_id`). Dona yetishmaganda savol
 aynan shu bo'ladi; audit jurnalida yozuv bor, lekin u ombor mudiriga
 ochilmaydi va konver bo'yicha izlash uchun mo'ljallanmagan ham.
 
+Konver raqami ostida **zakaz raqami**, bosilsa o'sha **yuk xati**
+ochiladi: «kim chiqargan» degan savoldan keyingi savol «qaysi hujjat
+bilan» bo'ladi. Ustun qo'shilgunga qadar chiqib ketganlarda «kim» bo'sh
+qolardi — buyurtmadagi yozuvdan bir martalik ko'chirildi
+(`migration_flags`: `ship-by-eski`).
+
 Yonida **kirim/chiqim filtri**: mudirning savoli ko'pincha bitta tomon
 haqida — «bugun nima keldi» yoki «bugun nima chiqdi». Filtr SERVERDA
 (`?kind=`), chunki oraliq katta bo'lsa qatorlar chegarasiga yetib,
@@ -600,6 +606,25 @@ pastda dollardagi raqam yirik shrift bilan. **Harajat ham chiqimning bir
 turi**: «Kimga» ro'yxatidan harajat moddasi tanlansa foyda-zarar oyi shu
 zahoti so'raladi.
 
+**★ CHIQIM IKKI BOSQICH: avval GURUH, keyin uning ichidagi.** Bitta
+ro'yxatda o'ttizta «Guruh · Modda» qatori turardi va kassir kerakligini
+topguncha butun ro'yxatni o'qib chiqardi. Endi «Kimga» da avval
+to'qqizta harajat guruhi ko'rinadi, ustiga **Ta'minotchiga to'lov** va
+**Xodim qo'liga pul** — kassir uchun ular ham «qayerga» degan savolning
+javobi, guruhlardan farqi yo'q. Tanlangach ikkinchi katak ochiladi va
+faqat o'shaning ichidagilar turadi. Shu sababdan xodimga pul berish
+alohida tugma EMAS.
+
+**Kurs oldindan to'ldiriladi** — oxirgi ishlatilgani (`/refs` dagi
+`rate`). Zavod qoidasi o'zgarmadi, kursni baribir odam yozadi; lekin
+uni har safar noldan terib o'tirish shart emas: kurs kunda bir marta
+o'zgaradi, operatsiya esa kuniga o'nlab bo'ladi. **Kursning O'ZI
+hisoblanmaydi**: so'm va dollar qoldig'i ikkita ALOHIDA pul, biri
+ikkinchisining aylantirilgani emas — `uzs/usd` bo'lsa o'ylab topilgan
+kurs chiqardi va butun hisob shunga qurilardi. Boshlang'ich qoldiq
+oynasida esa **jami dollarda** saqlashdan OLDIN ko'rinadi: bir nol
+ortiqcha yozilgani shu yerda bilinadi.
+
 **Kirim va chiqim ro'yxatida XODIM YO'Q** (zavod qarori): korxonaga pul
 mijozdan keladi, ta'minotchiga va harajatga ketadi. Xodimning qo'lidagi
 pul korxonaning O'Z puli — uning kassaga kelishi kirim emas,
@@ -752,6 +777,30 @@ klient uni o'chira olmaydi.
 **Tarixga tegadigan maydonlar** faqat `production.manage` da: konveyer
 raqami, soni, turgan joyi, FAKT sanalar. Tekshiruv **serverda**
 (`modules/units.js`, `RESTRICTED`) — katakni yashirish himoya emas.
+
+**Ombor qoldig'i — AYLANMA.** Jadvalda to'rtta raqam: **Kirdi ·
+Chiqdi · Bronda · Qoldiq**. Sana ikki xil ishlaydi va buni bilib
+qo'yish kerak: **kirdi/chiqdi tanlangan ORALIQ bo'yicha**, **bronda va
+qoldiq esa HOZIRGI holat**. Boshqacha bo'lishi mumkin emas —
+«1-sentabrdagi qoldiq» boshqa savol va uni oraliq filtri bilan
+aralashtirib bo'lmaydi; sahifa buni o'zi yozib turadi.
+
+Qator IKKI manbadan tushadi (`FULL JOIN`): hozir omborda turgani
+(`v_fg_units`) va davr ichida qimirlagani (`v_fg_moves`) — kelib, o'sha
+davrning o'zida chiqib ketgan mahsulot ham qatorda ko'rinishi kerak,
+garchi undan omborda hech narsa qolmagan bo'lsa ham.
+
+Eng ostida **JAMI** qatori, o'lchov birligi bo'yicha ajratilgan: dona
+bilan komplektni qo'shib bo'lmaydi. Alohida kartochka qilinmadi — ko'z
+jadvaldan chiqib, qaysi raqam qaysi ustunniki ekanini qidirib qolardi.
+
+**Qabul qilish ro'yxatida ham «N buyurtmada» turadi** — jurnaldagi bilan
+bir xil raqam, `v_unit_bron` dan. Qabul qiluvchining ishi navbat tuzish:
+ichida mijoz kutayotgan konver avval qabul qilinsa, o'sha kuniyoq
+chiqarib yuboriladi. Shu sababdan saralash ham shunga qarab
+(`ORDER BY booked_qty DESC`), va yonida jo'natilgan sanasi bilan kim
+jo'natgani turadi. Bitta mijoz bo'lsa ismi yoziladi, ko'p bo'lsa faqat
+soni: qatorga uchta ism sig'maydi va baribir o'qilmasdi.
 
 **T/M ombor qoldig'i — dona hisobi, pul emas.** Ombor mudiri mahsulotni
 SANAYDI, shuning uchun T/M omborda narx va summa ustunlari yo'q; ularning
