@@ -77,6 +77,20 @@ BEGIN
   END IF;
 END $$;
 
+--  ★ BOSHLANG'ICH QARZ — tizim ishga tushgan kundagi ta'minotchi
+--  qarzi, $ da. Mijozning `opening_debt` i bilan bir xil mantiq: bir
+--  martalik raqam, hisoblanmaydi, undan keyingisi operatsiyalardan
+--  chiqadi. Shusiz kassadan qilingan birinchi to'lov ta'minotchini
+--  MINUSGA tushirardi — biz unga qarzdor bo'lganimiz yozilmagan edi.
+--
+--  Maydon ISHORALI va tomoni mijoznikiga TESKARI: musbat — KORXONA
+--  ta'minotchiga qarzdor (odatiy hol, mol olindi, puli berilmadi),
+--  manfiy — ta'minotchi korxonaga qarzdor (oldindan to'lov qilingan).
+--  Ikkita maydon qilinmadi: bittasi to'ldirilib ikkinchisi unutilsa
+--  qarz ikki joyda yotib qolardi.
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opening_debt    NUMERIC(16,2);
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opening_debt_on DATE;
+
 -- DROP + CREATE, CREATE OR REPLACE emas: replace ustunni faqat oxiriga
 -- qo'sha oladi. Jadvalga ustun qo'shilganda view qaytadan qurilsin.
 -- Unga bog'liq boshqa view yo'q, shuning uchun DROP xavfsiz.
@@ -84,7 +98,8 @@ DROP VIEW IF EXISTS v_suppliers;
 CREATE VIEW v_suppliers AS
 SELECT s.id, s.name, s.phone, s.country, s.region, s.inn, s.note, s.active,
        s.category, sc.name AS category_name,
-       s.manager_id, w.name AS manager_name
+       s.manager_id, w.name AS manager_name,
+       s.opening_debt, s.opening_debt_on
 FROM suppliers s
 LEFT JOIN supplier_categories sc ON sc.code = s.category
 LEFT JOIN workers w              ON w.id    = s.manager_id;

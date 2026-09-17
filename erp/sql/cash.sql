@@ -506,6 +506,34 @@ SELECT date_trunc('month', o.op_date)::date AS mon,
 --  kassaga to'g'ridan to'langanda ham. Mijoz uchun farqi yo'q: u to'ladi
 --  va qarzi kamaydi. Pulning kassaga yetib borishi KORXONANING ichki
 --  ishi (pul menejerning qo'lida) va mijozning qarziga aloqasi yo'q.
+-- ══════════════════════════════════════════ TA'MINOTCHINING QARZI
+--
+--  `boshlang'ich qarz − to'langani`. Mijoznikiga teskari tomon:
+--  ta'minotchida MUSBAT raqam korxona unga qarzdorligini anglatadi —
+--  mol olindi, puli hali berilmadi.
+--
+--  Kirim hujjati (`purchasing`) hali yozilmagan, shuning uchun qarz
+--  hozircha faqat boshlang'ichdan va to'lovlardan iborat. U yozilganda
+--  shu yerga bitta qo'shiluvchi qo'shiladi — sahifa ham, so'rov ham
+--  o'zgarmaydi.
+--
+--  `sql/cash.sql` da, `purchasing.sql` da EMAS: view `cash_ops` ni
+--  o'qiydi va u migratsiyada eng oxirida yaratiladi (mijoz balansi
+--  bilan bir xil sabab).
+DROP VIEW IF EXISTS v_supplier_debt CASCADE;
+CREATE VIEW v_supplier_debt AS
+SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
+       --  Ta'minotchi OLUVCHI tomon: `v_cash_flow` da unga ketgan pul
+       --  musbat bo'lib turadi (izoh: yuqorida).
+       pay.paid,
+       (COALESCE(s.opening_debt, 0) - pay.paid)::numeric(16,2) AS balance
+  FROM suppliers s
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(f.amount_usd), 0)::numeric(16,2) AS paid
+      FROM v_cash_flow f
+     WHERE f.side_kind = 'supplier' AND f.side_id = s.id) pay ON true
+ WHERE s.active;
+
 DROP VIEW IF EXISTS v_customer_sales CASCADE;
 CREATE VIEW v_customer_sales AS
 SELECT c.id, c.name, c.country, c.region, c.phone,

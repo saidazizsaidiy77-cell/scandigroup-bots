@@ -1096,7 +1096,34 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    turadi, kod emas. Matn bo'lib yopishtirish ham qoldi — bitta-ikkita
    qator uchun fayl yasash ortiqcha.
 
-   **Yo'nalish nomlari zavodnikidek** (`supplier_categories`): MDF,
+   **Ta'minotchining BOSHLANG'ICH QARZI** (`suppliers.opening_debt`, `$`)
+   — tizim ishga tushgan kundagi holat. Mijozning `opening_debt` i
+   bilan bir xil mantiq va bir xil sabab: shusiz kassadan qilingan
+   birinchi to'lov ta'minotchini MINUSGA tushirardi — biz unga
+   qarzdor bo'lganimiz hech qayerda yozilmagan edi.
+
+   Maydon ISHORALI va tomoni mijoznikiga **TESKARI**: musbat —
+   KORXONA ta'minotchiga qarzdor (odatiy hol: mol olindi, puli
+   berilmadi), manfiy — ta'minotchi korxonaga qarzdor (oldindan
+   to'lov). Kartochkada maydon ostida qaysi tomon ekani yozilib
+   turadi — ishorali maydonda minus qo'yishni unutgan odam qarzni
+   teskari tomonga yozib qo'yardi va buni keyin hech narsa aytmasdi.
+
+   Ikki yo'ldan kiritiladi, mijoz bilan bir xil: **kartochkadan**
+   («Boshlang'ich qarz» + «Qarz sanasi») va **fayldan** («Qarzdor» va
+   «Haqdor» alohida ustun, yoki bitta ustunda minus bilan). Qayta
+   yuklashda yozilgani O'CHMAYDI, kartochkadan esa tuzatiladi ham,
+   tozalanadi ham — bo'sh qoldirilgani «tegma» emas, «yo'q» degani.
+
+   **Qarzi ro'yxatda turadi** (`v_supplier_debt.balance` =
+   `boshlang'ich qarz − to'langani`): «kimga qancha qarzmiz»
+   ta'minotchilar sahifasidagi birinchi savol. View `sql/cash.sql` da,
+   `purchasing.sql` da EMAS — u `cash_ops` ni o'qiydi va u migratsiyada
+   eng oxirida yaratiladi (mijoz balansi bilan bir xil sabab). Kirim
+   hujjati yozilganda shu yerga bitta qo'shiluvchi qo'shiladi, sahifa
+   ham, so'rov ham o'zgarmaydi.
+
+      **Yo'nalish nomlari zavodnikidek** (`supplier_categories`): MDF,
    Furnitura, Mato, Lak, Qadoqlash materiali, Oyna, Yarim tayyor
    mahsulot, Xizmat, Boshqa. Kod ham nom bilan bir xil — aks holda
    ekranda MDF turib, import matnida LDSP yozilardi. «Yarim tayyor

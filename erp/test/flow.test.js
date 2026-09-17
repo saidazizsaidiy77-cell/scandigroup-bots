@@ -2615,6 +2615,56 @@ test('ta\'minotchilarni fayldan yuklash: turi nomi bilan ham o\'qiladi', async (
     `SELECT category FROM suppliers WHERE name='Sinov Karton'`)).category, 'QADOQ');
 });
 
+//  ★ TA'MINOTCHINING BOSHLANG'ICH QARZI. Mijoznikiga TESKARI tomon:
+//  musbat raqam KORXONA ta'minotchiga qarzdorligini anglatadi. Shusiz
+//  kassadan qilingan birinchi to'lov uni minusga tushirardi.
+test('ta\'minotchi qarzi: to\'lov qarzdan ayriladi', async () => {
+  const admin  = H.api(base, await H.sessionFor('Administrator'));
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  const yangi = await admin('POST', '/api/purchasing/suppliers', {
+    name: 'Sinov Qarzdor Mdf', category: 'MDF',
+    opening_debt: 1000, opening_debt_on: '2026-09-01' });
+  assert.equal(yangi.status, 200, yangi.text);
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name='Sinov Qarzdor Mdf'`)).id;
+
+  const balans = async () => Number((await H.id(
+    `SELECT balance FROM v_supplier_debt WHERE id=$1`, [tam])).balance);
+  assert.equal(await balans(), 1000, 'boshlang\'ich qarz');
+
+  //  To'landi — qarz kamayadi
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE needs_supplier AND active LIMIT 1`)).id;
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'supplier', to_id: tam,
+    currency: 'USD', amount: 300, op_date: '2026-09-20',
+    expense_item_id: modda, pl_month: '2026-09' })).status, 200);
+  assert.equal(await balans(), 700, 'to\'lov qarzdan ayriladi');
+
+  //  Ro'yxatda qarzi bilan keladi
+  const list = (await admin('GET', '/api/purchasing/suppliers')).body;
+  const q = list.suppliers.find((x) => x.id === tam);
+  assert.equal(Number(q.balance), 700);
+  assert.equal(Number(q.opening_debt), 1000);
+
+  //  Qayta import qarzni O'CHIRMAYDI
+  assert.equal((await admin('POST', '/api/purchasing/suppliers', {
+    items: [{ name: 'Sinov Qarzdor Mdf', phone: '90-000-00-00' }] })).status, 200);
+  assert.equal(Number((await H.id(
+    `SELECT opening_debt FROM suppliers WHERE id=$1`, [tam])).opening_debt), 1000);
+
+  //  Kartochkadan esa tuzatiladi ham, tozalanadi ham
+  assert.equal((await admin('PATCH', '/api/purchasing/suppliers/' + tam,
+    { opening_debt: -50 })).status, 200);
+  assert.equal(await balans(), -350, 'oldindan to\'lov — manfiy tomonda');
+  assert.equal((await admin('PATCH', '/api/purchasing/suppliers/' + tam,
+    { opening_debt: null })).status, 200);
+  assert.equal((await H.id(
+    `SELECT opening_debt FROM suppliers WHERE id=$1`, [tam])).opening_debt, null);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

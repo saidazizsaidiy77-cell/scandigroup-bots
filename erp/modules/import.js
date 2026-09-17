@@ -601,6 +601,15 @@ const SFIELDS = {
   manager:  ['masul', 'masuli', 'masulxodim', 'taminotchixodim', 'menejer',
              'менеджер', 'ответственный'],
   note:     ['izoh', 'izohi', 'примечание', 'комментарий'],
+  //  Boshlang'ich qarz, $ da. Mijozdagidek IKKI ustun o'qiladi, lekin
+  //  tomoni teskari: ta'minotchida «qarzdormiz» — KORXONA unga
+  //  qarzdor (odatiy hol), «haqdormiz» esa oldindan to'lov.
+  debt:     ['qarz', 'qarzdor', 'qarzmiz', 'qarzdormiz', 'boshlangichqarz',
+             'долг', 'кредиторка'],
+  credit:   ['haqdor', 'haqdormiz', 'oldindantolov', 'oldindantulov', 'avans',
+             'аванс', 'переплата'],
+  debt_on:  ['qarzsanasi', 'qarzsana', 'boshlangichqarzsanasi',
+             'qarzholatisanasi', 'датадолга'],
 };
 
 router.post('/suppliers', need('purchasing.manage'),
@@ -686,6 +695,24 @@ router.post('/suppliers', need('purchasing.manage'),
         else { it.manager_id = hit.id; if (hit.as) matched.set(mgr, hit.as); }
       }
 
+      //  Qarzdor va haqdor bitta ishorali raqamga yig'iladi. Tomoni
+      //  mijoznikiga TESKARI: musbat — korxona ta'minotchiga qarzdor.
+      const debt = at('debt'), credit = at('credit');
+      if (debt || credit) {
+        const d = debt   ? toNum(debt)   : 0;
+        const k = credit ? toNum(credit) : 0;
+        if (d === undefined) errors.push(`Qarz raqam emas: «${debt}»`);
+        else if (k === undefined) errors.push(`Haqdor raqam emas: «${credit}»`);
+        else it.opening_debt = (d || 0) - (k || 0);
+      }
+
+      const debtOn = at('debt_on');
+      if (debtOn) {
+        const dt = toDate(debtOn);
+        if (dt === undefined) errors.push(`Qarz sanasi tushunarsiz: «${debtOn}»`);
+        else it.opening_debt_on = dt;
+      }
+
       it.phone   = at('phone')   || null;
       it.country = at('country') || null;
       it.region  = at('region')  || null;
@@ -720,8 +747,9 @@ router.post('/suppliers', need('purchasing.manage'),
         //  to'ladi — mijozlar bilan bir xil qoida.
         await client.query(
           `INSERT INTO suppliers (name, phone, country, region, category,
-                                  manager_id, inn, note)
-           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8)
+                                  manager_id, inn, note,
+                                  opening_debt, opening_debt_on)
+           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8,$9,$10)
            ON CONFLICT (lower(name)) DO UPDATE SET
              phone      = COALESCE(EXCLUDED.phone,      suppliers.phone),
              country    = COALESCE(EXCLUDED.country,    suppliers.country),
@@ -729,9 +757,15 @@ router.post('/suppliers', need('purchasing.manage'),
              category   = COALESCE(EXCLUDED.category,   suppliers.category),
              manager_id = COALESCE(EXCLUDED.manager_id, suppliers.manager_id),
              inn        = COALESCE(EXCLUDED.inn,        suppliers.inn),
-             note       = COALESCE(EXCLUDED.note,       suppliers.note)`,
+             note       = COALESCE(EXCLUDED.note,       suppliers.note),
+             -- Qarz bir marta: kiritilgani qayta yuklashda o'chmaydi
+             opening_debt    = COALESCE(suppliers.opening_debt,
+                                        EXCLUDED.opening_debt),
+             opening_debt_on = COALESCE(suppliers.opening_debt_on,
+                                        EXCLUDED.opening_debt_on)`,
           [r.it.name, r.it.phone, r.it.country, r.it.region,
-           r.it.category || null, r.it.manager_id || null, r.it.inn, r.it.note]);
+           r.it.category || null, r.it.manager_id || null, r.it.inn, r.it.note,
+           r.it.opening_debt ?? null, r.it.opening_debt_on || null]);
       }
       await audit(req, { module: 'purchasing', action: 'import', entity: 'suppliers',
                          entity_id: rows.length, payload: { count: rows.length } }, client);

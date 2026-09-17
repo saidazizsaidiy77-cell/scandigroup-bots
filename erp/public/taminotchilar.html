@@ -49,7 +49,8 @@
     <input id="fQ" placeholder="nom, region, telefon yoki STIR" style="max-width:300px" oninput="render()">
   </div>
   <div style="overflow-x:auto"><table>
-    <thead><tr><th>Ta'minotchi</th><th>Nima yetkazadi</th><th>Respublika</th><th>Region</th>
+    <thead><tr><th>Ta'minotchi</th><th>Nima yetkazadi</th><th class="num">Qarzimiz, $</th>
+      <th>Respublika</th><th>Region</th>
       <th>Tel raqami</th><th>STIR</th><th>Mas'ul xodim</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
@@ -59,6 +60,8 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const money = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -115,6 +118,12 @@ function render(){
       <td><strong>${esc(s.name)}</strong></td>
       <td>${s.category_name ? `<span class="tag">${esc(s.category_name)}</span>`
             : '<span class="muted">—</span>'}</td>
+      <!--  Qarz — ro'yxatdagi birinchi savol: «kimga qancha qarzmiz».
+            Musbat bo'lsa biz qarzdormiz, manfiy bo'lsa ta'minotchi
+            bizga; ikkalasi bir xil ko'rinsa raqam javob bermasdi. -->
+      <td class="num">${Number(s.balance)
+        ? `<b${Number(s.balance) < 0 ? ' class="muted"' : ''}>${money(s.balance)}</b>`
+        : '<span class="muted">—</span>'}</td>
       <td class="muted">${s.country ? esc(s.country) : '—'}</td>
       <td class="muted">${s.region ? esc(s.region) : '—'}</td>
       <td class="muted">${s.phone ? esc(s.phone) : '—'}</td>
@@ -123,7 +132,7 @@ function render(){
             : '<span class="tag warn">biriktirilmagan</span>'}</td>
       <td class="num"><button onclick="openForm(${s.id})">✎</button></td>
     </tr>`).join('')
-    : '<tr><td class="muted" colspan="8">Ta\'minotchi topilmadi</td></tr>';
+    : '<tr><td class="muted" colspan="9">Ta\'minotchi topilmadi</td></tr>';
 }
 
 function openForm(id){
@@ -164,12 +173,42 @@ function openForm(id){
               ${managers.map(m => `<option value="${m.id}"
                 ${s?.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
             </select></div>
+          <!--  ★ BOSHLANG'ICH QARZ — tizim ishga tushgan kundagi holat.
+                Bir martalik raqam: undan keyingisi to'lovlardan va
+                kirim hujjatlaridan chiqadi. Tomoni MIJOZNIKIGA
+                TESKARI, shuning uchun maydon ostida qaysi tomon
+                ekani yozilib turadi — minus qo'yishni unutgan odam
+                qarzni teskari tomonga yozib qo'yardi. -->
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Boshlang'ich qarz, $</label>
+              <input id="sDebt" type="number" step="0.01" inputmode="decimal"
+                     value="${s?.opening_debt ?? ''}" oninput="debtHint()"
+                     placeholder="biz qarzdormiz">
+              <div class="hint" id="sDebtHint"></div></div>
+            <div style="flex:1"><label>Qarz sanasi</label>
+              <input id="sDebtOn" type="date"
+                     value="${(s?.opening_debt_on || '').slice(0, 10)}">
+              <div class="hint">qaysi kun holatiga</div></div>
+          </div>
           <div><label>Izoh</label>
             <input id="sNote" value="${esc(s?.note || '')}"></div>
           <button class="primary" onclick="save(${id || 'null'})">Saqlash</button>
         </div>
       </div></div>`;
   fillRegions();
+  debtHint();
+}
+
+//  Qaysi tomon ekani YOZAYOTGANDA chiqadi: ishorali maydonda minus
+//  qo'yishni unutgan odam qarzni teskari tomonga yozib qo'yardi va buni
+//  keyin hech narsa aytmasdi.
+function debtHint(){
+  const el = $('sDebtHint');
+  if (!el) return;
+  const v = Number($('sDebt').value);
+  el.textContent = !$('sDebt').value.trim() || !v ? 'qarz yo\'q'
+    : v > 0 ? 'biz ta\'minotchiga qarzdormiz'
+            : 'ta\'minotchi bizga qarzdor (oldindan to\'lov)';
 }
 
 // Region ro'yxati respublikaga qarab o'zgaradi. Maydon matnli — ro'yxatda
@@ -331,6 +370,11 @@ async function save(id){
     inn: $('sInn').value.trim() || null,
     manager_id: $('sManager').value || null,
     note: $('sNote').value.trim() || null,
+    //  Bo'sh qoldirilgani «tegma» emas, «yo'q» degani: xato yozilgan
+    //  raqam kartochkadan tozalanishi kerak (server ham shunday
+    //  o'qiydi — izoh: modules/purchasing.js).
+    opening_debt: $('sDebt').value.trim() === '' ? null : Number($('sDebt').value),
+    opening_debt_on: $('sDebtOn').value || null,
   };
   if (!body.name) return alert("Ta'minotchi nomi majburiy");
   try{
