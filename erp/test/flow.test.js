@@ -2466,6 +2466,60 @@ test('dalolatnomada har qator hujjatga bog\'langan', async () => {
   assert.equal((await eksport('GET', '/api/sales/payment/' + tolov.op_id)).status, 404);
 });
 
+//  ★ XODIM QO'LIDAGI BOSHLANG'ICH QOLDIQ — kassaniki bilan bir xil
+//  qoida: operatsiya EMAS, shuning uchun kassa qoldig'iga tegmaydi.
+//  Kassadan berish bilan yozib qo'yilsa kassa shuncha kamayib ketardi,
+//  holbuki o'sha pul kassadan bugun chiqmagan.
+test('xodim qo\'lidagi boshlang\'ich qoldiq kassaga tegmaydi', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov ta''minotchi'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name='Sinov ta''minotchi')`);
+  const x = (await H.id(`SELECT id FROM workers WHERE name='Sinov ta''minotchi'`)).id;
+
+  const oldin = Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE id=$1`, [kassa])).total_usd);
+
+  //  So'm qoldig'i kurssiz yozilmaydi — kassaniki bilan bir xil shart
+  assert.equal((await kassir('PATCH', `/api/cash/workers/${x}/opening`,
+    { opening_uzs: 1000000 })).status, 400);
+
+  const r = await kassir('PATCH', `/api/cash/workers/${x}/opening`, {
+    opening_on: '2026-09-01', opening_uzs: 12500000,
+    opening_rate: 12500, opening_usd: 200 });
+  assert.equal(r.status, 200, r.text);
+
+  //  Qo'lidagi pul: 200 $ + 12 500 000 so'm / 12 500 = 1200 $
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [x])).total_usd), 1200);
+
+  //  Kassa qimirlamadi
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE id=$1`, [kassa])).total_usd), oldin);
+
+  //  Ro'yxatda ko'rinadi va o'z sahifasiga havolasi bor
+  const list = (await kassir('GET', '/api/cash/list')).body;
+  const q = (list.workers || []).find((w) => w.id === x);
+  assert.ok(q, 'qo\'lida puli bor xodim ro\'yxatda');
+  assert.equal(q.href, '/kassa.html?a=w' + x);
+
+  //  Kassir o'sha xodimning lentasini ocha oladi, menejer esa yo'q
+  assert.equal((await kassir('GET', '/api/cash/ops?a=w' + x)).status, 200);
+  const menejer = H.api(base, await H.sessionFor('Sinov menejer'));
+  assert.equal((await menejer('GET', '/api/cash/ops?a=w' + x)).status, 403);
+
+  //  Topshirsa qo'lidan chiqadi va kassaga tushadi
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'worker', from_id: x, to_kind: 'account', to_id: kassa,
+    currency: 'USD', amount: 200 })).status, 200);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [x])).total_usd), 1000);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE id=$1`, [kassa])).total_usd), oldin + 200);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

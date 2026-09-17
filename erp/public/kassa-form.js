@@ -384,7 +384,8 @@ function openOpening() {
           <div class="t">Boshlang'ich qoldiq</div>
           <div class="n">${esc(a.name)}</div>
         </div>
-        <p class="muted" style="margin:-8px 0 16px">Tizim ishga tushgan kundagi pul.
+        <p class="muted" style="margin:-8px 0 16px">Tizim ishga tushgan kundagi pul${
+          W ? " — shu xodimning qo'lida turgani" : ''}.
           Bir martalik raqam: undan keyingi hammasi operatsiyalardan chiqadi.</p>
         <div class="fields">
           <div><label>Sana</label>
@@ -443,12 +444,17 @@ function oCalc() {
 
 async function saveOpening() {
   try {
-    await App.api('/api/cash/accounts/' + here.id, { method: 'PATCH', body: JSON.stringify({
-      opening_on: $('oDate').value || null,
-      opening_uzs: $('oUzs').value || 0,
-      opening_usd: $('oUsd').value || 0,
-      opening_rate: $('oRate').value || null,
-    }) });
+    //  Yo'l joyga qarab: kassaniki `cash_accounts` ga, xodimniki
+    //  `workers` ga. Ikkalasi ham bir xil maydonlar, bir xil qoida —
+    //  bir martalik raqam, operatsiya emas.
+    await App.api(W ? '/api/cash/workers/' + here.id + '/opening'
+                    : '/api/cash/accounts/' + here.id,
+      { method: 'PATCH', body: JSON.stringify({
+        opening_on: $('oDate').value || null,
+        opening_uzs: $('oUzs').value || 0,
+        opening_usd: $('oUsd').value || 0,
+        opening_rate: $('oRate').value || null,
+      }) });
     toast('Saqlandi'); closeForm(); reload();
   } catch (e) { toast(e.message, true); }
 }

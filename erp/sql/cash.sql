@@ -370,16 +370,41 @@ CREATE TABLE IF NOT EXISTS worker_expense_groups (
 --  Ikki yo'ldan to'ladi: xodimga kassadan berilgan pul va
 --  menejer mijozdan olib, hali kassirga topshirmagani. Ikkalasi ham
 --  bitta narsa — xodimning qo'lidagi, korxonaga qarz pul.
+--
+--  ★ BOSHLANG'ICH QOLDIQ XODIMDA HAM BOR. Tizim ishga tushgan kuni
+--  pul faqat kassada emas, odamlarning qo'lida ham turadi: ta'minotchi
+--  bozorga ketgan, menejerda mijozdan olgani bor. Kassaning
+--  `opening_*` i bilan bir xil mantiq va bir xil sabab — operatsiya
+--  EMAS, chunki uning «qayerdan» i yo'q: pul tizimdan oldin ham bor
+--  edi. Kassadan berish bilan yozib qo'yilsa kassa qoldig'i shuncha
+--  kamayib ketardi, holbuki o'sha pul kassadan bugun chiqmagan.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS opening_uzs  NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS opening_usd  NUMERIC(16,2) NOT NULL DEFAULT 0;
+--  So'mdagi qoldiqni dollarga aylantiradigan kurs: o'sha kundagi kurs,
+--  keyin o'zgarmaydi (hisob-kitob baribir dollarda).
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS opening_rate NUMERIC(14,4);
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS opening_on   DATE;
+
+--  LEFT JOIN: qoldig'i bor, lekin hali bitta ham operatsiyasi yo'q
+--  xodim ham qatorda turishi kerak — aks holda birinchi kuni kassir
+--  uni «kimdan pul olsam bo'ladi» ro'yxatida topa olmasdi.
 DROP VIEW IF EXISTS v_worker_cash CASCADE;
 CREATE VIEW v_worker_cash AS
 SELECT w.id, w.name, w.phone,
-       COALESCE(SUM(f.amount)     FILTER (WHERE f.currency = 'UZS'), 0)::numeric(18,2) AS uzs,
-       COALESCE(SUM(f.amount)     FILTER (WHERE f.currency = 'USD'), 0)::numeric(16,2) AS usd,
-       COALESCE(SUM(f.amount_usd), 0)::numeric(16,2) AS total_usd,
+       w.opening_uzs, w.opening_usd, w.opening_rate, w.opening_on,
+       (w.opening_uzs + COALESCE(SUM(f.amount)
+          FILTER (WHERE f.currency = 'UZS'), 0))::numeric(18,2) AS uzs,
+       (w.opening_usd + COALESCE(SUM(f.amount)
+          FILTER (WHERE f.currency = 'USD'), 0))::numeric(16,2) AS usd,
+       (w.opening_usd
+          + CASE WHEN w.opening_rate > 0
+                 THEN ROUND(w.opening_uzs / w.opening_rate, 2) ELSE 0 END
+          + COALESCE(SUM(f.amount_usd), 0))::numeric(16,2) AS total_usd,
        MAX(f.op_date) AS last_on
   FROM workers w
-  JOIN v_cash_flow f ON f.side_kind = 'worker' AND f.side_id = w.id
- GROUP BY w.id, w.name, w.phone;
+  LEFT JOIN v_cash_flow f ON f.side_kind = 'worker' AND f.side_id = w.id
+ GROUP BY w.id, w.name, w.phone,
+          w.opening_uzs, w.opening_usd, w.opening_rate, w.opening_on;
 
 -- ───────────────────────────────────── HARAJAT: FOYDA-ZARAR KESIMIDA
 --

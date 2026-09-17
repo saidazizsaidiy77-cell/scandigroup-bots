@@ -127,8 +127,23 @@ router.get('/list', need(...ANY), wrap(async (req, res) => {
   const me = (await db.query(
     `SELECT * FROM v_worker_cash WHERE id = $1`, [req.user.id])).rows[0]
     || { id: req.user.id, name: req.user.name, uzs: 0, usd: 0, total_usd: 0 };
+  //  Xodimlarning qo'lidagi pul — kassaning yonidagi UCHINCHI joy:
+  //  korxonaning puli, lekin kassada emas. Kassirga ro'yxat kerak,
+  //  chunki boshlang'ich qoldiq aynan shu yerdan yoziladi.
+  //
+  //  Ro'yxatda qo'lida puli borlar VA belgisi bor xodimlar: birinchisi
+  //  «kimdan pul olsam bo'ladi», ikkinchisi «kimga qoldiq yozishim
+  //  kerak» degan savolning javobi. Zavodning yigirmata xodimini
+  //  chiqarish ikkalasiga ham javob bermasdi.
+  const workers = boss ? (await db.query(
+    `SELECT c.*
+       FROM v_worker_cash c
+       JOIN workers w ON w.id = c.id
+      WHERE w.active AND (w.can_hold_cash OR c.uzs <> 0 OR c.usd <> 0)
+      ORDER BY c.total_usd DESC, c.name`)).rows : [];
   res.json({
     boss,
+    workers: workers.map((w) => ({ ...w, href: `/kassa.html?a=w${w.id}` })),
     rows: rows.map((a) => ({ ...a, href: `/kassa.html?a=${encodeURIComponent(a.code)}` })),
     me: { ...me, href: '/kassa.html?a=me' },
   });
@@ -151,16 +166,24 @@ router.get('/balance', need(...ANY), wrap(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────── OPERATSIYALAR LENTASI
-//  Lenta bitta JOY haqida: kassa (`?a=MAIN`) yoki xodimning qo'li
-//  (`?a=me`). `dir` esa o'sha joyga nisbatan yo'nalish — kirim unga
-//  kelgani, chiqim undan ketgani. Shuning uchun bitta operatsiya ikki
-//  joyda ikki xil ko'rinadi va bu to'g'ri: menejerdan kassaga o'tgan pul
-//  menejerda chiqim, kassada kirim.
+//  Lenta bitta JOY haqida: kassa (`?a=MAIN`), xodimning o'z qo'li
+//  (`?a=me`) yoki kassir ochgan xodimning qo'li (`?a=w12`). `dir` esa
+//  o'sha joyga nisbatan yo'nalish — kirim unga kelgani, chiqim undan
+//  ketgani. Shuning uchun bitta operatsiya ikki joyda ikki xil
+//  ko'rinadi va bu to'g'ri: menejerdan kassaga o'tgan pul menejerda
+//  chiqim, kassada kirim.
 router.get('/ops', need(...ANY), wrap(async (req, res) => {
   const boss = isBoss(req);
   const kod = String(req.query.a || '').trim();
   let sideKind = null, sideId = null;
+  const xodim = /^w[0-9]+$/.test(kod) ? Number(kod.slice(1)) : null;
   if (kod === 'me') { sideKind = 'worker'; sideId = req.user.id; }
+  //  Boshqa xodimning qo'lidagi pul — kassirniki: u qancha pul
+  //  kutayotganini bilishi kerak. Menejerga esa faqat o'ziniki.
+  else if (xodim) {
+    if (!boss) return res.status(403).json({ error: 'Ruxsat yo\'q' });
+    sideKind = 'worker'; sideId = xodim;
+  }
   else if (kod) {
     if (!boss) return res.status(403).json({ error: 'Ruxsat yo\'q' });
     const a = (await db.query(
@@ -376,6 +399,30 @@ router.patch('/accounts/:id', need(...MANAGE), wrap(async (req, res) => {
   await audit(req, { module: 'cash', action: 'opening', entity: 'cash_account',
                      entity_id: Number(req.params.id),
                      payload: { code: rows[0].code, ...b } });
+  res.json({ ok: true });
+}));
+
+//  ★ XODIM QO'LIDAGI BOSHLANG'ICH QOLDIQ.
+//
+//  Kassaniki bilan bitta yo'l, bitta qoida: bir martalik raqam,
+//  operatsiya emas. Kassirniki — `cash.manage`: qo'lda qancha pul
+//  borligini sanab olgan odam yozadi, xodimning o'zi emas.
+router.patch('/workers/:id/opening', need(...MANAGE), wrap(async (req, res) => {
+  const b = req.body || {};
+  const uzsOp = Number(b.opening_uzs) || 0;
+  const rate = Number(b.opening_rate) || null;
+  if (uzsOp && !(rate > 0))
+    return res.status(400).json({ error: 'So\'m qoldig\'i uchun kurs kerak' });
+  const { rows } = await db.query(
+    `UPDATE workers
+        SET opening_uzs = $2, opening_usd = $3, opening_rate = $4,
+            opening_on  = $5::date
+      WHERE id = $1 AND active RETURNING name`,
+    [req.params.id, uzsOp, Number(b.opening_usd) || 0, rate, b.opening_on || null]);
+  if (!rows[0]) return res.status(404).json({ error: 'Xodim topilmadi' });
+  await audit(req, { module: 'cash', action: 'opening', entity: 'worker',
+                     entity_id: Number(req.params.id),
+                     payload: { name: rows[0].name, ...b } });
   res.json({ ok: true });
 }));
 

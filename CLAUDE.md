@@ -638,6 +638,22 @@ eski hisobotdan yo'qolib qolardi — keraksizi `active = false` qilinadi.
 Qayta deploy'da nomi ham tiklanmaydi (`ON CONFLICT DO NOTHING`):
 saytdan tuzatilgan nom keyingi migratsiyada eskisiga qaytib qolmasin.
 
+**Xodimning qo'lida ham boshlang'ich qoldiq bor** (`workers.opening_*`)
+— tizim ishga tushgan kuni pul faqat kassada emas, odamlarning qo'lida
+ham turadi: ta'minotchi bozorga ketgan, menejerda mijozdan olgani bor.
+Kassadan berish bilan yozib qo'yilsa kassa qoldig'i shuncha kamayib
+ketardi, holbuki o'sha pul kassadan bugun chiqmagan.
+
+Shu sababdan xodimning qo'li ham **JOY** bo'lib ochiladi:
+`/kassa.html?a=w12` — sarlavhada «qo'ldagi pul» yorlig'i bilan, ichida
+o'sha odamning lentasi va «✎ Boshlang'ich qoldiq» tugmasi. Kassalar
+ro'yxatida ostida «Xodimlar qo'lidagi pul» bo'limi turadi: qo'lida puli
+borlar VA belgisi bor xodimlar (`can_hold_cash`) — biri «kimdan pul
+olsam bo'ladi», ikkinchisi «kimga qoldiq yozishim kerak» degan savolning
+javobi. Sahifa u yerda faqat O'QIYDI: pul berish ham, qabul qilish ham
+kassaning o'z oynasidan bo'ladi, chunki ikkinchi tomoni baribir kassa.
+Yozadigan odam — kassir (`cash.manage`), xodimning o'zi emas.
+
 **Boshlang'ich qoldiq** (`cash_accounts.opening_*`) — tizim ishga
 tushgan kundagi pul. Bir martalik raqam, mijozning `opening_debt` i
 bilan bir xil mantiq: operatsiya EMAS, chunki uning «qayerdan» i yo'q —

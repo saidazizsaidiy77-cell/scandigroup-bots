@@ -66,15 +66,32 @@ function draw(d) {
       <p class="muted" style="font-size:12.5px;margin-top:10px">${esc(izoh)}</p>
     </a>`;
 
-  $('body').innerHTML = `
-    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
-      ${d.rows.map(a => card(a.href, a.name,
-          a.last_on ? `oxirgi harakat ${d8(a.last_on)}` : 'harakat yo\'q',
-          a, a.kind === 'bank' ? 'hisob raqami' : 'ok')).join('')}
-      ${card(d.me.href, d.boss ? "Mening qo'limdagi pul" : 'Mening pulim',
-          d.boss ? "kassaga topshirilmagani" : "kassirga topshirilmagani",
-          d.me, "qo'ldagi pul")}
-    </div>`;
+  const setka = (ichi) => `<div class="grid"
+    style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${ichi}</div>`;
+
+  //  ★ UCHINCHI JOY — XODIMLARNING QO'LIDAGI PUL.
+  //
+  //  Kassaning yonida turadi, lekin kassa EMAS: pul korxonaniki,
+  //  ammo javonda emas, odamning cho'ntagida. Kassir uchun bu kundalik
+  //  savol («Bahromda nima bor»), tizim ishga tushganda esa yagona joy
+  //  bo'lib qoladi — boshlang'ich qoldiq aynan shu kartochkadan
+  //  yoziladi. Ro'yxatda qo'lida puli borlar va belgisi bor xodimlar
+  //  turadi (izoh: modules/cash.js).
+  const xodimlar = (d.workers || []).filter(w => w.id !== d.me.id);
+
+  $('body').innerHTML = setka(
+      d.rows.map(a => card(a.href, a.name,
+        a.last_on ? `oxirgi harakat ${d8(a.last_on)}` : 'harakat yo\'q',
+        a, a.kind === 'bank' ? 'hisob raqami' : 'ok')).join('')
+    + card(d.me.href, d.boss ? "Mening qo'limdagi pul" : 'Mening pulim',
+        d.boss ? "kassaga topshirilmagani" : "kassirga topshirilmagani",
+        d.me, "qo'ldagi pul"))
+    + (xodimlar.length ? `
+      <h2 style="margin:26px 0 12px">Xodimlar qo'lidagi pul</h2>
+      ${setka(xodimlar.map(w => card(w.href, w.name,
+          w.last_on ? `oxirgi harakat ${d8(w.last_on)}`
+                    : 'harakat yo\'q',
+          w, "qo'ldagi pul")).join(''))}` : '');
 }
 
 App.start(async () => {

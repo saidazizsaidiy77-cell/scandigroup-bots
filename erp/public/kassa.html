@@ -39,7 +39,8 @@
 <body>
 
 <div class="top">
-  <div class="brand"><span class="dot"></span><h1 id="title">Kassa</h1></div>
+  <div class="brand"><span class="dot"></span><h1 id="title">Kassa</h1>
+    <span id="titleTag"></span></div>
   <div class="row" id="erpUser"></div>
 </div>
 
@@ -76,6 +77,12 @@ const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
 
 const A = new URLSearchParams(location.search).get('a') || 'me';
 const isMe = () => A === 'me';
+//  `a=w12` — kassir ochgan XODIMNING qo'lidagi pul. Uchinchi joy: pul
+//  korxonaniki, lekin kassada emas. Sahifa u yerda faqat O'QIYDI —
+//  pul berish ham, qabul qilish ham kassaning o'z oynasidan bo'ladi,
+//  chunki ikkinchi tomoni baribir kassa.
+const W = /^w\d+$/.test(A) ? Number(A.slice(1)) : null;
+const isAcc = () => !isMe() && !W;
 let refs = null, here = null, ops = [], tab = 'in', boss = false;
 const f = { from: '', to: '', q: '' };
 
@@ -90,6 +97,9 @@ function toast(msg, bad) {
 // ─────────────────────────────────────────────────────────── SARLAVHA
 function drawHead() {
   here.title = isMe() ? 'Mening pulim' : here.name;
+  //  Xodimning qo'lidagi pul kassa EMAS — sarlavha buni aytib turishi
+  //  kerak, aks holda ekranda «Bahrom» degan kassa turgandek bo'lardi.
+  $('titleTag').innerHTML = W ? `<span class="tag">qo'ldagi pul</span>` : '';
   $('title').textContent = here.title;
   document.title = here.title + ' · ZELTA';
   //  Kassaning O'Z valyutasi birinchi turadi: bank hisob raqamida
@@ -118,21 +128,24 @@ function drawHead() {
   //  ko'rsatish xato bo'lardi.
   const savdo = App.can('sales.view', 'sales.manage');
   const btn = [];
-  if (!isMe() || savdo) btn.push(['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']);
+  if (isAcc() || (isMe() && savdo)) btn.push(['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']);
   //  Qo'lida pul bo'lgan xodim sarfini o'zi yozadi — podotchyot shu
   //  bilan yopiladi (izoh: sql/cash.sql).
   if (isMe() && refs.my && refs.my.hold) btn.push(['spend', 'Harajat yozish']);
-  if (!isMe() && boss) {
+  if (isAcc() && boss) {
     if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
     //  Xodimga pul berish alohida tugma EMAS: u chiqimning bir turi va
     //  «Kimga» ro'yxatining birinchi bosqichida guruh bo'lib turadi
     //  (izoh: kassa-form.js, outGroups).
     btn.push(['out', 'Chiqim'], ['move', "Ko'chirish / valyuta"]);
   }
+  //  Boshlang'ich qoldiq kassada ham, xodimning qo'lida ham bor: tizim
+  //  ishga tushgan kuni pul ikkala joyda turgan edi. Yozadigan odam
+  //  bitta — kassir (`cash.manage`).
   $('btnBar').innerHTML = btn.map(([k, t], i) =>
     `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')
     + (!isMe() && boss ? `<button class="ic" title="Boshlang'ich qoldiq"
-         onclick="openOpening()" style="margin-left:6px">✎ Boshlang'ich qoldiq</button>` : '');
+         onclick="openOpening()">✎ Boshlang'ich qoldiq</button>` : '');
 
   $('tabs').innerHTML = [['in', 'Kirim'], ['out', 'Chiqim'], ['all', 'Hammasi']]
     .map(([k, t]) => `<button ${k === tab ? 'class="primary"' : ''}
@@ -216,8 +229,11 @@ async function reload() {
     App.api('/api/cash/list'), App.api('/api/cash/refs')]);
   refs = r;
   boss = d.boss;
-  here = isMe() ? d.me : d.rows.find(a => a.code === A);
-  if (!here) { $('body').innerHTML = `<div class="card"><h2>Kassa topilmadi</h2></div>`; return; }
+  here = isMe() ? d.me
+       : W ? (d.workers || []).find(w => w.id === W)
+       : d.rows.find(a => a.code === A);
+  if (!here) { $('body').innerHTML = `<div class="card"><h2>${
+    W ? 'Xodim topilmadi' : 'Kassa topilmadi'}</h2></div>`; return; }
   drawHead();
   await loadOps();
 }
