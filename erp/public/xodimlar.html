@@ -25,7 +25,16 @@
 </div>
 
 <div class="card">
-  <h2>Xodimlar</h2>
+  <div class="row" style="justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin-bottom:10px">
+    <h2 style="margin:0">Xodimlar</h2>
+    <!--  Qidiruv KLIENTDA: ro'yxat bir marta o'qiladi va yigirma-o'ttiz
+          qatordan iborat, ya'ni har harfda serverga borish ortiqcha.
+          Ism, telefon, PIN va rol nomi birga qidiriladi — qaysi ustunda
+          izlashni o'ylab o'tirmaslik uchun. -->
+    <div style="flex:1;max-width:340px"><label>Qidiruv</label>
+      <input id="wQ" placeholder="ism · telefon · PIN · rol" oninput="drawWorkers()"></div>
+  </div>
   <div style="overflow-x:auto"><table>
     <thead><tr><th>Ism</th><th>PIN</th><th>Telegram ID</th><th>Rollar</th>
       <th>Holat</th><th></th></tr></thead>
@@ -62,7 +71,24 @@ async function load(){
   [meta, workers] = await Promise.all([
     App.api('/api/admin/roles'), App.api('/api/admin/workers')]);
 
-  $('tW').innerHTML = workers.map(w => `
+  drawWorkers();
+
+  $('tR').innerHTML = meta.roles.map(r => `
+    <tr><td>${esc(r.name)}<div class="muted" style="font-size:12px">${esc(r.code)}</div></td>
+      <td class="muted">${SURFACE[r.surface] || r.surface}</td>
+      <td class="num">${r.permission_count}</td></tr>`).join('');
+}
+
+function drawWorkers(){
+  const q = ($('wQ')?.value || '').trim().toLowerCase();
+  const mos = (w) => !q
+    || w.name.toLowerCase().includes(q)
+    || (w.phone || '').toLowerCase().includes(q)
+    || (w.pin || '').includes(q)
+    || w.roles.some(r => (r.name || '').toLowerCase().includes(q)
+                      || (r.scope_shop || '').toLowerCase().includes(q));
+  const ro = workers.filter(mos);
+  $('tW').innerHTML = ro.length ? ro.map(w => `
     <tr>
       <td>${esc(w.name)}${w.phone ? `<div class="muted" style="font-size:12px">${esc(w.phone)}</div>` : ''}</td>
       <td class="muted">${w.pin ? esc(w.pin) : '—'}</td>
@@ -74,12 +100,9 @@ async function load(){
         ).join(' ') : '<span class="tag bad">rol yo\'q</span>'}</td>
       <td>${w.active ? '<span class="tag ok">faol</span>' : '<span class="tag">o\'chirilgan</span>'}</td>
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
-    </tr>`).join('');
-
-  $('tR').innerHTML = meta.roles.map(r => `
-    <tr><td>${esc(r.name)}<div class="muted" style="font-size:12px">${esc(r.code)}</div></td>
-      <td class="muted">${SURFACE[r.surface] || r.surface}</td>
-      <td class="num">${r.permission_count}</td></tr>`).join('');
+    </tr>`).join('')
+    : `<tr><td colspan="6" class="muted" style="padding:16px">
+         «${esc(q)}» bo'yicha xodim topilmadi</td></tr>`;
 }
 
 function openForm(id){
