@@ -1071,12 +1071,52 @@ router.get('/debts/:id', need(...READ), wrap(async (req, res) => {
     `SELECT COALESCE(SUM(debit - credit), 0) AS n FROM v_customer_ledger
       WHERE customer_id = $1 AND on_date < $2`, [c.id, from])).rows[0].n);
   const { rows } = await db.query(
-    `SELECT on_date, kind, note, conveyor_no, order_no, debit, credit
+    `SELECT on_date, kind, note, conveyor_no, order_no, debit, credit,
+            --  Hujjatga havola: chiqimda yuk xati, to'lovda kirim orderi
+            order_id, doc_no, op_id
        FROM v_customer_ledger
       WHERE customer_id = $1 AND on_date BETWEEN $2 AND $3
       ORDER BY on_date, conveyor_no
       LIMIT 500`, [c.id, from, to]);
-  res.json({ customer: c, from, to, opening, rows });
+  const jami = rows.reduce((a, r) =>
+    ({ debit: a.debit + Number(r.debit), credit: a.credit + Number(r.credit) }),
+    { debit: 0, credit: 0 });
+  res.json({ customer: c, from, to, opening, rows,
+             total: jami, closing: opening + jami.debit - jami.credit });
+}));
+
+// ══════════════════════════════════════════ KIRIM ORDERI — HUJJAT
+//
+//  Solishtirma dalolatnomada to'lov qatori bosilsa o'sha operatsiya
+//  hujjat bo'lib ochiladi: qachon, qancha, qaysi kursda va KIM OLIB
+//  KELGAN. Oxirgisi eng ko'p so'raladi — «bu pulni kim topshirgan»
+//  degan savol solishtirishda birinchi chiqadi.
+//
+//  Savdo o'qiydi, lekin BU KASSA EMAS: bitta operatsiya, faqat shu
+//  mijozники, va o'zgartirib bo'lmaydi. Kassa qoldig'i ham berilmaydi.
+router.get('/payment/:id', need(...READ), wrap(async (req, res) => {
+  const chans = channelsOf(req);
+  const o = (await db.query(
+    `SELECT o.id, o.doc_no, o.op_date, o.currency, o.amount, o.rate,
+            o.amount_usd, o.note, o.status,
+            c.name AS customer_name, c.region, c.phone AS customer_phone,
+            --  Pulni kim qabul qilgan: menejer o'z qo'liga olgan bo'lsa
+            --  o'sha, to'g'ridan kassaga to'langan bo'lsa kassa nomi.
+            CASE WHEN o.to_kind = 'worker' THEN w.name
+                 WHEN o.to_kind = 'account' THEN a.name END AS qabul,
+            o.to_kind,
+            k.name AS kiritgan, k.phone AS kiritgan_phone,
+            ord.order_no
+       FROM cash_ops o
+       JOIN customers c        ON c.id = o.from_id AND o.from_kind = 'customer'
+       LEFT JOIN workers w     ON w.id = o.to_id AND o.to_kind = 'worker'
+       LEFT JOIN cash_accounts a ON a.id = o.to_id AND o.to_kind = 'account'
+       LEFT JOIN workers k     ON k.id = o.created_by
+       LEFT JOIN orders ord    ON ord.id = o.order_id
+      WHERE o.id = $1 AND ($2::text[] IS NULL OR c.channel = ANY($2))`,
+    [req.params.id, chans])).rows[0];
+  if (!o) return res.status(404).json({ error: 'Hujjat topilmadi' });
+  res.json({ op: o });
 }));
 
 module.exports = router;

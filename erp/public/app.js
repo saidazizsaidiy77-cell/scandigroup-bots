@@ -239,6 +239,17 @@ const App = (() => {
       title: 'Qarzdorlik', lead: 'Oraliq bo\'yicha',
       text: "Davr boshiga \u00b7 qarzdor/haqdor aylanmasi \u00b7 davr oxiriga \u00b7 mijoz kesimida harakatlari bilan",
       perm: ['sales.view', 'sales.manage'] },
+    //  Qarzdorlik BARCHA mijozni bitta jadvalda ko'rsatadi, dalolatnoma
+    //  esa BITTA mijozning har bir qatorini hujjat qilib beradi — mijoz
+    //  bilan yuzma-yuz o'tirib solishtiriladigan qog'oz.
+    { href: '/dalolatnoma.html', mod: 'sales', nav: 'Solishtirma dalolatnoma',
+      title: 'Solishtirma dalolatnoma', lead: 'Mijoz bilan solishtirish',
+      text: "Bitta mijozning davr ichidagi har bir harakati \u00b7 chiqim bosilsa yuk xati, to'lov bosilsa kirim orderi \u00b7 yonida yugurib boradigan qoldiq",
+      perm: ['sales.view', 'sales.manage'] },
+    //  Hujjat sahifalari menyuda turmaydi: ular boshqa sahifadan,
+    //  alohida oynada ochiladi (yukxati.html bilan bir xil).
+    { href: '/kirim-orderi.html', mod: 'sales', nav: 'Kirim orderi', hidden: true,
+      perm: ['sales.view', 'sales.manage'] },
     { href: '/taminotchilar.html', mod: ['purchasing', 'refs'], nav: "Ta'minotchilar",
       title: "Ta'minotchilar", lead: "Kimdan sotib olinadi",
       text: "Nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim \u00b7 kirim hujjati va qarzdorlik shunga tayanadi",

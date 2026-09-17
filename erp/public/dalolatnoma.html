@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solishtirma dalolatnoma · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/yukxati.css">
+<script src="/app.js"></script>
+</head>
+<body class="wide">
+
+<div class="top no-print">
+  <div class="brand"><span class="dot"></span><h1>Solishtirma dalolatnoma</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card no-print">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div style="flex:1;min-width:240px"><label>Mijoz</label>
+      <input id="fQ" placeholder="nomi bo'yicha qidirish" oninput="mijozlar()"></div>
+    <div style="flex:1;min-width:240px"><label>&nbsp;</label>
+      <select id="fC" onchange="load()"></select></div>
+    <div><label>Sanadan</label><input id="fFrom" type="date" onchange="load()"></div>
+    <div><label>Sanagacha</label><input id="fTo" type="date" onchange="load()"></div>
+    <button onclick="davr('oy')">Shu oy</button>
+    <button onclick="davr('yil')">Shu yil</button>
+    <button onclick="davr('hammasi')">Hammasi</button>
+    <button class="primary" onclick="window.print()">Chop etish</button>
+  </div>
+</div>
+
+<div id="body" style="margin-top:16px"><p class="muted">Mijozni tanlang</p></div>
+
+<script>
+//  ═══════════════════════ SOLISHTIRMA DALOLATNOMA ═══════════════════
+//
+//  Mijoz bilan yuzma-yuz o'tirib solishtiriladigan hujjat: oraliq
+//  boshidagi qarz, davr ichidagi har bir harakat va oxiriga qolgani.
+//
+//  Qarzdorlik hisobotidan farqi — u BARCHA mijozni bitta jadvalda
+//  ko'rsatadi, bu esa BITTA mijozning har bir qatorini hujjat qilib
+//  beradi. Shuning uchun har qator HAVOLA: chiqim bosilsa yuk xati,
+//  to'lov bosilsa kirim orderi alohida oynada ochiladi — mijoz
+//  «bu qanday chiqim edi» deb so'raganda javob bir bosishda.
+//
+//  Yonida yugurib boradigan QOLDIQ ustuni: solishtirishda odam
+//  qatorma-qator yuradi va har qatordan keyin qancha qolganini
+//  ko'rishi kerak, oxirgi raqamni emas.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const money = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const d8 = (s) => !s ? '' : new Date(s).toLocaleDateString('ru-RU',
+  { day: '2-digit', month: '2-digit', year: '2-digit' });
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const FIRMA = 'ZELTA PREMIUM';
+
+let hammasi = [], d = null;
+
+//  Saldo QAYSI TOMONDA ekani yozib turadi: bitta ishorali raqam
+//  bo'lsa uni o'qigan odam kim kimga qarzdorligini bilmasdi
+//  (qarzdorlik hisoboti bilan bir xil qoida).
+const tomon = (v) => !Number(v) ? 'qarz yo\'q'
+  : Number(v) < 0 ? 'korxona qarzdor' : 'mijoz qarzdor';
+
+function davr(k) {
+  const now = new Date();
+  if (k === 'oy') {
+    $('fFrom').value = isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
+    $('fTo').value = isoDay(now);
+  } else if (k === 'yil') {
+    $('fFrom').value = `${now.getFullYear()}-01-01`;
+    $('fTo').value = isoDay(now);
+  } else { $('fFrom').value = ''; $('fTo').value = ''; }
+  load();
+}
+
+//  Mijozlar ro'yxati qidiruv bilan: zavodda yuzlab mijoz bor va
+//  ro'yxatdan ko'z bilan qidirib bo'lmaydi.
+function mijozlar() {
+  const q = ($('fQ').value || '').trim().toLowerCase();
+  const bor = $('fC').value;
+  const ro = hammasi.filter(c => !q || c.name.toLowerCase().includes(q)
+    || (c.region || '').toLowerCase().includes(q));
+  $('fC').innerHTML = `<option value="">— mijozni tanlang —</option>` +
+    ro.map(c => `<option value="${c.id}"${String(c.id) === bor ? ' selected' : ''}>${
+      esc(c.name)}${c.region ? ' · ' + esc(c.region) : ''}</option>`).join('');
+}
+
+function draw() {
+  if (!d) return $('body').innerHTML = `<p class="muted">Mijozni tanlang</p>`;
+  let qoldiq = Number(d.opening);
+  const link = (r) => {
+    //  Chiqim — yuk xati, to'lov — kirim orderi. Ikkalasi ham ALOHIDA
+    //  oynada: dalolatnoma ochiq qolsin, solishtirish to'xtamasin.
+    if (r.kind === 'ship' && r.order_id)
+      return `<a href="/yukxati.html?id=${r.order_id}" target="_blank"
+                >${esc(r.order_no || 'yuk xati')}</a>`;
+    if (r.kind === 'payment' && r.op_id)
+      return `<a href="/kirim-orderi.html?id=${r.op_id}" target="_blank"
+                >${esc(r.doc_no || 'kirim orderi')}</a>`;
+    return `<span class="muted">${esc(r.order_no || '—')}</span>`;
+  };
+
+  $('body').innerHTML = `
+    <div class="card">
+      <div style="text-align:center;padding-bottom:14px;border-bottom:2px solid var(--text)">
+        <div style="font-weight:600;letter-spacing:.08em">${esc(FIRMA)}</div>
+        <div style="font-size:19px;font-weight:600;margin-top:6px">
+          Solishtirma dalolatnoma</div>
+        <div class="muted" style="font-size:13px">${esc(d.customer.name)} · ${
+          d.from ? d8(d.from) + ' — ' + d8(d.to) : 'butun davr'}</div>
+      </div>
+
+      <div class="grid g3" style="margin-top:16px">
+        <div class="card"><h2>Davr boshiga</h2>
+          <div class="kpi">${money(Math.abs(d.opening))}<small> $</small></div>
+          <p class="muted" style="font-size:12px;margin-top:6px">${tomon(d.opening)}</p></div>
+        <div class="card"><h2>Qarzdor</h2>
+          <div class="kpi">${money(d.total.debit)}<small> $</small></div>
+          <p class="muted" style="font-size:12px;margin-top:6px">chiqib ketgan mahsulot</p></div>
+        <div class="card"><h2>Haqdor</h2>
+          <div class="kpi">${money(d.total.credit)}<small> $</small></div>
+          <p class="muted" style="font-size:12px;margin-top:6px">to'lovlar</p></div>
+        <div class="card"><h2>Davr oxiriga</h2>
+          <div class="kpi">${money(Math.abs(d.closing))}<small> $</small></div>
+          <p class="muted" style="font-size:12px;margin-top:6px">${tomon(d.closing)}</p></div>
+      </div>
+
+      <div style="overflow-x:auto;margin-top:16px"><table>
+        <thead><tr><th>Sana</th><th>Hujjat</th><th>Izoh</th>
+          <th class="num">Qarzdor</th><th class="num">Haqdor</th>
+          <th class="num">Qoldiq</th></tr></thead>
+        <tbody>
+          <tr><td class="muted">${d.from ? d8(d.from) : ''}</td><td></td>
+            <td><b>Davr boshiga</b></td><td></td><td></td>
+            <td class="num"><b>${money(qoldiq)}</b></td></tr>
+          ${d.rows.map(r => {
+            qoldiq += Number(r.debit) - Number(r.credit);
+            return `<tr>
+              <td>${d8(r.on_date)}</td>
+              <td>${link(r)}${r.conveyor_no
+                ? `<div class="muted" style="font-size:12px">${esc(r.conveyor_no)}</div>` : ''}</td>
+              <td class="muted">${esc(r.note)}</td>
+              <td class="num">${Number(r.debit) ? money(r.debit) : ''}</td>
+              <td class="num">${Number(r.credit) ? money(r.credit) : ''}</td>
+              <td class="num">${money(qoldiq)}</td></tr>`;
+          }).join('')}
+          <tr><td></td><td></td><td><b>Davr oxiriga</b></td>
+            <td class="num"><b>${money(d.total.debit)}</b></td>
+            <td class="num"><b>${money(d.total.credit)}</b></td>
+            <td class="num"><b>${money(d.closing)}</b></td></tr>
+        </tbody></table></div>
+
+      ${!d.rows.length ? `<p class="muted" style="margin-top:12px">
+        Tanlangan oraliqda harakat bo'lmagan.</p>` : ''}
+
+      <!--  Imzo joylari: dalolatnoma ikki tomon qo'l qo'yadigan hujjat,
+            shuning uchun qog'ozda ikkala tomon ham turadi. -->
+      <div style="display:flex;gap:40px;margin-top:40px">
+        <div style="flex:1;border-top:1px solid var(--text);padding-top:6px">
+          <div class="muted" style="font-size:12px">${esc(FIRMA)} — imzo, muhr</div></div>
+        <div style="flex:1;border-top:1px solid var(--text);padding-top:6px">
+          <div class="muted" style="font-size:12px">${
+            esc(d.customer.name)} — imzo</div></div>
+      </div>
+    </div>`;
+}
+
+async function load() {
+  const id = $('fC').value;
+  if (!id) { d = null; return draw(); }
+  const q = new URLSearchParams({ from: $('fFrom').value || '', to: $('fTo').value || '' });
+  d = await App.api(`/api/sales/debts/${id}?${q}`);
+  draw();
+}
+
+App.start(async () => {
+  hammasi = (await App.api('/api/units/customers')).customers || [];
+  mijozlar();
+  davr('yil');
+}, 'sales.view', 'sales.manage');
+</script>
+</body>
+</html>

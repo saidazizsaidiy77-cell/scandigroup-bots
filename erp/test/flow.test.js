@@ -2428,6 +2428,44 @@ test('podotchyot olgan xodim sarfini o\'zi yozadi, faqat ochilgan guruhga', asyn
   assert.equal(oxirgi.from_id, b);
 });
 
+//  SOLISHTIRMA DALOLATNOMA: bitta mijozning har bir qatori hujjatga
+//  bog'langan bo'lishi kerak — chiqim yuk xatiga, to'lov kirim
+//  orderiga. Mijoz «bu qanday chiqim edi» deb so'raganda javob bir
+//  bosishda topilsin.
+test('dalolatnomada har qator hujjatga bog\'langan', async () => {
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const d = (await admin('GET',
+    `/api/sales/debts/${mijoz}?from=2026-01-01&to=2026-12-31`)).body;
+
+  //  Boshiga + qarzdor − haqdor = oxiriga
+  assert.equal(Number(d.closing),
+    Number(d.opening) + Number(d.total.debit) - Number(d.total.credit));
+
+  const tolov = d.rows.find((r) => r.kind === 'payment');
+  assert.ok(tolov, 'to\'lov qatori bor');
+  assert.ok(tolov.doc_no && tolov.op_id, 'to\'lovda hujjat raqami va id');
+  //  Summa MODUL bilan: mijoz tomonida to'lov manfiy turadi, lekin
+  //  izohda «-12500000» degan raqam savol berdirardi.
+  assert.match(tolov.note, /· 12 500 000\.00 so'm$/, tolov.note);
+
+  //  Kirim orderi hujjati: kim olib kelgani bilan
+  const hujjat = (await admin('GET', '/api/sales/payment/' + tolov.op_id)).body;
+  assert.equal(hujjat.op.doc_no, tolov.doc_no);
+  assert.equal(hujjat.op.customer_name, 'Kanalsiz mijoz');
+  assert.ok(hujjat.op.qabul, 'kim olib kelgani yozilgan');
+
+  //  Chiqimda yuk xatiga havola: buyurtmasi topilgan qatorda order_id
+  const chiqim = d.rows.filter((r) => r.kind === 'ship' && r.order_id);
+  assert.ok(chiqim.length, 'yuk xatiga bog\'langan chiqim bor');
+  assert.equal((await admin('GET',
+    '/api/sales/waybill/' + chiqim[0].order_id)).status, 200);
+
+  //  Boshqa yo'nalishdagi mijozning hujjati ochilmaydi: chegara
+  //  qarzdorlik bilan bir xil.
+  const eksport = H.api(base, await H.sessionFor('Eksport menejeri'));
+  assert.equal((await eksport('GET', '/api/sales/payment/' + tolov.op_id)).status, 404);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

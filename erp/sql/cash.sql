@@ -543,7 +543,14 @@ SELECT c.id                                           AS customer_id,
        --  QARZDOR ustunidagi minus emas, HAQDOR (korxona mijozga
        --  qarzdor, ya'ni oldindan to'lov).
        GREATEST(c.opening_debt, 0)::numeric(16,2)     AS debit,
-       GREATEST(-c.opening_debt, 0)::numeric(16,2)    AS credit
+       GREATEST(-c.opening_debt, 0)::numeric(16,2)    AS credit,
+       --  Hujjatga o'tish uchun: chiqimda BUYURTMA id si (yuk xati),
+       --  to'lovda esa OPERATSIYA id si va raqami (kirim orderi).
+       --  Raqamning o'zi matn, id esa havola — solishtirma
+       --  dalolatnomada qator bosilsa o'sha hujjat ochiladi.
+       NULL::int  AS order_id,
+       NULL::text AS doc_no,
+       NULL::int  AS op_id
   FROM customers c
  WHERE COALESCE(c.opening_debt, 0) <> 0
 UNION ALL
@@ -554,7 +561,9 @@ SELECT u.customer_id,
        u.conveyor_no::text,
        u.order_no::text,
        GREATEST(COALESCE(u.total_amount, 0), 0)::numeric(16,2),
-       GREATEST(-COALESCE(u.total_amount, 0), 0)::numeric(16,2)
+       GREATEST(-COALESCE(u.total_amount, 0), 0)::numeric(16,2),
+       (SELECT o2.id FROM orders o2 WHERE o2.order_no = u.order_no),
+       NULL::text, NULL::int
   FROM production_units u
   LEFT JOIN products p ON p.id = u.product_id
  WHERE u.status = 'shipped' AND u.customer_id IS NOT NULL
@@ -566,14 +575,21 @@ UNION ALL
 SELECT f.side_id,
        f.op_date,
        'payment'::text,
+       --  Summa MODUL bilan: mijoz tomonida to'lov manfiy bo'lib turadi
+       --  (pul undan chiqdi), lekin izohda «-12500000» degan raqam
+       --  savol berdirardi — tomoni allaqachon HAQDOR ustunida.
        ('To''lov — ' || f.doc_no
          || CASE WHEN f.currency = 'UZS'
-                 THEN ' · ' || TRIM(TO_CHAR(f.amount, '999999999999D99')) || ' so''m'
+                 --  Ajratuvchi PROBEL: baza lokali vergul qo'yardi va
+                 --  «12,500,000.00» degan raqam zavodda o'qilmaydi.
+                 THEN ' · ' || REPLACE(TRIM(TO_CHAR(ABS(f.amount),
+                        'FM999G999G999G990D00')), ',', ' ') || ' so''m'
                  ELSE '' END)::text,
        NULL::text,
        ord.order_no::text,
        GREATEST(f.amount_usd, 0)::numeric(16,2),
-       GREATEST(-f.amount_usd, 0)::numeric(16,2)
+       GREATEST(-f.amount_usd, 0)::numeric(16,2),
+       ord.id, f.doc_no, f.op_id
   FROM v_cash_flow f
   LEFT JOIN orders ord ON ord.id = f.order_id
  WHERE f.side_kind = 'customer';

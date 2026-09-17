@@ -204,6 +204,20 @@ ustunidagi sana REJA emas, omborga kirgan FAKT kun bo'ladi: konver darrov
 ish «Omborga kirgan» ustuni bilan bo'ladi. Qoida `createOne()` da — ikkala
 yo'l ham shundan o'tadi.
 
+**★ NARX — YUK XATIDAN.** Mijozning qarzi u imzolagan hujjatdagi
+summadan hisoblanadi, konver kartochkasidagi narxdan emas: zavod qarori
+(«programmani har doim yuk xatidan chiqib ketgan narx bo'yicha ol»).
+Chiqarish tasdiqlanganda buyurtma qatoridagi narx konverga KO'CHIRILADI
+(`production_units.unit_price`), shuning uchun balans, qarzdorlik va
+dalolatnoma uchalasi bir xil raqamni aytadi. Ilgari ikki narx bo'lardi va
+qog'ozdagi summa balansdan farq qilardi; narxsiz konver esa balansdan
+butunlay tushib qolardi. Eski chiqimlar bir martalik ko'chirildi
+(`migration_flags`: `sotilgan-narx`).
+
+**Tan narx hali yo'q**: xom ashyo va ta'minot moduli yozilgandan keyin
+shakllanadi; boshlang'ich qoldiq va hozir chiqayotgan mahsulotga zavod
+o'zi qo'yadi.
+
 **Mijoz balansi** (`v_customer_sales.balance`) — `boshlang'ich qarz +
 CHIQIB KETGAN mahsulot summasi`. Zavod qoidasi: buyurtma yozilgani ham,
 bron qo'yilgani ham hali qarz emas — mahsulot mijozda emas. To'lovlar
@@ -240,6 +254,26 @@ oraliqdan oldin turadi va yig'indidan yo'qolib qolmaydi.
 Qator bosilganda ostida o'sha mijozning harakatlari chiqadi (qaysi konver,
 qaysi zakaz, qaysi kun) va yonida yugurib boradigan qoldiq. Chegara savdo
 bilan bir xil: menejer faqat o'z yo'nalishidagi mijozlarni ko'radi.
+
+**Solishtirma dalolatnoma** (`/dalolatnoma.html`) — o'sha lentaning
+MIJOZGA beriladigan ko'rinishi: bitta mijoz, bitta oraliq, boshiga va
+oxiriga saldosi bilan. Hisobot «kim qancha qarzdor» degan savolga zavod
+ichida javob beradi, dalolatnoma esa mijoz bilan YUZMA-YUZ solishtirish
+uchun — shuning uchun har qator HUJJATGA bog'langan:
+
+  · chiqib ketgan mahsulot — zakaz raqami, bosilsa **yuk xati** ochiladi;
+  · to'lov — order raqami (`P26-0004`), bosilsa **kirim orderi** ochiladi
+    (`public/kirim-orderi.html`): kimdan, kim olib kelgan, summa, kurs.
+
+«Bu 500 dollar qayerdan chiqdi» degan savolga jadvaldagi raqamning o'zi
+javob bermasdi — mijoz hujjatni ko'rishi kerak. Ikkalasi ham ALOHIDA
+oynada ochiladi: dalolatnoma yonida ochiq turadi, mijoz bilan qator
+bo'yicha yuriladi.
+
+Yo'li `v_customer_ledger` ga qo'shilgan `order_id`, `doc_no`, `op_id`
+ustunlaridan keladi — sahifa qaysi hujjat ekanini o'zi biladi, ikkinchi
+so'rov yozilmadi. To'lov hujjati `GET /api/sales/payment/:id` dan
+o'qiladi (savdo huquqi, yo'nalish chegarasi bilan).
 
 **Boshlang'ich qarzdorlik** (`customers.opening_debt`, `$`) — tizim ishga
 tushgan kundagi mijoz qarzi. Bir martalik raqam, hisoblanmaydi: kassa

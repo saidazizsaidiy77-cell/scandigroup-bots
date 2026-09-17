@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kirim orderi · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/yukxati.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="row no-print" style="justify-content:flex-end;gap:8px;margin-bottom:12px">
+  <button onclick="window.print()">Chop etish</button>
+  <button onclick="window.close()">Yopish</button>
+</div>
+
+<div id="body"><p class="muted">Yuklanmoqda…</p></div>
+
+<script>
+//  KIRIM ORDERI — bitta to'lovning hujjati.
+//
+//  Solishtirma dalolatnomada to'lov qatori bosilganda alohida oynada
+//  ochiladi. Yuk xati bilan bir xil mantiq: sahifa faqat O'QIYDI va
+//  qog'ozga tugmalarsiz tushadi.
+//
+//  Eng muhim qatori — KIM OLIB KELGAN: solishtirishda «bu pulni kim
+//  topshirgan» degan savol birinchi chiqadi va javobi hujjatda
+//  turishi kerak.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const num = (v, n = 2) => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: n, maximumFractionDigits: n });
+const d8 = (s) => !s ? '' : new Date(s).toLocaleDateString('ru-RU',
+  { day: '2-digit', month: '2-digit', year: '2-digit' });
+const FIRMA = 'ZELTA PREMIUM';
+
+const qator = (lab, val) => !val ? '' : `
+  <div style="display:flex;justify-content:space-between;gap:16px;
+       padding:9px 0;border-bottom:1px solid var(--line)">
+    <span class="muted">${esc(lab)}</span>
+    <span style="text-align:right"><b>${val}</b></span></div>`;
+
+App.start(async () => {
+  const id = new URLSearchParams(location.search).get('id');
+  if (!id) return $('body').innerHTML = '<p class="muted">Hujjat tanlanmagan</p>';
+  let d;
+  try { d = await App.api('/api/sales/payment/' + id); }
+  catch (e) { return $('body').innerHTML =
+    `<div class="card"><h2>Ochib bo'lmadi</h2>
+     <p class="muted" style="margin-top:8px">${esc(e.message)}</p></div>`; }
+  const o = d.op;
+  document.title = `Kirim orderi ${o.doc_no} · ZELTA`;
+
+  $('body').innerHTML = `
+    <div class="card" style="max-width:640px;margin:0 auto">
+      <div style="text-align:center;padding-bottom:14px;border-bottom:2px solid var(--text)">
+        <div style="font-weight:600;letter-spacing:.08em">${esc(FIRMA)}</div>
+        <div style="font-size:19px;font-weight:600;margin-top:6px">
+          Kirim orderi № ${esc(o.doc_no)}</div>
+        <div class="muted" style="font-size:13px">${d8(o.op_date)}${
+          o.status === 'cancelled'
+            ? ' · <span class="tag bad">bekor qilingan</span>' : ''}</div>
+      </div>
+
+      <div style="margin-top:14px">
+        ${qator('Kimdan', esc(o.customer_name) + (o.region
+          ? ` <span class="muted" style="font-weight:400">${esc(o.region)}</span>` : ''))}
+        ${qator('Telefon', o.customer_phone ? esc(o.customer_phone) : '')}
+        ${qator('Zakaz', o.order_no ? esc(o.order_no) : '')}
+        ${qator('Summa', num(o.amount) + (o.currency === 'UZS' ? " so'm" : ' $'))}
+        ${o.currency === 'UZS' ? qator('Kurs', num(o.rate) + " so'm") : ''}
+        ${qator('Dollarda', num(o.amount_usd) + ' $')}
+        <!--  KIM OLIB KELGAN: menejer o'z qo'liga olgan bo'lsa o'sha
+              odam, to'g'ridan kassaga to'langan bo'lsa kassa nomi. -->
+        ${qator(o.to_kind === 'worker' ? 'Kim olib kelgan' : 'Qayerga tushdi',
+          o.qabul ? esc(o.qabul) : '')}
+        ${qator('Kiritdi', o.kiritgan ? esc(o.kiritgan) + (o.kiritgan_phone
+          ? ` <span class="muted" style="font-weight:400">${esc(o.kiritgan_phone)}</span>`
+          : '') : '')}
+        ${qator('Izoh', o.note ? esc(o.note) : '')}
+      </div>
+
+      <div style="display:flex;gap:40px;margin-top:36px">
+        <div style="flex:1;border-top:1px solid var(--text);padding-top:6px">
+          <div class="muted" style="font-size:12px">Topshirdi — imzo</div></div>
+        <div style="flex:1;border-top:1px solid var(--text);padding-top:6px">
+          <div class="muted" style="font-size:12px">Qabul qildi — imzo</div></div>
+      </div>
+    </div>`;
+}, 'sales.view', 'sales.manage');
+</script>
+</body>
+</html>
