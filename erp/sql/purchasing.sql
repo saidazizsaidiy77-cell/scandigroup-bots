@@ -25,6 +25,11 @@ INSERT INTO supplier_categories (code, name, sort) VALUES
   ('LAK',       'Lak, bo''yoq, yelim',   4),
   ('QADOQ',     'Qadoqlash materiali',   5),
   ('OYNA',      'Oyna va ko''zgu',       6),
+  --  Zavod ro'yxatidagi eng katta guruhlardan biri: po'kak, rezina,
+  --  plastmas oyoq, stul karkasi, smala — zavodga TAYYOR bo'lib
+  --  keladigan, lekin o'zi mahsulot bo'lmagan qism. «Boshqa» ga
+  --  qo'shilsa zavodning o'z bo'linishi yo'qolardi.
+  ('YARIM',     'Yarim tayyor mahsulot', 7),
   ('XIZMAT',    'Xizmat (tashish, ta''mir)', 7),
   ('BOSHQA',    'Boshqa',               99)
 ON CONFLICT (code) DO NOTHING;
