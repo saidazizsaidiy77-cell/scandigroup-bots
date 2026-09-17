@@ -120,26 +120,47 @@ function outThird() {
   const id  = val.startsWith('expense:') ? Number(val.slice(8)) : 0;
   const it  = (refs.items || []).find(x => x.id === id);
   box.hidden = !(it && it.needs_supplier);
-  if (box.hidden) { $('fSup').innerHTML = ''; return calc(); }
+  if (box.hidden) { $('fSup').value = ''; $('fSupQ').value = ''; return calc(); }
   supFilter();
 }
 
+//  Topilganlar SHU YERDA, ro'yxat bo'lib turadi — bosib ochiladigan
+//  ochilma emas. Kassir nomni yozadi va javobni o'sha zahoti ko'radi;
+//  ilgari yozgandan keyin yana ochilmani ochishi kerak edi, ya'ni
+//  bitta tanlov uchun ikkita harakat.
+//
+//  Bittasi qolsa O'ZI tanlanadi: ro'yxatda bitta qator turganda uni
+//  bosish odamdan javobni ikkinchi marta so'rash bo'lardi.
 function supFilter() {
   const q = ($('fSupQ') ? $('fSupQ').value : '').trim().toLowerCase();
-  const bor = $('fSup') ? $('fSup').value : '';
   const list = (refs.suppliers || [])
     .filter(x => !q || x.name.toLowerCase().includes(q));
-  $('fSup').innerHTML = `<option value="">— tanlang —</option>` +
-    list.map(x => `<option value="supplier:${x.id}"${
-      `supplier:${x.id}` === bor ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
-  //  Bo'sh ro'yxat sababini AYTADI: kassir «tizim ishlamayapti» deb
-  //  o'ylab, to'lovni yozmay qo'yardi. Ro'yxat Ta'minot bo'limidan
-  //  to'ladi — bir marta import qilinadi.
+  if (q && list.length === 1) $('fSup').value = `supplier:${list[0].id}`;
+  const bor = $('fSup').value;
+  $('fSupList').innerHTML = list.length
+    ? list.map(x => `<button type="button"${
+        `supplier:${x.id}` === bor ? ' class="on"' : ''
+      } onclick="supPick(${x.id})">${esc(x.name)}</button>`).join('')
+    //  Bo'sh ro'yxat sababini AYTADI: kassir «tizim ishlamayapti» deb
+    //  o'ylab, to'lovni yozmay qo'yardi. Ro'yxat Ta'minot bo'limidan
+    //  to'ladi — bir marta import qilinadi.
+    : `<div class="none">${(refs.suppliers || []).length
+        ? "Bunday ta'minotchi topilmadi"
+        : "Ro'yxat bo'sh — Ta'minot → Ta'minotchilar sahifasidan kiriting"}</div>`;
   const bori = (refs.suppliers || []).length;
   $('fSupHint').textContent = q ? `${list.length} ta topildi`
-    : bori ? `${bori} ta ta'minotchi`
-           : "Ro'yxat bo'sh — Ta'minot → Ta'minotchilar sahifasidan kiriting";
+    : bori ? `${bori} ta ta'minotchi` : '';
   calc();
+}
+
+//  Tanlangach qidiruv katagiga nomi yoziladi: ro'yxat bitta qatorga
+//  qisqaradi va kim tanlanganini oyna yopilguncha ko'rsatib turadi.
+function supPick(id) {
+  const s = (refs.suppliers || []).find(x => x.id === id);
+  if (!s) return;
+  $('fSup').value = `supplier:${id}`;
+  $('fSupQ').value = s.name;
+  supFilter();
 }
 
 function outSecond() {
@@ -270,7 +291,8 @@ function openForm(kind) {
             <label>Ta'minotchi</label>
             <input id="fSupQ" placeholder="nomi bo'yicha qidirish"
                    oninput="supFilter()" style="margin-bottom:8px">
-            <select id="fSup" onchange="calc()"></select>
+            <input type="hidden" id="fSup">
+            <div id="fSupList" class="pick"></div>
             <div class="hint" id="fSupHint"></div></div>` : ''}
 
           <div><label>Summa</label>

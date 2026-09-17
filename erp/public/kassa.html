@@ -33,6 +33,20 @@
   display:flex;justify-content:space-between;align-items:baseline;gap:12px;
   flex-wrap:wrap}
 .ord-sum .big{font-size:26px;font-weight:600}
+
+/*  TANLASH RO'YXATI — qidirilgani SHU YERDA ko'rinib turadi.
+    Ilgari ostida ochilma turardi: odam nomni yozib, topilganini
+    ko'rish uchun yana ro'yxatni ochishi kerak edi — bitta tanlov
+    uchun ikkita harakat. */
+.pick{border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  max-height:232px;overflow-y:auto;background:var(--surface-2)}
+.pick button{display:block;width:100%;text-align:left;border:0;border-radius:0;
+  background:transparent;padding:10px 12px;font-size:14px;color:var(--text);
+  border-bottom:1px solid var(--line);cursor:pointer}
+.pick button:last-child{border-bottom:0}
+.pick button:hover{background:var(--surface)}
+.pick button.on{background:var(--accent);color:#fff;font-weight:600}
+.pick .none{padding:10px 12px;font-size:13px;color:var(--muted)}
 </style>
 <script src="/app.js"></script>
 </head>
