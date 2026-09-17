@@ -968,11 +968,14 @@ Bular hal bo'lmaguncha tegishli kod YOZILMAYDI: javobsiz taxmin qilib
 qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 
 **Xom ashyo spravochnigi** (ombor moduli shundan boshlanadi)
-- Ro'yxat Excel'da bormi? Bo'lsa ustunlariga moslab yuklash yoziladi.
-- Bitta material bir nechta rangda bo'ladimi — `LDSP 16mm` oq, yong'oq,
-  venge? Har rang alohida materialmi, yoki bitta material + rang ustunimi?
-  Qoldiq rang bo'yicha yuritilmasa «oq LDSP tugadi» degan savolga javob
-  bo'lmaydi.
+- ✅ HAL BO'LDI: **har rang ALOHIDA material** (zavod qarori).
+  `LDSP 16mm oq` va `LDSP 16mm venge` — ikkita qator, har birining o'z
+  qoldig'i va o'z narxi. Rang ustun EMAS: ustun bo'lsa qoldiq material
+  bo'yicha yig'ilib, «oq LDSP tugadi» degan savolga javob bo'lmasdi.
+  Tayyor mahsulotdagi `color` bilan adashtirmaslik kerak — u yerda rang
+  konverning xususiyati, bu yerda esa materialning O'ZI boshqa.
+- Ro'yxat Excel'dan yuklanadi (qo'lda terilmaydi). Kerakli ustunlar:
+  nomi · o'lchov birligi (dona, m², kg, rulon…) · turkumi.
 
 **Jo'natma**
 - Mashina raqami, haydovchi va hujjat raqami yoziladimi? Hozir buyurtmada
