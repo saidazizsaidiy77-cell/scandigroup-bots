@@ -615,6 +615,29 @@ javobi, guruhlardan farqi yo'q. Tanlangach ikkinchi katak ochiladi va
 faqat o'shaning ichidagilar turadi. Shu sababdan xodimga pul berish
 alohida tugma EMAS.
 
+**★ TA'MINOTCHIGA TO'LOVDA UCHINCHI BOSQICH.** «Ta'minotchilarga
+to'lov» moddasi tanlansa QAYSI ta'minotchi ekani so'raladi: pul ma'lum
+bir odamga ketadi va uning qarzidan ayrilishi kerak, modda esa
+foyda-zararda qoladi. Ikkalasi ham yoziladi — tomon `supplier`, yonida
+`expense_item_id` va `pl_month`. Shu sababdan `v_expenses` endi
+`to_kind = 'expense'` ni emas, **moddaning O'ZINI** qidiradi: aks holda
+ta'minotchiga to'langan pul hisobotdan yo'qolib ketardi.
+
+Belgi MODDADA (`expense_items.needs_supplier`), kodda emas: ertaga
+«Yetkazib berish xarajati» ham ta'minotchiga bog'lansa, o'sha qatorga
+bitta `true` yoziladi.
+
+**Qirqta ta'minotchi ro'yxatdan ko'z bilan qidirilmaydi** — uzun
+ro'yxat ustida qidiruv katagi turadi (o'ntadan oshsa o'zi chiqadi).
+**Foyda-zarar oyi ham yozilmaydi, TANLANADI**: «2026-09» ni terish
+formatni eslab turishni talab qilardi, ro'yxatda esa oy nomi bilan
+turadi va xato yozib bo'lmaydi.
+
+**Ta'minotchi va xodim ro'yxatda HAR DOIM turadi**, bo'sh bo'lsa ham:
+ilgari bo'sh bo'lsa qator umuman chiqmasdi va kassir «xodimga pul
+berish yo'q ekan» deb o'ylardi. Endi tanlanadi va ikkinchi katak nima
+qilish kerakligini aytadi — «Xodimlar sahifasida belgilang».
+
 **Kurs oldindan to'ldiriladi** — oxirgi ishlatilgani (`/refs` dagi
 `rate`). Zavod qoidasi o'zgarmadi, kursni baribir odam yozadi; lekin
 uni har safar noldan terib o'tirish shart emas: kurs kunda bir marta

@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS expense_items (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_expense_items_name
   ON expense_items(group_code, lower(name));
 
+
 --  Zavod ro'yxati. Kiritilgan modda O'CHIRILMAYDI — u operatsiyalarda
 --  ishlatilgan bo'lishi mumkin; keraksizi `active = false` qilinadi va
 --  eski hisobotda joyida qoladi. Qayta deploy'da nomi tiklanmaydi:
@@ -148,6 +149,26 @@ INSERT INTO expense_items (group_code, name, sort) VALUES
   ('BOSHQA', 'Bojxona xizmati', 20),
   ('BOSHQA', 'Benzin', 30)
 ON CONFLICT (group_code, lower(name)) DO NOTHING;
+
+--  ★ QAYSI MODDADA TA'MINOTCHI SO'RALADI.
+--
+--  «Ta'minotchilarga to'lov» — harajat moddasi, lekin pul MA'LUM bir
+--  ta'minotchiga ketadi va uning qarzidan ayrilishi kerak. Ikkalasi
+--  ham to'g'ri va ikkalasi ham kerak: modda foyda-zararga, ta'minotchi
+--  esa qarz hisobiga.
+--
+--  Belgi MODDADA turadi, kodda emas: ertaga «Yetkazib berish xarajati»
+--  ham ta'minotchiga bog'lansa, shu qatorga bitta `true` yoziladi.
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS needs_supplier BOOLEAN NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'modda-taminotchi') THEN
+    UPDATE expense_items SET needs_supplier = true
+     WHERE group_code = 'TAMIN' AND lower(name) = lower('Ta''minotchilarga to''lov');
+    INSERT INTO migration_flags (key) VALUES ('modda-taminotchi');
+  END IF;
+END $$;
 
 -- ──────────────────────────────────────────────────────── OPERATSIYA
 CREATE TABLE IF NOT EXISTS cash_ops (
@@ -334,7 +355,11 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
   FROM cash_ops o
   JOIN expense_items  ei ON ei.id = o.expense_item_id
   JOIN expense_groups eg ON eg.code = ei.group_code
- WHERE o.status = 'ok' AND o.to_kind = 'expense'
+ --  Tomoni ta'minotchi bo'lgan to'lov ham shu yerda: moddasi
+ --  qo'yilgan bo'lsa u foyda-zararning bir qatori. Shart faqat
+ --  moddaning O'ZI — «to_kind = expense» bo'lsa ta'minotchiga
+ --  to'langan pul hisobotdan yo'qolib ketardi.
+ WHERE o.status = 'ok' AND o.expense_item_id IS NOT NULL
  GROUP BY o.pl_month, eg.code, eg.name, eg.sort, ei.id, ei.name;
 
 -- ════════════════════════════════════════════════ FOYDA-ZARAR (P&L)

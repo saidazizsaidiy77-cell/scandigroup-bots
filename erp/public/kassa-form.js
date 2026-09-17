@@ -38,11 +38,13 @@ const SIDE_LIST = (kind) => ({
 //  Ta'minotchi va xodim ham shu yerda — kassir uchun ular ham
 //  «qayerga» degan savolning javobi, harajat guruhlaridan farqi yo'q.
 function outGroups() {
-  const g = [];
-  if ((refs.suppliers || []).length) g.push(['supplier', "Ta'minotchiga to'lov"]);
-  //  Xodim faqat belgisi qo'yilganlar bo'lsa: pul hamma xodimga
-  //  berilmaydi (izoh: sql/cash.sql, can_hold_cash).
-  if ((refs.payable || []).length) g.push(['worker', "Xodim qo'liga pul"]);
+  //  Ta'minotchi va xodim HAR DOIM ro'yxatda: ular zavodda bor
+  //  yo'nalish, ro'yxati bo'sh bo'lgani esa boshqa gap. Ilgari bo'sh
+  //  bo'lsa qator umuman chiqmasdi va kassir «xodimga pul berish
+  //  yo'q ekan» deb o'ylardi — endi tanlanadi va ikkinchi katak nima
+  //  qilish kerakligini aytadi.
+  const g = [['supplier', "Ta'minotchiga to'lov"],
+             ['worker',   "Xodim qo'liga pul (podotchyot)"]];
   (refs.groups || []).forEach(x => {
     if ((refs.items || []).some(i => i.group_code === x.code))
       g.push(['g:' + x.code, x.name]);
@@ -63,17 +65,96 @@ function outItems(g) {
   return [];
 }
 
+//  Oylar ro'yxati: qo'lda yozilmaydi, tanlanadi. «2026-09» ni terish
+//  klaviaturani ochib, formatni eslab turishni talab qilardi —
+//  ro'yxatda esa oy nomi bilan turadi va xato yozib bo'lmaydi.
+const OYLAR = ['Yanvar','Fevral','Mart','Aprel','May','Iyun',
+               'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+function oyOptions(tanlangan) {
+  const now = new Date();
+  const out = [];
+  //  O'n ikki oy orqaga va bitta oldinga: harajat o'tgan oyniki
+  //  bo'lishi odatiy hol, kelasi oyniki esa kamdan-kam.
+  //  Kelasi oydan boshlab O'N IKKI oy orqaga: ro'yxat tepasida yaqin
+  //  oylar tursin, uzoq o'tmish esa pastda.
+  for (let k = 1; k >= -12; k--) {
+    const d = new Date(now.getFullYear(), now.getMonth() + k, 1);
+    const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    out.push(`<option value="${v}"${v === tanlangan ? ' selected' : ''}>${
+      OYLAR[d.getMonth()]} ${d.getFullYear()}</option>`);
+  }
+  return out.join('');
+}
+
+//  Uchinchi bosqich — TA'MINOTCHI. Faqat moddasi shuni talab qilsa
+//  chiqadi (`needs_supplier`, izoh: sql/cash.sql): pul ma'lum bir
+//  ta'minotchiga ketadi va uning qarzidan ayriladi, modda esa
+//  foyda-zararda qoladi.
+//
+//  Qirqta ta'minotchi ro'yxatdan ko'z bilan qidiriladigan narsa emas,
+//  shuning uchun ustida qidiruv katagi turadi.
+//  Ikkinchi bosqich ro'yxatini qidiruv bo'yicha qayta chizadi.
+//  Tanlangani saqlanadi: qidiruv yozilganda tanlov yo'qolmasin.
+function itemFilter() {
+  const g = $('fSide') ? $('fSide').value : '';
+  const q = ($('fItemQ').value || '').trim().toLowerCase();
+  const bor = $('fItem').value;
+  const list = outItems(g).filter(([, t]) => !q || t.toLowerCase().includes(q));
+  $('fItem').innerHTML = `<option value="">— tanlang —</option>` +
+    list.map(([v, t]) => `<option value="${esc(v)}"${
+      v === bor ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  $('fItemHint').textContent = q ? `${list.length} ta topildi` : '';
+  outThird();
+}
+
+function outThird() {
+  const box = $('fSupBox');
+  if (!box) return;
+  const val = $('fItem') ? $('fItem').value : '';
+  const id  = val.startsWith('expense:') ? Number(val.slice(8)) : 0;
+  const it  = (refs.items || []).find(x => x.id === id);
+  box.hidden = !(it && it.needs_supplier);
+  if (box.hidden) { $('fSup').innerHTML = ''; return calc(); }
+  supFilter();
+}
+
+function supFilter() {
+  const q = ($('fSupQ') ? $('fSupQ').value : '').trim().toLowerCase();
+  const bor = $('fSup') ? $('fSup').value : '';
+  const list = (refs.suppliers || [])
+    .filter(x => !q || x.name.toLowerCase().includes(q));
+  $('fSup').innerHTML = `<option value="">— tanlang —</option>` +
+    list.map(x => `<option value="supplier:${x.id}"${
+      `supplier:${x.id}` === bor ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
+  $('fSupHint').textContent = q
+    ? `${list.length} ta topildi` : `${(refs.suppliers || []).length} ta ta'minotchi`;
+  calc();
+}
+
 function outSecond() {
   const g = $('fSide') ? $('fSide').value : '';
   const list = outItems(g);
   const box = $('fItemBox');
   if (!box) return;
-  box.hidden = !list.length;
+  box.hidden = !g;
   $('fItemLab').textContent = g === 'supplier' ? "Ta'minotchi"
     : g === 'worker' ? 'Xodim' : 'Harajat moddasi';
-  $('fItem').innerHTML = `<option value="">— tanlang —</option>` +
-    list.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
-  calc();
+  //  Ro'yxat bo'sh bo'lsa sababi yoziladi: bo'sh ro'yxat «tizim
+  //  ishlamayapti» degan taassurot qoldirardi.
+  $('fItem').innerHTML = list.length
+    ? `<option value="">— tanlang —</option>` +
+      list.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')
+    : `<option value="">${g === 'worker'
+        ? "— qo'liga pul beriladigan xodim belgilanmagan —"
+        : g === 'supplier' ? "— ta'minotchi ro'yxati bo'sh —"
+        : '— modda yo\'q —'}</option>`;
+  //  Qidiruv katagi UZUN ro'yxatda kerak: qirqta ta'minotchini ko'z
+  //  bilan qidirib bo'lmaydi, oltita moddani esa qidirish shart emas.
+  $('fItemQ').hidden = list.length < 10;
+  if ($('fItemQ').hidden) $('fItemQ').value = '';
+  $('fItemHint').textContent = g === 'worker' && !list.length
+    ? "Xodimlar sahifasida «Qo'liga pul beriladi» katagini belgilang" : '';
+  outThird();
 }
 
 function sidePicker(id, kinds, extra) {
@@ -155,8 +236,19 @@ function openForm(kind) {
                 Boshida yashirin turadi — bo'sh ro'yxat savol berdiradi. -->
           ${F.two ? `<div class="wide" id="fItemBox" hidden>
             <label id="fItemLab">Modda</label>
-            <select id="fItem" onchange="calc()"></select>
-            <div class="hint"></div></div>` : ''}
+            <input id="fItemQ" placeholder="nomi bo'yicha qidirish" hidden
+                   oninput="itemFilter()" style="margin-bottom:8px">
+            <select id="fItem" onchange="outThird()"></select>
+            <div class="hint" id="fItemHint"></div></div>
+
+          <!--  Uchinchi bosqich: qaysi ta'minotchiga. Qirqta nomni ko'z
+                bilan qidirib bo'lmaydi — ustida qidiruv katagi turadi. -->
+          <div class="wide" id="fSupBox" hidden>
+            <label>Ta'minotchi</label>
+            <input id="fSupQ" placeholder="nomi bo'yicha qidirish"
+                   oninput="supFilter()" style="margin-bottom:8px">
+            <select id="fSup" onchange="calc()"></select>
+            <div class="hint" id="fSupHint"></div></div>` : ''}
 
           <div><label>Summa</label>
             <input id="fAmt" type="number" min="0" step="0.01" inputmode="decimal"
@@ -178,7 +270,7 @@ function openForm(kind) {
           <!--  ★ QAYSI OYNING FOYDA-ZARARIGA: to'lov bugun ketadi,
                 harajat esa boshqa oyniki bo'lishi mumkin. -->
           <div id="fMonthBox" hidden><label>Foyda-zarar oyi</label>
-            <input id="fMonth" type="month" value="${bugun.slice(0, 7)}">
+            <select id="fMonth">${oyOptions(bugun.slice(0, 7))}</select>
             <div class="hint">qaysi oy hisobotiga tushsin</div></div>
 
           <div class="wide"><label>Izoh</label>
@@ -211,6 +303,8 @@ function calc() {
   //  o'rin almashishi.
   const side = String($('fItem') ? $('fItem').value
                                  : ($('fSide') ? $('fSide').value : ''));
+  //  Ta'minotchiga to'lovda ham oy so'raladi: modda saqlanadi va
+  //  foyda-zararga o'sha oy bilan tushadi.
   $('fMonthBox').hidden = !side.startsWith('expense:');
   const a = Number($('fAmt').value) || 0;
   const r = Number($('fRate').value) || 0;
@@ -222,10 +316,16 @@ function calc() {
 async function saveOp() {
   //  Ikki bosqichli shaklda javob IKKINCHI katakda: birinchisi faqat
   //  guruh, uning o'zi bilan operatsiya yozib bo'lmaydi.
-  const raw = String(($('fItem') && !$('fItemBox').hidden
-    ? $('fItem').value : $('fSide').value) || '');
+  //  Ta'minotchi so'ralgan bo'lsa TOMON o'shaniki: pul uning qarzidan
+  //  ayriladi. Harajat moddasi yo'qolmaydi — u yonida saqlanadi va
+  //  foyda-zararda o'z qatorida turadi (izoh: modules/cash.js).
+  const supOchiq = $('fSupBox') && !$('fSupBox').hidden;
+  const modda = $('fItem') && $('fItemBox') && !$('fItemBox').hidden
+    ? String($('fItem').value || '') : '';
+  const raw = String((supOchiq ? $('fSup').value : (modda || $('fSide').value)) || '');
   const [kind, id] = raw.split(':');
-  if (!kind) return toast('Tomon tanlanmagan', true);
+  if (!kind) return toast(supOchiq ? "Ta'minotchi tanlanmagan"
+                                   : 'Tomon tanlanmagan', true);
   //  SHU kassa doim bir tomonda: kirimda oluvchi, chiqimda beruvchi.
   //  Menejerda esa u o'zi (`me`) — serverda ham shunday qo'yiladi.
   const meSide = { kind: 'worker', id: refs.me.id };
@@ -244,7 +344,9 @@ async function saveOp() {
                          : { from_kind: acc.kind, from_id: acc.id,
                              to_kind: other.kind, to_id: other.id }),
     ...(kind === 'expense'
-      ? { expense_item_id: Number(id), pl_month: $('fMonth').value } : {}),
+      ? { expense_item_id: Number(id), pl_month: $('fMonth').value }
+      : supOchiq && modda.startsWith('expense:')
+      ? { expense_item_id: Number(modda.slice(8)), pl_month: $('fMonth').value } : {}),
   };
   try {
     const r = await App.api('/api/cash/ops',

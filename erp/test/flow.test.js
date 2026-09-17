@@ -2317,6 +2317,47 @@ test('ombor harakatida kim qabul qilgani ko\'rinadi va filtr ishlaydi', async ()
     `SELECT fg_by FROM production_units WHERE id=$1`, [u.id])).fg_by, null);
 });
 
+//  TA'MINOTCHIGA TO'LOV IKKI JOYGA YOZILADI: uning qarzidan ayriladi
+//  va foyda-zararda o'z moddasida turadi. Ikkalasi ham to'g'ri —
+//  «to_kind = expense» bo'lsa ta'minotchining qarzi kamaymasdi,
+//  moddasiz bo'lsa esa hisobotdan yo'qolib ketardi.
+test('ta\'minotchiga to\'lov moddasi bilan yoziladi', async () => {
+  const { db } = require('../db');
+  await db.query(`INSERT INTO suppliers (name) VALUES ('Sinov ta''minotchi')
+                  ON CONFLICT DO NOTHING`);
+  const tam = (await H.id(`SELECT id FROM suppliers WHERE name='Sinov ta''minotchi'`)).id;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE needs_supplier LIMIT 1`));
+  assert.ok(modda, "«Ta'minotchilarga to'lov» moddasi belgilangan");
+
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  //  Oy so'raladi: moddasi bor to'lov qaysi oyning foyda-zararida
+  //  ekani aytilmasa hisobotda «boshqa» bo'lib yo'qolib ketardi.
+  const oysiz = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'supplier', to_id: tam,
+    currency: 'USD', amount: 300, expense_item_id: modda.id });
+  assert.equal(oysiz.status, 400, oysiz.text);
+
+  const r = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'supplier', to_id: tam,
+    currency: 'USD', amount: 300, op_date: '2026-09-20',
+    expense_item_id: modda.id, pl_month: '2026-09' });
+  assert.equal(r.status, 200, r.text);
+
+  //  Foyda-zararda — o'z moddasida
+  const pl = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
+  const h = pl.rows.find(x => x.kind === 'expense' && x.item_id === modda.id);
+  assert.ok(h, 'ta\'minotchiga to\'lov foyda-zararda');
+  assert.equal(Number(h.amount_usd), 300);
+
+  //  Pul oqimida — ta'minotchi tomonida
+  const fl = (await kassir('GET', '/api/cash/flow?from=2026-09&to=2026-09')).body;
+  assert.ok(fl.rows.some(x => x.dir === 'out' && x.side === 'supplier'),
+    'chiqim ta\'minotchiga');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

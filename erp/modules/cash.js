@@ -60,7 +60,7 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     boss ? db.query(`SELECT id, code, name, kind FROM cash_accounts
                       WHERE is_active ORDER BY sort, name`) : { rows: [] },
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
-    db.query(`SELECT id, group_code, name FROM expense_items
+    db.query(`SELECT id, group_code, name, needs_supplier FROM expense_items
                WHERE active ORDER BY sort, name`),
     db.query(`SELECT id, name, region FROM customers
                WHERE active AND ($1::text[] IS NULL OR channel = ANY($1))
@@ -240,6 +240,15 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     //  harajat esa boshqa oyniki bo'lishi mumkin — shuning uchun
     //  so'raladi va bo'sh qoldirilmaydi.
     let pl_month = null, item_id = null;
+    //  ★ TA'MINOTCHIGA TO'LOVDA HAM MODDA. Pul ta'minotchining qarzidan
+    //  ayriladi (tomon — `supplier`), lekin foyda-zararda o'z moddasida
+    //  turishi kerak. Shuning uchun ikkalasi birga yoziladi.
+    if (to_kind === 'supplier' && b.expense_item_id) {
+      item_id = Number(b.expense_item_id) || null;
+      const m = String(b.pl_month || '').slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(m)) throw new Error('Foyda-zarar oyi tanlanmagan');
+      pl_month = m + '-01';
+    }
     if (to_kind === 'expense') {
       item_id = Number(b.expense_item_id) || null;
       if (!item_id) throw new Error('Harajat moddasi tanlanmagan');
