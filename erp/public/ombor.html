@@ -802,8 +802,13 @@ function drawMoves() {
               chiqdi». Aralash ro'yxatdan buni sanab chiqarish kerak
               bo'lardi. Filtr SERVERDA (?kind=): oraliq katta bo'lsa
               qatorlar chegarasiga yetib, klientda yarmi yo'qolardi. -->
-        <div style="flex:1;min-width:200px"><label>Mijoz</label>
-          <input id="mQ" value="${esc(d.q || '')}" placeholder="mijoz, konver yoki zakaz"
+        <!--  Bitta katak uchala savolga javob beradi: mijoz nomi, konver
+              raqami va zakaz raqami birga qidiriladi. Uchta alohida
+              katak qilinsa mudir qaysi biriga yozishni o'ylab o'tirardi,
+              va uchtasi ham bo'sh turgan filtr qatori joy egallardi. -->
+        <div style="flex:1;min-width:220px"><label>Qidiruv</label>
+          <input id="mQ" value="${esc(d.q || '')}"
+            placeholder="mijoz nomi · konver № · zakaz №"
             onchange="loadMoves()"></div>
         <div><label>Amal</label>
           <select id="mKind" onchange="loadMoves()">
