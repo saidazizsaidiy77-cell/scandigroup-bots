@@ -580,4 +580,168 @@ router.post('/customers', need('production.units', 'sales.manage', 'production.m
     } finally { client.release(); }
   }));
 
+// ════════════════════════════════════════════ TA'MINOTCHILARNI YUKLASH
+//
+//  Zavod ro'yxatni Excel'da yuritadi va uni qo'lda terib chiqish —
+//  o'ttiz ikkita qator, har birida nomi, raqami va turi — bir soatlik
+//  ish va o'nta xato. Mijozlar bilan bir xil yo'l: fayl tanlanadi,
+//  avval TEKSHIRIB ko'rsatiladi, keyin saqlanadi.
+const SFIELDS = {
+  name:     ['taminotchi', 'taminotchinomi', 'hisobnomi', 'hisob', 'nomi', 'nom',
+             'firma', 'tashkilot', 'поставщик', 'наименование'],
+  phone:    ['tel', 'telefon', 'telraqam', 'telraqami', 'telefonraqam',
+             'telefonraqami', 'raqam', 'nomer', 'телефон', 'номертелефона'],
+  //  Zavod faylida ustun «TURI» deb ataladi va ichida turning NOMI
+  //  turadi («QADOQLASH MATERIALI»), kodi emas. Ikkalasi ham o'qiladi.
+  category: ['turi', 'tur', 'yonalish', 'yonalishkodi', 'nimayetkazadi',
+             'kategoriya', 'категория', 'тип'],
+  country:  ['davlat', 'respublika', 'mamlakat', 'страна', 'республика'],
+  region:   ['region', 'viloyat', 'shahar', 'hudud', 'регион', 'область', 'город'],
+  inn:      ['stir', 'inn', 'инн'],
+  manager:  ['masul', 'masuli', 'masulxodim', 'taminotchixodim', 'menejer',
+             'менеджер', 'ответственный'],
+  note:     ['izoh', 'izohi', 'примечание', 'комментарий'],
+};
+
+router.post('/suppliers', need('purchasing.manage'),
+  express.raw({ type: '*/*', limit: '10mb' }),
+  wrap(async (req, res) => {
+    const buf = req.body;
+    if (!buf || !buf.length) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    let table;
+    try {
+      table = isXlsx(buf) ? readSheet(buf) : parseCsv(buf.toString('utf8'));
+    } catch (e) {
+      e.status = 400; e.message = 'Faylni o\'qib bo\'lmadi: ' + e.message; throw e;
+    }
+
+    const headIdx = table.findIndex((r) => r.some((c) => String(c).trim()));
+    if (headIdx < 0) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    const map = {}, unknown = [];
+    table[headIdx].forEach((h, i) => {
+      const n = norm(h);
+      if (!n) return;
+      const f = Object.keys(SFIELDS).find((k) => SFIELDS[k].includes(n));
+      if (f) { if (map[f] == null) map[f] = i; } else unknown.push(String(h).trim());
+    });
+    if (map.name == null) {
+      const e = new Error(
+        'Ta\'minotchi nomi ustuni topilmadi. Sarlavhada «Nomi» yoki «Hisob nomi» ' +
+        'bo\'lishi kerak. Topilgan ustunlar: ' +
+        table[headIdx].filter(Boolean).join(', '));
+      e.status = 400; throw e;
+    }
+
+    const [cat, wk, cur] = await Promise.all([
+      db.query(`SELECT code, name FROM supplier_categories ORDER BY sort`),
+      db.query(`SELECT id, name FROM workers WHERE active`),
+      db.query(`SELECT name FROM suppliers`),
+    ]);
+    //  Kodi bilan ham, nomi bilan ham: zavod faylida «MDF» deb turadi,
+    //  «Qadoqlash materiali» ham o'sha ustunda nom bo'lib yoziladi.
+    const byCat = new Map();
+    for (const c of cat.rows) { byCat.set(norm(c.code), c.code); byCat.set(norm(c.name), c.code); }
+    const byWorker = new Map(wk.rows.map((w) => [norm(w.name), w.id]));
+    const findWorker = (nom) => {
+      const n = norm(nom);
+      if (byWorker.has(n)) return { id: byWorker.get(n) };
+      const hits = wk.rows.filter((w) => norm(w.name).startsWith(n));
+      if (hits.length === 1) return { id: hits[0].id, as: hits[0].name };
+      if (hits.length > 1) return { many: hits.map((w) => w.name) };
+      return {};
+    };
+    const existing = new Set(cur.rows.map((c) => norm(c.name)));
+
+    const seen = new Set(), missing = new Set(), matched = new Map();
+    const rows = [];
+    for (let i = headIdx + 1; i < table.length; i++) {
+      const cells = table[i];
+      if (!cells.some((c) => String(c).trim())) continue;
+      const at = (f) => (map[f] == null ? '' : String(cells[map[f]] ?? '').trim());
+      const errors = [];
+      const it = {};
+
+      const name = at('name');
+      if (!name) errors.push('Ta\'minotchi nomi bo\'sh');
+      else if (seen.has(norm(name))) errors.push(`Faylda takrorlangan: «${name}»`);
+      else seen.add(norm(name));
+      it.name = name;
+
+      const tur = at('category');
+      if (tur) {
+        const code = byCat.get(norm(tur));
+        if (!code) errors.push(`Bunday yo'nalish yo'q: «${tur}». Bor: ` +
+          cat.rows.map((c) => c.name).join(', '));
+        else it.category = code;
+      }
+
+      const mgr = at('manager');
+      if (mgr) {
+        const hit = findWorker(mgr);
+        if (hit.many)
+          errors.push(`«${mgr}» bir nechta xodimga to'g'ri keladi: ${hit.many.join(', ')}`);
+        else if (hit.id == null) { errors.push(`Xodim topilmadi: «${mgr}»`); missing.add(mgr); }
+        else { it.manager_id = hit.id; if (hit.as) matched.set(mgr, hit.as); }
+      }
+
+      it.phone   = at('phone')   || null;
+      it.country = at('country') || null;
+      it.region  = at('region')  || null;
+      it.inn     = at('inn')     || null;
+      it.note    = at('note')    || null;
+      rows.push({ line: i + 1, it, errors, exists: existing.has(norm(name)) });
+    }
+    if (!rows.length) { const e = new Error('Faylda qator yo\'q'); e.status = 400; throw e; }
+
+    const bad = rows.filter((r) => r.errors.length);
+
+    if (req.query.save !== '1') {
+      return res.json({
+        preview: true, columns: Object.keys(map), unknown,
+        total: rows.length, bad: bad.length,
+        updates: rows.filter((r) => r.exists).length,
+        missing_managers: [...missing],
+        matched_managers: [...matched].map(([a, b]) => `${a} → ${b}`),
+        rows: rows.slice(0, 200),
+      });
+    }
+    if (bad.length) {
+      const e = new Error(`${bad.length} ta qatorda xato bor — saqlanmadi`);
+      e.status = 400; throw e;
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      for (const r of rows) {
+        //  Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh maydon
+        //  to'ladi — mijozlar bilan bir xil qoida.
+        await client.query(
+          `INSERT INTO suppliers (name, phone, country, region, category,
+                                  manager_id, inn, note)
+           VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8)
+           ON CONFLICT (lower(name)) DO UPDATE SET
+             phone      = COALESCE(EXCLUDED.phone,      suppliers.phone),
+             country    = COALESCE(EXCLUDED.country,    suppliers.country),
+             region     = COALESCE(EXCLUDED.region,     suppliers.region),
+             category   = COALESCE(EXCLUDED.category,   suppliers.category),
+             manager_id = COALESCE(EXCLUDED.manager_id, suppliers.manager_id),
+             inn        = COALESCE(EXCLUDED.inn,        suppliers.inn),
+             note       = COALESCE(EXCLUDED.note,       suppliers.note)`,
+          [r.it.name, r.it.phone, r.it.country, r.it.region,
+           r.it.category || null, r.it.manager_id || null, r.it.inn, r.it.note]);
+      }
+      await audit(req, { module: 'purchasing', action: 'import', entity: 'suppliers',
+                         entity_id: rows.length, payload: { count: rows.length } }, client);
+      await client.query('COMMIT');
+      res.json({ saved: rows.length, updated: rows.filter((r) => r.exists).length });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (!e.status) e.status = 400;
+      throw e;
+    } finally { client.release(); }
+  }));
+
 module.exports = router;

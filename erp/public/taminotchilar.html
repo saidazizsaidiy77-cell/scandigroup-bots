@@ -180,11 +180,35 @@ function fillRegions(){
 }
 
 function openImport(){
+  picked = null;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
       <div class="modal" style="max-width:680px">
         <div class="row" style="justify-content:space-between;margin-bottom:12px">
           <h1>Ro'yxatni import qilish</h1><button onclick="close_()">Yopish</button></div>
+
+        <!--  ★ FAYLDAN — asosiy yo'l. Zavod ro'yxatni Excel'da yuritadi
+              va o'ttiz ikkita qatorni qo'lda terib chiqish bir soatlik
+              ish va o'nta xato bo'lardi. Fayl avval TEKSHIRIB
+              ko'rsatiladi: xato qator bo'lsa hech narsa saqlanmaydi. -->
+        <div class="card" style="padding:14px;margin-bottom:16px">
+          <div class="row" style="justify-content:space-between;align-items:center;
+               gap:10px;flex-wrap:wrap">
+            <div><b>Excel yoki CSV fayl</b>
+              <div class="muted" style="font-size:12.5px;margin-top:3px">
+                Ustunlar: Nomi · Tel raqami · Turi · Region · STIR · Mas'ul xodim —
+                tartibi muhim emas, sarlavhasidan topiladi</div></div>
+            <button class="primary" onclick="$('impFile').click()"
+                    style="white-space:nowrap">Fayl tanlash</button>
+            <input id="impFile" type="file" accept=".xlsx,.csv,.txt"
+                   style="display:none" onchange="pick(this)">
+          </div>
+          <div id="impOut" style="margin-top:12px"></div>
+        </div>
+
+        <details>
+          <summary class="muted" style="cursor:pointer;font-size:13px;margin-bottom:12px">
+            Yoki ro'yxatni matn bo'lib yopishtirish</summary>
         <p class="muted" style="margin-bottom:14px">Har qator bitta ta'minotchi,
           maydonlar nuqtali vergul bilan ajratiladi:<br>
           <code>Nomi ; Yo'nalish kodi ; Respublika ; Region ; Tel raqami ; STIR ; Mas'ul xodim</code></p>
@@ -200,7 +224,73 @@ function openImport(){
           placeholder="Mdf Eman ; MDF ; O'zbekiston ; Toshkent viloyati ; +998901112233 ; 301234567 ;
 Furnitura Plus ; FURNITURA ; Turkiya ; Istanbul ; ; ;"></textarea>
         <button class="primary" style="width:100%;margin-top:14px" onclick="runImport()">Import qilish</button>
+        </details>
       </div></div>`;
+}
+
+// ───────────────────────────────────────────────────── FAYLDAN YUKLASH
+//
+//  Ikki bosqich: avval TEKSHIRIB ko'rsatiladi (nechta qator, nechtasi
+//  mavjud ta'minotchi, qaysi qatorda xato), keyin saqlanadi. Xato
+//  qator bo'lsa hech narsa saqlanmaydi — yarim kirgan ro'yxat eng
+//  yomoni: qaysi biri o'tgani bilinmay qoladi.
+let picked = null;
+
+async function pick(input){
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  picked = file;
+  $('impOut').innerHTML = `<p class="muted">Tekshirilmoqda\u2026</p>`;
+  try { show(await App.upload('/api/import/suppliers', file), file.name); }
+  catch (e) { $('impOut').innerHTML =
+    `<p class="tag bad" style="display:block">${esc(e.message)}</p>`; }
+}
+
+function show(r, filename){
+  const bad = r.rows.filter(x => x.errors.length);
+  $('impOut').innerHTML = `
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <b>${esc(filename)}</b>
+      <span class="muted" style="font-size:13px">${r.total} qator${
+        r.updates ? ` \u00b7 ${r.updates} tasi mavjud` : ''}</span>
+    </div>
+    ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
+      Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+    ${(r.matched_managers || []).length ? `
+      <p class="muted" style="font-size:12px;margin-bottom:10px">
+        Xodim to'liq ismi bo'yicha topildi: ${esc(r.matched_managers.join(' \u00b7 '))}</p>` : ''}
+    ${(r.missing_managers || []).length ? `
+      <p class="tag bad" style="display:block;margin-bottom:10px">
+        Bu xodimlar ro'yxatda yo'q: <b>${esc(r.missing_managers.join(', '))}</b><br>
+        Avval <b>Xodimlar</b> sahifasidan qo'shing, keyin faylni qayta tanlang.</p>` : ''}
+    ${bad.length ? `
+      <div style="max-height:30vh;overflow:auto;margin-bottom:10px">
+        <table><tbody>${bad.map(x => `
+          <tr><td style="width:70px" class="muted">${x.line}-qator</td>
+              <td>${esc(x.errors.join(' \u00b7 '))}</td></tr>`).join('')}</tbody></table>
+      </div>
+      <p class="muted" style="font-size:13px">${r.bad} ta qatorda xato bor.
+        Faylni tuzatib qaytadan tanlang \u2014 xato qator bo'lsa hech narsa
+        saqlanmaydi.</p>`
+    : `<p class="muted" style="font-size:13px;margin-bottom:12px">Hamma qator to'g'ri.${
+        r.updates ? ` Mavjud ${r.updates} tasining faqat bo'sh maydonlari
+        to'ldiriladi \u2014 yozilgani o'chmaydi.` : ''}</p>
+      <button class="primary" id="impSave" onclick="saveFile()" style="width:100%"
+        >${r.total} ta ta'minotchini saqlash</button>`}`;
+}
+
+async function saveFile(){
+  $('impSave').disabled = true;
+  try {
+    const r = await App.upload('/api/import/suppliers?save=1', picked);
+    close_(); await load();
+    alert(`${r.saved} ta ta'minotchi kiritildi.` +
+          (r.updated ? ` Shundan ${r.updated} tasi yangilandi.` : ''));
+  } catch (e) {
+    alert(e.message);
+    const b = $('impSave'); if (b) b.disabled = false;
+  }
 }
 
 async function runImport(){

@@ -2574,6 +2574,47 @@ test('podotchyot olgan xodim ta\'minotchiga to\'lay oladi', async () => {
     'xodim yozgan to\'lov foyda-zararda');
 });
 
+//  ★ TA'MINOTCHILAR FAYLDAN. Zavod ro'yxatni Excel'da yuritadi va
+//  ustunini «TURI» deb ataydi, ichida esa turning NOMI turadi
+//  («Qadoqlash materiali»), kodi emas — ikkalasi ham o'qilishi kerak.
+test('ta\'minotchilarni fayldan yuklash: turi nomi bilan ham o\'qiladi', async () => {
+  const bad = [
+    'Hisob nomi;Telefon raqami;TURI',
+    'Sinov Mdf Aka;90-111-22-33;MDF',
+    'Sinov Yomon Tur;90-111-22-44;YO\'QTUR',
+  ];
+  const pre = await (await post('/api/import/suppliers', bad)).json();
+  assert.equal(pre.total, 2);
+  assert.equal(pre.bad, 1);
+  assert.match(pre.rows[1].errors[0], /yo'nalish yo'q/);
+
+  assert.equal((await post('/api/import/suppliers?save=1', bad)).status, 400);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM suppliers
+      WHERE name IN ('Sinov Mdf Aka', 'Sinov Yomon Tur')`)).n, 0,
+    'xato bo\'lsa bitta ta\'minotchi ham kirmaydi');
+
+  //  Tuzatilgach kiradi: turi KODI bilan ham, NOMI bilan ham
+  const ok = [
+    'TURI;Hisob nomi;Telefon raqami',
+    'MDF;Sinov Mdf Aka;90-111-22-33',
+    'Qadoqlash materiali;Sinov Karton;90-111-22-55',
+  ];
+  const done = await (await post('/api/import/suppliers?save=1', ok)).json();
+  assert.equal(done.saved, 2);
+  assert.equal((await H.id(
+    `SELECT category FROM suppliers WHERE name='Sinov Karton'`)).category, 'QADOQ');
+
+  //  Qayta yuklash nusxa ochmaydi va yozilganini o'chirmaydi
+  const yana = await (await post('/api/import/suppliers?save=1', [
+    'Hisob nomi;TURI', 'Sinov Karton;'])).json();
+  assert.equal(yana.saved, 1);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM suppliers WHERE name='Sinov Karton'`)).n, 1);
+  assert.equal((await H.id(
+    `SELECT category FROM suppliers WHERE name='Sinov Karton'`)).category, 'QADOQ');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

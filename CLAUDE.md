@@ -1064,8 +1064,25 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    qo'lidagi puli, harajat foyda-zarar oyi bilan. Mijoz balansi to'ldi.
    Harajat moddalari zavod ro'yxati bilan kiritildi; foyda-zarar va pul
    oqimi hisobotlari yozildi.
-   Qolgani: **ta'minotchilar** ro'yxati — zavoddan keladi va
-   kiritilmaguncha «Kimga» ro'yxatida faqat harajat turadi.
+   **Ta'minotchilar ro'yxati FAYLDAN yuklanadi**
+   (`POST /api/import/suppliers`, Ta'minot → Ta'minotchilar): zavod uni
+   Excel'da yuritadi va o'ttiz ikkita qatorni qo'lda terib chiqish bir
+   soatlik ish va o'nta xato bo'lardi. Mijozlar bilan bir xil yo'l —
+   avval TEKSHIRIB ko'rsatiladi, xato qator bo'lsa hech narsa
+   saqlanmaydi; qayta yuklashda yozilgani o'chmaydi, faqat bo'sh
+   maydon to'ladi. Ustunlar sarlavhasidan topiladi, tartibi muhim
+   emas. Yo'nalish KODI bilan ham, NOMI bilan ham yoziladi: zavod
+   faylida ustun «TURI» deb ataladi va ichida «Qadoqlash materiali»
+   turadi, kod emas. Matn bo'lib yopishtirish ham qoldi — bitta-ikkita
+   qator uchun fayl yasash ortiqcha.
+
+   **Yo'nalish nomlari zavodnikidek** (`supplier_categories`): MDF,
+   Furnitura, Mato, Lak, Qadoqlash materiali, Oyna, Yarim tayyor
+   mahsulot, Xizmat, Boshqa. Kod ham nom bilan bir xil — aks holda
+   ekranda MDF turib, import matnida LDSP yozilardi. «Yarim tayyor
+   mahsulot» (po'kak, rezina, plastmas oyoq, stul karkasi, smala) —
+   zavodning eng katta guruhlaridan biri, «Boshqa» ga qo'shilsa
+   bo'linish yo'qolardi.
 
 ## Ochiq savollar — zavoddan javob kutilmoqda
 
