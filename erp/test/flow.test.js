@@ -2665,6 +2665,60 @@ test('ta\'minotchi qarzi: to\'lov qarzdan ayriladi', async () => {
     `SELECT opening_debt FROM suppliers WHERE id=$1`, [tam])).opening_debt, null);
 });
 
+//  ★ TA'MINOT QARZDORLIGI — aylanma-saldo qaydnomasi. Mijozlarniki
+//  bilan bir xil shakl, tomoni esa TESKARI: ta'minotchi passiv hisob,
+//  haqdor — bizning qarzimiz, qarzdor — to'lov.
+test('ta\'minot qarzdorligi: boshiga + haqdor − qarzdor = oxiriga', async () => {
+  const admin  = H.api(base, await H.sessionFor('Administrator'));
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  await admin('POST', '/api/purchasing/suppliers', {
+    name: 'Sinov Saldo Lak', category: 'LAK',
+    opening_debt: 800, opening_debt_on: '2026-08-01' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name='Sinov Saldo Lak'`)).id;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE needs_supplier AND active LIMIT 1`)).id;
+
+  //  Sentabrda 250 to'landi
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'supplier', to_id: tam,
+    currency: 'USD', amount: 250, op_date: '2026-09-15',
+    expense_item_id: modda, pl_month: '2026-09' })).status, 200);
+
+  const d = (await admin(
+    'GET', '/api/purchasing/debts?from=2026-09-01&to=2026-09-30')).body;
+  const r = d.rows.find((x) => x.id === tam);
+  assert.ok(r, 'ta\'minotchi hisobotda');
+  //  Boshlang'ich qarz avgustda — davr BOSHIGA haqdor bo'lib turadi
+  assert.equal(Number(r.opening_credit), 800);
+  assert.equal(Number(r.opening_debit), 0);
+  //  Davr ichida: to'lov qarzdor tomonda
+  assert.equal(Number(r.debit), 250);
+  assert.equal(Number(r.credit), 0);
+  //  boshiga + haqdor − qarzdor = oxiriga
+  assert.equal(Number(r.closing_credit), 550);
+
+  //  Qator ochilganda harakatlari va yugurib boradigan qoldiq
+  const ich = (await admin(
+    'GET', `/api/purchasing/debts/${tam}?from=2026-09-01&to=2026-09-30`)).body;
+  assert.equal(Number(ich.opening), 800);
+  assert.equal(Number(ich.closing), 550);
+  assert.equal(ich.rows.length, 1);
+  assert.equal(ich.rows[0].kind, 'payment');
+  assert.ok(ich.rows[0].doc_no, 'to\'lov hujjat raqami bilan');
+
+  //  «Hammasi» oralig'ida boshlang'ich qarz DAVR ICHIDA turadi
+  const hammasi = (await admin(
+    'GET', '/api/purchasing/debts?from=1900-01-01&to=2026-12-31')).body;
+  const h = hammasi.rows.find((x) => x.id === tam);
+  assert.equal(Number(h.opening_credit), 0);
+  assert.equal(Number(h.credit), 800);
+  assert.equal(Number(h.debit), 250);
+  assert.equal(Number(h.closing_credit), 550);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

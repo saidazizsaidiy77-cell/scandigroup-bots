@@ -302,7 +302,13 @@ const App = (() => {
     { mod: 'purchasing', nav: "O'chirilgan kirimlar",              perm: ['purchasing.manage'] },
     { mod: 'purchasing', nav: "Qaytarib berish (ta'minotchiga)",   perm: ['purchasing.manage'] },
     { mod: 'purchasing', nav: 'Solishtirma dalolatnoma',           perm: ['purchasing.view'] },
-    { mod: 'purchasing', nav: 'Qarzdorlik',                        perm: ['purchasing.view'] },
+    //  Aylanma-saldo qaydnomasi (ОСВ): saldo boshiga, davr aylanmasi
+    //  va saldo oxiriga — har biri qarzdor/haqdor bo'lib. Mijozlar
+    //  hisoboti bilan bir xil shakl, tomoni esa teskari.
+    { href: '/taminot-qarzdorlik.html', mod: 'purchasing', nav: 'Qarzdorlik',
+      title: "Ta'minot qarzdorligi", lead: 'Kimga qancha qarzmiz',
+      text: "Oraliq bo'yicha: davr boshiga \u00b7 davr ichida \u00b7 davr oxiriga",
+      perm: ['purchasing.view', 'purchasing.manage'] },
 
     // Ombor. Zavodda bir nechta ombor bor (tayyor mahsulot, xom ashyo,
     // va zavod aytadigan boshqalari), shuning uchun bo'limga kirilganda

@@ -30,17 +30,14 @@
   solishtirma dalolatnoma kimga yozilishi shu ro'yxatdan olinadi.</p>
 </div>
 
-<div class="grid g2" style="margin-top:16px">
-  <div class="card">
-    <h2>Yo'nalish kesimi</h2>
-    <table><thead><tr><th>Nima yetkazadi</th><th class="num">Ta'minotchi</th></tr></thead>
-      <tbody id="tCat"></tbody></table>
-  </div>
-  <div class="card">
-    <h2>Mas'ul xodim kesimi</h2>
-    <table><thead><tr><th>Xodim</th><th class="num">Ta'minotchi</th></tr></thead>
-      <tbody id="tMg"></tbody></table>
-  </div>
+<!--  «Yo'nalish kesimi» olib tashlandi (zavod qarori): ro'yxatning
+      o'zida yo'nalish ustuni turadi va nechtaligini sanash kundalik
+      savol emas. Mas'ul xodim kesimi qoldi — u «kim bilan kim
+      ishlaydi» degan savolga javob beradi. -->
+<div class="card" style="margin-top:16px">
+  <h2>Mas'ul xodim kesimi</h2>
+  <table><thead><tr><th>Xodim</th><th class="num">Ta'minotchi</th></tr></thead>
+    <tbody id="tMg"></tbody></table>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -100,8 +97,6 @@ async function load(){
       `<tr><td>${k ? esc(k) : `<span class="tag warn">${label}</span>`}</td>
         <td class="num">${n}</td></tr>`).join('');
   };
-  $('tCat').innerHTML = suppliers.length ? count('category_name', 'ko\'rsatilmagan')
-    : '<tr><td class="muted" colspan="2">Ta\'minotchi kiritilmagan</td></tr>';
   $('tMg').innerHTML = suppliers.length ? count('manager_name', 'biriktirilmagan')
     : '<tr><td class="muted" colspan="2">Ta\'minotchi kiritilmagan</td></tr>';
   render();

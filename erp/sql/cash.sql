@@ -534,6 +534,56 @@ SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
      WHERE f.side_kind = 'supplier' AND f.side_id = s.id) pay ON true
  WHERE s.active;
 
+-- ══════════════════════════ TA'MINOTCHI QARZI — HARAKATLAR LENTASI
+--
+--  `v_supplier_debt.balance` — bugungi qarz, bitta raqam. Zavodga esa
+--  ORALIQ kerak: «1-sentabrda qancha edi, oy ichida qancha qo'shildi,
+--  30-sentabrda qancha bo'ldi» — ya'ni AYLANMA-SALDO qaydnomasi.
+--  Buning uchun balansni emas, uni hosil qiladigan HARAKATLARNI sanasi
+--  bilan berish kerak; mijozniki bilan bir xil shakl.
+--
+--  ★ TOMONI MIJOZNIKIGA TESKARI. Ta'minotchi — passiv hisob:
+--
+--    HAQDOR (kredit)  — bizning qarzimiz OSHADI: boshlang'ich qarz,
+--                       kelgan mol (kirim hujjati yozilganda)
+--    QARZDOR (debet)  — qarzimiz KAMAYADI: to'lov; oldindan to'lov
+--                       ham shu tomonda
+--
+--  Saldo = kredit − debet, ya'ni musbat bo'lsa BIZ qarzdormiz —
+--  `v_supplier_debt.balance` bilan bir xil raqam.
+DROP VIEW IF EXISTS v_supplier_ledger CASCADE;
+CREATE VIEW v_supplier_ledger AS
+SELECT s.id                                           AS supplier_id,
+       COALESCE(s.opening_debt_on, DATE '1900-01-01') AS on_date,
+       'opening'::text                                AS kind,
+       'Boshlang''ich qarz'::text                     AS note,
+       --  Manfiy boshlang'ich qarz — haqdor ustunidagi minus emas,
+       --  QARZDOR yozuvi: ta'minotchi bizga qarzdor (oldindan to'lov).
+       GREATEST(-s.opening_debt, 0)::numeric(16,2)    AS debit,
+       GREATEST(s.opening_debt, 0)::numeric(16,2)     AS credit,
+       NULL::text AS doc_no,
+       NULL::int  AS op_id
+  FROM suppliers s
+ WHERE COALESCE(s.opening_debt, 0) <> 0
+UNION ALL
+--  ★ TO'LOVLAR. Ta'minotchi OLUVCHI tomon: unga ketgan pul
+--  `v_cash_flow` da musbat bo'lib turadi va qarzimizni kamaytiradi.
+SELECT f.side_id,
+       f.op_date,
+       'payment'::text,
+       ('To''lov — ' || f.doc_no
+         || CASE WHEN f.currency = 'UZS'
+                 --  Ajratuvchi PROBEL: baza lokali vergul qo'yardi va
+                 --  «12,500,000.00» degan raqam zavodda o'qilmaydi.
+                 THEN ' · ' || REPLACE(TRIM(TO_CHAR(ABS(f.amount),
+                        'FM999G999G999G990D00')), ',', ' ') || ' so''m'
+                 ELSE '' END)::text,
+       GREATEST(f.amount_usd, 0)::numeric(16,2),
+       GREATEST(-f.amount_usd, 0)::numeric(16,2),
+       f.doc_no, f.op_id
+  FROM v_cash_flow f
+ WHERE f.side_kind = 'supplier';
+
 DROP VIEW IF EXISTS v_customer_sales CASCADE;
 CREATE VIEW v_customer_sales AS
 SELECT c.id, c.name, c.country, c.region, c.phone,

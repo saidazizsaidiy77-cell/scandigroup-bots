@@ -1115,7 +1115,28 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    yuklashda yozilgani O'CHMAYDI, kartochkadan esa tuzatiladi ham,
    tozalanadi ham — bo'sh qoldirilgani «tegma» emas, «yo'q» degani.
 
-   **Qarzi ro'yxatda turadi** (`v_supplier_debt.balance` =
+   **Qarzdorlik hisoboti** (`v_supplier_ledger`,
+   `/taminot-qarzdorlik.html`) — mijozlarniki bilan BIR XIL shakl:
+   aylanma-saldo qaydnomasi (ОСВ), ya'ni `boshiga · davr ichida ·
+   oxiriga`, har biri ikki ustun bo'lib. Qator bosilsa harakatlari va
+   yugurib boradigan qoldiq chiqadi; to'lov raqami bosilsa kirim
+   orderi alohida oynada ochiladi.
+
+   **★ TOMONI MIJOZNIKIGA TESKARI** — ta'minotchi PASSIV hisob:
+
+     **Haqdor** (kredit) — bizning qarzimiz OSHADI: boshlang'ich qarz,
+     kelgan mol (kirim hujjati yozilganda).
+     **Qarzdor** (debet) — qarzimiz KAMAYADI: to'lov; oldindan to'lov
+     ham shu tomonda.
+
+         boshiga + haqdor − qarzdor = oxiriga
+
+   Saldo = `kredit − debet`, ya'ni musbat bo'lsa BIZ qarzdormiz —
+   `v_supplier_debt.balance` bilan bir xil raqam. Sahifa ostida
+   ikkalasining ma'nosi yozilib turadi: mijozlar hisobotiga o'rgangan
+   ko'z bu yerda tomonni teskari o'qib qo'yardi.
+
+      **Qarzi ro'yxatda turadi** (`v_supplier_debt.balance` =
    `boshlang'ich qarz − to'langani`): «kimga qancha qarzmiz»
    ta'minotchilar sahifasidagi birinchi savol. View `sql/cash.sql` da,
    `purchasing.sql` da EMAS — u `cash_ops` ni o'qiydi va u migratsiyada
