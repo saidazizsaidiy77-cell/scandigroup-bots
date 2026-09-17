@@ -113,6 +113,17 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  unga faqat SHUNI beradi — pul o'z qo'lida qoladi, kassa
   --  qoldig'i va boshqa operatsiyalar ko'rinmaydi ham (modules/cash.js).
   ('sotuvchi',     'cash.entry'),
+  --  ★ QO'LIDAGI PULNI SARFLAGAN XODIM HISOBOT BERADI. Ombor mudiri va
+  --  ishlab chiqarish boshliqlari podotchyot oladi va nimaga
+  --  sarflaganini O'ZI yozadi — kassirga og'zaki aytib, u yozib
+  --  o'tirmaydi. `cash.entry` shuni beradi, boshqa hech narsani:
+  --  kassa qoldig'i ham, boshqa xodimning puli ham ko'rinmaydi.
+  --
+  --  Nimaga sarflashi mumkinligi esa XODIMDA belgilanadi
+  --  (`worker_expense_groups`, izoh: sql/cash.sql): tsex boshliqlari
+  --  faqat oylik uchun, ombor mudiri hamma harajat uchun.
+  ('omborchi',     'cash.entry'),
+  ('ishlab_boshl', 'cash.entry'),
 
   --  Kassir pulni sanab oladi, chiqim qiladi va tuzatadi — ya'ni
   --  `cash.manage`. `cash.entry` ning o'zi faqat «o'z qo'lidagi pul»

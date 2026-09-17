@@ -43,9 +43,15 @@ function outGroups() {
   //  bo'lsa qator umuman chiqmasdi va kassir «xodimga pul berish
   //  yo'q ekan» deb o'ylardi — endi tanlanadi va ikkinchi katak nima
   //  qilish kerakligini aytadi.
-  const g = [['supplier', "Ta'minotchiga to'lov"],
-             ['worker',   "Xodim qo'liga pul (podotchyot)"]];
+  //  Xodim o'z sarfini yozayotgan bo'lsa ro'yxatda faqat HARAJAT
+  //  guruhlari, ustiga unga ochilganlari: ta'minotchiga to'lov ham,
+  //  boshqa xodimga pul berish ham uning ishi emas.
+  const ozi = form === 'spend';
+  const ruxsat = (refs.my && refs.my.groups) || [];
+  const g = ozi ? [] : [['supplier', "Ta'minotchiga to'lov"],
+                        ['worker',   "Xodim qo'liga pul (podotchyot)"]];
   (refs.groups || []).forEach(x => {
+    if (ozi && ruxsat.length && !ruxsat.includes(x.code)) return;
     if ((refs.items || []).some(i => i.group_code === x.code))
       g.push(['g:' + x.code, x.name]);
   });
@@ -187,6 +193,10 @@ const FORMS = {
   take: { t: 'Xodimdan qabul qilish', who: 'Kim topshirdi', into: true,
           kinds: () => ['worker'] },
   move: { t: "Ko'chirish", who: 'Qaysi kassaga', kinds: () => ['account'] },
+  //  ★ HISOBOT: xodim qo'lidagi puldan nimaga sarflaganini O'ZI yozadi.
+  //  Pul qo'lidan chiqadi va harajatga aylanadi — podotchyot shu bilan
+  //  yopiladi. Ro'yxatda faqat unga ochilgan guruhlar turadi.
+  spend: { t: 'Harajat yozish', who: 'Nimaga', two: true },
 };
 
 function openForm(kind) {

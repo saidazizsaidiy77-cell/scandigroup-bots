@@ -11,6 +11,11 @@ const router = express.Router();
 router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
   const { rows } = await db.query(
     `SELECT w.id, w.name, w.phone, w.pin, w.tg_id, w.active, w.can_hold_cash,
+            --  Qo'lidagi pulni qaysi harajat guruhlariga sarflay oladi.
+            --  BO'SH = hammasi (izoh: sql/cash.sql).
+            COALESCE((SELECT array_agg(g.group_code ORDER BY g.group_code)
+                        FROM worker_expense_groups g
+                       WHERE g.worker_id = w.id), '{}') AS cash_groups,
             COALESCE(json_agg(json_build_object(
               'code', wr.role_code, 'name', r.name, 'surface', r.surface,
               'scope_shop_id', wr.scope_shop_id, 'scope_shop', sh.name,
@@ -29,7 +34,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
 }));
 
 router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
-  const [roles, shops, channels, houses] = await Promise.all([
+  const [roles, shops, channels, houses, eg] = await Promise.all([
     db.query(`SELECT r.code, r.name, r.surface,
                      COUNT(rp.permission_code) AS permission_count
                 FROM roles r LEFT JOIN role_permissions rp ON rp.role_code = r.code
@@ -42,9 +47,12 @@ router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
     db.query(`SELECT id, name FROM warehouses
                WHERE kind = 'fg' AND is_active AND code <> 'TM'
                ORDER BY sort, name`),
+    // Harajat guruhlari: qo'liga pul beriladigan xodim nimaga
+    // sarflay olishi shu ro'yxatdan belgilanadi.
+    db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
   ]);
   res.json({ roles: roles.rows, shops: shops.rows, channels: channels.rows,
-             warehouses: houses.rows });
+             warehouses: houses.rows, expense_groups: eg.rows });
 }));
 
 // Telegram ID — RAQAM, @nom emas (bazada bigint). Bot ichida /myid
@@ -65,6 +73,21 @@ function tgId(v) {
     throw e;
   }
   return s;
+}
+
+//  Qaysi harajat guruhlariga sarflay oladi. Yuborilmasa TEGILMAYDI:
+//  kartochka boshqa maydon uchun saqlansa cheklov o'chib qolmasin.
+//  Bo'sh ro'yxat esa ataylab: «hamma guruh» degani (izoh: sql/cash.sql).
+async function saveCashGroups(client, workerId, codes) {
+  if (!Array.isArray(codes)) return;
+  await client.query(`DELETE FROM worker_expense_groups WHERE worker_id = $1`,
+                     [workerId]);
+  for (const c of codes) {
+    await client.query(
+      `INSERT INTO worker_expense_groups (worker_id, group_code)
+       SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM expense_groups WHERE code = $2)
+       ON CONFLICT DO NOTHING`, [workerId, c]);
+  }
 }
 
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
@@ -91,6 +114,7 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
         [w.id, r.code, r.scope_shop_id || null, r.scope_channel || null,
          r.scope_warehouse_id || null]);
     }
+    await saveCashGroups(client, w.id, req.body.cash_groups);
     await audit(req, { module: 'admin', action: 'create', entity: 'worker',
                        entity_id: w.id, payload: { name, roles } }, client);
     await client.query('COMMIT');
@@ -140,6 +164,7 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
            r.scope_warehouse_id || null]);
       }
     }
+    await saveCashGroups(client, id, req.body.cash_groups);
     // Rol yoki holat o'zgarsa sessiyalar bekor qilinadi — huquq darhol kuchga kiradi
     if (Array.isArray(roles) || active === false)
       await client.query(`DELETE FROM sessions WHERE worker_id = $1`, [id]);

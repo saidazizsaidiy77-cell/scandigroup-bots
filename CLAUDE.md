@@ -117,12 +117,18 @@ bilan» bo'ladi. Ustun qo'shilgunga qadar chiqib ketganlarda «kim» bo'sh
 qolardi — buyurtmadagi yozuvdan bir martalik ko'chirildi
 (`migration_flags`: `ship-by-eski`).
 
-Yonida **kirim/chiqim filtri**: mudirning savoli ko'pincha bitta tomon
-haqida — «bugun nima keldi» yoki «bugun nima chiqdi». Filtr SERVERDA
-(`?kind=`), chunki oraliq katta bo'lsa qatorlar chegarasiga yetib,
-klientda yarmi yo'qolardi. **Yig'indi kartochkalari esa filtrdan QAT'I
-NAZAR** hisoblanadi: «faqat kirim» tanlangan kunda chiqim nol bo'lib
-ko'rinsa, mudir o'sha kuni hech narsa chiqmagan deb o'qirdi.
+Yonida **kirim/chiqim filtri** va **mijoz bo'yicha qidiruv**: mudirning
+savoli ko'pincha bitta tomon haqida — «bugun nima keldi» — yoki bitta
+mijoz haqida: «Qarshi Husanga nima chiqqan». Qidiruv katagi konver va
+zakaz raqamini ham oladi, ya'ni qaysi ustunda izlashni o'ylash shart
+emas. Ikkalasi ham SERVERDA (`?kind=`, `?q=`), chunki oraliq katta
+bo'lsa qatorlar chegarasiga yetib, klientda yarmi yo'qolardi.
+
+**Yig'indi kartochkalari kirim/chiqim filtridan QAT'I NAZAR**
+hisoblanadi: «faqat kirim» tanlangan kunda chiqim nol bo'lib ko'rinsa,
+mudir o'sha kuni hech narsa chiqmagan deb o'qirdi. Mijoz qidiruvi esa
+yig'indiga TA'SIR QILADI — «shu mijozga qancha chiqqan» degan savolga
+javob kerak, butun ombor aylanmasi emas.
 
 Omborlar aro ko'chirish `warehouse_moves` ga yoziladi va ombor tarixida
 IKKI qator bo'lib chiqadi: berganida chiqim, olganida kirim. Ishlab
@@ -669,6 +675,25 @@ Zavodning yigirmata xodimini ro'yxatga chiqarish «kimdan pul olsam
 bo'ladi» degan savolga javob bermasdi. Topshirilgach xodim ro'yxatdan
 o'zi chiqadi: qo'lida hech narsa qolmadi, ikkinchi marta qabul qilib
 bo'lmaydi.
+
+**★ PODOTCHYOT «HISOB BERISH SHARTI BILAN»** — xodim qo'lidagi puldan
+nimaga sarflaganini O'ZI yozadi («Mening pulim» sahifasidagi «Harajat
+yozish»). Pul qo'lidan chiqadi va harajatga aylanadi, podotchyot shu
+bilan yopiladi. Kassirga og'zaki aytib, u yozib o'tirmaydi.
+
+Lekin hamma hamma narsani yoza olmaydi: **qaysi harajat guruhlariga
+sarflay olishi XODIMDA belgilanadi** (`worker_expense_groups`) — ombor
+mudiri va korpus boshlig'i barcha harajatni qiladi, tsex boshliqlari
+esa faqat oylik uchun. Cheklov GURUH bo'yicha: yangi modda qo'shilsa
+ro'yxat o'zi kengayadi. **Qator yo'q = hamma guruh** — tsex doirasi
+bilan bir xil qoida (`scope_shop_id`).
+
+Huquqi `cash.entry`, ya'ni `omborchi` va `ishlab_boshl` ham oladi —
+lekin bu unga kassani ochmaydi: qoldiq ham, boshqa xodimning puli ham
+ko'rinmaydi. Tomonlarni ham server qo'yadi: xodim yuborgan `from_kind`
+e'tiborga olinmaydi, pul FAQAT o'z qo'lidan chiqadi. «Mijozdan pul
+olindi» tugmasi esa savdo huquqi bor xodimda — tsex boshlig'iga u
+tugma ko'rsatilmaydi.
 
 **Pul hamma xodimga BERILMAYDI** — zavodda beshta odam oladi (zavod
 qarori). Shuning uchun berish ham alohida oynada: **«Xodimga pul

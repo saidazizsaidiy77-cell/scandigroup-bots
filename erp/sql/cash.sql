@@ -347,6 +347,24 @@ SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active, a.main_ccy,
 --  pul baribir paydo bo'ladi va uni topshiradi — unga belgi kerak emas.
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_hold_cash BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ QO'LIDAGI PULNI NIMAGA SARFLASHI MUMKIN.
+--
+--  Pul «hisob berish sharti bilan» beriladi: xodim sarflab, nimaga
+--  ketganini o'zi yozadi. Lekin hamma hamma narsani yoza olmaydi —
+--  ombor mudiri va korpus boshlig'i barcha harajatni qiladi, tsex
+--  boshliqlari esa faqat oylik uchun.
+--
+--  Cheklov GURUH bo'yicha: modda qo'shilsa ro'yxat o'zi kengayadi va
+--  har xodimga qaytadan belgilab chiqish kerak bo'lmaydi.
+--
+--  ★ QATOR YO'Q = HAMMA GURUH. Tsex doirasi bilan bir xil qoida
+--  (`scope_shop_id`): bo'sh doira cheklov yo'qligini anglatadi.
+CREATE TABLE IF NOT EXISTS worker_expense_groups (
+  worker_id  INT  NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+  group_code TEXT NOT NULL REFERENCES expense_groups(code) ON DELETE CASCADE,
+  PRIMARY KEY (worker_id, group_code)
+);
+
 -- ─────────────────────────────────────────────── XODIM QO'LIDAGI PUL
 --
 --  Ikki yo'ldan to'ladi: xodimga kassadan berilgan pul va

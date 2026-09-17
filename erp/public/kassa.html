@@ -111,7 +111,17 @@ function drawHead() {
   //  «Xodimdan qabul qilish» faqat qo'lida korxona puli bor xodim
   //  bo'lganda chiqadi (`refs.workers` — shularning ro'yxati): topshiradigan
   //  odam yo'q bo'lsa tugma ham kerak emas.
-  const btn = [['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']];
+  //  Menejer mijozdan pul oladi, podotchyot olgan xodim esa sarfini
+  //  yozadi — ikkalasi ham «o'z puli» sahifasida, lekin bir xil odam
+  //  emas. Shuning uchun tugma huquqqa qarab chiqadi: savdo huquqi
+  //  yo'q tsex boshlig'iga «Mijozdan pul olindi» degan tugma
+  //  ko'rsatish xato bo'lardi.
+  const savdo = App.can('sales.view', 'sales.manage');
+  const btn = [];
+  if (!isMe() || savdo) btn.push(['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']);
+  //  Qo'lida pul bo'lgan xodim sarfini o'zi yozadi — podotchyot shu
+  //  bilan yopiladi (izoh: sql/cash.sql).
+  if (isMe() && refs.my && refs.my.hold) btn.push(['spend', 'Harajat yozish']);
   if (!isMe() && boss) {
     if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
     //  Xodimga pul berish alohida tugma EMAS: u chiqimning bir turi va

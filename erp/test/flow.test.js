@@ -2358,6 +2358,73 @@ test('ta\'minotchiga to\'lov moddasi bilan yoziladi', async () => {
     'chiqim ta\'minotchiga');
 });
 
+//  ★ PODOTCHYOT «HISOB BERISH SHARTI BILAN»: xodim qo'lidagi puldan
+//  nimaga sarflaganini O'ZI yozadi va shu bilan pul qo'lidan chiqadi.
+//  Lekin hamma hamma narsani emas — tsex boshlig'i faqat o'ziga
+//  ochilgan guruhga yoza oladi.
+test('podotchyot olgan xodim sarfini o\'zi yozadi, faqat ochilgan guruhga', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  //  Tsex boshlig'i: podotchyot oladi, lekin faqat bitta guruhga
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov tsex boshlig''i'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name='Sinov tsex boshlig''i')`);
+  const b = (await H.id(`SELECT id FROM workers WHERE name='Sinov tsex boshlig''i'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'ishlab_boshl') ON CONFLICT DO NOTHING`, [b]);
+  const bosh = H.api(base, await H.sessionFor('Sinov tsex boshlig\'i'));
+
+  const guruh = (await H.id(`SELECT code FROM expense_groups ORDER BY sort LIMIT 1`)).code;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE group_code=$1 LIMIT 1`, [guruh])).id;
+  const boshqa = (await H.id(
+    `SELECT id FROM expense_items WHERE group_code <> $1 LIMIT 1`, [guruh])).id;
+
+  //  Belgisi yo'q — sarf yozib bo'lmaydi
+  const yoq = await bosh('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 50,
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /podotchyot/);
+
+  //  Belgilanadi va faqat BITTA guruh ochiladi
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + b,
+    { can_hold_cash: true, cash_groups: [guruh] })).status, 200);
+
+  //  Kassir unga pul beradi
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: b,
+    currency: 'USD', amount: 500 })).status, 200);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [b])).total_usd), 500);
+
+  //  Ochilmagan guruhga yozib bo'lmaydi
+  const xato = await bosh('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 50,
+    expense_item_id: boshqa, pl_month: '2026-09' });
+  assert.equal(xato.status, 400, xato.text);
+  assert.match(xato.body.error, /ochilmagan/);
+
+  //  O'z guruhiga — yoziladi va pul qo'lidan chiqadi
+  const ok = await bosh('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 120,
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [b])).total_usd), 380);
+
+  //  Tomonlarni KLIENT qo'ymaydi: kassaning pulini sarflab bo'lmaydi
+  const soxta = await bosh('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense',
+    currency: 'USD', amount: 10, expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(soxta.status, 200, soxta.text);
+  const oxirgi = await H.id(
+    `SELECT from_kind, from_id FROM cash_ops ORDER BY id DESC LIMIT 1`);
+  assert.equal(oxirgi.from_kind, 'worker', 'server tomonni o\'zi qo\'yadi');
+  assert.equal(oxirgi.from_id, b);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

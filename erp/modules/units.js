@@ -1551,13 +1551,27 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
   wrap(async (req, res) => {
   const from = req.query.from || today();
   const to   = req.query.to || from;
+  //  Qidiruv MIJOZ nomi bo'yicha — «shu mijozga nima chiqqan» degan
+  //  savol tarixda eng ko'p beriladi. Konver va mahsulot nomi ham shu
+  //  katakdan qidiriladi: ombor mudiri qaysi ustunda izlayotganini
+  //  o'ylab o'tirmasin.
+  //
+  //  Yig'indi kartochkalari bu filtrni HISOBGA OLADI (kirim/chiqim
+  //  filtridan farqli): «Qarshi Husan» yozilganda «shu mijozga qancha
+  //  chiqqan» degan javob kerak, butun ombor aylanmasi emas.
   const WHERE = `on_date BETWEEN $1::date AND $2::date
+        AND ($6::text IS NULL
+             OR customer_name ILIKE '%' || $6 || '%'
+             OR conveyor_no   ILIKE '%' || $6 || '%'
+             OR product       ILIKE '%' || $6 || '%'
+             OR order_no      ILIKE '%' || $6 || '%')
         AND warehouse_id = (SELECT w.id FROM warehouses w
                              WHERE w.code = COALESCE($3, 'TM')
                                AND (w.perm IS NULL OR w.perm = ANY($4::text[]))
                                AND ($5::int[] IS NULL OR w.id = ANY($5)
                                     OR w.code = 'TM'))`;
-  const args = [from, to, req.query.w || null, req.user.permissions, whIds(req)];
+  const args = [from, to, req.query.w || null, req.user.permissions, whIds(req),
+                (req.query.q || '').trim() || null];
   const kind = req.query.kind === 'kirim' || req.query.kind === 'chiqim'
     ? req.query.kind : null;
 
@@ -1568,7 +1582,7 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
   const [rows, jami] = await Promise.all([
     db.query(
       `SELECT * FROM v_fg_moves
-        WHERE ${WHERE} AND ($6::text IS NULL OR kind = $6)
+        WHERE ${WHERE} AND ($7::text IS NULL OR kind = $7)
         ORDER BY on_date DESC, kind, conveyor_no
         LIMIT 2000`, [...args, kind]),
     db.query(
@@ -1577,7 +1591,7 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
   ]);
   const yig = (k) => Number(jami.rows.find((r) => r.kind === k)?.qty || 0);
   res.json({
-    from, to, kind, rows: rows.rows,
+    from, to, kind, q: args[5] || '', rows: rows.rows,
     kirim: yig('kirim'), chiqim: yig('chiqim'),
   });
 }));

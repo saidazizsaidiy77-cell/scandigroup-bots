@@ -121,10 +121,32 @@ function openForm(id){
           <div><label>Kassa</label>
             <div class="row" style="gap:10px;align-items:center">
               <input type="checkbox" id="wCash" style="width:auto"
-                     ${w?.can_hold_cash ? 'checked' : ''}>
+                     ${w?.can_hold_cash ? 'checked' : ''}
+                     onchange="$('wCashG').style.display = this.checked ? '' : 'none'">
               <span style="flex:1">Qo'liga pul beriladi
                 <span class="muted" style="font-size:12px">· kassir shu xodimga
-                  chiqim yoza oladi</span></span>
+                  chiqim yoza oladi, xodim esa sarfini o'zi yozadi</span></span>
+            </div>
+            <!--  ★ NIMAGA SARFLAY OLADI. Pul «hisob berish sharti bilan»
+                  beriladi va xodim sarfini o'zi yozadi — lekin hamma
+                  hamma narsani emas: tsex boshlig'i faqat oylik uchun,
+                  ombor mudiri esa barcha harajat uchun.
+                  HECH NARSA belgilanmasa — hamma guruh (tsex doirasi
+                  bilan bir xil qoida: bo'sh doira cheklov yo'qligi). -->
+            <div id="wCashG" style="margin-top:10px${
+              w?.can_hold_cash ? '' : ';display:none'}">
+              <label>Nimaga sarflay oladi</label>
+              <div class="row" style="gap:8px;flex-wrap:wrap">
+                ${(meta.expense_groups || []).map(g => `
+                  <label class="tag" style="cursor:pointer;display:inline-flex;
+                    align-items:center;gap:6px;padding:6px 10px">
+                    <input type="checkbox" class="cashg" value="${esc(g.code)}"
+                      style="width:auto"
+                      ${(w?.cash_groups || []).includes(g.code) ? 'checked' : ''}>
+                    ${esc(g.name)}</label>`).join('')}
+              </div>
+              <div class="muted" style="font-size:12px;margin-top:6px">
+                Hech biri belgilanmasa — barcha harajat guruhi</div>
             </div></div>
 
           <div><label>Rollar</label>
@@ -188,6 +210,8 @@ async function save(id){
     pin:   $('wPin').value.trim() || null,
     tg_id: $('wTg').value.trim() || null,
     can_hold_cash: $('wCash').checked,
+    cash_groups: [...document.querySelectorAll('.cashg')]
+      .filter(c => c.checked).map(c => c.value),
     roles,
   };
   if (id) body.active = $('wActive').checked;

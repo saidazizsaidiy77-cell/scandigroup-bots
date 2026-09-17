@@ -55,8 +55,8 @@ async function nextDocNo(client) {
 router.get('/refs', need(...ANY), wrap(async (req, res) => {
   const boss = isBoss(req);
   const chans = channelsOf(req);
-  const [accounts, groups, items, customers, suppliers, workers, payable, kurs] =
-    await Promise.all([
+  const [accounts, groups, items, customers, suppliers, workers, payable,
+         meniki, kurs] = await Promise.all([
     boss ? db.query(`SELECT id, code, name, kind FROM cash_accounts
                       WHERE is_active ORDER BY sort, name`) : { rows: [] },
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
@@ -89,6 +89,11 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  o'tirish shart emas: oxirgi ishlatilgani katakda tayyor turadi
     //  va kerak bo'lsa ustidan yoziladi. Kurs kunda bir marta
     //  o'zgaradi, operatsiya esa kuniga o'nlab bo'ladi.
+    //  O'zim haqimda: podotchyot olamanmi va qaysi guruhga sarflayman
+    db.query(`SELECT w.can_hold_cash, g.group_code
+                FROM workers w
+                LEFT JOIN worker_expense_groups g ON g.worker_id = w.id
+               WHERE w.id = $1`, [req.user.id]),
     db.query(`SELECT rate FROM cash_ops
                WHERE rate IS NOT NULL AND status = 'ok'
                ORDER BY op_date DESC, id DESC LIMIT 1`),
@@ -97,6 +102,10 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     accounts: accounts.rows, groups: groups.rows, items: items.rows,
     customers: customers.rows, suppliers: suppliers.rows, workers: workers.rows,
     payable: payable.rows,
+    //  O'ZIM: qo'limga pul beriladimi va qaysi guruhlarga sarflay
+    //  olaman. Bo'sh ro'yxat — hamma guruh.
+    my: { hold: !!(meniki.rows[0] || {}).can_hold_cash,
+          groups: meniki.rows.map((r) => r.group_code).filter(Boolean) },
     rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null,
     me: { id: req.user.id, name: req.user.name }, boss,
   });
@@ -211,12 +220,21 @@ async function assertSide(client, kind, id, req) {
 router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => {
   const b = req.body || {};
   const boss = isBoss(req);
-  //  Menejerning yagona yo'li. `to_id` ham o'zi: boshqa xodimning
-  //  qo'liga pul yozib qo'yib bo'lmaydi.
-  const from_kind = boss ? b.from_kind : 'customer';
-  const to_kind   = boss ? b.to_kind   : 'worker';
-  const from_id   = Number(b.from_id) || null;
-  const to_id     = boss ? (b.to_id == null ? null : Number(b.to_id)) : req.user.id;
+  //  ★ KASSIRSIZ XODIMNING IKKITA YO'LI BOR, boshqa hech nima:
+  //
+  //    1. savdo menejeri mijozdan pul oladi   mijoz → O'ZI
+  //    2. podotchyot olgan xodim sarfini yozadi  O'ZI → harajat
+  //
+  //  Ikkalasida ham bir tomon MAJBURAN o'zi: boshqa xodimning qo'liga
+  //  ham, kassaga ham yozib qo'yib bo'lmaydi. Klient boshqasini
+  //  yuborsa e'tiborga olinmaydi — tekshiruv shu yerda.
+  const sarf = !boss && b.to_kind === 'expense';
+  const from_kind = boss ? b.from_kind : (sarf ? 'worker' : 'customer');
+  const to_kind   = boss ? b.to_kind   : (sarf ? 'expense' : 'worker');
+  const from_id   = boss ? (Number(b.from_id) || null)
+                         : (sarf ? req.user.id : (Number(b.from_id) || null));
+  const to_id     = boss ? (b.to_id == null ? null : Number(b.to_id))
+                         : (sarf ? null : req.user.id);
 
   const client = await db.connect();
   try {
@@ -256,6 +274,27 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
       if (!/^\d{4}-\d{2}$/.test(m))
         throw new Error('Foyda-zarar oyi tanlanmagan');
       pl_month = m + '-01';
+    }
+
+    //  ★ XODIM O'Z QO'LIDAGI PULDAN SARFLAYDI. Ikkita shart:
+    //  qo'liga pul beriladigan xodim bo'lsin va modda unga ruxsat
+    //  etilgan guruhdan bo'lsin (izoh: sql/cash.sql). Cheklov
+    //  belgilanmagan bo'lsa — hamma guruh.
+    if (sarf) {
+      const w = (await client.query(
+        `SELECT can_hold_cash FROM workers WHERE id = $1 AND active`,
+        [req.user.id])).rows[0];
+      if (!w || !w.can_hold_cash)
+        throw new Error('Sizga podotchyot berilmaydi — harajat yozib bo\'lmaydi');
+      const ok = (await client.query(
+        `SELECT 1 FROM expense_items i
+          WHERE i.id = $1
+            AND (NOT EXISTS (SELECT 1 FROM worker_expense_groups g
+                              WHERE g.worker_id = $2)
+                 OR EXISTS (SELECT 1 FROM worker_expense_groups g
+                             WHERE g.worker_id = $2 AND g.group_code = i.group_code))`,
+        [item_id, req.user.id])).rowCount;
+      if (!ok) throw new Error('Bu harajat guruhi sizga ochilmagan');
     }
 
     await assertSide(client, from_kind, from_id, req);

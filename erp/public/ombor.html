@@ -783,7 +783,7 @@ let moves = null;
 //  Tanlangan filtr o'zgaruvchida saqlanadi: jadval har safar qaytadan
 //  chiziladi va <select> ning qiymati shu bilan tiklanmasa, har
 //  yuklashda «Hammasi» ga qaytib ketardi.
-let mKind = '';
+let mKind = '', mQ = '';
 
 function drawMoves() {
   const d = moves;
@@ -802,7 +802,10 @@ function drawMoves() {
               chiqdi». Aralash ro'yxatdan buni sanab chiqarish kerak
               bo'lardi. Filtr SERVERDA (?kind=): oraliq katta bo'lsa
               qatorlar chegarasiga yetib, klientda yarmi yo'qolardi. -->
-        <div style="margin-left:auto"><label>Amal</label>
+        <div style="flex:1;min-width:200px"><label>Mijoz</label>
+          <input id="mQ" value="${esc(d.q || '')}" placeholder="mijoz, konver yoki zakaz"
+            onchange="loadMoves()"></div>
+        <div><label>Amal</label>
           <select id="mKind" onchange="loadMoves()">
             ${[['', 'Hammasi'], ['kirim', 'Faqat kirim'], ['chiqim', 'Faqat chiqim']]
               .map(([v, t]) => `<option value="${v}"${
@@ -865,8 +868,13 @@ async function loadMoves() {
   p.set('to', $('mTo')?.value || isoDay(new Date()));
   if ($('mKind')) mKind = $('mKind').value;
   if (mKind) p.set('kind', mKind);
+  if ($('mQ')) mQ = $('mQ').value;
+  if (mQ) p.set('q', mQ);
   moves = await App.api('/api/units/stock/moves?' + p);
   drawMoves();
+  //  Jadval qayta chizilgach fokus qidiruv katagiga qaytariladi:
+  //  aks holda mijoz nomini yozib bo'lgach klaviatura yopilib qolardi.
+  if (mQ && $('mQ')) { $('mQ').focus(); $('mQ').setSelectionRange(9999, 9999); }
 }
 
 App.start(async () => {
