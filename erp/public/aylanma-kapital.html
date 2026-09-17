@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sof aylanma kapital · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+/*  Birinchi ustun YOPISHIB turadi: o'n ikkita sana ustuni ekranga
+    sig'maydi va gorizontal siljiganda ko'rsatkich nomi ko'zdan
+    yo'qolib, raqam qaysi qatorniki ekani bilinmay qolardi. */
+.wc{border-collapse:separate;border-spacing:0}
+.wc th,.wc td{white-space:nowrap}
+.wc th:first-child,.wc td:first-child{position:sticky;left:0;z-index:1;
+  background:var(--surface);min-width:210px;white-space:normal}
+.wc thead th{background:var(--surface)}
+.wc tr.grp td{font-weight:600;background:var(--surface-2)}
+.wc tr.tot td{font-weight:600;border-top:1px solid var(--line)}
+.wc tr.tot:first-child td{border-top:0}
+/*  SOF — hisobotning javobi: qolganlari uni hosil qiladi. */
+.wc tr.sof td{font-size:16px;font-weight:600;border-top:2px solid var(--line);
+  padding-top:14px;padding-bottom:14px}
+.wc tr.open td:first-child{cursor:pointer}
+.wc tr.ich td{color:var(--muted);font-size:13px}
+.wc tr.ich td:first-child{padding-left:30px}
+.wc .bad{color:#b3261e}
+</style>
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Sof aylanma kapital</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div><label>Sanadan</label><input id="fFrom" type="date" onchange="load()"></div>
+    <div><label>Sanagacha</label><input id="fTo" type="date" onchange="load()"></div>
+    <button onclick="davr('yil')">Shu yil</button>
+    <button onclick="davr('yarim')">Olti oy</button>
+    <button onclick="davr('otgan')">O'tgan yil</button>
+    <button onclick="exportCsv()">Excelga yuklash</button>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:12px">
+    Ustun &mdash; oyning <b>15-sanasi</b> va <b>oxirgi kuni</b>. Har raqam
+    o'sha kun HOLATIGA: kelajakdagi sana ustun bo'lmaydi.</p>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Aktiv</h2><div class="kpi" id="kA">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kAd">oxirgi ustun</p></div>
+  <div class="card"><h2>Passiv</h2><div class="kpi" id="kP">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Majburiyatlar</p></div>
+  <div class="card"><h2>Sof aylanma kapital</h2><div class="kpi" id="kS">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Aktiv &minus; passiv</p></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+  <p class="muted" style="font-size:12px;margin-top:14px">
+    <b>Tannarx hali yo'q</b> &mdash; tayyor mahsulot ham, ishlab chiqarishdagi
+    ham SOTUV narxida sanalgan. Ya'ni ikkala raqam ham yuqori chegara:
+    ichida foyda ham turibdi. Xom ashyo hisobi yozilgach tannarx
+    shakllanadi va bu ikki qator o'zi to'g'rilanadi &mdash; sahifa
+    o'zgarmaydi.</p>
+</div>
+
+<script>
+// ════════════════ SOF AYLANMA KAPITAL (чистый оборотный капитал)
+//
+//  «Korxonada bugun nima bor va nimadan qarzmiz» — foyda-zarar «qancha
+//  ishladik» degan savolga javob beradi, bu esa «qo'limizda nima
+//  qoldi». Ikkalasi har xil narsa va bir-birini almashtirmaydi:
+//  foyda bo'lishi, lekin puli mijozning qarzida yotishi mumkin.
+//
+//  Ustun — SANA HOLATI, oy emas: balans oraliqning emas, kunning
+//  suratini oladi. Oyiga ikkita nuqta (15-sana va oy oxiri) — zavod
+//  qarori.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+//  Nol «—» bo'lib chiqadi: nollar qatori ko'zni chalg'itadi.
+const num = (v) => Number(v)
+  ? `<span${Number(v) < 0 ? ' class="bad"' : ''}>${usd(v)}</span>`
+  : '<span class="muted">—</span>';
+const d8 = v => !v ? '—'
+  : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4)
+  .toISOString().slice(0, 10);
+
+let d = { rows: [], wip_shops: [] };
+//  Ishlab chiqarish qatori ochilganda tsex kesimi chiqadi. Ma'lumot
+//  allaqachon kelgan — ikkinchi so'rov yozilmadi.
+let ochiq = false;
+
+function davr(kind) {
+  const now = new Date(), y = now.getFullYear();
+  const kun = (a, b, c) => isoDay(new Date(a, b, c));
+  if (kind === 'yil')   { $('fFrom').value = kun(y, 0, 1);      $('fTo').value = isoDay(now); }
+  if (kind === 'yarim') { $('fFrom').value = kun(y, now.getMonth() - 5, 1);
+                          $('fTo').value = isoDay(now); }
+  if (kind === 'otgan') { $('fFrom').value = kun(y - 1, 0, 1);  $('fTo').value = kun(y - 1, 11, 31); }
+  load();
+}
+
+//  Qatorlar RO'YXATI kodda: ular o'zgarmaydigan ko'rsatkichlar va
+//  tartibi ham balansniki — eng likvidsizidan puligacha.
+const AKTIV = [
+  ['fg',          "T/M ombor va vitrinalar", 'omborda turgan tayyor mahsulot'],
+  ['wip',         'Ishlab chiqarishda',      'tugallanmagan ishlab chiqarish'],
+  ['xom',         'Xom ashyo ombori',        'hisobi hali yozilmagan'],
+  ['kassa',       'Kassa va bank',           ''],
+  ['qolda',       "Xodimlar qo'lida",        "korxonaning puli, javonda emas"],
+  ['mijoz_qarz',  'Mijozlarning qarzi',      ''],
+  ['tamin_avans', "Ta'minotchiga avans",     'oldindan to’langani'],
+];
+const PASSIV = [
+  ['tamin_qarz',  "Ta'minotchilarga qarz",   ''],
+  ['mijoz_avans', 'Mijozlardan avans',       'oldindan olingani'],
+];
+
+function draw() {
+  const r = d.rows;
+  if (!r.length) { $('body').innerHTML =
+    `<p class="muted">Tanlangan oraliqda ustun yo'q.</p>`; return; }
+  const oxirgi = r[r.length - 1];
+  $('kA').innerHTML = `${usd(oxirgi.aktiv)}<small> $</small>`;
+  $('kAd').textContent = d8(oxirgi.on_date) + ' holatiga';
+  $('kP').innerHTML = `${usd(oxirgi.passiv)}<small> $</small>`;
+  $('kS').innerHTML = `<span${Number(oxirgi.sof) < 0 ? ' class="bad"' : ''}
+    >${usd(oxirgi.sof)}</span><small> $</small>`;
+
+  const qator = (nom, izoh, kel, cls) => `
+    <tr class="${cls || ''}">
+      <td>${esc(nom)}${izoh
+        ? `<div class="muted" style="font-size:11.5px">${esc(izoh)}</div>` : ''}</td>
+      ${r.map(kel).join('')}
+    </tr>`;
+
+  //  Tsex kesimi: har sana uchun o'sha kundagi tsexlar. Nomlar
+  //  hamma ustundan yig'iladi — bir oyda bo'sh, boshqasida to'la
+  //  bo'lishi mumkin va qator yo'qolib qolmasin.
+  const tsexlar = [...new Set(d.wip_shops.map(x => x.shop))].sort();
+  const tsexSom = (shop, on_date) => {
+    const x = d.wip_shops.find(y => y.shop === shop
+      && String(y.on_date).slice(0, 10) === String(on_date).slice(0, 10));
+    return x ? x.som : 0;
+  };
+
+  $('body').innerHTML = `<div style="overflow-x:auto"><table class="wc">
+    <thead><tr><th>Ko'rsatkich</th>
+      ${r.map(x => `<th class="num">${d8(x.on_date)}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${qator('AKTIVLAR', '', () => '<td></td>', 'grp')}
+      ${AKTIV.map(([k, nom, izoh]) => {
+        const asos = qator(nom, izoh, x => `<td class="num">${num(x[k])}</td>`,
+          k === 'wip' && tsexlar.length ? 'open' : '');
+        if (k !== 'wip' || !ochiq || !tsexlar.length) return asos;
+        //  Tsex kesimi faqat ochilganda — ekranda yettita qator
+        //  turadi, tafsilot kerak bo'lganda chiqadi.
+        return asos + tsexlar.map(t => `
+          <tr class="ich"><td>${esc(t)}</td>
+            ${r.map(x => `<td class="num">${num(tsexSom(t, x.on_date))}</td>`).join('')}
+          </tr>`).join('');
+      }).join('')}
+      ${qator('Jami aktiv', '', x => `<td class="num">${num(x.aktiv)}</td>`, 'tot')}
+      ${qator('PASSIVLAR', '', () => '<td></td>', 'grp')}
+      ${PASSIV.map(([k, nom, izoh]) =>
+        qator(nom, izoh, x => `<td class="num">${num(x[k])}</td>`)).join('')}
+      ${qator('Jami passiv', '', x => `<td class="num">${num(x.passiv)}</td>`, 'tot')}
+      ${qator('SOF AYLANMA KAPITAL', 'aktiv − passiv',
+              x => `<td class="num">${num(x.sof)}</td>`, 'sof')}
+    </tbody></table></div>`;
+
+  //  Ochish/yopish: qator nomi bosilganda.
+  const wipQator = document.querySelector('.wc tr.open td:first-child');
+  if (wipQator) wipQator.onclick = () => { ochiq = !ochiq; draw(); };
+}
+
+//  Excel zavodda shu ko'rinishda kutiladi: ustun — sana, qator —
+//  ko'rsatkich, ya'ni ekrandagining o'zi.
+function exportCsv() {
+  const r = d.rows;
+  if (!r.length) return;
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const line = (nom, kel) => [q(nom), ...r.map(x => q(Number(kel(x)).toFixed(2)))].join(';');
+  const csv = '﻿' + [
+    [q("Ko'rsatkich"), ...r.map(x => q(String(x.on_date).slice(0, 10)))].join(';'),
+    ...AKTIV.map(([k, nom]) => line(nom, x => x[k])),
+    line('Jami aktiv', x => x.aktiv),
+    ...PASSIV.map(([k, nom]) => line(nom, x => x[k])),
+    line('Jami passiv', x => x.passiv),
+    line('Sof aylanma kapital', x => x.sof),
+  ].join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'),
+    { href: url, download: `aylanma-kapital-${d.from}_${d.to}.csv` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fFrom').value) q.set('from', $('fFrom').value);
+  if ($('fTo').value)   q.set('to', $('fTo').value);
+  d = await App.api('/api/cash/working-capital?' + q);
+  $('fFrom').value = d.from; $('fTo').value = d.to;
+  draw();
+}
+
+App.start(load, 'cash.view', 'cash.manage');
+</script>
+</body>
+</html>

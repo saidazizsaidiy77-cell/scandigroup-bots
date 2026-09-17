@@ -2719,6 +2719,40 @@ test('ta\'minot qarzdorligi: boshiga + haqdor − qarzdor = oxiriga', async () =
   assert.equal(Number(h.closing_credit), 550);
 });
 
+//  ★ SOF AYLANMA KAPITAL — sana HOLATIGA olingan surat. Ustun oyning
+//  15-sanasi va oxirgi kuni; kelajakdagi sana ustun bo'lmaydi.
+test('aylanma kapital: ustun 15-sana va oy oxiri, aktiv − passiv = sof', async () => {
+  const admin = H.api(base, await H.sessionFor('Administrator'));
+  const d = (await admin(
+    'GET', '/api/cash/working-capital?from=2026-08-01&to=2026-09-17')).body;
+
+  const kunlar = d.rows.map((r) => String(r.on_date).slice(0, 10));
+  assert.deepEqual(kunlar, ['2026-08-15', '2026-08-31', '2026-09-15'],
+    'oyning 15-sanasi va oxiri; kelajak sana yo\'q');
+
+  for (const r of d.rows) {
+    const aktiv = ['fg', 'wip', 'xom', 'kassa', 'qolda', 'mijoz_qarz', 'tamin_avans']
+      .reduce((a, k) => a + Number(r[k] || 0), 0);
+    const passiv = ['tamin_qarz', 'mijoz_avans']
+      .reduce((a, k) => a + Number(r[k] || 0), 0);
+    assert.equal(Number(r.aktiv).toFixed(2), aktiv.toFixed(2));
+    assert.equal(Number(r.passiv).toFixed(2), passiv.toFixed(2));
+    assert.equal(Number(r.sof).toFixed(2), (aktiv - passiv).toFixed(2));
+  }
+
+  //  Ta'minotchi qarzi PASSIVDA: avgustda 800 edi, sentabrda 250
+  //  to'landi (yuqoridagi sinov) — ya'ni kamayib boradi.
+  const avg = d.rows.find((r) => String(r.on_date).startsWith('2026-08-15'));
+  const sen = d.rows.find((r) => String(r.on_date).startsWith('2026-09-15'));
+  assert.ok(Number(avg.tamin_qarz) > Number(sen.tamin_qarz),
+    'to\'langan qarz passivdan kamayadi');
+
+  //  Xom ashyo qatori TURADI, lekin nol: modul hali yozilmagan.
+  //  Qator umuman bo'lmasa hisobot to'la ko'rinardi.
+  assert.equal(Number(sen.xom), 0);
+  assert.ok('wip_shops' in d, 'tsex kesimi keladi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

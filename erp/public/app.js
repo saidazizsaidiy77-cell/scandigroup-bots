@@ -189,6 +189,15 @@ const App = (() => {
       title: 'Pul oqimi', lead: 'Kirim va chiqim',
       text: "Mijozlardan kelgan va ta'minot bilan harajatga ketgan pul \u00b7 to'lov sanasi bo'yicha \u00b7 hozirgi qoldiq",
       perm: ['cash.view', 'cash.manage'] },
+    //  SOF AYLANMA KAPITAL — «qo'limizda nima qoldi». Foyda-zarar
+    //  «qancha ishladik» degan savolga javob beradi va ikkalasi
+    //  bir-birini almashtirmaydi: foyda bo'lishi, lekin puli
+    //  mijozning qarzida yotishi mumkin.
+    { href: '/aylanma-kapital.html', mod: 'reports', nav: 'Aylanma kapital',
+      group: 'Moliyaviy hisobotlar',
+      title: 'Sof aylanma kapital', lead: 'Aktiv va passiv',
+      text: "Ombor, ishlab chiqarish, kassa va qarzlar \u00b7 oyning 15-sanasi va oxiriga",
+      perm: ['cash.view', 'cash.manage'] },
     { href: '/dashboard.html', mod: 'reports', nav: 'Panel',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",

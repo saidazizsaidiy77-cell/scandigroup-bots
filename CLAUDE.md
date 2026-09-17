@@ -857,6 +857,46 @@ ikki marta kirim bo'lib ko'rinardi.
 Shuning uchun «foyda bor, pul yo'q» degan holat aynan shu ikki hisobotni
 yonma-yon qo'yganda ko'rinadi.
 
+**Sof aylanma kapital** (`/aylanma-kapital.html`,
+`GET /api/cash/working-capital`) — uchinchi savol: «qo'limizda nima
+qoldi». Foyda-zarar «qancha ishladik», pul oqimi «pul qayerda» deydi,
+bu esa korxonaning AYLANMA mablag'i: aktivdan majburiyat ayirilgani.
+Foyda bo'lishi, lekin uning hammasi mijozning qarzida yotishi mumkin —
+buni faqat shu hisobot ko'rsatadi.
+
+**Ustun — SANA HOLATI, oy emas**: balans oraliqning emas, kunning
+suratini oladi. Oyiga ikkita nuqta — **15-sana va oyning oxirgi kuni**
+(zavod qarori). Kelajakdagi sana ustun bo'lmaydi: u bugungi holatni
+boshqa kun deb yozib qo'yardi.
+
+    AKTIV   T/M ombor · ishlab chiqarishda · xom ashyo · kassa va bank ·
+            xodimlar qo'lida · mijozlarning qarzi · ta'minotchiga avans
+    PASSIV  ta'minotchilarga qarz · mijozlardan avans
+    SOF     aktiv − passiv
+
+Har raqam O'SHA KUN holatiga hisoblanadi: kassa — boshlang'ich qoldiq
+(sanasi kelgan bo'lsa) va o'sha kungacha bo'lgan harakat; ombor —
+o'sha kuni javonda turgani (`fg_on <= kun` va chiqib ketgani keyin);
+qarzlar — lentadagi saldo. **Xodim qo'lidagi pul AKTIV**: u
+korxonaning puli, shunchaki javonda emas.
+
+**Ishlab chiqarishdagi mahsulot ham aktiv** — tugallanmagan ishlab
+chiqarish: zaxira xom ashyodan tayyor mahsulotgacha uchta holatda
+turadi va o'rtadagisi ham korxonaniki. Qatori ochilsa **tsex kesimi**
+chiqadi va konver o'sha kunda QAYSI tsexda turgani TARIXDAN o'qiladi
+(`unit_moves`), hozirgi joyidan emas — aks holda avgust ustuni
+bugungi joylashuvni avgust deb yozib qo'yardi.
+
+**Xom ashyo qatori TURADI, lekin nol** — moduli hali yozilmagan.
+Qator umuman chizilmasa hisobot to'la ko'rinardi, holbuki bitta aktivi
+yetishmaydi: bo'sh qator savol, yo'q qator esa yolg'on.
+
+**Tannarx hali yo'q**, shuning uchun tayyor mahsulot ham, ishlab
+chiqarishdagi ham SOTUV narxida sanalgan — ikkala raqam ham yuqori
+chegara, ichida foyda ham turibdi. Sahifa buni o'zi aytib turadi. Xom
+ashyo hisobi yozilgach tannarx shakllanadi va bu ikki qator o'zi
+to'g'rilanadi; sahifa o'zgarmaydi.
+
 **Ustun — OY.** Direktorning savoli «qaysi oyda nima bo'ldi»: bitta
 yig'indi raqam unga javob bermaydi, oylar yonma-yon turgandagina o'sish
 ham, sakrash ham ko'rinadi. Oylar ORALIQdan chiqadi, ma'lumotdan emas —

@@ -503,4 +503,157 @@ router.get('/flow', need(...READ), wrap(async (req, res) => {
              now: { accounts: kassa.rows[0].usd, workers: qol.rows[0].usd } });
 }));
 
+// ═══════════════════════ SOF AYLANMA KAPITAL (чистый оборотный капитал)
+//
+//  «Korxonada bugun nima bor va nimadan qarzmiz» — bitta ekranda,
+//  oy bo'yicha emas, SANA HOLATIGA. Foyda-zarar «qancha ishladik»
+//  degan savolga javob beradi, bu esa «qo'limizda nima qoldi»:
+//  ikkalasi har xil narsa va bir-birini almashtirmaydi.
+//
+//  Ustun — OYNING 15-SANASI VA OXIRGI KUNI (zavod qarori). Oyiga
+//  ikkita nuqta: oy o'rtasida va oy yopilganda. Kelajakdagi sana
+//  ustun bo'lmaydi — u bugungi holatni boshqa kun deb yozib qo'yardi.
+//
+//  AKTIV — korxonaning puli va mol-mulki: tayyor mahsulot, kassa,
+//  xodim qo'lidagi pul, mijozlarning qarzi va ta'minotchiga berilgan
+//  avans. PASSIV — majburiyat: ta'minotchiga qarzimiz va mijozdan
+//  olingan avans. Farqi — SOF AYLANMA KAPITAL.
+const WC_SQL = `
+WITH oy AS (
+  SELECT generate_series(date_trunc('month', $1::date),
+                         date_trunc('month', $2::date),
+                         interval '1 month')::date AS m
+), kunlar AS (
+  SELECT (m + 14)::date AS on_date FROM oy
+  UNION
+  SELECT (m + interval '1 month' - interval '1 day')::date FROM oy
+), d AS (
+  SELECT on_date FROM kunlar WHERE on_date BETWEEN $1 AND $2
+)
+SELECT d.on_date, fg.som AS fg, wip.som AS wip, kas.som AS kassa, xod.som AS qolda,
+       mij.qarz AS mijoz_qarz, mij.avans AS mijoz_avans,
+       tam.qarz AS tamin_qarz, tam.avans AS tamin_avans
+  FROM d
+  --  TAYYOR MAHSULOT: o'sha kunda omborda TURGANI. Chiqib ketgan
+  --  sanasi keyin bo'lsa o'sha kuni hali javonda edi.
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(SUM(u.qty * COALESCE(u.unit_price, 0)), 0)::numeric(16,2) AS som
+      FROM production_units u
+     WHERE u.status <> 'cancelled' AND u.fg_on IS NOT NULL
+       AND u.fg_on <= d.on_date
+       AND (u.ship_on IS NULL OR u.ship_on > d.on_date)) fg
+  --  ISHLAB CHIQARISHDA TURGANI — tugallanmagan ishlab chiqarish.
+  --  Balansda u ham AYLANMA AKTIV: zaxira xom ashyodan tayyor
+  --  mahsulotgacha uchta holatda turadi va o'rtadagisi ham korxonaniki.
+  --  O'sha kunda: boshlangan, lekin hali omborga tushmagan.
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(SUM(u.qty * COALESCE(u.unit_price, 0)), 0)::numeric(16,2) AS som
+      FROM production_units u
+     WHERE u.status <> 'cancelled' AND u.started_on <= d.on_date
+       AND (u.fg_on IS NULL OR u.fg_on > d.on_date)) wip
+  --  KASSA VA BANK: boshlang'ich qoldiq (sanasi kelgan bo'lsa) va
+  --  o'sha kungacha bo'lgan harakat.
+  CROSS JOIN LATERAL (
+    SELECT (COALESCE((SELECT SUM(a.opening_usd + CASE WHEN a.opening_rate > 0
+                        THEN ROUND(a.opening_uzs / a.opening_rate, 2) ELSE 0 END)
+                        FROM cash_accounts a
+                       WHERE a.is_active
+                         AND (a.opening_on IS NULL OR a.opening_on <= d.on_date)), 0)
+          + COALESCE((SELECT SUM(f.amount_usd) FROM v_cash_flow f
+                       WHERE f.side_kind = 'account' AND f.op_date <= d.on_date), 0)
+           )::numeric(16,2) AS som) kas
+  --  XODIM QO'LIDAGI PUL ham AKTIV: u korxonaning puli, shunchaki
+  --  javonda emas, odamning cho'ntagida.
+  CROSS JOIN LATERAL (
+    SELECT (COALESCE((SELECT SUM(w.opening_usd + CASE WHEN w.opening_rate > 0
+                        THEN ROUND(w.opening_uzs / w.opening_rate, 2) ELSE 0 END)
+                        FROM workers w
+                       WHERE w.active
+                         AND (w.opening_on IS NULL OR w.opening_on <= d.on_date)), 0)
+          + COALESCE((SELECT SUM(f.amount_usd) FROM v_cash_flow f
+                       WHERE f.side_kind = 'worker' AND f.op_date <= d.on_date), 0)
+           )::numeric(16,2) AS som) xod
+  --  MIJOZLAR: saldo HAR MIJOZ bo'yicha alohida sanaladi va keyin
+  --  tomonga ajratiladi. Ishoralar qisqartirilmaydi — biri 1000
+  --  qarzdor, boshqasi 1000 avans bo'lsa ikkalasi ham ko'rinishi
+  --  kerak: biri aktiv, ikkinchisi passiv.
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(SUM(GREATEST(x.s, 0)), 0)::numeric(16,2)  AS qarz,
+           COALESCE(SUM(GREATEST(-x.s, 0)), 0)::numeric(16,2) AS avans
+      FROM (SELECT SUM(l.debit - l.credit) AS s FROM v_customer_ledger l
+             WHERE l.on_date <= d.on_date GROUP BY l.customer_id) x) mij
+  --  TA'MINOTCHILAR: tomoni teskari — kredit − debet (izoh:
+  --  modules/purchasing.js).
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(SUM(GREATEST(x.s, 0)), 0)::numeric(16,2)  AS qarz,
+           COALESCE(SUM(GREATEST(-x.s, 0)), 0)::numeric(16,2) AS avans
+      FROM (SELECT SUM(l.credit - l.debit) AS s FROM v_supplier_ledger l
+             WHERE l.on_date <= d.on_date GROUP BY l.supplier_id) x) tam
+ ORDER BY d.on_date`;
+
+//  ISHLAB CHIQARISHNING TSEX KESIMI. Konver o'sha kunda QAYSI tsexda
+//  turganini tarixdan o'qiymiz (`unit_moves`), hozirgi joyidan emas —
+//  aks holda avgust ustuni bugungi joylashuvni avgust deb yozib
+//  qo'yardi. Hech qayerga ko'chmagan konverda esa harakat yo'q va
+//  turgan joyi o'zgarmagan, shuning uchun kartochkasidagi bo'lim
+//  olinadi.
+const WIP_SHOP_SQL = `
+WITH oy AS (
+  SELECT generate_series(date_trunc('month', $1::date),
+                         date_trunc('month', $2::date),
+                         interval '1 month')::date AS m
+), kunlar AS (
+  SELECT (m + 14)::date AS on_date FROM oy
+  UNION
+  SELECT (m + interval '1 month' - interval '1 day')::date FROM oy
+), d AS (
+  SELECT on_date FROM kunlar WHERE on_date BETWEEN $1 AND $2
+)
+SELECT d.on_date,
+       COALESCE(sh.name, 'Bo''limsiz') AS shop,
+       SUM(u.qty * COALESCE(u.unit_price, 0))::numeric(16,2) AS som,
+       SUM(u.qty)::int AS qty
+  FROM d
+  JOIN production_units u
+    ON u.status <> 'cancelled' AND u.started_on <= d.on_date
+   AND (u.fg_on IS NULL OR u.fg_on > d.on_date)
+  LEFT JOIN LATERAL (
+    SELECT m.section_id FROM unit_moves m
+     WHERE m.unit_id = u.id AND m.moved_on <= d.on_date
+     ORDER BY m.moved_at DESC LIMIT 1) mv ON true
+  LEFT JOIN sections s ON s.id = COALESCE(mv.section_id, u.current_section_id)
+  LEFT JOIN shops sh   ON sh.id = s.shop_id
+ GROUP BY d.on_date, COALESCE(sh.name, 'Bo''limsiz')
+HAVING SUM(u.qty) > 0
+ ORDER BY d.on_date, 2`;
+
+router.get('/working-capital', need(...READ), wrap(async (req, res) => {
+  //  Oraliq berilmasa: shu yilning boshidan bugungacha.
+  const bugun = new Date();
+  const iso = (x) => x.toISOString().slice(0, 10);
+  const ok = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? v : null);
+  const to = ok(req.query.to) || iso(bugun);
+  const from = ok(req.query.from)
+    || iso(new Date(Date.UTC(bugun.getUTCFullYear(), 0, 1)));
+  const [a, b] = from <= to ? [from, to] : [to, from];
+
+  const [asos, tsex] = await Promise.all([
+    db.query(WC_SQL, [a, b]),
+    db.query(WIP_SHOP_SQL, [a, b]),
+  ]);
+  const rows = asos.rows;
+  //  Xom ashyo ombori HALI YO'Q: qatori turadi, lekin nol. Qator
+  //  umuman chizilmasa hisobot to'la ko'rinardi, holbuki bitta
+  //  aktivi yetishmaydi — bo'sh qator savol, yo'q qator esa yolg'on.
+  const jadval = rows.map((r) => {
+    const aktiv = ['fg', 'wip', 'kassa', 'qolda', 'mijoz_qarz', 'tamin_avans']
+      .reduce((n, k) => n + Number(r[k] || 0), 0);
+    const passiv = ['tamin_qarz', 'mijoz_avans']
+      .reduce((n, k) => n + Number(r[k] || 0), 0);
+    return { ...r, xom: 0, aktiv: +aktiv.toFixed(2), passiv: +passiv.toFixed(2),
+             sof: +(aktiv - passiv).toFixed(2) };
+  });
+  res.json({ from: a, to: b, rows: jadval, wip_shops: tsex.rows });
+}));
+
 module.exports = router;
