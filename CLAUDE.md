@@ -650,7 +650,15 @@ o'sha odamning lentasi va «✎ Boshlang'ich qoldiq» tugmasi. Kassalar
 ro'yxatida ostida «Xodimlar qo'lidagi pul» bo'limi turadi: qo'lida puli
 borlar VA belgisi bor xodimlar (`can_hold_cash`) — biri «kimdan pul
 olsam bo'ladi», ikkinchisi «kimga qoldiq yozishim kerak» degan savolning
-javobi. Sahifa u yerda faqat O'QIYDI: pul berish ham, qabul qilish ham
+javobi.
+
+**Kassa — kartochka, xodim — JADVAL.** Kassa ikkita va har biri o'z
+joyi: qoldig'i yirik raqam bo'lib turishi kerak. Xodim esa o'ntacha va
+ko'pchiligining qo'lida nol turadi — o'nta kartochka butun ekranni
+egallab, javobi bor bittasi ularning orasida yo'qolib ketardi.
+Jadvalda ko'z bitta ustundan pastga yuguradi: xodim · so'm · dollar ·
+jami $ · oxirgi harakat, eng ko'p puli bori tepada. Qator bosilsa
+o'sha odamning sahifasi ochiladi. Sahifa u yerda faqat O'QIYDI: pul berish ham, qabul qilish ham
 kassaning o'z oynasidan bo'ladi, chunki ikkinchi tomoni baribir kassa.
 Yozadigan odam — kassir (`cash.manage`), xodimning o'zi emas.
 

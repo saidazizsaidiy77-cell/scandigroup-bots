@@ -79,6 +79,12 @@ function draw(d) {
   //  turadi (izoh: modules/cash.js).
   const xodimlar = (d.workers || []).filter(w => w.id !== d.me.id);
 
+  //  Kassalar KARTOCHKA, xodimlar esa RO'YXAT. Kassa ikkita va
+  //  har biri o'z joyi — qoldig'i yirik raqam bo'lib turishi kerak.
+  //  Xodim esa o'ntacha va ko'pchiligining qo'lida nol turadi:
+  //  o'nta kartochka butun ekranni egallab, javobi bor bittasi
+  //  ularning orasida yo'qolib ketardi. Jadvalda ko'z bitta ustundan
+  //  pastga yuguradi va kimda pul borligi darrov ko'rinadi.
   $('body').innerHTML = setka(
       d.rows.map(a => card(a.href, a.name,
         a.last_on ? `oxirgi harakat ${d8(a.last_on)}` : 'harakat yo\'q',
@@ -88,10 +94,22 @@ function draw(d) {
         d.me, "qo'ldagi pul"))
     + (xodimlar.length ? `
       <h2 style="margin:26px 0 12px">Xodimlar qo'lidagi pul</h2>
-      ${setka(xodimlar.map(w => card(w.href, w.name,
-          w.last_on ? `oxirgi harakat ${d8(w.last_on)}`
-                    : 'harakat yo\'q',
-          w, "qo'ldagi pul")).join(''))}` : '');
+      <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Xodim</th><th class="num">So'm</th>
+          <th class="num">Dollar</th><th class="num">Jami $</th>
+          <th>Oxirgi harakat</th></tr></thead>
+        <tbody>${xodimlar.map(w => `
+          <tr class="click" onclick="location.href='${w.href}'">
+            <td><b>${esc(w.name)}</b></td>
+            <td class="num">${Number(w.uzs) ? uzs(w.uzs) : '<span class="muted">—</span>'}</td>
+            <td class="num">${Number(w.usd) ? usd(w.usd) : '<span class="muted">—</span>'}</td>
+            <!--  Jami — qo'lidagi pulning to'la javobi: so'mi ham,
+                  dollari ham kirgan kursi bilan qo'shilgani. -->
+            <td class="num"><b>${usd(w.total_usd)}</b></td>
+            <td class="muted">${w.last_on ? d8(w.last_on)
+              : 'harakat yo\'q'}</td></tr>`).join('')}</tbody>
+      </table></div></div>` : '');
 }
 
 App.start(async () => {
