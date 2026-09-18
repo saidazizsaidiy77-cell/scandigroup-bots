@@ -1,0 +1,75 @@
+# ============================================================================
+#  TEKSHIRUV — har push va har PR da GitHub o'zi bajaradi
+#
+#  Deploydan oldingi marosim ilgari QO'LDA edi (izoh: CLAUDE.md, «Sinash»)
+#  va shuning uchun kechasi soat o'n birda o'tkazib yuborilishi mumkin edi.
+#  Endi uni mashina qiladi: u hech qachon shoshilmaydi.
+#
+#  ★ IKKI QADAM, IKKI XIL SAVOL:
+#
+#    1. `npm test` — ishlayaptimi.
+#    2. Migratsiya UCH MARTA toza bazada — ertaga sayt KO'TARILADIMI.
+#
+#  Ikkinchisi muhimroq. `ERP_AUTO_MIGRATE=1` migratsiyani `listen()` dan
+#  OLDIN chaqiradi: u yiqilsa bitta funksiya emas, BUTUN SAYT ochilmaydi.
+#  Uch marta — chunki xato ko'pincha ikkinchi yurishda chiqadi (view
+#  ustunini o'zgartirish, `ON CONFLICT` siz INSERT).
+#
+#  DIQQAT: Railway `main` ni bu tekshiruvdan qat'i nazar deploy qiladi.
+#  Qizil natija deployni TO'XTATMAYDI, faqat aytadi. To'xtatish uchun
+#  GitHub'da `main` himoyalanadi va o'zgarish PR orqali kiritiladi.
+# ============================================================================
+name: test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        # Testlar bazaga ulanishdan oldin u tayyor bo'lishi kerak, aks
+        # holda birinchi so'rov ECONNREFUSED bilan yiqilardi.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      PGSSL: 'off'
+      #  Zavodda kalit qo'yilgan bo'ladi, ya'ni sinov ham PIN izi bilan
+      #  yursin (izoh: `erp/pin.js`). Bu SINOV kaliti — haqiqiysi
+      #  Railway sozlamasida turadi va bu yerga hech qachon yozilmaydi.
+      ERP_PIN_SECRET: ci-sinov-kaliti-0123456789
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Testlar
+        run: npm test
+
+      - name: Migratsiya toza bazada uch marta
+        run: |
+          psql "$TEST_ADMIN_URL" -qc 'CREATE DATABASE erp_ci'
+          export DATABASE_URL="${TEST_ADMIN_URL%/postgres}/erp_ci"
+          for i in 1 2 3; do
+            echo "--- $i-yurish ---"
+            node erp/migrate.js
+          done

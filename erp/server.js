@@ -5,7 +5,27 @@ const { db } = require('./db');
 const auth = require('./auth');
 
 const app = express();
+
+//  ★ SERVER PROKSI ORTIDA TURADI (Railway, keyin o'z domenimiz). Usiz
+//  har so'rov proksining IP manzili bilan kelardi va PIN urinishlari
+//  cheklovi (izoh: `erp/pin.js`) butun zavodni BITTA manzil deb
+//  o'qirdi: bitta telefondagi xato urinish qolganlarni ham bloklardi.
+//  1 — faqat eng yaqin proksiga ishonamiz, undan narisiga emas.
+app.set('trust proxy', 1);
 app.use(express.json());
+
+//  HTTPS ustida ochilgan bo'lsa brauzerga «bu saytga boshqa hech qachon
+//  http bilan borma» deyiladi. Tsexdagi telefon ochiq Wi-Fi'da turadi va
+//  bitta http so'rovi sessiya tokenini ko'chaga chiqarardi.
+//
+//  Shart SO'ROVDAN o'qiladi, muhitdan emas: lokalda `http://localhost`
+//  bilan ishlaganda sarlavha qo'yilsa brauzer saytni bir yil davomida
+//  https'ga majburlab, ochilmay qolardi.
+app.use((req, res, next) => {
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https')
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
 // Sahifa va skriptlar keshlanmasin: yangi versiya chiqqanda xodim brauzerni
 // tozalab o'tirmasligi kerak. Rasm va shrift keshlanaveradi.
 app.use(express.static(path.join(__dirname, 'public'), {

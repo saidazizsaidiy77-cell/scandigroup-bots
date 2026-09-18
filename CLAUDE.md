@@ -1096,6 +1096,16 @@ Lokal PostgreSQL kerak. Boshqa manzil: `TEST_ADMIN_URL`.
 Har ishga tushirishda toza baza quriladi, migratsiya ikki marta o'tkaziladi
 (idempotentlik), keyin server ko'tarilib so'rovlar HTTP orqali yuboriladi.
 
+**Buni GitHub ham bajaradi** (`.github/workflows/test.yml`): har push va
+har PR da toza PostgreSQL ko'tariladi, testlar yuriydi va migratsiya toza
+bazada uch marta o'tkaziladi. Commit yonida yashil yoki qizil belgi
+turadi.
+
+⚠️ **Qizil natija deployni TO'XTATMAYDI** — Railway `main` ni baribir
+deploy qiladi. To'xtatish uchun GitHub'da `main` himoyalanadi
+(Settings → Branches) va o'zgarish PR orqali kiritiladi: shunda
+tekshiruvdan o'tmagan kod `main` ga umuman yetib bormaydi.
+
 Deploydan oldin qo'lda ham tekshiring:
 
 ```bash
@@ -1264,6 +1274,22 @@ terminal BITTA internetdan chiqadi: qat'iy blok qo'yilsa bitta
 hazilkash butun zavodni to'xtatardi. Shuning uchun blok qisqa (eng ko'pi
 5 daqiqa) va har muvaffaqiyatli kirish uni tozalaydi — haqiqiy xodim
 kirdi, demak hujum emas. `ERP_PIN_TRIES=0` butunlay o'chiradi.
+
+---
+
+## Proksi va HTTPS
+
+Server proksi ortida turadi (Railway, keyin o'z domenimiz), shuning uchun
+`app.set('trust proxy', 1)` — usiz har so'rov proksining manzili bilan
+kelardi va PIN urinishlari cheklovi butun zavodni BITTA manzil deb
+o'qirdi: bitta telefondagi xato urinish qolganlarni ham bloklardi.
+
+**HSTS** — HTTPS ustida ochilgan so'rovga «bu saytga boshqa hech qachon
+http bilan borma» sarlavhasi qo'shiladi: tsexdagi telefon ochiq Wi-Fi'da
+turadi va bitta http so'rovi sessiya tokenini ko'chaga chiqarardi. Shart
+SO'ROVDAN o'qiladi (`req.secure` yoki `x-forwarded-proto`), muhitdan
+emas — lokalda `http://localhost` bilan ishlaganda sarlavha qo'yilsa
+brauzer saytni bir yil davomida https'ga majburlab, ochilmay qolardi.
 
 ---
 
