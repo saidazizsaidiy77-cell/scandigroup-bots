@@ -1267,6 +1267,46 @@ kirdi, demak hujum emas. `ERP_PIN_TRIES=0` butunlay o'chiradi.
 
 ---
 
+## Zaxira
+
+`npm run erp:backup` — butun bazani bitta faylga tushiradi
+(`erp/backup.js`). Railway'ning o'z zaxirasi bor, lekin u BIR JOYDA
+turadi: hisob yopilsa yoki to'lov uzilsa zaxira ham u bilan ketadi.
+
+**★ NUSXA IKKI JOYDA va ikkalasi bir-biriga bog'liq emas:**
+
+  1. **Telegram** — serverning O'ZI yopiq kanalga yuboradi
+     (`BACKUP_TG_TOKEN` + `BACKUP_TG_CHAT`). Kanal shu sababdan yaxshi:
+     zaxira to'xtaganini alohida nazorat qilish shart emas — bugungi
+     fayl yo'q bo'lsa ko'rinib turadi. Telegram 50 MB dan katta faylni
+     olmaydi va baza o'sganda bu jim to'xtamasin: chegara oshsa skript
+     aniq aytadi va xato kodi bilan chiqadi.
+  2. **OneDrive** — zavod kompyuterida `BACKUP_DIR` OneDrive papkasiga
+     qo'yiladi, qolganini OneDrive ilovasining o'zi qiladi. **Serverni
+     OneDrive'ga ulab bo'lmaydi**: uning kaliti jim o'ladi va zaxira
+     to'xtaganini hech kim sezmasdi.
+
+**★ FAYL SHIFRLANADI** (`BACKUP_PASS`, AES-256-GCM, kalit scrypt bilan).
+Dump ichida mijozlarning telefonlari, xodimlar ismi va butun moliyaviy
+hisob turadi — shifrlanmagan nusxani bulutga qo'yish uni ko'chaga
+qo'yish bilan barobar. Ochish: `node erp/backup.js --och <fayl>`.
+**Parol yo'qolsa nusxa ochilmaydi.** Parolsiz ishlatsa ham bo'ladi,
+lekin skript ogohlantiradi va faylni bulutga qo'ymaslikni aytadi.
+
+**Kunlik jadval** — `BACKUP_AT=03:00` (izoh: `erp/server.js`). Alohida
+cron xizmati ko'tarilmadi: zaxira kuniga bir marta olinadi va uni
+ikkinchi nazorat qilinadigan joyga aylantirish ortiqcha. Konteyner
+qayta ishga tushsa taymer noldan boshlanadi, shuning uchun «bugun
+olindimi» degan xotira emas, VAQT OYNASI ishlatiladi: zaxira faqat
+belgilangan vaqtdan keyingi 15 daqiqa ichida olinadi. Vaqt SERVER
+vaqti bo'yicha — Railway'da UTC, mahalliy vaqt kerak bo'lsa
+`TZ=Asia/Tashkent` ham qo'yiladi.
+
+`pg_dump` kerak. Railway'da yo'q bo'lsa `NIXPACKS_PKGS=postgresql`
+sozlamasi qo'shiladi; skript buni xato xabarida ham aytadi.
+
+---
+
 ## Hali yo'q
 
 Ombor (xom ashyo), ishbay oylik, sifat nazorati (brakda

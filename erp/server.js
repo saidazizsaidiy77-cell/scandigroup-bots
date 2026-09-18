@@ -67,6 +67,45 @@ app.get('/health', async (_req, res) => {
   }
 });
 
+/* ─────────────────────────────────────────────────────── KUNLIK ZAXIRA
+ *  `BACKUP_AT=03:00` qo'yilsa server har kuni o'sha vaqtda zaxira oladi
+ *  va uni Telegram kanaliga yuboradi (izoh: `erp/backup.js`).
+ *
+ *  Vaqt SERVER vaqti bo'yicha: Railway'da u UTC, ya'ni mahalliy vaqt
+ *  kerak bo'lsa `TZ=Asia/Tashkent` ham qo'yiladi.
+ *
+ *  ★ NEGA ODDIY TAYMER, cron EMAS. Zaxira kuniga bir marta olinadi va
+ *  serverning o'zida ishlaydi — alohida xizmat ko'tarish uni ikkinchi
+ *  nazorat qilinadigan joyga aylantirardi. Konteyner qayta ishga
+ *  tushsa taymer noldan boshlanadi, shuning uchun «bugun olindimi»
+ *  degan xotira emas, VAQT OYNASI ishlatiladi: zaxira faqat belgilangan
+ *  vaqtdan keyingi 15 daqiqa ichida olinadi. Oynadan tashqarida qayta
+ *  ishga tushish hech narsa qilmaydi.
+ */
+function zaxiraJadvali() {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(process.env.BACKUP_AT || '').trim());
+  if (!m) return;
+  const daqiqa = Number(m[1]) * 60 + Number(m[2]);
+  const OYNA = 15;
+  let oxirgi = '';
+  console.log(`Kunlik zaxira: ${m[1]}:${m[2]} (server vaqti)`);
+  setInterval(() => {
+    const d = new Date();
+    const kun = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const farq = (d.getHours() * 60 + d.getMinutes()) - daqiqa;
+    if (kun === oxirgi || farq < 0 || farq >= OYNA) return;
+    oxirgi = kun;
+    const ish = require('child_process').spawn(
+      process.execPath, [path.join(__dirname, 'backup.js')], { env: process.env });
+    //  Natija Railway jurnaliga tushadi: zaxira yiqilsa jim qolmasin.
+    ish.stdout.on('data', (c) => process.stdout.write('[zaxira] ' + c));
+    ish.stderr.on('data', (c) => process.stderr.write('[zaxira] ' + c));
+    ish.on('close', (kod) => {
+      if (kod !== 0) console.error(`[zaxira] XATO: chiqish kodi ${kod}`);
+    });
+  }, 5 * 60 * 1000);
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Serverga qo'yishda migratsiyani qo'lda ishga tushirish noqulay — ERP_AUTO_MIGRATE=1
@@ -84,4 +123,5 @@ const PORT = process.env.PORT || 3000;
     }
   }
   app.listen(PORT, () => console.log(`ZELTA ERP → http://localhost:${PORT}`));
+  zaxiraJadvali();
 })();
