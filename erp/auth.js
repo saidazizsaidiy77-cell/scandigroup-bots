@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const { db, wrap } = require('./db');
+const pin = require('./pin');
 
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -97,10 +98,25 @@ function verifyTelegram(initData, botToken) {
 const router = express.Router();
 
 // Tsex terminali: PIN bilan kirish
+//
+//  Bazada PIN emas, uning IZI turadi (izoh: `erp/pin.js`). Ochiq ustun
+//  ham qaraladi: maxfiy kalit qo'yilmagan serverda tizim eskicha
+//  ishlayversin, aks holda kalitni unutish butun zavodni ishdan
+//  to'xtatardi. Kalit qo'yilgach ochiq ustun migratsiyada bo'shaydi.
 router.post('/pin', wrap(async (req, res) => {
+  const kut = pin.blocked(req);
+  if (kut) return res.status(429).json({
+    error: `Ko'p marta xato kiritildi. ${kut} soniyadan keyin qayta urinib ko'ring.` });
+
+  const raw = String(req.body.pin || '');
+  if (!raw) return res.status(401).json({ error: 'PIN topilmadi' });
   const { rows } = await db.query(
-    `SELECT id FROM workers WHERE pin = $1 AND active`, [String(req.body.pin || '')]);
-  if (!rows[0]) return res.status(401).json({ error: 'PIN topilmadi' });
+    `SELECT id FROM workers
+      WHERE active
+        AND (($2::text IS NOT NULL AND pin_hash = $2)
+          OR (pin_hash IS NULL AND pin = $1))`, [raw, pin.hash(raw)]);
+  if (!rows[0]) { pin.bad(req); return res.status(401).json({ error: 'PIN topilmadi' }); }
+  pin.good(req);
   const token = await createSession(rows[0].id, req.body.surface === 'miniapp' ? 'miniapp' : 'web');
   res.json({ token, user: await loadWorker(rows[0].id) });
 }));

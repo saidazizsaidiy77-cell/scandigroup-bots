@@ -12,6 +12,11 @@
 const crypto = require('crypto');
 const { Client } = require('pg');
 
+//  PIN izi maxfiy kalit bilan hisoblanadi (izoh: `erp/pin.js`). Sinov
+//  HAQIQIY yo'ldan yursin — zavodda kalit qo'yilgan bo'ladi, kalitsiz
+//  yo'l esa faqat vaqtinchalik.
+process.env.ERP_PIN_SECRET = process.env.ERP_PIN_SECRET || 'sinov-kaliti-0123456789';
+
 const ADMIN_URL = process.env.TEST_ADMIN_URL
   || 'postgresql://postgres@127.0.0.1:5433/postgres';
 const DB = process.env.TEST_DB || 'zelta_test';

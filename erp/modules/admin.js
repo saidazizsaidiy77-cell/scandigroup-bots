@@ -5,12 +5,24 @@
 const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
+const pin = require('../pin');
 
 const router = express.Router();
 
+//  PIN qayerga yoziladi: maxfiy kalit bor bo'lsa IZGA, yo'q bo'lsa
+//  eskicha ochiq ustunga (izoh: `erp/pin.js`). Ikkalasi bir vaqtda
+//  to'lmaydi — aks holda ko'chirish qaysi biri haqiqiy ekanini
+//  bilmasdi. Qaytadi: [pin, pin_hash].
+const pinCols = (kod) => (kod && pin.ready) ? [null, pin.hash(kod)] : [kod, null];
+
 router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
   const { rows } = await db.query(
-    `SELECT w.id, w.name, w.phone, w.pin, w.tg_id, w.active, w.can_hold_cash,
+    //  ★ PIN QAYTARILMAYDI. Bazada uning izi turadi va izdan raqamni
+    //  tiklab bo'lmaydi (izoh: `erp/pin.js`) — shuning uchun ro'yxatda
+    //  faqat «qo'yilganmi yoki yo'q» ko'rinadi. Unutilgan PIN topilmaydi,
+    //  YANGISI qo'yiladi.
+    `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
+            (w.pin IS NOT NULL OR w.pin_hash IS NOT NULL) AS has_pin,
             --  Qo'lidagi pulni qaysi harajat guruhlariga sarflay oladi.
             --  BO'SH = hammasi (izoh: sql/cash.sql).
             COALESCE((SELECT array_agg(g.group_code ORDER BY g.group_code)
@@ -91,10 +103,11 @@ async function saveCashGroups(client, workerId, codes) {
 }
 
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
-  const { name, phone, pin, tg_id, can_hold_cash, roles = [] } = req.body;
+  const { name, phone, tg_id, can_hold_cash, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
-  if (pin && !/^\d{4,6}$/.test(String(pin)))
+  const kod = req.body.pin ? String(req.body.pin) : null;
+  if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
   const tg = tgId(tg_id);
 
@@ -102,9 +115,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const w = (await client.query(
-      `INSERT INTO workers (name, phone, pin, tg_id, can_hold_cash)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [name.trim(), phone || null, pin ? String(pin) : null, tg,
+      `INSERT INTO workers (name, phone, pin, pin_hash, tg_id, can_hold_cash)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true])).rows[0];
     for (const r of roles) {
       await client.query(
@@ -130,8 +143,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
 
 router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
-  const { name, phone, pin, tg_id, active, can_hold_cash, roles } = req.body;
-  if (pin && !/^\d{4,6}$/.test(String(pin)))
+  const { name, phone, tg_id, active, can_hold_cash, roles } = req.body;
+  const kod = req.body.pin ? String(req.body.pin) : null;
+  if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
   const tg = tgId(tg_id);
 
@@ -142,7 +156,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
       `UPDATE workers SET
          name   = COALESCE($2, name),
          phone  = COALESCE($3, phone),
-         pin    = COALESCE($4, pin),
+         --  PIN yuborilgan bo'lsa IKKALA ustun ham qayta yoziladi:
+         --  yangisi izga tushadi, ochiq ustun bo'shaydi.
+         pin      = CASE WHEN $8::boolean THEN $4 ELSE pin END,
+         pin_hash = CASE WHEN $8::boolean THEN $9 ELSE pin_hash END,
          tg_id  = COALESCE($5, tg_id),
          active = COALESCE($6, active),
          --  Qo'liga pul beriladigan xodim (izoh: sql/cash.sql). Belgi
@@ -150,9 +167,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          --  saqlansa belgi o'chib qolmasin.
          can_hold_cash = COALESCE($7, can_hold_cash)
        WHERE id = $1`,
-      [id, name || null, phone || null, pin ? String(pin) : null,
+      [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
-       typeof can_hold_cash === 'boolean' ? can_hold_cash : null]);
+       typeof can_hold_cash === 'boolean' ? can_hold_cash : null,
+       kod !== null, pinCols(kod)[1]]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {

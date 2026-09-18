@@ -1224,8 +1224,50 @@ so'raladi.
 
 ---
 
+## Xavfsizlik
+
+**★ PIN BAZADA OCHIQ MATNDA TURMAYDI** (`erp/pin.js`). Ilgari turardi:
+bazani ochgan har kim — biz, hosting muhandisi, zaxira faylini qo'lga
+kiritgan odam — hamma xodimning, shu jumladan direktorning PIN'ini
+o'qiy olardi. Endi `workers.pin_hash` da uning IZI turadi va izdan
+raqamni qaytarib bo'lmaydi.
+
+**Iz bcrypt bilan emas, MAXFIY KALIT bilan hisoblanadi**
+(`ERP_PIN_SECRET`, HMAC-SHA256). Sabab: PIN — 4 raqam, ya'ni 10 000
+variant, va tuzli-sekin hash uni himoya qilmaydi — hamma variantni
+sanab chiqish bir necha daqiqa. Kalit esa bazada emas, server
+sozlamasida turadi: zaxira fayli oqib ketsa unda kalit yo'q va izlar
+hech narsa bermaydi. Yon foydasi: iz deterministik, ya'ni
+`pin_hash UNIQUE` ishlayveradi va kirish bitta indeksli so'rov bo'lib
+qoladi.
+
+**Kalit o'zgarsa hamma PIN ishlamay qoladi** — bir marta qo'yiladi va
+saqlanadi. Kalit umuman qo'yilmagan bo'lsa tizim ESKICHA (ochiq matn
+bilan) ishlayveradi va konsolga ogohlantirish yozadi: kalitni unutish
+butun zavodni ishdan to'xtatgandan ko'ra shu yaxshi. Kalit qo'yilgach
+ochiq ustun migratsiyada o'zi bo'shaydi (`erp/migrate.js`, `hashPins`).
+`migration_flags` ishlatilmadi — bu bir martalik ko'chirish emas,
+doimiy qoida: eski bazadan ochiq PIN bilan kelgan qator keyingi
+migratsiyada ham tozalanadi.
+
+Shu sababdan `production-seed.sql` dagi test xodimlari endi PIN bo'yicha
+emas, ISM bo'yicha tekshiriladi: ochiq ustun bo'shagach PIN bo'yicha
+tekshirish o'sha xodimlarni ikkinchi marta yaratib qo'yardi.
+
+**Unutilgan PIN topilmaydi, YANGISI qo'yiladi.** Xodimlar sahifasida PIN
+ustuni endi «qo'yilgan / —» deb turadi, kartochkadagi maydon esa har
+doim bo'sh ochiladi. Qidiruv ham PIN'siz.
+
+**Urinishlar cheklovi** (`ERP_PIN_TRIES`, standart 5) — iz o'zi yetarli
+emas, xato urinish sekinlashishi kerak. Lekin tsexdagi bir nechta
+terminal BITTA internetdan chiqadi: qat'iy blok qo'yilsa bitta
+hazilkash butun zavodni to'xtatardi. Shuning uchun blok qisqa (eng ko'pi
+5 daqiqa) va har muvaffaqiyatli kirish uni tozalaydi — haqiqiy xodim
+kirdi, demak hujum emas. `ERP_PIN_TRIES=0` butunlay o'chiradi.
+
+---
+
 ## Hali yo'q
 
 Ombor (xom ashyo), ishbay oylik, sifat nazorati (brakda
-aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline rejim,
-PIN uchun urinishlar cheklovi (ataylab — zavod qarori).
+aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline rejim.

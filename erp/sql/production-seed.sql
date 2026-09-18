@@ -156,7 +156,12 @@ ON CONFLICT (code) DO NOTHING;
 
 -- ------------------------------------------------------------- TEST XODIMLARI
 -- Rollar va huquqlar yadroda: sql/core-seed.sql
-INSERT INTO workers (name, pin) VALUES
+--  ★ QAYTA YOZILMASLIK ISMGA QARAB tekshiriladi, PIN'ga emas: maxfiy
+--  kalit qo'yilgach PIN ochiq ustundan ko'chiriladi va u yerda bo'sh
+--  qoladi (izoh: `erp/pin.js`). PIN bo'yicha tekshirilsa keyingi
+--  migratsiya o'sha xodimlarni IKKINCHI marta yaratib qo'yardi.
+INSERT INTO workers (name, pin)
+SELECT v.name, v.pin FROM (VALUES
   ('Administrator',    '0000'),
   ('Korpus ustasi',    '1111'),
   ('Bo''yoq ustasi',   '2222'),
@@ -164,17 +169,20 @@ INSERT INTO workers (name, pin) VALUES
   ('Stul ustasi',      '4444'),
   ('Direktor',         '5555'),
   ('Arra operatori',   '6666')
-ON CONFLICT (pin) DO NOTHING;
+) AS v(name, pin)
+WHERE NOT EXISTS (SELECT 1 FROM workers w WHERE w.name = v.name);
 
 -- Rol biriktirish. scope_shop_id — usta faqat o'z tsexini ko'radi.
+--  Xodim ISMI bo'yicha topiladi (yuqoridagi sabab). Ism takrorlansa
+--  birinchisi olinadi: seed faqat toza bazada ishlaydi.
 INSERT INTO worker_roles (worker_id, role_code, scope_shop_id) VALUES
-  ((SELECT id FROM workers WHERE pin='0000'), 'admin',     NULL),
-  ((SELECT id FROM workers WHERE pin='5555'), 'direktor',  NULL),
-  ((SELECT id FROM workers WHERE pin='1111'), 'tsex_usta', (SELECT id FROM shops WHERE code='KORPUS')),
-  ((SELECT id FROM workers WHERE pin='2222'), 'tsex_usta', (SELECT id FROM shops WHERE code='BOYOQ')),
-  ((SELECT id FROM workers WHERE pin='3333'), 'tsex_usta', (SELECT id FROM shops WHERE code='QADOQ')),
-  ((SELECT id FROM workers WHERE pin='4444'), 'tsex_usta', (SELECT id FROM shops WHERE code='STUL')),
-  ((SELECT id FROM workers WHERE pin='6666'), 'operator',  (SELECT id FROM shops WHERE code='KORPUS'))
+  ((SELECT id FROM workers WHERE name='Administrator'    ORDER BY id LIMIT 1), 'admin',     NULL),
+  ((SELECT id FROM workers WHERE name='Direktor'         ORDER BY id LIMIT 1), 'direktor',  NULL),
+  ((SELECT id FROM workers WHERE name='Korpus ustasi'    ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='KORPUS')),
+  ((SELECT id FROM workers WHERE name='Bo''yoq ustasi'   ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='BOYOQ')),
+  ((SELECT id FROM workers WHERE name='Qadoqlash ustasi' ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='QADOQ')),
+  ((SELECT id FROM workers WHERE name='Stul ustasi'      ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='STUL')),
+  ((SELECT id FROM workers WHERE name='Arra operatori'   ORDER BY id LIMIT 1), 'operator',  (SELECT id FROM shops WHERE code='KORPUS'))
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================

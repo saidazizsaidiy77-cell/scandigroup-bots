@@ -30,10 +30,13 @@
     <h2 style="margin:0">Xodimlar</h2>
     <!--  Qidiruv KLIENTDA: ro'yxat bir marta o'qiladi va yigirma-o'ttiz
           qatordan iborat, ya'ni har harfda serverga borish ortiqcha.
-          Ism, telefon, PIN va rol nomi birga qidiriladi — qaysi ustunda
-          izlashni o'ylab o'tirmaslik uchun. -->
+          Ism, telefon va rol nomi birga qidiriladi — qaysi ustunda
+          izlashni o'ylab o'tirmaslik uchun.
+
+          PIN bo'yicha qidirilmaydi: u bazada ochiq matnda turmaydi
+          (izoh: `erp/pin.js`). -->
     <div style="flex:1;max-width:340px"><label>Qidiruv</label>
-      <input id="wQ" placeholder="ism · telefon · PIN · rol" oninput="drawWorkers()"></div>
+      <input id="wQ" placeholder="ism · telefon · rol" oninput="drawWorkers()"></div>
   </div>
   <div style="overflow-x:auto"><table>
     <thead><tr><th>Ism</th><th>PIN</th><th>Telegram ID</th><th>Rollar</th>
@@ -84,14 +87,16 @@ function drawWorkers(){
   const mos = (w) => !q
     || w.name.toLowerCase().includes(q)
     || (w.phone || '').toLowerCase().includes(q)
-    || (w.pin || '').includes(q)
     || w.roles.some(r => (r.name || '').toLowerCase().includes(q)
                       || (r.scope_shop || '').toLowerCase().includes(q));
   const ro = workers.filter(mos);
   $('tW').innerHTML = ro.length ? ro.map(w => `
     <tr>
       <td>${esc(w.name)}${w.phone ? `<div class="muted" style="font-size:12px">${esc(w.phone)}</div>` : ''}</td>
-      <td class="muted">${w.pin ? esc(w.pin) : '—'}</td>
+      <!--  ★ PIN KO'RSATILMAYDI. Bazada uning izi turadi, izdan raqamni
+            tiklab bo'lmaydi — shuning uchun «unutdim» degan xodimga eski
+            PIN aytilmaydi, YANGISI qo'yiladi. -->
+      <td class="muted">${w.has_pin ? 'qo\'yilgan' : '—'}</td>
       <td class="muted">${w.tg_id ? esc(w.tg_id) : '<span class="tag warn">ulanmagan</span>'}</td>
       <td>${w.roles.length ? w.roles.map(r =>
         `<span class="tag">${esc(r.name)}${r.scope_shop ? ' · ' + esc(r.scope_shop) : ''}${
@@ -124,8 +129,11 @@ function openForm(id){
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Telefon</label>
               <input id="wPhone" value="${esc(w?.phone || '')}" placeholder="+998..."></div>
+            <!--  Maydon HAR DOIM BO'SH ochiladi: eski PIN o'qilmaydi.
+                  Bo'sh qoldirilsa tegilmaydi, raqam yozilsa almashtiriladi. -->
             <div style="flex:1"><label>PIN (4-6 raqam)</label>
-              <input id="wPin" inputmode="numeric" value="${esc(w?.pin || '')}"></div>
+              <input id="wPin" inputmode="numeric" placeholder="${
+                w?.has_pin ? 'o\'zgartirish uchun yangisini yozing' : 'masalan 4417'}"></div>
           </div>
           <!-- Telegram ID ixtiyoriy: u faqat Telegram ilovasi orqali kirish
                uchun kerak, saytga PIN bilan kiriladi. Maydonga @nom yozilishi

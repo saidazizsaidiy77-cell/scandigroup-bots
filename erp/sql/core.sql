@@ -16,12 +16,24 @@ CREATE TABLE IF NOT EXISTS workers (
   id         SERIAL PRIMARY KEY,
   name       TEXT NOT NULL,
   phone      TEXT,
-  pin        TEXT UNIQUE,          -- tsex terminaliga kirish
+  pin        TEXT UNIQUE,          -- ESKI ustun: izoh pastda
   tg_id      BIGINT UNIQUE,        -- Telegram Mini App / bot
   hired_at   DATE,
   active     BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+--  ★ PIN BAZADA OCHIQ MATNDA TURMAYDI. `pin_hash` — PIN'ning izi
+--  (izoh: `erp/pin.js`): izdan PIN'ni qaytarib bo'lmaydi, shuning uchun
+--  bazani ko'rgan odam ham, zaxira faylini ochgan odam ham tsexga kira
+--  olmaydi. Eski `pin` ustuni joyida qoladi va MAXFIY KALIT qo'yilgach
+--  bir martalik ko'chirishda bo'shatiladi (`erp/migrate.js`,
+--  `migration_flags`: `pin-hash`) — kalitsiz server eskicha ishlayversin.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+--  Iz kalit bilan hisoblanadi, ya'ni bir xil PIN har doim bir xil iz
+--  beradi — shuning uchun takrorlanmaslik shu yerda tekshiriladi.
+--  Iz yo'q qatorlar ko'p bo'lishi mumkin (PIN'siz xodim), NULL to'qnashmaydi.
+CREATE UNIQUE INDEX IF NOT EXISTS workers_pin_hash_uq ON workers (pin_hash);
 
 -- --------------------------------------------------------- ROL VA HUQUQLAR
 CREATE TABLE IF NOT EXISTS permissions (

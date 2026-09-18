@@ -2753,6 +2753,59 @@ test('aylanma kapital: ustun 15-sana va oy oxiri, aktiv − passiv = sof', async
   assert.ok('wip_shops' in d, 'tsex kesimi keladi');
 });
 
+/* ============================================================================
+ *  PIN — IZ VA URINISHLAR
+ *
+ *  Singanda butun zavod tizimga kira olmay qoladi, shuning uchun bu yerda.
+ * ========================================================================== */
+test('PIN bazada ochiq matnda turmaydi va uning bilan kiriladi', async () => {
+  const yoq = H.api(base, null);
+
+  //  Migratsiya ochiq PIN'larni izga ko'chirdi.
+  const w = await H.id(
+    `SELECT pin, pin_hash FROM workers WHERE name = 'Administrator'`);
+  assert.equal(w.pin, null, 'ochiq ustun bo\'shatiladi');
+  assert.ok(w.pin_hash && w.pin_hash.startsWith('h1:'), 'izi yoziladi');
+
+  //  Iz turgani bilan kirish ishlayveradi.
+  const kir = await yoq('POST', '/api/auth/pin', { pin: '0000' });
+  assert.equal(kir.status, 200, kir.text);
+  assert.ok(kir.body.token);
+  assert.equal(kir.body.user.name, 'Administrator');
+
+  //  Ro'yxatda PIN'ning O'ZI qaytarilmaydi — faqat qo'yilgani.
+  const ro = (await admin('GET', '/api/admin/workers')).body
+    .find((r) => r.name === 'Administrator');
+  assert.ok(!('pin' in ro), 'PIN javobda yo\'q');
+  assert.equal(ro.has_pin, true);
+
+  //  Yangi PIN kartochkadan qo'yiladi va u ham izga tushadi.
+  const yangi = await admin('POST', '/api/admin/workers',
+    { name: 'Sinov PIN xodimi', pin: '9317' });
+  assert.equal(yangi.status, 200, yangi.text);
+  const w2 = await H.id(`SELECT pin, pin_hash FROM workers WHERE id = $1`, [yangi.body.id]);
+  assert.equal(w2.pin, null);
+  assert.ok(w2.pin_hash.startsWith('h1:'));
+  assert.equal((await yoq('POST', '/api/auth/pin', { pin: '9317' })).status, 200);
+
+  //  Band PIN ikkinchi xodimga berilmaydi: iz kalit bilan hisoblanadi,
+  //  ya'ni bir xil PIN bir xil iz beradi va UNIQUE uni tutadi.
+  assert.equal((await admin('POST', '/api/admin/workers',
+    { name: 'Sinov PIN ikkinchi', pin: '9317' })).status, 409);
+
+  //  Xato PIN — 401, va ko'p urinishdan keyin blok. Muvaffaqiyatli
+  //  kirish hisobni tozalaydi, shuning uchun blok sinovi OXIRIDA.
+  //  Birinchi beshtasi bepul: odam raqamni chalkashtiradi. Oltinchisi
+  //  hisobni oshiradi va blokni qo'yadi, keyingisi kutiladi.
+  for (let i = 0; i < 6; i++)
+    assert.equal((await yoq('POST', '/api/auth/pin', { pin: '0001' })).status, 401);
+  const blok = await yoq('POST', '/api/auth/pin', { pin: '0001' });
+  assert.equal(blok.status, 429, 'ko\'p xato urinishdan keyin kutiladi');
+  //  Blokda to'g'ri PIN ham qabul qilinmaydi — aks holda cheklovning
+  //  ma'nosi qolmasdi.
+  assert.equal((await yoq('POST', '/api/auth/pin', { pin: '0000' })).status, 429);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

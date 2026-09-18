@@ -6,6 +6,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { db } = require('./db');
+const pin = require('./pin');
 
 const FILES = [
   'core.sql',            // xodim, rol, huquq, sessiya, audit, bildirishnoma
@@ -41,6 +42,8 @@ async function migrate({ quiet = false } = {}) {
     await db.query(sql);
     if (!quiet) console.log('OK');
   }
+  const pins = await hashPins();
+  if (!quiet && pins) console.log(`  ${'PIN izlari'.padEnd(22)}${pins} ta ko'chirildi`);
   const { rows } = await db.query(
     `SELECT (SELECT COUNT(*) FROM shops)    AS tsexlar,
             (SELECT COUNT(*) FROM sections) AS bolimlar,
@@ -49,6 +52,27 @@ async function migrate({ quiet = false } = {}) {
             (SELECT COUNT(*) FROM customers) AS mijozlar,
             (SELECT COUNT(*) FROM production_units) AS birliklar`);
   return rows[0];
+}
+
+/*  ★ PIN'NI OCHIQ USTUNDAN IZGA KO'CHIRISH.
+ *
+ *  SQL buni qila olmaydi: iz maxfiy kalit bilan hisoblanadi va kalit
+ *  bazada emas, server sozlamasida turadi (izoh: `erp/pin.js`).
+ *
+ *  `migration_flags` ISHLATILMAYDI — bu bir martalik ko'chirish emas,
+ *  doimiy qoida: kalit keyinroq qo'yilsa o'sha kuni ko'chadi, eski
+ *  bazadan ochiq PIN bilan kelgan qator bo'lsa keyingi migratsiyada
+ *  o'zi tozalanadi. Kalit yo'q bo'lsa hech narsa qilinmaydi va sayt
+ *  eskicha ko'tariladi.
+ */
+async function hashPins() {
+  if (!pin.ready) return 0;
+  const { rows } = await db.query(`SELECT id, pin FROM workers WHERE pin IS NOT NULL`);
+  for (const w of rows)
+    await db.query(
+      `UPDATE workers SET pin_hash = COALESCE(pin_hash, $2), pin = NULL WHERE id = $1`,
+      [w.id, pin.hash(w.pin)]);
+  return rows.length;
 }
 
 module.exports = { migrate };
