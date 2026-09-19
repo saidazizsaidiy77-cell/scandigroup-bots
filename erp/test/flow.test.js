@@ -786,6 +786,77 @@ test('savdo menejeriga faqat o\'z yo\'nalishidagi mijozlar ko\'rinadi', async ()
     assert.ok(a.includes(n), n);
 });
 
+test('savdo xodimiga faqat O\'Z mijozi va O\'Z buyurtmasi ko\'rinadi', async () => {
+  //  ★ Yo'nalish doirasi bitta menejerni ajratib bermaydi: bitta
+  //  kanalda bir nechta menejer ishlaydi va ular bir-birining mijozini,
+  //  narxini va buyurtmasini ko'rib turardi. Belgi XODIMDA
+  //  (`worker_roles.scope_own`), kodda emas — ism ham, mijoz ham
+  //  hech qayerga yozilmaydi (4-qoida).
+  const { db } = require('../db');
+  for (const nom of ['Oz menejer bir', 'Oz menejer ikki']) {
+    await db.query(`INSERT INTO workers (name) VALUES ($1) ON CONFLICT DO NOTHING`, [nom]);
+    await db.query(
+      `INSERT INTO worker_roles (worker_id, role_code, scope_own)
+       SELECT id, 'sotuvchi', true FROM workers WHERE name = $1
+       ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_own = true`, [nom]);
+  }
+  const m1id = (await H.id(`SELECT id FROM workers WHERE name='Oz menejer bir'`)).id;
+  const m2id = (await H.id(`SELECT id FROM workers WHERE name='Oz menejer ikki'`)).id;
+  const m1 = H.api(base, await H.sessionFor('Oz menejer bir'));
+  const m2 = H.api(base, await H.sessionFor('Oz menejer ikki'));
+
+  assert.equal((await admin('POST', '/api/units/customers', { items: [
+    { name: 'Birinchining mijozi', manager_id: m1id },
+    { name: 'Ikkinchining mijozi', manager_id: m2id },
+    { name: 'Egasiz mijoz' },
+  ] })).status, 200);
+
+  const nomlar = async (api) =>
+    (await api('GET', '/api/units/customers')).body.customers.map((c) => c.name);
+
+  const a = await nomlar(m1);
+  assert.ok(a.includes('Birinchining mijozi'));
+  assert.ok(!a.includes('Ikkinchining mijozi'), 'boshqa menejerniki ko\'rinmaydi');
+  //  Egasi yo'q mijoz ham ko'rinmaydi: u hech kimniki emas.
+  assert.ok(!a.includes('Egasiz mijoz'));
+
+  //  Doirasi yo'q xodim (administrator) hammasini ko'radi.
+  const h = await nomlar(admin);
+  for (const n of ['Birinchining mijozi', 'Ikkinchining mijozi', 'Egasiz mijoz'])
+    assert.ok(h.includes(n), n);
+
+  //  ★ BUYURTMA HAM O'ZINIKI. Chegara SERVERDA: id qo'lda yuborilsa ham.
+  const c1 = (await H.id(`SELECT id FROM customers WHERE name='Birinchining mijozi'`)).id;
+  const c2 = (await H.id(`SELECT id FROM customers WHERE name='Ikkinchining mijozi'`)).id;
+  const z = await m1('POST', '/api/sales/orders', { customer_id: c1, items: [] });
+  assert.equal(z.status, 200, z.text);
+
+  assert.equal((await m2('GET', '/api/sales/orders/' + z.body.id)).status, 404,
+    'boshqa menejerning buyurtmasi ochilmaydi');
+  assert.equal((await m1('GET', '/api/sales/orders/' + z.body.id)).status, 200);
+  assert.equal((await admin('GET', '/api/sales/orders/' + z.body.id)).status, 200);
+
+  const roy = (await m2('GET', '/api/sales/orders')).body.rows;
+  assert.ok(!roy.some((r) => r.id === z.body.id), 'ro\'yxatda ham ko\'rinmaydi');
+
+  //  Boshqa menejerning mijoziga buyurtma yozib bo'lmaydi.
+  const yoq = await m2('POST', '/api/sales/orders', { customer_id: c1, items: [] });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /boshqa menejerning mijozi/);
+
+  //  Tahrirlash ham: boshqa menejerning mijozi id bilan ham tegilmaydi.
+  assert.equal((await m1('PATCH', '/api/units/customers/' + c2,
+    { region: 'Xorazm' })).status, 404);
+
+  //  ★ Doirasi bor xodim yozgan mijoz O'ZINIKI bo'ladi — aks holda u
+  //  mijozni kiritadi-yu, saqlangan zahoti ro'yxatdan yo'qolardi.
+  assert.equal((await m1('POST', '/api/units/customers',
+    { name: 'Menejer yozgan mijoz' })).status, 200);
+  assert.ok((await nomlar(m1)).includes('Menejer yozgan mijoz'));
+  assert.equal((await H.id(
+    `SELECT manager_id FROM customers WHERE name='Menejer yozgan mijoz'`)).manager_id, m1id);
+});
+
 test('mijozning boshlang\'ich qarzi kiritiladi va qayta yuklashda o\'chmaydi', async () => {
   const csv = [
     'Mijoz nomi;Tel raqami;Kanal;Boshlang\'ich qarz',

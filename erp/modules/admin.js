@@ -122,10 +122,10 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
-                                   scope_warehouse_id)
-         VALUES ($1,$2,$3,$4,$5)`,
+                                   scope_warehouse_id, scope_own)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
         [w.id, r.code, r.scope_shop_id || null, r.scope_channel || null,
-         r.scope_warehouse_id || null]);
+         r.scope_warehouse_id || null, r.scope_own === true]);
     }
     await saveCashGroups(client, w.id, req.body.cash_groups);
     await audit(req, { module: 'admin', action: 'create', entity: 'worker',
@@ -176,10 +176,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
       for (const r of roles) {
         await client.query(
           `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
-                                   scope_warehouse_id)
-           VALUES ($1,$2,$3,$4,$5)`,
+                                   scope_warehouse_id, scope_own)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
           [id, r.code, r.scope_shop_id || null, r.scope_channel || null,
-           r.scope_warehouse_id || null]);
+           r.scope_warehouse_id || null, r.scope_own === true]);
       }
     }
     await saveCashGroups(client, id, req.body.cash_groups);

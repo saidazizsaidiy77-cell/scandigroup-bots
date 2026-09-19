@@ -24,7 +24,7 @@ async function loadWorker(workerId) {
     db.query(
       `SELECT wr.role_code AS code, r.name, r.surface,
               wr.scope_shop_id, wr.scope_line_id, wr.scope_channel,
-              wr.scope_warehouse_id
+              wr.scope_warehouse_id, wr.scope_own
          FROM worker_roles wr JOIN roles r ON r.code = wr.role_code
         WHERE wr.worker_id = $1 ORDER BY r.sort`, [workerId]),
   ]);
@@ -38,6 +38,10 @@ async function loadWorker(workerId) {
     scope_channels: roles.rows.map((r) => r.scope_channel).filter(Boolean),
     // Vitrina sotuvchisi o'z nuqtasini ko'radi (izoh: sql/warehouse.sql)
     scope_warehouse_ids: roles.rows.map((r) => r.scope_warehouse_id).filter(Boolean),
+    //  Savdo xodimi FAQAT o'zinikini ko'radi (izoh: sql/units.sql).
+    //  Rollardan biri belgilangan bo'lsa yetarli — eng TOR doira
+    //  ishlaydi, yo'nalish doirasi bilan bir xil qoida.
+    scope_own: roles.rows.some((r) => r.scope_own),
   };
 }
 
@@ -145,4 +149,16 @@ router.post('/logout', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-module.exports = { router, authenticate, need, loadWorker, verifyTelegram };
+//  ★ O'Z MIJOZI, O'Z BUYURTMASI — CHEGARA (`worker_roles.scope_own`).
+//
+//  Belgi qo'yilgan xodimga faqat o'zi yuritadigan mijoz va o'zi yozgan
+//  buyurtma ko'rinadi; qo'yilmaganga — hammasi. Qaytadigani xodimning
+//  id si yoki `null`, ya'ni so'rovga `($n::int IS NULL OR manager_id =
+//  $n)` bo'lib qo'shiladi va bo'sh doira hech narsani cheklamaydi.
+//
+//  Funksiya SHU YERDA, uchta modulda emas: savdo, mijozlar ro'yxati va
+//  kassa uchalasi shu chegaraga tayanadi va ular bir-biridan ajralib
+//  ketsa bitta ekranda boshqa menejerning mijozi ko'rinib qolardi.
+const ownOf = (req) => (req.user?.scope_own ? req.user.id : null);
+
+module.exports = { router, authenticate, need, loadWorker, verifyTelegram, ownOf };

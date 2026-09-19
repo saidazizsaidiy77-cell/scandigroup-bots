@@ -101,7 +101,8 @@ function drawWorkers(){
       <td>${w.roles.length ? w.roles.map(r =>
         `<span class="tag">${esc(r.name)}${r.scope_shop ? ' · ' + esc(r.scope_shop) : ''}${
            r.scope_warehouse ? ' · ' + esc(r.scope_warehouse) : ''}${
-           r.scope_channel_name ? ' · ' + esc(r.scope_channel_name) : ''}</span>`
+           r.scope_channel_name ? ' · ' + esc(r.scope_channel_name) : ''}${
+           r.scope_own ? ' · o\'zinikini' : ''}</span>`
         ).join(' ') : '<span class="tag bad">rol yo\'q</span>'}</td>
       <td>${w.active ? '<span class="tag ok">faol</span>' : '<span class="tag">o\'chirilgan</span>'}</td>
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
@@ -116,6 +117,10 @@ function openForm(id){
   const scopeOf = (code) => w?.roles.find(r => r.code === code)?.scope_shop_id || '';
   const chanOf  = (code) => w?.roles.find(r => r.code === code)?.scope_channel || '';
   const whOf    = (code) => w?.roles.find(r => r.code === code)?.scope_warehouse_id || '';
+  //  Yangi xodimda belgi QO'YILGAN bo'lib ochiladi: zavod qoidasi
+  //  shunday — savdo xodimi o'zinikini ko'radi. Bosh ofis menejeri
+  //  uchun katakcha olib tashlanadi.
+  const ownOf_  = (code) => (w ? !!w.roles.find(r => r.code === code)?.scope_own : true);
 
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
@@ -206,7 +211,17 @@ function openForm(id){
                     ${(meta.warehouses || []).map(h => `<option value="${h.id}"
                       ${String(whOf(r.code)) === String(h.id) ? 'selected' : ''}
                       >${esc(h.name)}</option>`).join('')}
-                  </select>` : `
+                  </select>
+                  <!--  ★ O'Z MIJOZI, O'Z BUYURTMASI. Yo'nalish doirasi
+                        bitta menejerni ajratib bermaydi: bitta kanalda
+                        bir nechta menejer ishlaydi va ular bir-birining
+                        mijozini ko'rib turardi. Bo'sh qoldirilsa —
+                        butun savdo (bosh ofis, rahbariyat). -->
+                  <label class="tag" style="cursor:pointer;display:inline-flex;
+                    align-items:center;gap:6px;padding:6px 10px;white-space:nowrap">
+                    <input type="checkbox" class="own" data-role="${r.code}"
+                      style="width:auto" ${ownOf_(r.code) ? 'checked' : ''}>
+                    Faqat o'zinikini</label>` : `
                   <select class="scope" data-role="${r.code}" style="width:190px">
                     <option value="">Barcha tsex</option>
                     ${meta.shops.map(s => `<option value="${s.id}"
@@ -234,6 +249,7 @@ async function save(id){
     scope_shop_id: document.querySelector(`.scope[data-role="${cb.value}"]`)?.value || null,
     scope_channel: document.querySelector(`.chan[data-role="${cb.value}"]`)?.value || null,
     scope_warehouse_id: document.querySelector(`.wh[data-role="${cb.value}"]`)?.value || null,
+    scope_own: !!document.querySelector(`.own[data-role="${cb.value}"]`)?.checked,
   }));
   const body = {
     name:  $('wName').value.trim(),

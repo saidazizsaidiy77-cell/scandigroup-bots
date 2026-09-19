@@ -101,6 +101,33 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS opening_debt_on DATE;
 --  Bu FILTR emas, CHEGARA: so'rovga serverda qo'shiladi (scopeChannels).
 ALTER TABLE worker_roles ADD COLUMN IF NOT EXISTS scope_channel TEXT
   REFERENCES customer_channels(code);
+
+--  ★ O'Z MIJOZI, O'Z BUYURTMASI (zavod qarori, 2026-09).
+--
+--  Yo'nalish doirasi bitta menejerni ajratib bermaydi: bitta kanalda
+--  bir nechta menejer ishlaydi va ular bir-birining mijozini, narxini
+--  va buyurtmasini ko'rib turardi. Belgi qo'yilgan xodimga endi FAQAT
+--  o'zi yuritadigan mijoz (`customers.manager_id`) va o'zi yozgan
+--  buyurtma (`orders.manager_id`) ko'rinadi.
+--
+--  Bo'sh qoldirilsa — hammasi: bosh ofis, rahbariyat va administrator
+--  butun savdoni ko'radi. Yo'nalish doirasi bilan bir xil idiom, faqat
+--  bu yerda «kim» deyiladi, «qaysi kanal» emas.
+--
+--  Bu FILTR emas, CHEGARA: so'rovga serverda qo'shiladi (`ownOf`).
+--  Ikkalasi birga ishlaydi — kanal ham, egasi ham.
+ALTER TABLE worker_roles ADD COLUMN IF NOT EXISTS scope_own BOOLEAN NOT NULL DEFAULT false;
+
+--  Bir martalik: zavodda savdo xodimi o'zinikini ko'radi degan qoida
+--  bugundan kuchga kirdi. Keyin saytdan olib tashlansa qaytib
+--  qo'yilmaydi (izoh: CLAUDE.md, «Bir martalik ma'lumot ko'chirishlar»).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'savdo-oz-mijozi') THEN
+    UPDATE worker_roles SET scope_own = true WHERE role_code = 'sotuvchi';
+    INSERT INTO migration_flags (key) VALUES ('savdo-oz-mijozi');
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_customers_country ON customers(country);
 CREATE INDEX IF NOT EXISTS idx_customers_region  ON customers(region);
 CREATE INDEX IF NOT EXISTS idx_customers_channel ON customers(channel);

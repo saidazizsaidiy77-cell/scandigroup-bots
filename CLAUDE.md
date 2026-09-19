@@ -1195,7 +1195,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `kirituvchi` | `production.entry`, `production.request` | **faqat «Konver qo'shish»**: ishlab chiqarishga nima kirishini yozadi, konverni rahbariyat ochadi. Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
-| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor |
+| `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
 | `admin` | barchasi | hammasi |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
@@ -1234,6 +1234,37 @@ biriktirilsa (B2B, EXPORT...), u faqat o'sha kanaldagi mijozlarni ko'radi.
 Bo'sh = hamma kanal. Tsex doirasi bilan bir xil: filtr emas, **chegara**
 (`channelsOf(req)`). Xodimlar sahifasida savdo roli tanlanganda tsex
 o'rniga yo'nalish so'raladi.
+
+**★ O'Z MIJOZI, O'Z BUYURTMASI** — `worker_roles.scope_own` (zavod
+qarori, 2026-09). Yo'nalish doirasi bitta menejerni ajratib bermaydi:
+bitta kanalda bir nechta menejer ishlaydi va ular bir-birining mijozini,
+narxini va buyurtmasini ko'rib turardi. Belgi qo'yilgan xodimga endi
+FAQAT o'zi yuritadigan mijoz (`customers.manager_id`) va o'zi yozgan
+buyurtma (`orders.manager_id`) ko'rinadi.
+
+Chegara BITTA joyda — `ownOf(req)` (`erp/auth.js`), uni savdo, mijozlar
+va kassa uchalasi shundan oladi: ular bir-biridan ajralib ketsa bitta
+ekranda boshqa menejerning mijozi ko'rinib qolardi. Qamrovi:
+
+  · mijozlar ro'yxati, kartochkasi va tahriri;
+  · buyurtma ro'yxati, ochilishi, tahriri, bron va jo'natish;
+  · yuk xati (ombor mudirida doira yo'q — unga ochiq qolaveradi);
+  · qarzdorlik, dalolatnoma va kirim orderi;
+  · kassadagi mijoz ro'yxati va to'lov yozish.
+
+**Egasi yo'q mijoz ko'rinmaydi**: u hech kimniki emas. Shuning uchun
+doirasi bor xodim YOZGAN mijoz o'sha zahoti O'ZINIKI bo'ladi — aks
+holda u mijozni kiritadi-yu, saqlangan zahoti ro'yxatdan yo'qolardi.
+Menejerni boshqa odamga ko'chirish doirasi yo'q xodimning ishi.
+
+**Mijozlar kesimi (`/customers/stats`) doirasi bor xodimga berilmaydi**:
+«qaysi kanalda qancha sotildi» degan javob boshqa menejerlarning
+raqamini ham ichiga olardi. Kartochkalar chizilmaydi, sahifa ishlayveradi.
+
+Bo'sh qoldirilsa — butun savdo: bosh ofis, rahbariyat va administrator.
+Xodimlar sahifasida savdo roli yonida **«Faqat o'zinikini»** katakchasi,
+yangi xodimda BELGILANGAN bo'lib ochiladi. Tekshiruv serverda: ro'yxatni
+chetlab, id ni qo'lda yuborsa ham qabul qilinmaydi.
 
 **Tsex doirasi** — `worker_roles.scope_shop_id`. Doira bo'sh = hamma tsex.
 Bu filtr emas, **chegara**: `scopeOf(req)` orqali so'rovga qo'shiladi,

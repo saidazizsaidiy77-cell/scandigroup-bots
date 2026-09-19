@@ -18,7 +18,7 @@
 // ============================================================================
 const express = require('express');
 const { db, wrap, audit } = require('../db');
-const { need } = require('../auth');
+const { need, ownOf } = require('../auth');
 
 const router = express.Router();
 const READ  = ['cash.view', 'cash.manage'];
@@ -62,9 +62,12 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
     db.query(`SELECT id, group_code, name, needs_supplier FROM expense_items
                WHERE active ORDER BY sort, name`),
+    //  O'z mijozi chegarasi savdo bilan BIR XIL (izoh: erp/auth.js):
+    //  menejer boshqa menejerning mijozidan to'lov yozib qo'ymasin.
     db.query(`SELECT id, name, region FROM customers
                WHERE active AND ($1::text[] IS NULL OR channel = ANY($1))
-               ORDER BY name`, [chans]),
+                 AND ($2::int IS NULL OR manager_id = $2)
+               ORDER BY name`, [chans, ownOf(req)]),
     //  Ta'minotchi ro'yxati HAMMAGA: podotchyot olgan xodim ham
     //  ta'minotchiga to'lov qiladi (ombor mudiri bozorda naqd
     //  to'laydi) va uchinchi bosqichda uni tanlashi kerak. Ilgari
@@ -240,6 +243,14 @@ async function assertSide(client, kind, id, req) {
       const ok = await client.query(
         `SELECT 1 FROM customers WHERE id = $1 AND channel = ANY($2)`, [id, chans]);
       if (!ok.rowCount) throw new Error('Bu mijoz sizning yo\'nalishingizda emas');
+    }
+    //  Tekshiruv SERVERDA: ro'yxatni chetlab, id ni qo'lda yuborsa ham
+    //  boshqa menejerning mijoziga to'lov yozilmaydi.
+    const own = ownOf(req);
+    if (own) {
+      const ok = await client.query(
+        `SELECT 1 FROM customers WHERE id = $1 AND manager_id = $2`, [id, own]);
+      if (!ok.rowCount) throw new Error('Bu mijoz boshqa menejerniki');
     }
   }
 }

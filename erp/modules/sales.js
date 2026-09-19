@@ -15,7 +15,7 @@
 // ============================================================================
 const express = require('express');
 const { db, wrap, audit } = require('../db');
-const { need } = require('../auth');
+const { need, ownOf } = require('../auth');
 const { clonePart, refreshStock } = require('./units');
 
 const router = express.Router();
@@ -26,6 +26,15 @@ const channelsOf = (req) => {
   const c = req.user?.scope_channels || [];
   return c.length ? c : null;
 };
+
+//  ★ O'Z BUYURTMASI — CHEGARA (`ownOf`, izoh: erp/auth.js). Tranzaksiya
+//  ichidagi yo'llarda buyurtma qatori allaqachon o'qilgan, shuning
+//  uchun ikkinchi so'rov yozilmaydi — tekshiruv shu yerda.
+function assertOwn(req, o) {
+  const own = ownOf(req);
+  if (own && o.manager_id !== own)
+    throw new Error('Bu buyurtma boshqa menejerniki');
+}
 
 //  Zakaz raqami qo'lda ham qo'yiladi: zavod o'z daftarida raqam yuritadi
 //  va nakladnoyda o'sha raqam turishi kerak. Bo'sh qoldirilsa tizim
@@ -67,11 +76,14 @@ async function nextOrderNo(client) {
 // klient ro'yxatdan tanlamay, to'g'ridan-to'g'ri id yuborishi mumkin.
 async function assertCustomer(client, req, customerId) {
   const chans = channelsOf(req);
+  const own = ownOf(req);
   const { rows } = await client.query(
-    `SELECT name, channel FROM customers WHERE id = $1`, [customerId]);
+    `SELECT name, channel, manager_id FROM customers WHERE id = $1`, [customerId]);
   if (!rows[0]) throw new Error('Mijoz topilmadi');
   if (chans && !chans.includes(rows[0].channel))
     throw new Error(`«${rows[0].name}» sizning yo'nalishingizda emas`);
+  if (own && rows[0].manager_id !== own)
+    throw new Error(`«${rows[0].name}» boshqa menejerning mijozi`);
 }
 
 //  Buyurtma yozish uchun mahsulot ro'yxati. Katalogdan alohida turadi:
@@ -230,11 +242,13 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($4::int  IS NULL OR manager_id = $4)
         AND ($5::text IS NULL OR order_no ILIKE '%' || $5 || '%'
              OR customer_name ILIKE '%' || $5 || '%')
+        --  O'z buyurtmasi chegarasi: filtr EMAS, klient o'chira olmaydi.
+        AND ($7::int IS NULL OR manager_id = $7)
       ORDER BY ordered_on DESC, id DESC
       LIMIT 500`,
     [chans, kutmoqda ? null : (req.query.status || null),
      req.query.customer_id || null,
-     req.query.manager_id || null, req.query.q || null, kutmoqda]);
+     req.query.manager_id || null, req.query.q || null, kutmoqda, ownOf(req)]);
 
   //  ★ HAR BUYURTMA QAYERDA — ro'yxatning o'zida.
   //
@@ -277,8 +291,9 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const o = (await db.query(
     `SELECT * FROM v_sales_orders
-      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))`,
-    [req.params.id, chans])).rows[0];
+      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
+        AND ($3::int IS NULL OR manager_id = $3)`,
+    [req.params.id, chans, ownOf(req)])).rows[0];
   if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
   const items = (await db.query(
@@ -449,6 +464,7 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
     const chans = channelsOf(req);
     if (chans && !chans.includes(cur.channel))
       throw new Error('Bu buyurtma sizning yo\'nalishingizda emas');
+    assertOwn(req, cur);
     if (customer_id) await assertCustomer(client, req, customer_id);
 
     //  Omborga yuborilgan buyurtma tahrirlanmaydi: mudir ko'rib turgan
@@ -566,8 +582,9 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        JOIN orders o    ON o.id = i.order_id
        JOIN customers c ON c.id = o.customer_id
       WHERE i.id = $1 AND i.order_id = $2
-        AND ($3::text[] IS NULL OR c.channel = ANY($3))`,
-    [req.query.item_id, req.params.id, chans])).rows[0];
+        AND ($3::text[] IS NULL OR c.channel = ANY($3))
+        AND ($4::int IS NULL OR o.manager_id = $4)`,
+    [req.query.item_id, req.params.id, chans, ownOf(req)])).rows[0];
   if (!it) return res.status(404).json({ error: 'Qator topilmadi' });
 
   //  Rang va mato mos kelgani tepada turadi, lekin mos kelmagani ham
@@ -627,6 +644,7 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
     const chans = channelsOf(req);
     if (chans && !chans.includes(o.channel))
       throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
+    assertOwn(req, o);
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
     if (o.status === 'shipped') throw new Error("Buyurtma jo'natilgan");
 
@@ -729,6 +747,7 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
     const chans = channelsOf(req);
     if (chans && !chans.includes(o.channel))
       throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
+    assertOwn(req, o);
 
     const r = (await client.query(
       `SELECT r.id, r.unit_id, r.qty, u.conveyor_no
@@ -795,8 +814,10 @@ router.get('/waybill/:id', need(...READ, ...SHIP), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const o = (await db.query(
     `SELECT * FROM v_sales_orders
-      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))`,
-    [req.params.id, chans])).rows[0];
+      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
+        --  Ombor mudirida doira yo'q, ya'ni hujjat unga ochiq qolaveradi.
+        AND ($3::int IS NULL OR manager_id = $3)`,
+    [req.params.id, chans, ownOf(req)])).rows[0];
   if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
   const items = (await db.query(
@@ -825,6 +846,7 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     const chans = channelsOf(req);
     if (chans && !chans.includes(o.channel))
       throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
+    assertOwn(req, o);
     if (o.status === 'shipped') throw new Error('Allaqachon jo\'natilgan');
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
     if (o.status === 'to_ship') throw new Error('Allaqachon omborga yuborilgan');
@@ -859,8 +881,9 @@ router.patch('/orders/:id/payment', need(...WRITE), wrap(async (req, res) => {
        FROM customers c
       WHERE o.id = $1 AND c.id = o.customer_id
         AND ($3::text[] IS NULL OR c.channel = ANY($3))
+        AND ($4::int IS NULL OR o.manager_id = $4)
       RETURNING o.order_no, o.payment_on`,
-    [req.params.id, req.body.payment_on || null, channelsOf(req)]);
+    [req.params.id, req.body.payment_on || null, channelsOf(req), ownOf(req)]);
   if (!rows[0]) return res.status(404).json({ error: 'Buyurtma topilmadi' });
   await audit(req, { module: 'sales', action: 'payment-date', entity: 'order',
                      entity_id: Number(req.params.id),
@@ -876,7 +899,8 @@ router.post('/orders/:id/unsend', need(...WRITE), wrap(async (req, res) => {
        FROM customers c
       WHERE o.id = $1 AND c.id = o.customer_id AND o.status = 'to_ship'
         AND ($2::text[] IS NULL OR c.channel = ANY($2))
-      RETURNING o.order_no`, [req.params.id, channelsOf(req)]);
+        AND ($3::int IS NULL OR o.manager_id = $3)
+      RETURNING o.order_no`, [req.params.id, channelsOf(req), ownOf(req)]);
   if (!rows[0]) return res.status(400).json({ error: 'Buyurtma omborda emas' });
   await audit(req, { module: 'sales', action: 'send-undo', entity: 'order',
                      entity_id: Number(req.params.id),
@@ -1042,6 +1066,7 @@ const DEBT_SQL = `
     LEFT JOIN v_customer_ledger l  ON l.customer_id = c.id
    WHERE c.active
      AND ($3::text[] IS NULL OR c.channel = ANY($3))
+     AND ($5::int IS NULL OR c.manager_id = $5)
      AND ($4::text IS NULL OR c.name ILIKE '%' || $4 || '%'
           OR c.region ILIKE '%' || $4 || '%' OR c.phone ILIKE '%' || $4 || '%')
    GROUP BY c.id, c.name, c.region, c.phone, c.channel, ch.name, m.name
@@ -1075,7 +1100,7 @@ const yon = (v) => {
 router.get('/debts', need(...READ), wrap(async (req, res) => {
   const { from, to } = period(req.query);
   const { rows } = (await db.query(DEBT_SQL,
-    [from, to, channelsOf(req), req.query.q || null]));
+    [from, to, channelsOf(req), req.query.q || null, ownOf(req)]));
   for (const r of rows) {
     const o = yon(r.opening), c = yon(r.closing);
     r.opening_debit = o.debit; r.opening_credit = o.credit;
@@ -1098,8 +1123,9 @@ router.get('/debts/:id', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const c = (await db.query(
     `SELECT id, name FROM customers
-      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))`,
-    [req.params.id, chans])).rows[0];
+      WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
+        AND ($3::int IS NULL OR manager_id = $3)`,
+    [req.params.id, chans, ownOf(req)])).rows[0];
   if (!c) return res.status(404).json({ error: 'Mijoz topilmadi' });
 
   const opening = Number((await db.query(
@@ -1148,8 +1174,9 @@ router.get('/payment/:id', need(...READ), wrap(async (req, res) => {
        LEFT JOIN cash_accounts a ON a.id = o.to_id AND o.to_kind = 'account'
        LEFT JOIN workers k     ON k.id = o.created_by
        LEFT JOIN orders ord    ON ord.id = o.order_id
-      WHERE o.id = $1 AND ($2::text[] IS NULL OR c.channel = ANY($2))`,
-    [req.params.id, chans])).rows[0];
+      WHERE o.id = $1 AND ($2::text[] IS NULL OR c.channel = ANY($2))
+        AND ($3::int IS NULL OR c.manager_id = $3)`,
+    [req.params.id, chans, ownOf(req)])).rows[0];
   if (!o) return res.status(404).json({ error: 'Hujjat topilmadi' });
   res.json({ op: o });
 }));

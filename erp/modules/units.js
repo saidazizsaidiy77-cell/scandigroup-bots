@@ -9,7 +9,7 @@
 // ============================================================================
 const express = require('express');
 const { db, wrap, audit, today } = require('../db');
-const { need } = require('../auth');
+const { need, ownOf } = require('../auth');
 const { resolveShift } = require('./shift');
 
 const router = express.Router();
@@ -28,10 +28,15 @@ const trim = (v) => {
 // ───────────────────────────────────────────────────────────────── MIJOZLAR
 router.get('/customers', need('production.view', 'sales.view'), wrap(async (req, res) => {
   const chans = channelsOf(req);
+  //  ★ O'Z MIJOZI — CHEGARA (izoh: erp/auth.js, `ownOf`). Yo'nalish
+  //  doirasi bitta menejerni ajratib bermaydi: bitta kanalda bir nechta
+  //  menejer ishlaydi va ular bir-birining mijozini ko'rib turardi.
+  const own = ownOf(req);
   const [customers, channels, managers] = await Promise.all([
     db.query(`SELECT * FROM v_customer_sales
-               WHERE $1::text[] IS NULL OR channel = ANY($1)
-               ORDER BY name`, [chans]),
+               WHERE ($1::text[] IS NULL OR channel = ANY($1))
+                 AND ($2::int IS NULL OR manager_id = $2)
+               ORDER BY name`, [chans, own]),
     db.query(`SELECT * FROM customer_channels ORDER BY sort`),
     // Savdo menejeri sifatida biriktirish mumkin bo'lgan xodimlar:
     // savdo roli borlar birinchi turadi
@@ -44,7 +49,13 @@ router.get('/customers', need('production.view', 'sales.view'), wrap(async (req,
   res.json({ customers: customers.rows, channels: channels.rows, managers: managers.rows });
 }));
 
-router.get('/customers/stats', need('production.view', 'sales.view'), wrap(async (_req, res) => {
+router.get('/customers/stats', need('production.view', 'sales.view'), wrap(async (req, res) => {
+  //  Kesimlar butun zavod bo'yicha yig'iladi — doirasi bor xodimga
+  //  ular berilmaydi: «qaysi kanalda qancha sotildi» degan javob
+  //  boshqa menejerlarning raqamini ham ichiga olardi. Bo'sh ro'yxat
+  //  sahifani buzmaydi: kartochkalar chizilmaydi, xolos.
+  if (ownOf(req)) return res.json({ byChannel: [], byCountry: [],
+                                    byRegion: [], byManager: [] });
   const [byChannel, byCountry, byRegion, byManager] = await Promise.all([
     db.query(`SELECT * FROM v_channel_sales ORDER BY amount DESC, customers DESC`),
     db.query(`SELECT * FROM v_country_sales ORDER BY amount DESC, customers DESC`),
@@ -65,6 +76,11 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
     for (const it of items) {
       const name = String(it.name || '').trim();
       if (!name) throw new Error('Mijoz nomi majburiy');
+      //  ★ DOIRASI BOR XODIM YOZGAN MIJOZ O'ZINIKI bo'ladi. Aks holda
+      //  u mijozni kiritadi-yu, saqlangan zahoti ro'yxatdan yo'qolardi:
+      //  egasi yo'q mijoz hech kimniki emas. Menejerni boshqa odamga
+      //  ko'chirish esa doirasi yo'q xodimning ishi.
+      if (ownOf(req)) it.manager_id = req.user.id;
       // Takror kiritilsa yangi qator yaratmaydi — bo'sh maydonlarni to'ldiradi
       const { rows } = await client.query(
         `INSERT INTO customers (name, phone, country, region, channel, manager_id,
@@ -115,13 +131,17 @@ router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
        -- maydon yuborilgan bo'lsa nima yuborilgan bo'lsa shu yoziladi.
        opening_debt    = CASE WHEN $10::boolean THEN $11::numeric ELSE opening_debt END,
        opening_debt_on = CASE WHEN $10::boolean THEN $12::date    ELSE opening_debt_on END
-     WHERE id = $1 RETURNING id`,
+     WHERE id = $1
+       --  Chegara SHU YERDA ham: doirasi bor xodim boshqa menejerning
+       --  mijozini id bilan yuborib tahrirlay olmaydi.
+       AND ($13::int IS NULL OR manager_id = $13)
+     RETURNING id`,
     [req.params.id, name || null, phone || null, country || null, region || null,
      channel || null, manager_id || null, note || null,
      typeof active === 'boolean' ? active : null,
      opening_debt !== undefined,
      opening_debt === '' || opening_debt == null ? null : Number(opening_debt),
-     opening_debt_on || null]);
+     opening_debt_on || null, ownOf(req)]);
   if (!rows[0]) return res.status(404).json({ error: 'Mijoz topilmadi' });
   res.json({ ok: true });
 }));
