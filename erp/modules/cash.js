@@ -296,6 +296,15 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     if (to_kind !== 'expense' && !to_id) throw new Error('«Qayerga» tanlanmagan');
     if (from_kind === to_kind && from_id === to_id)
       throw new Error('Bir joyning o\'ziga ko\'chirib bo\'lmaydi');
+    //  ★ QO'LDAN QO'LGA PUL O'TMAYDI (zavod qarori). Pul kassa orqali
+    //  yuradi: xodim avval kassirga topshiradi, kassir ikkinchisiga
+    //  beradi — shunda har ikkala harakatning hujjati bo'ladi va
+    //  qoldiq kimning qo'lida turganini aniq aytadi.
+    //
+    //  Tekshiruv SERVERDA: «Harajat yozish» oynasida bu yo'l umuman
+    //  ko'rsatilmaydi, lekin tugmani yashirish himoya emas.
+    if (from_kind === 'worker' && to_kind === 'worker')
+      throw new Error('Qo\'ldan qo\'lga pul o\'tmaydi — avval kassaga topshiriladi');
 
     const currency = b.currency === 'USD' ? 'USD' : 'UZS';
     const amount = Number(b.amount);

@@ -48,20 +48,25 @@ function outGroups() {
   //  Uchinchi bosqich (qaysi ta'minotchi) o'zgarmadi: u moddaning
   //  belgisidan chiqadi (`needs_supplier`, izoh: sql/cash.sql).
   //
-  //  Xodim esa qoladi: uning to'lovi harajat emas — korxonaning puli
-  //  bir joydan ikkinchisiga ko'chadi va hech qanday moddasi yo'q.
+  //  ★ «HARAJAT YOZISH» OYNASIDA XODIM YO'Q — KIM YOZAYOTGANIDAN
+  //  QAT'I NAZAR. Bu oyna qo'ldagi pulni HARAJATGA aylantiradi, uning
+  //  ikkinchi tomoni har doim harajat moddasi. Xodimga pul berish esa
+  //  harajat emas: korxonaning puli bir qo'ldan ikkinchisiga ko'chadi
+  //  va uning moddasi yo'q.
+  //
+  //  Ro'yxatda turgani mantiqsiz edi — xodimning qo'lidagi puldan
+  //  boshqa xodimga, ustiga O'ZIGA ham «podotchyot berish» taklif
+  //  qilinardi. Pul kassa orqali yuradi: berish ham, qabul qilish ham
+  //  KASSANING oynasida, chunki u yerda ikkinchi tomoni baribir kassa.
+  const sarf = form === 'spend';
+  //  Cheklov esa faqat XODIMNING O'ZI yozganida: kassir boshqa
+  //  xodimning sahifasida chekni qo'lida ushlab turibdi va uni yozib
+  //  qo'yishi kerak.
+  const ozi = sarf && isMe();
+  const ruxsat = (refs.my && refs.my.groups) || [];
   //  Ro'yxati bo'sh bo'lsa ham turadi: ilgari qator umuman chiqmasdi
   //  va kassir «xodimga pul berish yo'q ekan» deb o'ylardi.
-  //  Xodim o'z sarfini yozayotgan bo'lsa ro'yxatda faqat HARAJAT
-  //  guruhlari, ustiga unga ochilganlari: ta'minotchiga to'lov ham,
-  //  boshqa xodimga pul berish ham uning ishi emas.
-  //  O'Z sahifasida ro'yxat unga ochilgan guruhlar bilan qisqaradi.
-  //  Kassir BOSHQA xodimning sahifasida yozayotgan bo'lsa esa hammasi
-  //  turadi: u hujjatni qo'lida ushlab turibdi va uni yozib qo'yishi
-  //  kerak — cheklov xodimning O'ZI yozganida ma'noga ega.
-  const ozi = form === 'spend' && isMe();
-  const ruxsat = (refs.my && refs.my.groups) || [];
-  const g = ozi ? [] : [['worker', "Xodim qo'liga pul (podotchyot)"]];
+  const g = sarf ? [] : [['worker', "Xodim qo'liga pul (podotchyot)"]];
   (refs.groups || []).forEach(x => {
     if (ozi && ruxsat.length && !ruxsat.includes(x.code)) return;
     if ((refs.items || []).some(i => i.group_code === x.code))

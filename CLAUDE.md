@@ -1026,6 +1026,18 @@ guruh ichidagisi harajat MODDASINI ham yozadi, ya'ni to'lov
 foyda-zararda o'z qatorida qoladi — yuqoridagi yorliq esa moddasiz
 o'tib ketardi va hisobotdan yo'qolardi.
 
+**★ «HARAJAT YOZISH» OYNASIDA XODIM YO'Q** — kim yozayotganidan qat'i
+nazar. Bu oyna qo'ldagi pulni HARAJATGA aylantiradi va uning ikkinchi
+tomoni har doim harajat moddasi. Xodimga pul berish esa harajat emas:
+korxonaning puli bir qo'ldan ikkinchisiga ko'chadi va uning moddasi
+yo'q. Ro'yxatda turgani mantiqsiz edi — xodimning qo'lidagi puldan
+boshqa xodimga, ustiga O'ZIGA ham «podotchyot berish» taklif qilinardi.
+
+**Qo'ldan qo'lga pul O'TMAYDI** (`worker → worker`, tekshiruv serverda):
+xodim avval kassirga topshiradi, kassir ikkinchisiga beradi — shunda
+har ikkala harakatning hujjati bo'ladi va qoldiq kimning qo'lida
+turganini aniq aytadi. Ro'yxatdan olib tashlash himoya emas.
+
 **★ TA'MINOTCHIGA TO'LOVDA UCHINCHI BOSQICH.** «Ta'minotchilarga
 to'lov» moddasi tanlansa QAYSI ta'minotchi ekani so'raladi: pul ma'lum
 bir odamga ketadi va uning qarzidan ayrilishi kerak, modda esa

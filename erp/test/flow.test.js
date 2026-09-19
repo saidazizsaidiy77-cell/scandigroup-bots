@@ -2546,6 +2546,33 @@ test('tsex boshlig\'i ham qo\'lidagi pulni sarflaydi', async () => {
   assert.equal((await usta('PATCH', '/api/cash/ops/1')).status, 403);
 });
 
+test('qo\'ldan qo\'lga pul o\'tmaydi \u2014 kassa orqali yuradi', async () => {
+  //  ★ «Harajat yozish» oynasida xodimga pul berish TURMAYDI: bu oyna
+  //  qo'ldagi pulni HARAJATGA aylantiradi, uning ikkinchi tomoni har
+  //  doim harajat moddasi. Xodimga pul berish esa harajat emas —
+  //  korxonaning puli bir qo'ldan ikkinchisiga ko'chadi.
+  //
+  //  Tekshiruv SERVERDA: ro'yxatdan olib tashlash himoya emas.
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  for (const nom of ['Sinov qo\'l bir', 'Sinov qo\'l ikki'])
+    await db.query(`INSERT INTO workers (name) SELECT $1
+                     WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name = $1)`, [nom]);
+  const a = (await H.id(`SELECT id FROM workers WHERE name='Sinov qo''l bir'`)).id;
+  const b = (await H.id(`SELECT id FROM workers WHERE name='Sinov qo''l ikki'`)).id;
+
+  const yoq = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'worker', from_id: a, to_kind: 'worker', to_id: b,
+    currency: 'USD', amount: 50 });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /Qo'ldan qo'lga/);
+
+  //  O'ZIGA ham: bu qator oynada eng mantiqsiz ko'rinardi.
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'worker', from_id: a, to_kind: 'worker', to_id: a,
+    currency: 'USD', amount: 50 })).status, 400);
+});
+
 test('qo\'lida pul turgan odam belgisisiz ham hisob beradi', async () => {
   //  ★ Belgi («Qo'liga pul beriladi») KELAJAK haqida: kassadan bu
   //  odamga pul berish mumkinmi. Qo'lida ALLAQACHON turgan pulga esa
