@@ -132,6 +132,15 @@ function draw() {
       <th class="num">Jami</th></tr></thead>
     <tbody>
       ${qator('<b>Tushum</b> — mahsulot sotuvi', inc)}
+      <!--  ★ AVVAL JAMI, KEYIN TAFSILOTI — pul oqimi bilan bir xil.
+            Direktorning savoli «qancha harajat bo'ldi», keyin esa
+            «nimaga». Ilgari guruhlar yuqorida turib, «Jami harajat»
+            ularning ostida qolardi: ko'z o'nta qatorni o'qib chiqib,
+            javobni eng oxirida topardi — guruh ochilganda esa u yanada
+            pastga surilardi. Endi jami qatorning O'ZIDA, tafsiloti esa
+            uning ostida: tushum · harajat · foyda uchtasi ham bir xil
+            o'qiladi. -->
+      ${qator('<b>Jami harajat</b>', exp)}
       ${guruh.map((g, i) => {
         const by = {};
         g.items.forEach(it => ms.forEach(m => {
@@ -144,7 +153,6 @@ function draw() {
               qator(`<span style="padding-left:22px" class="muted">${esc(it.name)}</span>`,
                     it.by)).join('') : '');
       }).join('')}
-      ${qator('<b>Jami harajat</b>', exp)}
       ${qator('<b>FOYDA</b>', foyda)}
     </tbody></table></div>
     <p class="muted" style="font-size:12px;margin-top:12px">

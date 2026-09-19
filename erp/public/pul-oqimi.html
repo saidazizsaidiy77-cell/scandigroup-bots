@@ -137,6 +137,14 @@ function draw() {
       <th class="num">Jami</th></tr></thead>
     <tbody>
       ${qator('<b>KIRIM</b> — mijozlardan', kirim, '')}
+      <!--  ★ AVVAL JAMI, KEYIN TAFSILOTI. Direktorning savoli «qancha
+            chiqdi», keyin esa «nimaga». Ilgari harajat guruhlari
+            yuqorida turib, «CHIQIM — jami» ularning ostida qolardi:
+            ko'z uchta-to'rtta qatorni o'qib chiqib, javobni eng
+            oxirida topardi — guruh ochilganda esa u yanada pastga
+            surilardi. Endi jami qatorning O'ZIDA, tafsiloti esa uning
+            ostida — kirim/chiqim/farq uchtasi ham bir xil o'qiladi. -->
+      ${qator('<b>CHIQIM</b> — jami', chiqim, '')}
       ${qator("Ta'minotchilarga to'lov", tamin)}
       ${guruh.map(g => {
         const by = {};
@@ -150,7 +158,6 @@ function draw() {
               qator(`<span style="padding-left:22px" class="muted">${esc(it.name)}</span>`,
                     it.by)).join('') : '');
       }).join('')}
-      ${qator('<b>CHIQIM</b> — jami', chiqim, '')}
       ${qator('<b>FARQ</b>', farq, '')}
     </tbody></table></div>
     <p class="muted" style="font-size:12px;margin-top:12px">
