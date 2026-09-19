@@ -1364,7 +1364,19 @@ Raqamning o'zi yolg'on emas — tushuntirilmagani yolg'on bo'lardi.
 «qaysi kanalda qancha sotildi» degan javob boshqa menejerlarning
 raqamini ham ichiga olardi. Kartochkalar chizilmaydi, sahifa ishlayveradi.
 
-Bo'sh qoldirilsa — butun savdo: bosh ofis, rahbariyat va administrator.
+Bo'sh qoldirilsa — butun savdo: **savdo bo'lim boshlig'i**, bosh ofis,
+rahbariyat va administrator. Boshliqqa alohida rol yozilmadi: u ham
+`sotuvchi`, farqi faqat doirasida — zavodda lavozim o'zgarsa bitta
+katakcha belgilanadi, kodga tegilmaydi.
+
+Uning birinchi savoli «kim nima yozdi», shuning uchun buyurtmalar
+ro'yxatida **menejer filtri** turadi (`/api/sales/orders?manager_id=`).
+Ustun ilgari ham bor edi, lekin uni SARALAB bo'lmasdi: o'ttizta
+qatordan bittasining ishini ko'z bilan terib olish kerak edi. Doirasi
+bor xodimga ro'yxat CHIZILMAYDI — u yerda baribir bitta ism turardi.
+Mijozlar sahifasida alohida filtr qo'shilmadi: u yerdagi qidiruv
+menejerning ismini ham oladi.
+
 Xodimlar sahifasida savdo roli yonida **«Faqat o'zinikini»** katakchasi,
 yangi xodimda BELGILANGAN bo'lib ochiladi. Tekshiruv serverda: ro'yxatni
 chetlab, id ni qo'lda yuborsa ham qabul qilinmaydi.

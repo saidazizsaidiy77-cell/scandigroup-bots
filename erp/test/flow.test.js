@@ -786,6 +786,36 @@ test('savdo menejeriga faqat o\'z yo\'nalishidagi mijozlar ko\'rinadi', async ()
     assert.ok(a.includes(n), n);
 });
 
+test('savdo boshlig\'i buyurtmalarni menejer bo\'yicha saralaydi', async () => {
+  //  ★ Savdo bo'lim boshlig'ining birinchi savoli — «kim nima yozdi».
+  //  Ro'yxatda menejer ustuni bor edi, lekin uni SARALAB bo'lmasdi:
+  //  o'ttizta qatordan bittasining ishini ko'z bilan terib olish kerak
+  //  edi. Server filtri bor edi, sahifa esa uni yubormasdi.
+  //
+  //  Boshliqda doira YO'Q (`scope_own` belgilanmagan) — shuning uchun
+  //  u hamma menejerning buyurtmasini ko'radi va ular orasidan
+  //  tanlaydi. Doirasi bor xodimga ro'yxat chizilmaydi ham: u yerda
+  //  baribir bitta ism turardi.
+  const mgr = (await H.id(`SELECT id FROM workers WHERE name='Sinov sotuvchi'`)).id;
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+
+  const meniki = await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, manager_id: mgr, items: [] });
+  assert.equal(meniki.status, 200, meniki.text);
+  const ozga = await admin('POST', '/api/sales/orders', { customer_id: mijoz, items: [] });
+  assert.equal(ozga.status, 200, ozga.text);
+
+  const filtr = (await admin('GET', '/api/sales/orders?manager_id=' + mgr)).body.rows;
+  assert.ok(filtr.some((r) => r.id === meniki.body.id), 'o\'sha menejerniki chiqadi');
+  assert.ok(!filtr.some((r) => r.id === ozga.body.id), 'boshqasiniki chiqmaydi');
+  assert.ok(filtr.every((r) => r.manager_id === mgr), 'hammasi bitta menejerniki');
+
+  //  Filtrsiz ikkalasi ham turadi.
+  const hammasi = (await admin('GET', '/api/sales/orders')).body.rows;
+  for (const o of [meniki, ozga])
+    assert.ok(hammasi.some((r) => r.id === o.body.id));
+});
+
 test('savdo xodimiga faqat O\'Z mijozi va O\'Z buyurtmasi ko\'rinadi', async () => {
   //  ★ Yo'nalish doirasi bitta menejerni ajratib bermaydi: bitta
   //  kanalda bir nechta menejer ishlaydi va ular bir-birining mijozini,
