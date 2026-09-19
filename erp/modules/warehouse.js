@@ -394,4 +394,272 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+
+// ══════════════════════════════════════════ VITRINADAN QAYTARISH
+//
+//  ★ UCH ODAM, UCH BOSQICH (zavod qarori 2026-09, izoh:
+//  sql/warehouse.sql). Vitrinadagi mahsulot T/M omborga bir bosishda
+//  qaytmaydi — u mashinada yuradi va yo'lda turgan holati bo'ladi:
+//
+//    1. savdo bo'lim boshlig'i  hujjatni shakllantiradi   new
+//    2. vitrinadagi xodim       tasdiqlaydi — do'kondan chiqdi  confirmed
+//    3. T/M ombor mudiri        kelganda qabul qiladi      accepted
+//
+//  Mahsulot FAQAT uchinchi bosqichda ko'chadi: `warehouse_id` o'sha
+//  paytda T/M bo'ladi va `warehouse_moves` ga yoziladi. Ya'ni yo'ldagi
+//  mahsulot ikkala omborning qoldig'ida ham to'g'ri turadi — vitrinada
+//  hali bor, T/M da hali yo'q.
+//
+//  Shundan keyin u oddiy T/M qoldig'i: hohlagan savdo xodimi unga
+//  buyurtma yozadi, chunki savdo faqat T/M dan oladi (`CANDIDATE_WHERE`).
+const RET = ['sales.manage', 'warehouse.manage', 'production.manage'];
+
+//  Hujjat raqami: V26-0001. Konver `K`, zakaz `Z`, pul `P`, qaytarish `V`.
+//  Raqam SAQLASHDA beriladi va tranzaksiya qulfi bilan: ikki odam bir
+//  vaqtda yozsa ham takrorlanmaydi (kassa orderi bilan bir xil qoida).
+async function nextRetNo(client) {
+  const prefix = `V${String(new Date().getFullYear()).slice(-2)}-`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
+       FROM wh_returns WHERE doc_no LIKE $1`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(4, '0');
+}
+
+//  Hujjat ko'rinadimi: chiqayotgan ombor xodimning doirasida bo'lsin.
+//  Boshliqda doira yo'q — u hammasini ko'radi; vitrina sotuvchisi esa
+//  faqat o'z nuqtasinikini.
+const retVisible = (req) => {
+  const ids = req.user?.scope_warehouse_ids || [];
+  return ids.length ? ids : null;
+};
+
+router.get('/fg/returns', need(...RET, 'warehouse.view'), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM v_wh_returns
+      WHERE ($1::int[] IS NULL OR from_warehouse_id = ANY($1))
+        AND ($2::text IS NULL OR status = $2)
+      ORDER BY (status IN ('new','confirmed')) DESC, id DESC
+      LIMIT 200`, [retVisible(req), req.query.status || null]);
+  res.json({ rows });
+}));
+
+router.get('/fg/returns/:id', need(...RET, 'warehouse.view'), wrap(async (req, res) => {
+  const r = (await db.query(
+    `SELECT * FROM v_wh_returns WHERE id = $1
+       AND ($2::int[] IS NULL OR from_warehouse_id = ANY($2))`,
+    [req.params.id, retVisible(req)])).rows[0];
+  if (!r) return res.status(404).json({ error: 'Hujjat topilmadi' });
+  const items = (await db.query(
+    `SELECT i.id, i.unit_id, i.conveyor_no, i.qty,
+            p.name AS product, g.name AS product_type, g.uom,
+            u.color, u.fabric
+       FROM wh_return_items i
+       JOIN production_units u ON u.id = i.unit_id
+       JOIN products p        ON p.id = u.product_id
+       JOIN product_groups g  ON g.id = p.group_id
+      WHERE i.return_id = $1 ORDER BY i.id`, [req.params.id])).rows;
+  res.json({ doc: r, items });
+}));
+
+//  ★ YOZADIGAN ODAM — SAVDO BO'LIM BOSHLIG'I. Belgisi lavozimda emas,
+//  DOIRASIDA: vitrinasi biriktirilmagan savdo xodimi (boshliq, bosh
+//  ofis) yozadi, vitrina sotuvchisi esa yozmaydi — aks holda u o'z
+//  qoldig'ini o'zi yozib, o'zi berib yuborardi.
+router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
+  if ((req.user.scope_warehouse_ids || []).length)
+    return res.status(403).json({
+      error: 'Qaytarish hujjatini vitrinasi biriktirilmagan xodim yozadi' });
+
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: 'Qator yo\'q' });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    let whId = null;
+    const saved = [];
+    for (const it of items) {
+      const u = (await client.query(
+        `SELECT u.id, u.conveyor_no, u.qty, u.status,
+                COALESCE(u.warehouse_id, tm.id) AS at_wh, w.kind, w.code,
+                COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                           WHERE r.unit_id = u.id), 0)::int AS reserved
+           FROM production_units u
+           LEFT JOIN warehouses tm ON tm.code = 'TM'
+           LEFT JOIN warehouses w  ON w.id = COALESCE(u.warehouse_id, tm.id)
+          WHERE u.id = $1 FOR UPDATE OF u`, [it.unit_id])).rows[0];
+      if (!u) throw new Error('Konver topilmadi');
+      if (u.status !== 'fg') throw new Error(`${u.conveyor_no}: omborda emas`);
+      if (u.code === 'TM')
+        throw new Error(`${u.conveyor_no}: allaqachon T/M omborda`);
+      if (u.kind !== 'fg') throw new Error(`${u.conveyor_no}: vitrinada emas`);
+      //  Bron qo'yilgan dona qaytmaydi: u mijozniki bo'lib turibdi.
+      //  Vitrina savdoga chiqmaydi, ya'ni bu deyarli bo'lmaydi — lekin
+      //  eski bron qolgan bo'lsa jimgina ko'chib ketmasin.
+      if (u.reserved)
+        throw new Error(`${u.conveyor_no}: ${u.reserved} tasi buyurtmada`);
+
+      //  BITTA hujjat — BITTA vitrina: uni bitta odam tasdiqlaydi va
+      //  bitta mashina olib keladi. Ikki do'kondan yig'ilgan hujjatni
+      //  kim tasdiqlashi ham noma'lum bo'lib qolardi.
+      if (whId && whId !== u.at_wh)
+        throw new Error('Bitta hujjatda faqat BITTA vitrinaning mahsuloti bo\'ladi');
+      whId = u.at_wh;
+
+      const n = it.qty == null || it.qty === '' ? u.qty : Number(it.qty);
+      if (!Number.isInteger(n) || n <= 0 || n > u.qty)
+        throw new Error(`${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
+      saved.push({ unit_id: u.id, conveyor_no: u.conveyor_no, qty: n });
+    }
+
+    const doc = (await client.query(
+      `INSERT INTO wh_returns (doc_no, from_warehouse_id, note, created_by)
+       VALUES ($1,$2,$3,$4) RETURNING id, doc_no`,
+      [await nextRetNo(client), whId, req.body.note || null, req.user.id])).rows[0];
+    for (const x of saved)
+      await client.query(
+        `INSERT INTO wh_return_items (return_id, unit_id, conveyor_no, qty)
+         VALUES ($1,$2,$3,$4)`, [doc.id, x.unit_id, x.conveyor_no, x.qty]);
+
+    await audit(req, { module: 'warehouse', action: 'return-new', entity: 'wh_returns',
+                       entity_id: doc.id,
+                       payload: { doc_no: doc.doc_no, lines: saved.length } }, client);
+    await client.query('COMMIT');
+    res.json({ id: doc.id, doc_no: doc.doc_no });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  ★ TASDIQLASH — VITRINADAGI XODIM. Ikki shart: o'sha vitrina uning
+//  doirasida bo'lsin va hujjatni O'ZI yozmagan bo'lsin. Ikkinchisi
+//  ikki odam qoidasi: doirasi yo'q boshliq hamma vitrinani ko'radi,
+//  lekin o'z hujjatini tasdiqlay olmaydi.
+router.post('/fg/returns/:id/confirm', need(...RET, 'warehouse.view'),
+  wrap(async (req, res) => {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const r = (await client.query(
+        `SELECT * FROM wh_returns WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+      if (!r) throw new Error('Hujjat topilmadi');
+      if (r.status !== 'new')
+        throw new Error('Hujjat allaqachon tasdiqlangan yoki yopilgan');
+      const ids = req.user.scope_warehouse_ids || [];
+      if (ids.length && !ids.includes(r.from_warehouse_id))
+        throw new Error('Bu vitrina sizga biriktirilmagan');
+      if (r.created_by === req.user.id)
+        throw new Error('O\'zingiz yozgan hujjatni o\'zingiz tasdiqlay olmaysiz');
+
+      await client.query(
+        `UPDATE wh_returns SET status = 'confirmed', confirmed_by = $2,
+                confirmed_on = COALESCE($3::date, CURRENT_DATE) WHERE id = $1`,
+        [r.id, req.user.id, req.body.on || null]);
+      await audit(req, { module: 'warehouse', action: 'return-confirm',
+                         entity: 'wh_returns', entity_id: r.id,
+                         payload: { doc_no: r.doc_no } }, client);
+      await client.query('COMMIT');
+      res.json({ ok: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(e.status || 400).json({ error: e.message });
+    } finally { client.release(); }
+  }));
+
+//  ★ QABUL QILISH — T/M OMBOR MUDIRI. Mahsulot FAQAT shu yerda ko'chadi:
+//  `warehouse_id` T/M bo'ladi va harakat `warehouse_moves` ga yoziladi,
+//  ya'ni ombor tarixida vitrinada chiqim, T/M da kirim bo'lib chiqadi.
+//  Konverning bir qismi qaytayotgan bo'lsa shu yerda bo'linadi.
+router.post('/fg/returns/:id/accept', need('warehouse.manage', 'production.manage'),
+  wrap(async (req, res) => {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const r = (await client.query(
+        `SELECT * FROM wh_returns WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+      if (!r) throw new Error('Hujjat topilmadi');
+      if (r.status === 'accepted') throw new Error('Allaqachon qabul qilingan');
+      if (r.status !== 'confirmed')
+        throw new Error('Vitrina hali tasdiqlamagan — mahsulot yo\'lda emas');
+
+      const tm = (await client.query(
+        `SELECT id, name FROM warehouses WHERE code = 'TM'`)).rows[0];
+      const items = (await client.query(
+        `SELECT * FROM wh_return_items WHERE return_id = $1 ORDER BY id`,
+        [r.id])).rows;
+
+      for (const it of items) {
+        const u = (await client.query(
+          `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh
+             FROM production_units u
+             LEFT JOIN warehouses tm ON tm.code = 'TM'
+            WHERE u.id = $1 FOR UPDATE OF u`, [it.unit_id])).rows[0];
+        if (!u) throw new Error(`${it.conveyor_no}: konver topilmadi`);
+        if (u.status !== 'fg')
+          throw new Error(`${it.conveyor_no}: omborda emas`);
+        if (u.at_wh !== r.from_warehouse_id)
+          throw new Error(`${it.conveyor_no}: vitrinadan allaqachon ko'chirilgan`);
+        if (it.qty > u.qty)
+          throw new Error(`${it.conveyor_no}: vitrinada ${u.qty} ta qolgan`);
+
+        const id = it.qty < u.qty
+          ? await clonePart(client, req, u, it.qty, { keepPlace: true })
+          : u.id;
+        await client.query(
+          `UPDATE production_units SET warehouse_id = $2 WHERE id = $1`, [id, tm.id]);
+        await client.query(
+          `INSERT INTO warehouse_moves (unit_id, conveyor_no, from_warehouse_id,
+                                        to_warehouse_id, qty, moved_on, note, worker_id)
+           VALUES ($1,$2,$3,$4,$5, COALESCE($6::date, CURRENT_DATE), $7,$8)`,
+          [id, it.conveyor_no, r.from_warehouse_id, tm.id, it.qty,
+           req.body.on || null, `Qaytarish ${r.doc_no}`, req.user.id]);
+      }
+
+      await client.query(
+        `UPDATE wh_returns SET status = 'accepted', accepted_by = $2,
+                accepted_on = COALESCE($3::date, CURRENT_DATE) WHERE id = $1`,
+        [r.id, req.user.id, req.body.on || null]);
+      await audit(req, { module: 'warehouse', action: 'return-accept',
+                         entity: 'wh_returns', entity_id: r.id,
+                         payload: { doc_no: r.doc_no, lines: items.length } }, client);
+      await client.query('COMMIT');
+      res.json({ ok: true, to: tm.name });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(e.status || 400).json({ error: e.message });
+    } finally { client.release(); }
+  }));
+
+//  Rad etish ham, yozgan odamning bekor qilishi ham BITTA yo'ldan,
+//  lekin holati boshqa — konver so'rovi bilan bir xil idiom
+//  (`rejected` boshqaniki, `cancelled` o'zinikidir). Sabab ikkalasida
+//  ham so'raladi: nega bo'lmaganini bilmasa, ertaga yana yozardi.
+router.post('/fg/returns/:id/reject', need(...RET, 'warehouse.view'),
+  wrap(async (req, res) => {
+    const sabab = String(req.body.note || '').trim();
+    if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+    const r = (await db.query(
+      `SELECT * FROM wh_returns WHERE id = $1`, [req.params.id])).rows[0];
+    if (!r) return res.status(404).json({ error: 'Hujjat topilmadi' });
+    if (r.status === 'accepted')
+      return res.status(400).json({ error: 'Qabul qilingan hujjat bekor qilinmaydi' });
+    if (r.status === 'rejected' || r.status === 'cancelled')
+      return res.status(400).json({ error: 'Hujjat allaqachon yopilgan' });
+
+    const ozi = r.created_by === req.user.id;
+    const ids = req.user.scope_warehouse_ids || [];
+    if (!ozi && ids.length && !ids.includes(r.from_warehouse_id))
+      return res.status(403).json({ error: 'Bu vitrina sizga biriktirilmagan' });
+
+    await db.query(
+      `UPDATE wh_returns SET status = $2, decided_by = $3, decided_at = NOW(),
+              decide_note = $4 WHERE id = $1`,
+      [r.id, ozi ? 'cancelled' : 'rejected', req.user.id, sabab]);
+    await audit(req, { module: 'warehouse', action: ozi ? 'return-cancel' : 'return-reject',
+                       entity: 'wh_returns', entity_id: r.id,
+                       payload: { doc_no: r.doc_no, note: sabab } });
+    res.json({ ok: true });
+  }));
+
 module.exports = router;

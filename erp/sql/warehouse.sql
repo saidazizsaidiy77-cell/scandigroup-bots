@@ -353,3 +353,88 @@ JOIN products p         ON p.id = u.product_id
 JOIN product_groups g   ON g.id = p.group_id
 JOIN warehouses wf      ON wf.id = m.from_warehouse_id
 LEFT JOIN workers mw2   ON mw2.id = m.worker_id;
+
+-- ═══════════════════════════════════════════ VITRINADAN QAYTARISH
+--
+--  ★ ZAVOD QARORI (2026-09). Vitrinadagi mahsulot T/M omborga
+--  QAYTARILADI va bu bir bosishda bo'lmaydi — u yo'lda mashinada
+--  yuradi va uch odamning qo'lidan o'tadi:
+--
+--    1. savdo bo'lim boshlig'i  qaytarish yuk xatini shakllantiradi
+--    2. vitrinadagi xodim       tasdiqlaydi — mahsulot do'kondan chiqdi
+--    3. T/M ombor mudiri        kelganda qabul qiladi
+--
+--  Shundan keyin mahsulot oddiy T/M qoldig'iga aylanadi va HOHLAGAN
+--  savdo xodimi unga buyurtma yoza oladi.
+--
+--  ★ NEGA BIR BOSISHLIK `fg/transfer` YETMADI. U mahsulotni o'sha
+--  zahoti ikkinchi omborga ko'chiradi, ya'ni YO'LDA turgan holat yo'q:
+--  do'kondan chiqqan, lekin omborga yetib kelmagan mahsulot qoldiqda
+--  allaqachon T/M da turgandek ko'rinardi va mudir uni sanay olmasdi.
+--  Ikkinchidan, unda hujjat yo'q: kim qaytargani, kim bergani va kim
+--  olgani hech qayerda yozilmasdi.
+--
+--  ★ IKKI ODAM QOIDASI. Hujjatni yozgan odam uni O'ZI tasdiqlay
+--  olmaydi (`created_by <> confirmed_by`): vitrina sotuvchisi o'zining
+--  qoldig'ini o'zi yozib, o'zi berib yuborardi. Boshliqda vitrina
+--  doirasi yo'q, vitrina xodimida esa bor — chegara shundan chiqadi,
+--  kodga na ism, na lavozim yozilmaydi (4-qoida).
+CREATE TABLE IF NOT EXISTS wh_returns (
+  id                SERIAL PRIMARY KEY,
+  --  Hujjat raqami: V26-0001. Konver `K`, zakaz `Z`, pul `P`, qaytarish `V`.
+  doc_no            TEXT UNIQUE,
+  from_warehouse_id INT  NOT NULL REFERENCES warehouses(id),
+  --  new → confirmed → accepted;  rejected / cancelled — yopiq
+  status            TEXT NOT NULL DEFAULT 'new'
+                    CHECK (status IN ('new','confirmed','accepted','rejected','cancelled')),
+  note              TEXT,
+  created_by        INT REFERENCES workers(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  --  Vitrina tasdiqladi: mahsulot do'kondan chiqdi va YO'LDA
+  confirmed_by      INT REFERENCES workers(id),
+  confirmed_on      DATE,
+  --  T/M qabul qildi: mahsulot javonda
+  accepted_by       INT REFERENCES workers(id),
+  accepted_on       DATE,
+  --  Rad etish ham, yozgan odamning bekor qilishi ham bitta yo'ldan,
+  --  lekin holati boshqa — konver so'rovi bilan bir xil idiom.
+  decided_by        INT REFERENCES workers(id),
+  decided_at        TIMESTAMPTZ,
+  decide_note       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wh_ret_status ON wh_returns(status);
+CREATE INDEX IF NOT EXISTS idx_wh_ret_from   ON wh_returns(from_warehouse_id);
+
+--  Konveyer raqami NUSXA bo'lib yoziladi: konver keyin boshqa bo'lakka
+--  qo'shilib ketsa ham hujjatda qaysi raqam qaytgani qolishi kerak
+--  (`warehouse_moves` bilan bir xil sabab).
+CREATE TABLE IF NOT EXISTS wh_return_items (
+  id          SERIAL PRIMARY KEY,
+  return_id   INT  NOT NULL REFERENCES wh_returns(id) ON DELETE CASCADE,
+  unit_id     INT  NOT NULL REFERENCES production_units(id),
+  conveyor_no TEXT NOT NULL,
+  qty         INT  NOT NULL CHECK (qty > 0)
+);
+CREATE INDEX IF NOT EXISTS idx_wh_ret_items ON wh_return_items(return_id);
+
+--  Hujjat ro'yxati: sahifa shundan o'qiydi. Qatorlar soni va jami
+--  donasi shu yerda sanaladi — ro'yxat uchun ikkinchi so'rov yozilmadi.
+DROP VIEW IF EXISTS v_wh_returns;
+CREATE VIEW v_wh_returns AS
+SELECT r.id, r.doc_no, r.status, r.note,
+       r.from_warehouse_id, w.name AS from_warehouse, w.code AS from_code,
+       r.created_at, r.created_by,  cw.name AS created_by_name,
+       r.confirmed_on, r.confirmed_by, fw.name AS confirmed_by_name,
+       r.accepted_on,  r.accepted_by,  aw.name AS accepted_by_name,
+       r.decided_at, r.decide_note, dw.name AS decided_by_name,
+       COALESCE(i.lines, 0)::int AS lines,
+       COALESCE(i.qty, 0)::int   AS qty
+  FROM wh_returns r
+  JOIN warehouses w   ON w.id = r.from_warehouse_id
+  LEFT JOIN workers cw ON cw.id = r.created_by
+  LEFT JOIN workers fw ON fw.id = r.confirmed_by
+  LEFT JOIN workers aw ON aw.id = r.accepted_by
+  LEFT JOIN workers dw ON dw.id = r.decided_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines, SUM(qty) AS qty
+      FROM wh_return_items x WHERE x.return_id = r.id) i ON true;

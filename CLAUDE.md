@@ -239,6 +239,45 @@ mudiri ko'rmagan mahsulot hisobga tushib qolardi.
      vitrinada turgan mahsulot to'g'ridan-to'g'ri o'sha yerga kiritiladi.
      Fayldan yuklashda ham shu — `warehouse_code` ustuni.
 
+**★ VITRINADAN QAYTARISH — UCH ODAM, UCH BOSQICH** (zavod qarori,
+2026-09; `wh_returns`, `wh_return_items`, `sql/warehouse.sql`).
+Vitrinadagi mahsulot T/M omborga bir bosishda qaytmaydi — u mashinada
+yuradi va yo'lda turgan holati bo'ladi:
+
+    1. savdo bo'lim boshlig'i   hujjatni shakllantiradi      new
+    2. vitrinadagi xodim        tasdiqlaydi — do'kondan chiqdi  confirmed
+    3. T/M ombor mudiri         kelganda qabul qiladi        accepted
+
+Shundan keyin mahsulot oddiy T/M qoldig'i bo'ladi va **hohlagan savdo
+xodimi** unga buyurtma yozadi — savdo baribir faqat T/M dan oladi.
+
+**Mahsulot FAQAT uchinchi bosqichda ko'chadi**: `warehouse_id` o'sha
+paytda T/M bo'ladi va harakat `warehouse_moves` ga yoziladi. Ya'ni
+yo'ldagi mahsulot ikkala qoldiqda ham to'g'ri turadi — vitrinada hali
+bor, T/M da hali yo'q. Bir bosishlik `fg/transfer` shuni bera olmasdi:
+do'kondan chiqqan mahsulot T/M da allaqachon turgandek ko'rinardi va
+mudir uni sanay olmasdi. Ustiga unda HUJJAT yo'q: kim qaytargani, kim
+bergani va kim olgani hech qayerda yozilmasdi.
+
+**★ IKKI ODAM QOIDASI — DOIRADAN CHIQADI, LAVOZIMDAN EMAS.** Hujjatni
+**vitrinasi biriktirilmagan** savdo xodimi yozadi (boshliq, bosh ofis),
+va yozgan odam uni **O'ZI tasdiqlay olmaydi** (`created_by <>
+confirmed_by`). Vitrina sotuvchisi hujjat yozmaydi — aks holda u o'z
+qoldig'ini o'zi yozib, o'zi berib yuborardi. Kodga na ism, na lavozim
+yozilmaydi (4-qoida).
+
+**Bitta hujjat — bitta vitrina**: uni bitta odam tasdiqlaydi va bitta
+mashina olib keladi. Ikki do'kondan yig'ilgan hujjatni kim tasdiqlashi
+ham noma'lum bo'lib qolardi. Konverning BIR QISMI qaytadi: 6 talikdan
+2 tasi — qolgani vitrinada qoladi va konver qabul qilishda bo'linadi
+(`clonePart`).
+
+Hujjat raqami **`V26-0001`** (konver `K`, zakaz `Z`, pul `P`), saqlashda
+beriladi. Rad etish ham, yozgan odamning bekor qilishi ham bitta
+yo'ldan (`/reject`), lekin holati boshqa: `rejected` — boshqaniki,
+`cancelled` — o'zinikidir; sabab ikkalasida ham so'raladi (konver
+so'rovi bilan bir xil idiom).
+
 Kiritishda adashilsa — ombor o'rniga tsex tanlanib ketsa — konverni
 o'sha zahoti omborga o'tkazadigan tuzatish bor:
 `POST /api/units/:id/to-warehouse` (faqat `production.manage`). Bu
