@@ -282,38 +282,35 @@ JOIN sections sc       ON sc.id = r.section_id
 JOIN v_section_rate rt ON rt.section_id = r.section_id
 WHERE u.status = 'production' AND pp.step_no IS NOT NULL;
 
--- Muddat taxmini: MAX(qty/quvvat) + SUM(1/quvvat) — quvurli oqim yaqinlashuvi
-CREATE OR REPLACE VIEW v_unit_eta AS
-WITH brk AS (
-  SELECT unit_id, MIN(rem_step) AS change_step
-  FROM v_unit_rem WHERE rem_shop_id <> at_shop_id GROUP BY unit_id
-),
-nxt AS (
-  SELECT b.unit_id, b.change_step, sh.name AS next_shop
-  FROM brk b
-  JOIN v_unit_rem r ON r.unit_id = b.unit_id AND r.rem_step = b.change_step
-  JOIN shops sh     ON sh.id = r.rem_shop_id
-  GROUP BY b.unit_id, b.change_step, sh.name
-)
--- Quvvati noma'lum bo'lim oldinda tursa muddat CHIQARILMAYDI. Aks holda
--- o'sha bo'lim yig'indidan jimgina tushib qoladi va sana haqiqiydan qisqa
--- ko'rinadi — savdo mijozga bajarib bo'lmaydigan muddat aytadi. Bo'sh
--- javob "quvvatni kiriting" degani, noto'g'ri sanadan ko'ra foydaliroq.
-SELECT r.unit_id, n.next_shop,
-       CASE WHEN COUNT(*) FILTER (WHERE r.rate_per_day IS NULL
-              AND (n.change_step IS NULL OR r.rem_step < n.change_step)) > 0 THEN NULL
-            ELSE CEIL(MAX(r.qty / NULLIF(r.rate_per_day, 0))
-              FILTER (WHERE n.change_step IS NULL OR r.rem_step < n.change_step)
-            + SUM(1.0 / NULLIF(r.rate_per_day, 0))
-              FILTER (WHERE n.change_step IS NULL OR r.rem_step < n.change_step))
-       END AS next_shop_days,
-       CASE WHEN COUNT(*) FILTER (WHERE r.rate_per_day IS NULL) > 0 THEN NULL
-            ELSE CEIL(MAX(r.qty / NULLIF(r.rate_per_day, 0))
-                    + SUM(1.0 / NULLIF(r.rate_per_day, 0)))
-       END AS fg_days
-FROM v_unit_rem r
-LEFT JOIN nxt n ON n.unit_id = r.unit_id
-GROUP BY r.unit_id, n.next_shop, n.change_step;
+--  ★ MUDDAT ENDI QUVVATDAN EMAS, MARSHRUTDAN HISOBLANADI.
+--
+--  Zavod qarori (2026-09): **har bo'limda bir kun turadi, undan ortiq
+--  emas**. Ya'ni sana konverning BOSHLANGAN KUNIDAN va marshrutdagi
+--  qadam raqamidan chiqadi, bugungi kundan va bo'lim quvvatidan emas:
+--
+--      N-qadamga kirish  =  started_on + (N − 1)
+--      T/M omborga kirish=  started_on + qadamlar soni
+--
+--  Eski hisob (MAX(qty/quvvat) + SUM(1/quvvat)) olib tashlandi. U ikki
+--  narsani talab qilardi: har bo'limning quvvati kiritilgan bo'lishi va
+--  o'sha quvvat haqiqatga yaqin bo'lishi. Quvvat kiritilmagan bo'lim
+--  yo'lda uchrasa muddat UMUMAN chiqmasdi — jurnalda bo'sh katak turardi
+--  va savdo mijozga sana ayta olmasdi. Ustiga u CURRENT_DATE dan
+--  hisoblardi, ya'ni javob har kuni surilib borardi: kecha «25-sentabr»
+--  degan konver bugun «26-sentabr» bo'lardi va kechikish ko'rinmasdi.
+--
+--  Yangi formulada sana QOTIB turadi: konver kechiksa reja o'tmishda
+--  qoladi va aynan shu narsa kechikishni ko'rsatadi (`fg_late` va
+--  hokazo ustunlari shundan hisoblanadi).
+--
+--  `v_unit_eta` va `v_unit_shop_eta` endi hech kim o'qimaydi —
+--  olib tashlanadi: ishlatilmaydigan, lekin boshqa javob beradigan
+--  view turgan joyning o'zi xato manbai.
+--
+--  CASCADE xavfsiz: undan faqat `v_unit_register` osilib turadi va u
+--  har migratsiyada `register.sql` da qaytadan quriladi (u yerda ham
+--  DROP + CREATE).
+DROP VIEW IF EXISTS v_unit_eta CASCADE;
 
 -- ★ ISHLAB CHIQARISH BOSHLIG'INING JADVALI — register.sql da
 --

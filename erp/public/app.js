@@ -276,9 +276,9 @@ const App = (() => {
     //     text: "Har bo'limning kunlik quvvati — muddat hisobi shunga tayanadi",
     //     perm: ['production.manage'] },
     //
-    // Quvvatsiz muddat `taxmin` ustunlari bo'sh qoladi; `reja` (tsex
-    // boshlig'i qo'lda qo'ygan) va `fakt` (tizim yozgan) sanalar
-    // o'zgarishsiz ishlayveradi.
+    // Muddat endi quvvatdan emas, marshrutdan hisoblanadi (har bo'limda
+    // bir kun — izoh: sql/register.sql), shuning uchun bu sahifa
+    // muddatga umuman kerak emas.
     { href: '/xodimlar.html', mod: 'payroll', nav: 'Xodimlar',
       title: 'Xodimlar', lead: 'Rollar va kirish',
       text: "Xodim qo'shish, PIN berish, rol va tsex biriktirish",

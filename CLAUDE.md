@@ -49,6 +49,40 @@ bog'lanadi, shuning uchun ombor qoldig'i ham dona emas, konver hisobida.
 `route_templates` + `route_steps`, mahsulotga `route_template_id` orqali
 biriktiriladi. Haqiqiy manba: **`sql/routes.sql`** — tartib faqat shu yerda.
 
+**★ MUDDAT MARSHRUTDAN HISOBLANADI: har bo'limda BIR KUN** (zavod qarori,
+2026-09). Sana konverning boshlangan kunidan va qadam raqamidan chiqadi
+(`v_unit_step_plan`, `v_unit_plan`, `sql/register.sql`):
+
+    N-qadamga kirish   =  started_on + (N − 1)
+    T/M omborga kirish =  started_on + qadamlar soni
+
+Ya'ni birinchi bo'limda konver boshlangan KUNNING O'ZIDA turadi,
+oxirgi bo'limdan keyingi kuni esa omborga tushadi. Lak va qadoqlash
+sanalari ham shundan — o'sha tsexning marshrutdagi birinchi qadami.
+
+Eski hisob (`v_unit_eta`, `MAX(qty/quvvat) + SUM(1/quvvat)`) olib
+tashlandi. U ikki narsani talab qilardi: har bo'limning quvvati
+kiritilgan bo'lishi va u haqiqatga yaqin bo'lishi. Quvvati yo'q bo'lim
+yo'lda uchrasa muddat UMUMAN chiqmasdi — savdo mijozga sana ayta
+olmasdi. Ustiga u `CURRENT_DATE` dan hisoblardi, ya'ni javob har kuni
+surilib borardi: kecha «25-sentabr» degan konver bugun «26-sentabr»
+bo'lardi va kechikish hech qachon ko'rinmasdi. Yangi formulada sana
+QOTIB turadi — konver kechiksa reja o'tmishda qoladi va `fg_late`,
+`lak_late`, `pack_late` ustunlari aynan shuni ko'rsatadi.
+
+Manba belgisi uchta: **fakt** (bo'lib bo'lgan) → **reja** (tsex
+boshlig'i qo'lda qo'ygan, formuladan USTUN) → **marshrut** (formula).
+Zahiraga marshrut sanasi chiqarilmaydi: u buyurtma kutadi, marshrut
+kutmaydi.
+
+Bo'limsiz kiritilgan konverda keyingi tsex yo'q, lekin **T/M ombor
+sanasi bor**: u marshrutning to'liq uzunligidan chiqadi va konver
+qayerda turganini bilishni talab qilmaydi.
+
+Zavod ko'rinishidagi (`/zavod.html`) jamlanma muddat hali ham
+quvvatdan hisoblanadi (`v_position_eta`, `v_section_rate`) — u boshqa
+savolga javob beradi: bitta konver emas, bo'lim oldidagi butun navbat.
+
 **Harakat** (`unit_moves`) — konver bo'limdan bo'limga o'tdi. Har o'tkazish
 jamlanma `flow_log` ga ham yoziladi (hisobotlar shundan hisoblanadi).
 Harakatda `qty` (nechta dona ko'chdi) va `from_section_id` (qayerdan) bor.

@@ -57,31 +57,74 @@ CREATE INDEX IF NOT EXISTS idx_units_color  ON production_units(color)
 CREATE INDEX IF NOT EXISTS idx_units_fabric ON production_units(fabric)
   WHERE fabric IS NOT NULL;
 
--- ------------------------------------------------------- TSEXGACHA MUDDAT
--- Konver oldida turgan HAR BIR tsexga necha kunda yetishi. v_unit_eta faqat
--- keyingi tsex va T/M omborini bilardi; lak va qadoqlash sanalari uchun
--- oradagi tsexlar ham kerak.
+-- ---------------------------------------------------------- ★ MUDDAT REJASI
 --
--- Hisob v_unit_eta bilan bir xil: MAX(qty/quvvat) + SUM(1/quvvat) — partiya
--- bo'limlardan ketma-ket emas, quvur bo'lib o'tadi.
-CREATE OR REPLACE VIEW v_unit_shop_eta AS
-WITH target AS (
-  -- Har tsexga kirish qadami: o'sha tsexdagi eng birinchi qolgan qadam
-  SELECT unit_id, rem_shop_id AS shop_id, MIN(rem_step) AS enter_step
-  FROM v_unit_rem
-  GROUP BY unit_id, rem_shop_id
+--  Zavod qarori (2026-09): **konver har bo'limda BIR KUN turadi, undan
+--  ortiq emas**. Shuning uchun muddat bo'lim quvvatidan emas, konverning
+--  BOSHLANGAN KUNIDAN va marshrutdagi qadam raqamidan chiqadi
+--  (izoh: `sql/units.sql`, eski `v_unit_eta` o'rnida):
+--
+--      N-qadamga kirish   =  started_on + (N − 1)
+--      T/M omborga kirish =  started_on + qadamlar soni
+--
+--  Ya'ni birinchi bo'limda konver boshlangan KUNNING O'ZIDA turadi,
+--  ikkinchisiga ertasi kuni o'tadi, va oxirgi bo'limdan keyingi kuni
+--  omborga tushadi.
+--
+--  Marshrut mahsulotnikidan olinadi (`v_product_route`), ya'ni stulning
+--  uchta yo'li ham (Rover / Zborka / Shkurkadan boshlanadigan) o'z
+--  qadamlar soni bilan hisoblanadi — sahifaga ham, kodga ham qo'lda
+--  hech narsa yozilmaydi.
+DROP VIEW IF EXISTS v_unit_shop_eta CASCADE;
+
+CREATE OR REPLACE VIEW v_unit_step_plan AS
+--  step_no — ROW_NUMBER(), ya'ni bigint; sanaga qo'shish uchun int
+--  bo'lishi kerak (`date + bigint` operatori yo'q).
+SELECT u.id AS unit_id, r.step_no::int AS step_no, sc.shop_id,
+       (u.started_on + (r.step_no - 1)::int) AS on_date
+  FROM production_units u
+  JOIN v_product_route r ON r.product_id = u.product_id
+  JOIN sections sc       ON sc.id = r.section_id;
+
+--  Har TSEXGA kirish rejasi: o'sha tsexdagi eng birinchi qadam kuni.
+--  Lak va qadoqlash sanalari shundan o'qiladi. Stul lakdan keyin O'Z
+--  tsexiga qaytadi, ya'ni bitta tsex marshrutda ikki marta uchraydi —
+--  MIN ataylab: «qachon kiradi» degan savolning javobi birinchisi.
+CREATE OR REPLACE VIEW v_unit_plan_shop AS
+SELECT unit_id, shop_id, MIN(on_date) AS on_date
+  FROM v_unit_step_plan
+ GROUP BY unit_id, shop_id;
+
+--  Konver bo'yicha jamlanma reja: T/M ombor sanasi va KEYINGI tsex.
+--
+--  Qaysi tsex «keyingi» ekani konver hozir TURGAN joyidan chiqadi
+--  (`v_unit_rem`), sanasi esa rejadan: joyi o'zgargan zahoti keyingi
+--  tsex ham o'zgaradi, sana esa boshidan beri bir xil turadi.
+--
+--  Bo'limsiz kiritilgan («boshlanmagan») konverda keyingi tsex yo'q,
+--  lekin T/M ombor sanasi BOR: u marshrutning to'liq uzunligidan
+--  chiqadi va joyni bilishni talab qilmaydi. Eski hisobda bunday
+--  konver muddatsiz qolardi.
+CREATE OR REPLACE VIEW v_unit_plan AS
+WITH oxiri AS (
+  SELECT sp.unit_id, MAX(sp.step_no) AS steps,
+         (MAX(sp.on_date) + 1)::date AS fg_on
+    FROM v_unit_step_plan sp
+   GROUP BY sp.unit_id
+),
+brk AS (   -- turgan joyidan keyin tsex almashadigan birinchi qadam
+  SELECT unit_id, MIN(rem_step) AS change_step
+    FROM v_unit_rem
+   WHERE rem_shop_id <> at_shop_id
+   GROUP BY unit_id
 )
--- v_unit_eta bilan bir xil qoida: yo'lda quvvati noma'lum bo'lim bo'lsa
--- muddat chiqarilmaydi. Yarim ma'lumotdan chiqqan sana bo'sh katakdan
--- yomonroq — unga ishonib mijozga va'da beriladi.
-SELECT t.unit_id, t.shop_id,
-       CASE WHEN COUNT(*) FILTER (WHERE r.rate_per_day IS NULL) > 0 THEN NULL
-            ELSE CEIL(MAX(r.qty / NULLIF(r.rate_per_day, 0))
-                    + SUM(1.0 / NULLIF(r.rate_per_day, 0)))::int
-       END AS days
-FROM target t
-JOIN v_unit_rem r ON r.unit_id = t.unit_id AND r.rem_step < t.enter_step
-GROUP BY t.unit_id, t.shop_id;
+SELECT o.unit_id, o.steps, o.fg_on,
+       sp.on_date AS next_shop_on,
+       sh.name    AS next_shop
+  FROM oxiri o
+  LEFT JOIN brk b           ON b.unit_id = o.unit_id
+  LEFT JOIN v_unit_step_plan sp ON sp.unit_id = o.unit_id AND sp.step_no = b.change_step
+  LEFT JOIN shops sh        ON sh.id = sp.shop_id;
 
 -- ------------------------------------------------------------ ★ JURNAL
 -- Ishlab chiqarish boshlig'ining jadvali. Bu view FAQAT shu faylda
@@ -119,18 +162,18 @@ SELECT
   COALESCE(g.owner_shop_id, pp.shop_id) AS owner_shop_id,
   u.entered_section_on,
 
-  -- Keyingi tsexga o'tkazish sanasi: qo'lda reja bo'lsa u, aks holda taxmin.
-  -- Kutish nuqtasida turgan zahiraga taxmin yo'q: u buyurtma kutadi,
-  -- quvvat kutmaydi — qachon o'tishini hech qanday hisob ayta olmaydi.
+  -- Keyingi tsexga o'tkazish sanasi: qo'lda reja bo'lsa u, aks holda
+  -- marshrut rejasi (har bo'limda bir kun).
+  -- Kutish nuqtasida turgan zahiraga reja yo'q: u buyurtma kutadi,
+  -- marshrut kutmaydi — qachon o'tishini hech qanday hisob ayta olmaydi.
   COALESCE(u.next_shop_planned_on,
            CASE WHEN u.is_stock AND COALESCE(cur.is_hold, false) THEN NULL
-                ELSE CURRENT_DATE + (e.next_shop_days || ' days')::interval END)::date
-    AS next_shop_on,
+                ELSE pl.next_shop_on END) AS next_shop_on,
   CASE WHEN u.next_shop_planned_on IS NOT NULL THEN 'reja'
-       WHEN e.next_shop_days IS NOT NULL
-            AND NOT (u.is_stock AND COALESCE(cur.is_hold, false)) THEN 'taxmin'
+       WHEN pl.next_shop_on IS NOT NULL
+            AND NOT (u.is_stock AND COALESCE(cur.is_hold, false)) THEN 'marshrut'
        ELSE NULL END AS next_shop_src,
-  e.next_shop AS next_shop,
+  pl.next_shop AS next_shop,
 
   -- T/M omboriga kirish: fakt → reja → taxmin (lak va qadoqlash bilan bir xil).
   --
@@ -142,11 +185,10 @@ SELECT
   -- Qo'lda qo'yilgan REJA ko'rsatilaveradi: tsex boshlig'i ataylab
   -- muddat belgilagan bo'lsa, u haqiqiy va'da.
   COALESCE(u.fg_on, u.fg_planned_on,
-           CASE WHEN u.is_stock THEN NULL
-                ELSE (CURRENT_DATE + (e.fg_days || ' days')::interval)::date END) AS fg_on,
+           CASE WHEN u.is_stock THEN NULL ELSE pl.fg_on END) AS fg_on,
   CASE WHEN u.fg_on         IS NOT NULL THEN 'fakt'
        WHEN u.fg_planned_on IS NOT NULL THEN 'reja'
-       WHEN e.fg_days IS NOT NULL AND NOT u.is_stock THEN 'taxmin'
+       WHEN pl.fg_on IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS fg_src,
 
   COALESCE(c.name, 'T/M ombor') AS customer_name,  -- mijoz yo'q bo'lsa T/M ombor
@@ -164,20 +206,18 @@ SELECT
 
   -- Lak tsexi: fakt → reja → taxmin
   COALESCE(u.lak_on, u.lak_planned_on,
-           CASE WHEN u.is_stock THEN NULL
-                ELSE (CURRENT_DATE + (lak.days || ' days')::interval)::date END) AS lak_on,
+           CASE WHEN u.is_stock THEN NULL ELSE lak.on_date END) AS lak_on,
   CASE WHEN u.lak_on         IS NOT NULL THEN 'fakt'
        WHEN u.lak_planned_on IS NOT NULL THEN 'reja'
-       WHEN lak.days IS NOT NULL AND NOT u.is_stock THEN 'taxmin'
+       WHEN lak.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS lak_src,
 
   -- Qadoqlash tsexi: savdo mijozga muddat aytishda shunga qaraydi
   COALESCE(u.pack_on, u.pack_planned_on,
-           CASE WHEN u.is_stock THEN NULL
-                ELSE (CURRENT_DATE + (pk.days || ' days')::interval)::date END) AS pack_on,
+           CASE WHEN u.is_stock THEN NULL ELSE pk.on_date END) AS pack_on,
   CASE WHEN u.pack_on         IS NOT NULL THEN 'fakt'
        WHEN u.pack_planned_on IS NOT NULL THEN 'reja'
-       WHEN pk.days IS NOT NULL AND NOT u.is_stock THEN 'taxmin'
+       WHEN pk.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS pack_src,
 
   -- Reja bor, fakt yo'q va muddat o'tib ketgan — nazorat shu ustunda
@@ -200,9 +240,9 @@ JOIN product_groups g  ON g.id = p.group_id
 -- Konver hozir turgan bo'lim: kutish nuqtasimi yoki yo'q
 LEFT JOIN sections cur ON cur.id = u.current_section_id
 LEFT JOIN v_unit_place pp ON pp.unit_id = u.id
-LEFT JOIN v_unit_eta e    ON e.unit_id = u.id
+LEFT JOIN v_unit_plan pl  ON pl.unit_id = u.id
 LEFT JOIN customers c     ON c.id = u.customer_id
-LEFT JOIN v_unit_shop_eta lak ON lak.unit_id = u.id
+LEFT JOIN v_unit_plan_shop lak ON lak.unit_id = u.id
      AND lak.shop_id = (SELECT id FROM shops WHERE milestone = 'lak'  LIMIT 1)
-LEFT JOIN v_unit_shop_eta pk  ON pk.unit_id = u.id
+LEFT JOIN v_unit_plan_shop pk  ON pk.unit_id = u.id
      AND pk.shop_id  = (SELECT id FROM shops WHERE milestone = 'pack' LIMIT 1);

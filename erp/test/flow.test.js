@@ -2754,6 +2754,55 @@ test('aylanma kapital: ustun 15-sana va oy oxiri, aktiv − passiv = sof', async
 });
 
 /* ============================================================================
+ *  MUDDAT REJASI — HAR BO'LIMDA BIR KUN
+ *
+ *  Sana savdo mijozga aytadigan va'daga aylanadi, shuning uchun formulaning
+ *  o'zi sinaladi: qadam raqami bo'yicha, boshlangan kundan.
+ * ========================================================================== */
+test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
+  const u = await newUnit({ started_on: '2026-09-01', entered_section_on: '2026-09-01' });
+
+  const r = (await admin('GET', '/api/units/?conveyor_no=' + u.conveyor_no)).body[0];
+  const pl = await H.id(`SELECT steps, fg_on, next_shop, next_shop_on
+                           FROM v_unit_plan WHERE unit_id = $1`, [u.id]);
+
+  //  Penal marshruti — korpus, lak va qadoqlash tsexlari (sql/routes.sql).
+  //  Qadamlar soni shu yerda qotib yozilmaydi: marshrut o'zgarsa test
+  //  emas, FORMULA tekshirilishi kerak.
+  //  DATE ustuni `pg` da Date bo'lib keladi, JSON'da esa matn — ikkalasini
+  //  bir ko'rinishga keltiramiz. Mahalliy qismlardan yig'iladi: toISOString
+  //  UTC ga o'tkazadi va soat mintaqasi oldinda bo'lsa sana bir kun orqaga
+  //  siljib ketardi.
+  const ymd = (v) => { const d = v instanceof Date ? v : new Date(v);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
+      }-${String(d.getDate()).padStart(2, '0')}`; };
+  const kun = (n) => ymd(new Date(2026, 8, 1 + n));
+
+  assert.ok(pl.steps > 1, 'marshrutda qadam bor');
+  //  Oxirgi bo'limdan KEYINGI kuni omborga tushadi.
+  assert.equal(ymd(pl.fg_on), kun(pl.steps));
+  assert.equal(ymd(r.fg_on), kun(pl.steps));
+  assert.equal(r.fg_src, 'marshrut');
+
+  //  Arrada turibdi, ya'ni keyingi tsex — korpusdan keyin keladigani.
+  //  Sanasi o'sha tsexning birinchi qadami: started_on + (qadam − 1).
+  assert.ok(pl.next_shop, 'keyingi tsex topiladi');
+  const step = await H.id(
+    `SELECT MIN(sp.step_no) AS n FROM v_unit_step_plan sp
+       JOIN shops sh ON sh.id = sp.shop_id AND sh.name = $2
+      WHERE sp.unit_id = $1`, [u.id, pl.next_shop]);
+  assert.equal(ymd(r.next_shop_on), kun(step.n - 1));
+
+  //  Qo'lda qo'yilgan reja formuladan USTUN turadi: tsex boshlig'ining
+  //  va'dasi hisobdan kuchliroq.
+  assert.equal((await admin('PATCH', '/api/units/' + u.id,
+    { fg_planned_on: '2026-10-05' })).status, 200);
+  const r2 = (await admin('GET', '/api/units/?conveyor_no=' + u.conveyor_no)).body[0];
+  assert.equal(ymd(r2.fg_on), '2026-10-05');
+  assert.equal(r2.fg_src, 'reja');
+});
+
+/* ============================================================================
  *  PIN — IZ VA URINISHLAR
  *
  *  Singanda butun zavod tizimga kira olmay qoladi, shuning uchun bu yerda.

@@ -548,7 +548,7 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
             COALESCE(mine.qty, 0)::int AS mine,
             COALESCE(s.is_hold, false) AS waiting,
             --  Omborga qachon tushadi: fakt → tsex boshlig'i qo'ygan reja →
-            --  marshrut va quvvatdan taxmin (v_unit_register.fg_on).
+            --  marshrutdan hisob (v_unit_register.fg_on).
             --  Menejer mijozga «shu kuni beramiz» deyishi uchun shu sana.
             r.fg_on AS eta, r.fg_src AS eta_src,
             (LOWER(COALESCE(u.color, '')) = LOWER(COALESCE($2, ''))

@@ -111,8 +111,9 @@ const MON = ['yan','fev','mar','apr','may','iyn','iyl','avg','sen','okt','noy','
 const d8 = s => { if (!s) return '—'; const d = new Date(s);
   return d.getDate() + '-' + MON[d.getMonth()]; };
 // Sana uch manbadan keladi: fakt (tizim yozgan), reja (tsex boshlig'i
-// qo'ygan) va taxmin (marshrut va quvvatdan). Qaysi ekani ko'rinib tursin —
-// rejaga va'da beriladi, taxminga esa ehtiyot bo'lib qaraladi.
+// qo'ygan) va marshrut (har bo'limda bir kun — izoh: sql/register.sql).
+// Qaysi ekani ko'rinib tursin: fakt bo'lib bo'lgan, reja — odam bergan
+// va'da, marshrut esa formuladan chiqqan kun.
 const dateWithSrc = (s, src, late) => !s ? '<span class="muted">—</span>' :
   `<span class="${late ? 'late' : ''}">${d8(s)}</span>
    <span class="src ${late ? 'late' : src === 'fakt' ? 'fakt' : ''}"
