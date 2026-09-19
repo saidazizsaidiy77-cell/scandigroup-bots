@@ -52,7 +52,7 @@ const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate()
 const d8 = v => !v ? '\u2014'
   : (x => `${x.slice(8,10)}.${x.slice(5,7)}.${x.slice(2,4)}`)(String(v).slice(0,10));
 
-let tab = 'board', canMove = false;
+let tab = 'board', canMove = false, canPlan = false;
 let data = null, shopId = null;
 const picked = new Set();
 //  Qaysi konverning buyurtmalari ochilgan. Qiymat `undefined` — so'rov
@@ -95,13 +95,63 @@ async function go(k) {
 // Qaysi sana olinishi konver turgan tsexga bog'liq (server: /board):
 // korpusdagiga «Lak tsehi», bo'yoqlashdagiga «Qadoqlash», qadoqlashdagiga
 // «T/M ombor» sanasi. Ya'ni jurnaldagi sana bilan bir xil, boshqa hisob emas.
+//  Sana katagi. Korpusda u BO'SH tug'iladi va boshliq o'zi qo'yadi,
+//  shuning uchun bo'sh katak bu yerda «—» emas, «qo'yish» taklifi:
+//  bo'sh chiziqcha unutilgandek turardi va hech kim bosmasdi.
 function due(u) {
   if (u.waiting) return `<span class="tag">zahira</span>`;
-  if (u.days_left == null) return `<span class="muted">—</span>`;
+  const tug = (ich, cls) => canPlan
+    ? `<button class="ic ${cls || ''}" style="font:inherit;padding:2px 8px"
+         title="Muddatni qo'yish" onclick="askPlan(${u.id}, event)">${ich}</button>`
+    : ich;
+  if (u.days_left == null)
+    return tug(canPlan ? '+ muddat' : '<span class="muted">—</span>');
   const d = u.days_left;
-  if (d < 0)   return `<span class="tag bad">&minus;${-d} kun</span>`;
-  if (d === 0) return `<span class="tag warn">Bugun</span>`;
-  return `<span class="tag ${d <= 2 ? 'warn' : 'ok'}">${d} kun</span>`;
+  const t = d < 0 ? `<span class="tag bad">&minus;${-d} kun</span>`
+    : d === 0     ? `<span class="tag warn">Bugun</span>`
+    : `<span class="tag ${d <= 2 ? 'warn' : 'ok'}">${d} kun</span>`;
+  return tug(t);
+}
+
+//  ── MUDDATNI QO'YISH ──────────────────────────────────────────────────
+//
+//  Bitta sana so'raladi: «qachon topshiriladi». Qaysi ustunga
+//  yozilishini SERVER hal qiladi (lak, qadoqlash yoki ombor) — ekranda
+//  boshliqqa ustun nomi emas, savolning javobi kerak.
+function askPlan(id, ev) {
+  if (ev) ev.stopPropagation();
+  const u = unitById(id);
+  if (!u) return;
+  const bor = u.due_on ? String(u.due_on).slice(0, 10) : '';
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="planBox" onclick="if(event.target===this)closePlan()">
+      <div class="modal" style="max-width:360px">
+        <h2 style="margin-bottom:4px">${esc(u.conveyor_no)}</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">${esc(u.product)} ·
+          ${esc(u.due_shop || 'T/M ombor')}ga qachon topshiriladi?</p>
+        <label>Sana</label>
+        <input id="planVal" type="date" value="${bor}" style="font-size:18px">
+        <button class="primary" style="width:100%;margin-top:16px"
+          onclick="okPlan(${id})">Saqlash</button>
+        ${bor ? `<button style="width:100%;margin-top:8px"
+          onclick="okPlan(${id}, true)">Sanani olib tashlash</button>` : ''}
+        <button style="width:100%;margin-top:8px" onclick="closePlan()">Bekor qilish</button>
+      </div>
+    </div>`);
+}
+
+const closePlan = () => $('planBox')?.remove();
+
+async function okPlan(id, ochir) {
+  const v = ochir ? null : ($('planVal').value || null);
+  if (!ochir && !v) return toast('Sana tanlanmadi', true);
+  closePlan();
+  try {
+    await App.api(`/api/units/${id}/plan`,
+      { method: 'POST', body: JSON.stringify({ due_on: v }) });
+    toast(ochir ? 'Sana olib tashlandi' : 'Muddat qo\'yildi');
+    await loadBoard();
+  } catch (e) { toast(e.message, true); }
 }
 
 // Ustaning ekranida oltita ustundan boshqa hech narsa yo'q. Zakaz raqami,
@@ -543,6 +593,9 @@ const exportFeed = () => {
 //  yuklama esa uning ishi emas (CLAUDE.md, «Kim nima ko'radi»).
 App.start(async () => {
   canMove = App.can('production.entry');
+  //  Korpusda muddatni BOSHLIQ qo'yadi (izoh: sql/register.sql) —
+  //  shuning uchun sana katagi bosiladigan bo'ladi.
+  canPlan = App.can('production.plan', 'production.units', 'production.manage');
   drawTabs();
   await loadBoard();
 }, 'production.entry', 'production.reports');

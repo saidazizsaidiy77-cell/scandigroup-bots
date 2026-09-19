@@ -1067,6 +1067,94 @@ router.get('/:id/bron', need('production.view', 'production.entry'),
 //
 //  Turgan bo'limi O'ZGARMAY qoladi — qabul qilishda ham shunday: konver
 //  ombordan qaytarilsa (`undo`) o'z joyiga qaytishi kerak.
+/* ============================================================================
+ *  ★ MUDDAT REJASI — TSEX BOSHLIG'I QO'YADI
+ *
+ *  Stulda sana marshrutdan o'zi chiqadi, korpusda esa bo'sh qoladi:
+ *  marshruti uzun, quritish va kamera navbati bor va o'sha kunni
+ *  boshliqdan boshqa hech kim to'g'ri ayta olmaydi (izoh:
+ *  `sql/register.sql`, `shops.plan_auto`).
+ *
+ *  Boshliqda jurnal yo'q va ochilishi ham kerak emas — u yerda narx,
+ *  mijoz va butun zavodning konverlari turadi. Shuning uchun alohida
+ *  yo'l: FAQAT reja sanalari, faqat o'z tsexining konveriga.
+ *
+ *  Qaysi ustunga yozilishini SERVER hal qiladi, klient emas: ekranda
+ *  bitta sana turadi («qachon topshiriladi»), u esa oldinda qaysi tsex
+ *  turganiga qarab lak, qadoqlash yoki ombor sanasi bo'ladi. Bu qoida
+ *  bo'limlar ekranidagi orqaga sanash bilan BIR XIL manbadan chiqishi
+ *  kerak, aks holda boshliq qo'ygan kun o'sha ekranda ko'rinmasdi.
+ * ========================================================================== */
+router.post('/:id/plan',
+  need('production.plan', 'production.units', 'production.manage'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const scope = scopeOf(req);
+    const boss = req.user.permissions.includes('production.units')
+              || req.user.permissions.includes('production.manage');
+
+    const u = (await db.query(
+      `SELECT r.id, r.conveyor_no,
+              --  Konver kimniki: javobgar tsex → turgan joyining tsexi →
+              --  marshrutni boshlaydigan tsex. Oxirgisi bo'limsiz
+              --  kiritilgan konver uchun: uni ham boshliq rejalashtiradi.
+              COALESCE(r.owner_shop_id, birinchi.shop_id) AS own_shop,
+              hs.milestone
+         FROM v_unit_register r
+         JOIN product_groups g ON g.id = r.group_id
+         LEFT JOIN LATERAL (
+           SELECT sc.shop_id FROM v_product_route pr
+             JOIN sections sc ON sc.id = pr.section_id
+            WHERE pr.product_id = r.product_id
+            ORDER BY pr.step_no LIMIT 1) birinchi ON true
+         --  Oldinda turgan birinchi BOSHQA tsex — bo'limlar ekranidagi
+         --  orqaga sanash ham shu ifodadan chiqadi.
+         LEFT JOIN LATERAL (
+           SELECT sh.milestone FROM v_product_route pr
+             JOIN sections sc2 ON sc2.id = pr.section_id
+             JOIN shops    sh  ON sh.id  = sc2.shop_id
+            WHERE pr.product_id = r.product_id
+              AND (r.step_no IS NULL OR pr.step_no > r.step_no)
+              AND COALESCE(g.owner_shop_id, sc2.shop_id) IS DISTINCT FROM r.owner_shop_id
+            ORDER BY pr.step_no LIMIT 1) hs ON true
+        WHERE r.id = $1`, [id])).rows[0];
+    if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
+    if (!boss && scope && !scope.includes(u.own_shop))
+      return res.status(403).json({ error: 'Bu konver boshqa tsexniki' });
+
+    //  Bo'sh yuborilgani «tegma» emas, «yo'q» degani: boshliq qo'ygan
+    //  kunni olib tashlay olishi kerak, aks holda xato sana abadiy
+    //  qolib ketardi.
+    const kun = (v) => (v === undefined ? undefined
+      : (v === null || String(v).trim() === '' ? null : String(v)));
+    const due = kun(req.body.due_on);
+    const fg  = kun(req.body.fg_on);
+
+    const set = [];
+    if (due !== undefined) {
+      set.push(['next_shop_planned_on', due]);
+      //  Oldinda tsex bo'lmasa (qadoqlashdan keyin) topshirish OMBORGA
+      //  bo'ladi — o'sha sana fg rejasiga yoziladi.
+      if (u.milestone === 'lak')       set.push(['lak_planned_on', due]);
+      else if (u.milestone === 'pack') set.push(['pack_planned_on', due]);
+      else                             set.push(['fg_planned_on', due]);
+    }
+    if (fg !== undefined) set.push(['fg_planned_on', fg]);
+    if (!set.length) return res.status(400).json({ error: 'Sana yuborilmadi' });
+
+    //  Bir ustun ikki marta kelsa oxirgisi qoladi: `due` ombor sanasini
+    //  yozib, keyin alohida `fg` ham yuborilgan bo'lishi mumkin.
+    const cols = new Map(set);
+    const names = [...cols.keys()];
+    await db.query(
+      `UPDATE production_units SET ${
+        names.map((c, i) => `${c} = $${i + 2}::date`).join(', ')} WHERE id = $1`,
+      [id, ...names.map((c) => cols.get(c))]);
+    await audit(req, { module: 'production', action: 'plan', entity: 'unit',
+                       entity_id: id, payload: Object.fromEntries(cols) });
+    res.json({ ok: true, conveyor_no: u.conveyor_no });
+  }));
+
 router.post('/:id/to-warehouse', need('production.manage'), wrap(async (req, res) => {
   const client = await db.connect();
   try {

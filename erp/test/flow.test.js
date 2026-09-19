@@ -2789,6 +2789,47 @@ test('jurnalda mahsulot ham tuzatiladi, lekin bron va marshrut chegara', async (
     { product_id: KAMOD })).status, 403);
 });
 
+test('muddat: stulda marshrutdan, korpusda tsex boshlig\'i qo\'yadi', async () => {
+  //  Korpus mahsuloti: sana BO'SH tug'iladi — boshliq qo'yadi.
+  const kor = await newUnit({ started_on: '2026-09-02', entered_section_on: '2026-09-02' });
+  const r1 = (await admin('GET', '/api/units/?conveyor_no=' + kor.conveyor_no)).body[0];
+  assert.equal(r1.fg_on, null, 'korpusda marshrut sanasi chiqarilmaydi');
+  assert.equal(r1.next_shop_on, null);
+
+  //  Stul mahsuloti: o'sha formula ishlayveradi.
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const st = (await admin('POST', '/api/units/', { items: [{
+    product_id: STUL, qty: 2, started_on: '2026-09-02' }] })).body.created[0];
+  const r2 = (await admin('GET', '/api/units/?conveyor_no=' + st.conveyor_no)).body[0];
+  assert.ok(r2.fg_on, 'stulda marshrut sanasi chiqadi');
+  assert.equal(r2.fg_src, 'marshrut');
+
+  //  Boshliq o'z tsexining konveriga muddat qo'yadi — jurnalsiz.
+  const ok = await korpus('POST', `/api/units/${kor.id}/plan`, { due_on: '2026-09-20' });
+  assert.equal(ok.status, 200, ok.text);
+  const r3 = (await admin('GET', '/api/units/?conveyor_no=' + kor.conveyor_no)).body[0];
+  assert.equal(String(r3.next_shop_on).slice(0, 10), '2026-09-20');
+  assert.equal(r3.next_shop_src, 'reja');
+  //  Korpusdan keyin lak tsexi turadi — sana o'sha ustunga ham tushadi.
+  assert.equal(String(r3.lak_on).slice(0, 10), '2026-09-20');
+  assert.equal(r3.lak_src, 'reja');
+
+  //  Boshqa tsexning boshlig'i tegolmaydi.
+  assert.equal((await lak('POST', `/api/units/${kor.id}/plan`,
+    { due_on: '2026-09-21' })).status, 403);
+
+  //  Bo'sh yuborilgani «yo'q» degani: sana olib tashlanadi.
+  assert.equal((await korpus('POST', `/api/units/${kor.id}/plan`,
+    { due_on: null })).status, 200);
+  const r4 = (await admin('GET', '/api/units/?conveyor_no=' + kor.conveyor_no)).body[0];
+  assert.equal(r4.next_shop_on, null);
+
+  //  Boshliq konverning O'ZIGA tegolmaydi — faqat reja.
+  assert.equal((await korpus('PATCH', '/api/units/' + kor.id, { qty: 9 })).status, 403);
+});
+
 /* ============================================================================
  *  KONVER SO'ROVI — tsex boshlig'i yozadi, direktor tasdiqlaydi
  *
@@ -2872,13 +2913,22 @@ test('konver so\'rovi: rad etiladi va o\'zi bekor qiladi', async () => {
  *  o'zi sinaladi: qadam raqami bo'yicha, boshlangan kundan.
  * ========================================================================== */
 test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
-  const u = await newUnit({ started_on: '2026-09-01', entered_section_on: '2026-09-01' });
+  //  STUL olinadi: sana marshrutdan faqat `plan_auto` belgili tsexda
+  //  chiqadi, korpusda esa boshliq qo'yadi (izoh: sql/register.sql).
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active
+        AND p.route_template_id = (SELECT id FROM route_templates WHERE code = 'L2-FULL')
+      ORDER BY p.id LIMIT 1`)).id;
+  const ROVER2 = (await H.id(`SELECT id FROM sections WHERE code = 'STU-ROVER'`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [{
+    product_id: STUL, qty: 3, section_id: ROVER2,
+    started_on: '2026-09-01', entered_section_on: '2026-09-01' }] })).body.created[0];
 
   const r = (await admin('GET', '/api/units/?conveyor_no=' + u.conveyor_no)).body[0];
   const pl = await H.id(`SELECT steps, fg_on, next_shop, next_shop_on
                            FROM v_unit_plan WHERE unit_id = $1`, [u.id]);
 
-  //  Penal marshruti — korpus, lak va qadoqlash tsexlari (sql/routes.sql).
   //  Qadamlar soni shu yerda qotib yozilmaydi: marshrut o'zgarsa test
   //  emas, FORMULA tekshirilishi kerak.
   //  DATE ustuni `pg` da Date bo'lib keladi, JSON'da esa matn — ikkalasini

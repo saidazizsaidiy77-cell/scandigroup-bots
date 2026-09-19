@@ -75,6 +75,33 @@ boshlig'i qo'lda qo'ygan, formuladan USTUN) → **marshrut** (formula).
 Zahiraga marshrut sanasi chiqarilmaydi: u buyurtma kutadi, marshrut
 kutmaydi.
 
+**★ FORMULA HAMMA TSEXDA ISHLAMAYDI** (`shops.plan_auto`, zavod qarori
+2026-09). **Stulda** sana marshrutdan o'zi chiqadi: yo'li qisqa
+(6–8 bo'lim) va bir tekis yuradi. **Korpusda** esa katak BO'SH
+tug'iladi va **tsex boshlig'i o'zi qo'yadi**: marshruti o'n to'qqiz
+bo'lim, quritish va kamera navbati bor, va o'sha kunni boshliqdan
+boshqa hech kim to'g'ri ayta olmaydi. Bo'sh katak bu yerda «unutilgan»
+emas, «boshliq qo'yadi» degani.
+
+Belgi TSEXDA, kodda emas — omborning `perm` i va xodimning
+`can_hold_cash` i bilan bir xil idiom: ertaga korpus ham avtomatga
+o'tsa bitta katakcha belgilanadi. Qaysi tsexniki ekani marshrutni
+BOSHLAYDIGAN qadamdan chiqadi, turgan joyidan emas: stul lak bo'limiga
+o'tganda ham stul tsexiniki bo'lib qoladi.
+
+**Boshliq muddatni o'z ekranidan qo'yadi** (`production.plan`,
+`POST /api/units/:id/plan`, bo'limlar ekranidagi sana katagi). Unga
+jurnal ochilmaydi va ochilishi ham kerak emas — u yerda narx, mijoz va
+butun zavodning konverlari turadi; bu huquq esa FAQAT reja sanalarini
+yozadi va faqat o'z tsexining konveriga (tsex doirasi — chegara).
+Ekranda bitta sana so'raladi («qachon topshiriladi»), **qaysi ustunga
+yozilishini SERVER hal qiladi**: oldinda lak tursa `lak_planned_on`,
+qadoqlash bo'lsa `pack_planned_on`, tsex qolmagan bo'lsa
+`fg_planned_on` — va har uchalasida `next_shop_planned_on`. Shu qoida
+bo'limlar ekranidagi orqaga sanash bilan BIR manbadan chiqadi, aks
+holda boshliq qo'ygan kun o'sha ekranda ko'rinmasdi. Bo'sh yuborilgani
+«tegma» emas, «yo'q» degani — xato sana olib tashlanadi.
+
 Bo'limsiz kiritilgan konverda keyingi tsex yo'q, lekin **T/M ombor
 sanasi bor**: u marshrutning to'liq uzunligidan chiqadi va konver
 qayerda turganini bilishni talab qilmaydi.
@@ -994,7 +1021,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 
 | Rol | Huquq | Ko'radi |
 |---|---|---|
-| `tsex_usta` | `production.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi |
+| `tsex_usta` | `production.entry`, `production.request`, `production.plan` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi va muddat rejasini qo'yadi |
 | `kirituvchi` | + `production.units`, `production.reports` | jurnal, boshlang'ich qoldiq, hisobotlar |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |

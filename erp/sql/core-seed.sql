@@ -22,6 +22,11 @@ INSERT INTO permissions (code, module, name) VALUES
   --  `production.units` dan alohida: u konverni TO'G'RIDAN-TO'G'RI
   --  ochadi, bu esa faqat navbatga qo'yadi.
   ('production.request','production', 'Konver so''rovi: tsex boshlig''i yozadi'),
+  --  ★ MUDDAT REJASI. Stulda sana marshrutdan o'zi chiqadi, korpusda esa
+  --  tsex boshlig'i qo'yadi (izoh: sql/register.sql, `shops.plan_auto`) —
+  --  shuning uchun unga jurnalni ochmaydigan alohida huquq kerak: u
+  --  faqat REJA sanalarini yozadi, konverning o'ziga tegmaydi.
+  ('production.plan',   'production', 'Muddat rejasi: tsexdan chiqish sanasi'),
   ('production.approve','production', 'Konver so''rovini tasdiqlash'),
   -- Xom ashyo va tayyor mahsulot ombori (rejada)
   ('warehouse.view',    'warehouse',  'Ombor qoldiqlarini ko''rish'),
@@ -87,6 +92,7 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('ishlab_boshl', 'production.view'),  ('ishlab_boshl', 'production.entry'),
   ('ishlab_boshl', 'production.units'), ('ishlab_boshl', 'production.manage'),
   ('ishlab_boshl', 'production.request'), ('ishlab_boshl', 'production.approve'),
+  ('ishlab_boshl', 'production.plan'),
   ('ishlab_boshl', 'production.reports'), ('ishlab_boshl', 'warehouse.view'),
   ('ishlab_boshl', 'warehouse.material'),
 
@@ -102,6 +108,7 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  Tsex boshlig'i ishlab chiqarishga nima kirishini o'zi rejalashtiradi,
   --  lekin konverni o'zi ochmaydi — so'rov yozadi (izoh: sql/units.sql).
   ('tsex_usta',    'production.entry'), ('tsex_usta', 'production.request'),
+  ('tsex_usta',    'production.plan'),
   ('operator',     'production.entry'),
 
   -- Ombor mudiri: zavodning HAMMA omborini ko'radi — tayyor mahsulot,

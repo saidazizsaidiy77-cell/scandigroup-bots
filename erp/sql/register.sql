@@ -49,6 +49,28 @@ UPDATE shops SET name = 'Lak tsexi'
 UPDATE shops SET milestone = 'lak'  WHERE code = 'BOYOQ' AND milestone IS NULL;
 UPDATE shops SET milestone = 'pack' WHERE code = 'QADOQ' AND milestone IS NULL;
 
+--  ★ MUDDATNI KIM QO'YADI — TSEXGA QARAB (zavod qarori, 2026-09).
+--
+--  Stulda marshrut qisqa va bir tekis yuradi, shuning uchun sana
+--  formuladan chiqaveradi. Korpusda esa tsex boshlig'i o'zi qo'yadi:
+--  marshrut uzun (o'n to'qqiz bo'lim), quritish va kamera navbati bor
+--  va u kunni boshliqdan boshqa hech kim to'g'ri ayta olmaydi.
+--
+--  Belgi TSEXDA, kodda emas — omborning `perm` i va xodimning
+--  `can_hold_cash` i bilan bir xil idiom: ertaga korpus ham avtomatga
+--  o'tsa bitta katakcha belgilanadi, kodga tegilmaydi.
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_auto BOOLEAN NOT NULL DEFAULT false;
+
+--  Bir martalik: saytdan o'zgartirilgani keyingi deployda qaytib
+--  qolmasin (izoh: CLAUDE.md, «Bir martalik ma'lumot ko'chirishlar»).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'muddat-avtomat') THEN
+    UPDATE shops SET plan_auto = true WHERE code = 'STUL';
+    INSERT INTO migration_flags (key) VALUES ('muddat-avtomat');
+  END IF;
+END $$;
+
 -- Rang va mato ro'yxati oldindan tuzilmaydi — kiritilganlari o'zi yig'iladi
 -- va keyingi safar tanlash uchun taklif qilinadi. Shuning uchun alohida
 -- spravochnik jadvali yo'q, faqat indeks.
@@ -118,13 +140,22 @@ brk AS (   -- turgan joyidan keyin tsex almashadigan birinchi qadam
    WHERE rem_shop_id <> at_shop_id
    GROUP BY unit_id
 )
+--  Marshrutni BOSHLAYDIGAN tsex konverning egasi: sana avtomat
+--  hisoblanadimi yoki yo'qmi shu hal qiladi (`shops.plan_auto`).
+--  Turgan joyi emas — stul lak bo'limiga o'tganda ham stul tsexiniki
+--  bo'lib qoladi va qoidasi o'zgarmasligi kerak.
 SELECT o.unit_id, o.steps, o.fg_on,
        sp.on_date AS next_shop_on,
-       sh.name    AS next_shop
+       sh.name    AS next_shop,
+       COALESCE(bsh.plan_auto, false) AS auto
   FROM oxiri o
   LEFT JOIN brk b           ON b.unit_id = o.unit_id
   LEFT JOIN v_unit_step_plan sp ON sp.unit_id = o.unit_id AND sp.step_no = b.change_step
-  LEFT JOIN shops sh        ON sh.id = sp.shop_id;
+  LEFT JOIN shops sh        ON sh.id = sp.shop_id
+  LEFT JOIN LATERAL (
+    SELECT s1.shop_id FROM v_unit_step_plan s1
+     WHERE s1.unit_id = o.unit_id ORDER BY s1.step_no LIMIT 1) first ON true
+  LEFT JOIN shops bsh       ON bsh.id = first.shop_id;
 
 -- ------------------------------------------------------------ ★ JURNAL
 -- Ishlab chiqarish boshlig'ining jadvali. Bu view FAQAT shu faylda
@@ -166,11 +197,14 @@ SELECT
   -- marshrut rejasi (har bo'limda bir kun).
   -- Kutish nuqtasida turgan zahiraga reja yo'q: u buyurtma kutadi,
   -- marshrut kutmaydi — qachon o'tishini hech qanday hisob ayta olmaydi.
+  --  `pl.auto` — tsexning belgisi (yuqorida): stulda sana formuladan
+  --  chiqadi, korpusda esa BO'SH qoladi va tsex boshlig'i qo'yadi.
+  --  Bo'sh katak bu yerda «unutilgan» emas, «boshliq qo'yadi» degani.
   COALESCE(u.next_shop_planned_on,
-           CASE WHEN u.is_stock AND COALESCE(cur.is_hold, false) THEN NULL
-                ELSE pl.next_shop_on END) AS next_shop_on,
+           CASE WHEN pl.auto AND NOT (u.is_stock AND COALESCE(cur.is_hold, false))
+                THEN pl.next_shop_on END) AS next_shop_on,
   CASE WHEN u.next_shop_planned_on IS NOT NULL THEN 'reja'
-       WHEN pl.next_shop_on IS NOT NULL
+       WHEN pl.auto AND pl.next_shop_on IS NOT NULL
             AND NOT (u.is_stock AND COALESCE(cur.is_hold, false)) THEN 'marshrut'
        ELSE NULL END AS next_shop_src,
   pl.next_shop AS next_shop,
@@ -185,10 +219,10 @@ SELECT
   -- Qo'lda qo'yilgan REJA ko'rsatilaveradi: tsex boshlig'i ataylab
   -- muddat belgilagan bo'lsa, u haqiqiy va'da.
   COALESCE(u.fg_on, u.fg_planned_on,
-           CASE WHEN u.is_stock THEN NULL ELSE pl.fg_on END) AS fg_on,
+           CASE WHEN pl.auto AND NOT u.is_stock THEN pl.fg_on END) AS fg_on,
   CASE WHEN u.fg_on         IS NOT NULL THEN 'fakt'
        WHEN u.fg_planned_on IS NOT NULL THEN 'reja'
-       WHEN pl.fg_on IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
+       WHEN pl.auto AND pl.fg_on IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS fg_src,
 
   COALESCE(c.name, 'T/M ombor') AS customer_name,  -- mijoz yo'q bo'lsa T/M ombor
@@ -206,18 +240,18 @@ SELECT
 
   -- Lak tsexi: fakt → reja → taxmin
   COALESCE(u.lak_on, u.lak_planned_on,
-           CASE WHEN u.is_stock THEN NULL ELSE lak.on_date END) AS lak_on,
+           CASE WHEN pl.auto AND NOT u.is_stock THEN lak.on_date END) AS lak_on,
   CASE WHEN u.lak_on         IS NOT NULL THEN 'fakt'
        WHEN u.lak_planned_on IS NOT NULL THEN 'reja'
-       WHEN lak.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
+       WHEN pl.auto AND lak.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS lak_src,
 
   -- Qadoqlash tsexi: savdo mijozga muddat aytishda shunga qaraydi
   COALESCE(u.pack_on, u.pack_planned_on,
-           CASE WHEN u.is_stock THEN NULL ELSE pk.on_date END) AS pack_on,
+           CASE WHEN pl.auto AND NOT u.is_stock THEN pk.on_date END) AS pack_on,
   CASE WHEN u.pack_on         IS NOT NULL THEN 'fakt'
        WHEN u.pack_planned_on IS NOT NULL THEN 'reja'
-       WHEN pk.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
+       WHEN pl.auto AND pk.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS pack_src,
 
   -- Reja bor, fakt yo'q va muddat o'tib ketgan — nazorat shu ustunda
