@@ -1300,7 +1300,13 @@ javob beradi:
 
 Standarti **`true`**: «qo'lida pul bor odam uni har doim hisobdan
 chiqara oladi» degan qoida joyida qoladi va pul tiqilib qolmaydi.
-Belgi olib tashlanadigan joy bitta — inkassator.
+
+**★ INKASSATOR BELGISI O'ZI HAM YETARLI**: `cash_all_customers`
+qo'yilgan xodimda tugma `can_spend_cash` dan QAT'I NAZAR chizilmaydi —
+qoida yuqorida aytilgani: uning qo'lidagi pul mijozdan yig'ilgan va
+uning bitta yo'li bor. Ikkita katakcha qo'yib, ikkinchisini unutish
+uchun bitta kun yetardi. `can_spend_cash` esa inkassator BO'LMAGAN
+xodimni yopish uchun qoladi (ombor mudiri, ta'minotchi).
 
 Tekshiruv **serverda va BITTA joyda** (`modules/cash.js`, tomonlar
 qo'yilgandan keyin): xodimning o'zi yozganida ham, kassir uning

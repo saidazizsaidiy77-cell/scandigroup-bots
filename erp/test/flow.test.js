@@ -4114,6 +4114,17 @@ test('inkassatorning qo\'lidagi pul faqat kassaga topshiriladi', async () => {
     `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [wid])).total_usd), 0,
     'qo\'lida hech narsa qolmadi');
 
+  //  ★ INKASSATOR BELGISI O'ZI HAM YETARLI: uning qo'lidagi pul
+  //  mijozdan yig'ilgani va sarflanmaydi. Ikkita katakcha qo'yib,
+  //  ikkinchisini unutish uchun bitta kun yetardi.
+  await db.query(`UPDATE workers
+                     SET can_spend_cash = true, cash_all_customers = true
+                   WHERE id = $1`, [wid]);
+  const ink2 = H.api(base, await H.sessionFor('Sinov yigimchi'));
+  assert.equal((await ink2('GET', '/api/cash/refs')).body.my.sarflaydi, false,
+    'inkassatorda tugma chizilmaydi');
+  await db.query(`UPDATE workers SET cash_all_customers = false WHERE id = $1`, [wid]);
+
   //  Belgi Xodimlar sahifasidan qo'yiladi va yuborilmasa tegilmaydi.
   assert.equal((await admin('PATCH', '/api/admin/workers/' + wid,
     { can_spend_cash: true })).status, 200);
