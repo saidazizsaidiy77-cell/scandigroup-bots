@@ -1258,6 +1258,47 @@ test('konver bo\'linmaydi — ustiga bron qo\'yiladi, bir nechta mijozdan', asyn
     'bitta bron qolgach mijoz yana yoziladi');
 });
 
+test('rangsiz konver savdoda ko\'rinadi va rangi buyurtmada tanlanadi', async () => {
+  //  ★ Ishlab chiqarishdagi konver RANGSIZ tug'iladi — zahira ham,
+  //  bo'limsiz kiritilgan «boshlanmagan» konver ham. Rang mijoz
+  //  aytganda ma'lum bo'ladi va o'shanda bo'yaladi, shuning uchun
+  //  bunday konver savdo ro'yxatidan tushib ketmasligi kerak.
+  const bosh = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 6 },          // bo'limsiz, rangsiz
+  ] })).body.created[0];
+
+  const st = (await admin('GET', '/api/sales/stock')).body.rows;
+  const q = st.find((r) => r.src === 'production'
+    && r.product_id === PENAL && !r.color);
+  assert.ok(q, 'boshlanmagan rangsiz konver savdo ro\'yxatida turadi');
+
+  //  Rangi bor buyurtma qatoriga ham nomzod bo'ladi: bo'yalmagan
+  //  partiya istalgan rangga yaraydi.
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2, color: 'Venge' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  const nomzod = (await admin('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${qator.id}`)).body.rows;
+  assert.ok(nomzod.some((x) => x.id === bosh.id),
+    'rangsiz konver rangi bor qatorga ham taklif qilinadi');
+
+  //  ★ YANGI RANG KIRITILMAYDI — tekshiruv SERVERDA. Ro'yxat klientda
+  //  quriladi, ya'ni qo'lda yuborilgan qiymat shu yerda tutilishi kerak:
+  //  bitta «Venge» va bitta «venge » ombor qoldig'ini ikkiga bo'lardi.
+  const yangi = await admin('PATCH', '/api/sales/orders/' + z.id, {
+    customer_id: mijoz,
+    items: [{ id: qator.id, product_id: PENAL, qty: 2, color: 'Feruza' }] });
+  assert.equal(yangi.status, 400, yangi.text);
+  assert.match(yangi.body.error, /ro'yxatda yo'q/);
+
+  //  Boridan bo'lsa o'tadi, katta-kichik harfga qaramaydi.
+  const ok = await admin('PATCH', '/api/sales/orders/' + z.id, {
+    customer_id: mijoz,
+    items: [{ id: qator.id, product_id: PENAL, qty: 2, color: 'venge' }] });
+  assert.equal(ok.status, 200, ok.text);
+});
+
 test('ishlab chiqarishdagi konverga ham bron qo\'yiladi', async () => {
   const ish = (await admin('POST', '/api/units/', { items: [
     { product_id: PENAL, qty: 8, color: 'Venge', section_id: ARRA },
@@ -1542,7 +1583,7 @@ test('zahira alohida manba bo\'lib chiqadi', async () => {
   //  qimirlamaydi, bron ustiga qo'yiladi.
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
   const o = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
-    items: [{ product_id: PENAL, qty: 2, color: 'Pistoq', unit_price: 100 }] })).body;
+    items: [{ product_id: PENAL, qty: 2, color: 'Venge', unit_price: 100 }] })).body;
   const qator = (await admin('GET', '/api/sales/orders/' + o.id)).body.items[0];
   assert.equal((await admin('POST', `/api/sales/orders/${o.id}/assign`,
     { item_id: qator.id, unit_id: z.id, qty: 2 })).status, 200);
@@ -1642,7 +1683,7 @@ test('yuk xatida ombor mudiri ko\'rsatiladi', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Xujjat mijozi'`)).id;
   const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
     ship_to: 'ZAVOD',
-    items: [{ product_id: PENAL, qty: 1, color: 'Xujjat', unit_price: 90 }] })).body;
+    items: [{ product_id: PENAL, qty: 1, color: 'Venge', unit_price: 90 }] })).body;
 
   //  Hali hech kim chiqarmagan — lekin mudir bitta, ismi hujjatda
   const d = (await admin('GET', '/api/sales/orders/' + z.id)).body;
@@ -1652,7 +1693,7 @@ test('yuk xatida ombor mudiri ko\'rsatiladi', async () => {
 
   //  Chiqarib yuborilgach — aynan tasdiqlagan odam
   const u = (await admin('POST', '/api/units/', { items: [
-    { product_id: PENAL, qty: 1, color: 'Xujjat', unit_price: 90,
+    { product_id: PENAL, qty: 1, color: 'Venge', unit_price: 90,
       is_opening: true, fg_on: '2026-09-05' }] })).body.created[0];
   const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
   await admin('POST', `/api/sales/orders/${z.id}/assign`,
@@ -1689,7 +1730,7 @@ test('yuk xatini ombor mudiri buyurtma oynasisiz chiqaradi', async () => {
     `SELECT id FROM customers WHERE name='Hujjat chop mijozi'`)).id;
   const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
     ship_to: 'ZAVOD',
-    items: [{ product_id: PENAL, qty: 2, color: 'Chop', unit_price: 70 }] })).body;
+    items: [{ product_id: PENAL, qty: 2, color: 'Venge', unit_price: 70 }] })).body;
 
   //  Buyurtma oynasi unga yopiq — savdo hujjatni yozadi, u emas
   assert.equal((await mudir('GET', '/api/sales/orders/' + z.id)).status, 403);

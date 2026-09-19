@@ -359,7 +359,42 @@ router.post('/orders', need(...WRITE), wrap(async (req, res) => {
 //  qaysi qator o'chirilgani, qaysisi qo'shilganini klient hisoblab
 //  yubormasligi kerak — u bir kun adashadi. Biriktirilgan konveri bor
 //  qator esa o'chirilmaydi: avval konver ajratiladi.
+//  ★ RANG VA MATO FAQAT BORIDAN — so'rov oynasidagi bilan BIR XIL
+//  qoida (zavod qarori 2026-09, izoh: `modules/units.js`).
+//
+//  Buyurtma qatoriga rang ro'yxatdan tanlanadi, lekin ro'yxat KLIENTDA
+//  quriladi: tekshiruvsiz qolsa qo'lda yuborilgan qiymat o'tib ketardi
+//  va bitta «Venge» bilan bitta «venge » ombor qoldig'ini ikkiga bo'lib
+//  yuborardi. Yangi rang — zavodning qarori, terish xatosi emas: u
+//  jurnal orqali kiritiladi va shundan keyin ro'yxatda paydo bo'ladi.
+//
+//  Katta-kichik harfga qaramaydi. Eski buyurtmada TURGAN qiymat
+//  tegilmasa tekshirilmaydi: o'sha rangdagi konver sotilib ketgan
+//  bo'lishi mumkin va qator o'z qiymatini yo'qotmasligi kerak.
+async function assertRang(client, orderId, items) {
+  const eski = new Map((await client.query(
+    `SELECT id, color, fabric FROM order_items WHERE order_id = $1`,
+    [orderId])).rows.map((r) => [r.id, r]));
+
+  for (const it of items) {
+    for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
+      const v = String(it[maydon] || '').trim();
+      if (!v) continue;
+      const was = it.id ? eski.get(Number(it.id)) : null;
+      if (was && String(was[maydon] || '').trim().toLowerCase() === v.toLowerCase())
+        continue;
+      const bor = (await client.query(
+        `SELECT 1 FROM production_units
+          WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
+      if (!bor) throw new Error(
+        `${nom} «${v}» ro'yxatda yo'q — boridan tanlang`);
+    }
+  }
+}
+
 async function saveItems(client, orderId, items) {
+  await assertRang(client, orderId, items);
+
   const keep = items.map((i) => i.id).filter(Boolean);
   const busy = (await client.query(
     `SELECT i.id, p.name FROM order_items i

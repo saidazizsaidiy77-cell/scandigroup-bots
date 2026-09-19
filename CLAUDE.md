@@ -579,16 +579,44 @@ o'qilardi) — faqat SHU buyurtmaga olingan soni.
 Ro'yxat **uch manbadan**, shu tartibda:
 
   1. **T/M omborda** — tayyor turibdi, darrov beriladi.
-  2. **Zahirada** — kutish bo'limida buyurtma kutmoqda va **rangi hali
-     yo'q**: mijoz aytgan rangga bo'yaladi. Shuning uchun zahirasi bor
-     mahsulotda rang ro'yxatiga «Zahiraga tanlanadi» guruhi qo'shiladi —
-     zavodda ishlatilgan ranglarning hammasi (`/api/sales/suggest`).
-  3. **Ishlab chiqarishda** — yo'lda, rangi allaqachon ma'lum.
+  2. **Zahirada** — kutish bo'limida buyurtma kutmoqda.
+  3. **Ishlab chiqarishda** — yo'lda; bo'limsiz kiritilgan
+     «boshlanmagan» konver ham shu yerda.
 
 To'rtinchi manba yo'q: «buyurtma uchun yangi konver ochilmaydi» degan
 qoida sotiladigan narsa allaqachon mavjudligini anglatadi. Eski
 buyurtma ochilganda ro'yxatda qolmagan qiymat «Ro'yxatda yo'q» guruhida
 saqlanadi — qator o'z qiymatini yo'qotmaydi.
+
+**★ RANGI YO'Q KONVER HAR QANDAY RANGGA YARAYDI** (zavod qarori).
+Ishlab chiqarishdagi konver RANGSIZ tug'iladi — zahira ham,
+boshlanmagan partiya ham: rang mijoz aytganda ma'lum bo'ladi va
+o'shanda bo'yaladi. Shuning uchun:
+
+  · menejer rang tanlagan zahoti ular ro'yxatdan TUSHIB KETMAYDI
+    (`rowsFor`, `bosh()` — `public/buyurtmalar.html`);
+  · rang katagiga «Rangi tanlanadi» guruhi qo'shiladi: zavodda
+    ishlatilgan ranglarning hammasi (`/api/sales/suggest`);
+  · izohda «ishlab chiqarishda — rangi tanlanadi» deb yoziladi:
+    «bor» bilan «bo'yab beramiz» bir xil javob emas.
+
+Ilgari bu faqat ZAHIRAGA tegishli edi va boshqa rangsiz konver rang
+tanlangan zahoti yo'qolardi — menejer «bu rangda konver yo'q» degan
+javobni olardi, holbuki zavodda o'sha mahsulotning bo'yalmagan
+partiyasi turgan bo'lardi va buyurtma bekorga rad etilardi.
+
+**T/M OMBORDAGI rangsiz konverga bu tegishli emas**: u tayyor turibdi
+va rangi allaqachon bor, shunchaki yozilmagan. Uni «istalgan rangga
+yaraydi» deb ko'rsatish yolg'on va'da bo'lardi.
+
+**Rang va mato bu yerda ham FAQAT BORIDAN** — so'rov oynasidagi bilan
+bir xil qoida. Tekshiruv **serverda** (`assertRang`, `modules/sales.js`):
+ro'yxat klientda quriladi, ya'ni qo'lda yuborilgan qiymat shu yerda
+tutilishi kerak — bitta «Venge» va bitta «venge » ombor qoldig'ini
+ikkiga bo'lib yuborardi. Katta-kichik harfga qaramaydi. Eski
+buyurtmada TURGAN qiymat tegilmasa tekshirilmaydi: o'sha rangdagi
+konver sotilib ketgan bo'lishi mumkin va qator o'z qiymatini
+yo'qotmasligi kerak.
 
 **Zakaz raqami qo'lda ham qo'yiladi** (`orders.order_no`, UNIQUE). Zavod
 o'z daftarida raqam yuritadi va nakladnoyda o'sha raqam turishi kerak;

@@ -511,14 +511,31 @@ function drawAddr() {
 const SRC = [['fg', 'T/M omborda'], ['stock', 'Zahirada'],
              ['production', 'Ishlab chiqarishda']];
 
+//  ★ RANGI YO'Q KONVER HAR QANDAY RANGGA YARAYDI (zavod qarori).
+//
+//  Ishlab chiqarishdagi konver rangsiz tug'iladi — zahira ham,
+//  bo'limsiz kiritilgan «boshlanmagan» konver ham: rang mijoz aytganda
+//  ma'lum bo'ladi va o'shanda bo'yaladi. Shuning uchun menejer rang
+//  tanlagan zahoti ular ro'yxatdan TUSHIB KETMAYDI.
+//
+//  Ilgari tushib ketardi va menejer «bu rangda konver yo'q» degan
+//  javobni olardi, holbuki zavodda o'sha mahsulotning bo'yalmagan
+//  partiyasi turgan bo'lardi — buyurtma bekorga rad etilardi.
+//
+//  T/M OMBORDAGI rangsiz konverga bu tegishli EMAS: u tayyor turibdi
+//  va rangi allaqachon bor, shunchaki yozilmagan. Uni «istalgan rangga
+//  yaraydi» deb ko'rsatish yolg'on va'da bo'lardi.
+const bosh = (r) => !r.color && r.src !== 'fg';
+
 //  Shu qatorga tegishli qoldiq satrlari
 const rowsFor = (it, level) => stock.filter(r =>
   (level < 2 || r.product_id === Number(it.product_id))
-  && (level < 3 || (r.color || '') === (it.color || '')));
+  && (level < 3 || bosh(r) || (r.color || '') === (it.color || '')));
 
-//  Zahira shu mahsulotda bormi — rang ro'yxati shunga qarab ochiladi
-const hasZahira = (it) => it.product_id
-  && rowsFor(it, 2).some(r => r.src === 'stock');
+//  Rangi tanlanadigan konver shu mahsulotda bormi — rang ro'yxati
+//  shunga qarab ochiladi.
+const rangTanlanadi = (it) => it.product_id
+  && rowsFor(it, 2).some((r) => r.src === 'stock' || bosh(r));
 
 //  Qator QAYERDAN yopiladi — HAMMA manbasi bilan. Ilgari bittasi
 //  yozilardi va omborda bori ko'rinib, ishlab chiqarishdagisi
@@ -529,14 +546,19 @@ const hasZahira = (it) => it.product_id
 //  Rang HALI TANLANMAGAN bo'lsa mahsulotning hamma satri qaraladi:
 //  aks holda rangsiz satrlar bilan solishtirilib, to'la ombor ustida
 //  «omborda yo'q» deb yozilardi.
-const SRC_HINT = { fg: 'T/M omborda bor', stock: 'zahirada — rangi tanlanadi',
+const SRC_HINT = { fg: 'T/M omborda bor', stock: 'zahirada',
                    production: 'ishlab chiqarishda' };
 function srcHint(it) {
   if (!it.product_id) return '';
-  const rows = rowsFor(it, it.color ? 4 : 2);
-  const bor = SRC.map(([s]) => s).filter(s => rows.some(r => r.src === s));
-  return bor.length ? bor.map(s => SRC_HINT[s]).join(' \u00b7 ')
-                    : 'Bu rangda konver yo\'q';
+  const rows = rowsFor(it, it.color ? 3 : 2);
+  const bor = SRC.map(([s]) => s).filter(s => rows.some(r => r.src === s))
+    .map((s) => {
+      //  «Bor» bilan «bo'yab beramiz» bir xil javob emas: manbada
+      //  faqat rangsiz konver bo'lsa menejer buni bilishi kerak.
+      const g = rows.filter(r => r.src === s);
+      return g.every(bosh) ? SRC_HINT[s] + ' \u2014 rangi tanlanadi' : SRC_HINT[s];
+    });
+  return bor.length ? bor.join(' \u00b7 ') : 'Bu rangda konver yo\'q';
 }
 
 //  Ro'yxat: qiymat birinchi uchragan manbada qoladi — omborda bori
@@ -562,7 +584,7 @@ const nameOf = (x, key) => key === 'product_id' ? x.name
 //  Katak. Saqlangan qiymat ro'yxatda bo'lmasa (konver sotilib ketgan,
 //  eski buyurtma ochilgan) u oxirgi guruhda turadi — qator o'z
 //  qiymatini yo'qotmasin.
-function cell(i, key, rows, val, dis, zahira) {
+function cell(i, key, rows, val, dis, tanlov) {
   const list = listOf(rows, key);
   const sel = (v) => String(v) === String(val ?? '') ? ' selected' : '';
   const grp = ([src, label]) => {
@@ -571,17 +593,19 @@ function cell(i, key, rows, val, dis, zahira) {
       `<option value="${esc(x.v)}"${sel(x.v)}>${esc(nameOf(x, key))}</option>`)
       .join('')}</optgroup>` : '';
   };
-  //  ZAHIRAGA RANG TANLANADI: konverning rangi hali yo'q, mijoz aytgan
-  //  rangga bo'yaladi. Shuning uchun bu yerda zavodda ishlatilgan
-  //  ranglarning hammasi taklif qilinadi — qo'lda yozish baribir yo'q.
-  const pal = zahira && key !== 'product_id'
+  //  RANGI HALI YO'Q KONVERGA RANG TANLANADI (zahira ham, ishlab
+  //  chiqarishdagi bo'yalmagan partiya ham): mijoz aytgan rangga
+  //  bo'yaladi. Shuning uchun bu yerda zavodda ishlatilgan ranglarning
+  //  hammasi taklif qilinadi — qo'lda yozish baribir yo'q va YANGI
+  //  rang bu yerdan kirmaydi (tekshiruv serverda, `modules/sales.js`).
+  const pal = tanlov && key !== 'product_id'
     ? (key === 'color' ? palette.colors : palette.fabrics)
         .filter(v => !list.some(x => String(x.v) === v)) : [];
   const has = list.some(x => String(x.v) === String(val ?? '')) || pal.includes(val);
   return `<select ${dis} onchange="setPick(${i},'${key}',this.value)" style="width:100%">
     <option value=""${val == null || val === '' ? ' selected' : ''}>— tanlang —</option>
     ${SRC.map(grp).join('')}
-    ${pal.length ? `<optgroup label="Zahiraga tanlanadi">${pal.map(v =>
+    ${pal.length ? `<optgroup label="${key === 'color' ? 'Rangi' : 'Matosi'} tanlanadi">${pal.map(v =>
         `<option value="${esc(v)}"${sel(v)}>${esc(v)}</option>`).join('')}</optgroup>` : ''}
     ${!has && val ? `<optgroup label="Ro'yxatda yo'q"><option value="${esc(val)}" selected
         >${esc(key === 'product_id'
@@ -622,7 +646,7 @@ function drawItems(){
   const dis = '';
   $('tI').innerHTML = cur.items.length ? cur.items.map((it, i) => {
     const p = products.find(x => x.id === Number(it.product_id));
-    const z = hasZahira(it);
+    const z = rangTanlanadi(it);
     //  Mahsulot QAYERDAN keladi — soni emas. Bo'sh dona soni tanlash
     //  paytida chalg'itadi: menejer mijoz so'ragan miqdorni yozadi,
     //  konverdagi qolgan dona esa boshqa mijozniki. Aniq soni bron
