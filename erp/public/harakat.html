@@ -334,14 +334,36 @@ function kindOf(id) {
   return 'move';                       // qabul qilish ro'yxatidagilar
 }
 
-async function apply(ids, qty) {
+//  ★ QABUL QILGAN TSEX O'ZIDAN KEYINGISIGA MUDDAT QO'YADI.
+//
+//  Boshqa tsexdan kelgan konverni olayotgan boshliq o'sha zahoti «men
+//  buni qachon topshiraman» degan savolga javob beradi: lak tsexi
+//  qadoqlashga, qadoqlash esa T/M omborga. Aks holda sana faqat
+//  birinchi tsexda qo'yilardi va zanjirning o'rtasi ko'rinmasdi.
+//
+//  Sanasi marshrutdan o'zi chiqadigan tsexda (stul) so'ralmaydi —
+//  belgi tsexda (`shops.plan_auto`, izoh: sql/register.sql).
+const qabulmi = (id) => (data.inbox || []).some(u => u.id === id);
+
+async function apply(ids, qty, planOn) {
   const send = ids.filter(id => kindOf(id) === 'send');
   const move = ids.filter(id => kindOf(id) !== 'send');
+
+  const qabul = move.filter(qabulmi);
+  if (qabul.length && planOn === undefined && data.shop && !data.shop.plan_auto)
+    return askAccept(ids, qty);
+
   try {
     if (move.length)
       await App.api('/api/units/move', {
         method: 'POST', body: JSON.stringify({
-          items: move.map(id => qty == null ? { unit_id: id } : { unit_id: id, qty }) }) });
+          items: move.map(id => ({
+            unit_id: id,
+            ...(qty == null ? {} : { qty }),
+            //  Sana faqat QABUL qilinayotganlarga: o'z tsexi ichidagi
+            //  harakatga reja qo'yilmaydi.
+            ...(planOn && qabulmi(id) ? { plan_on: planOn } : {}),
+          })) }) });
     if (send.length)
       await App.api('/api/units/handover', {
         method: 'POST', body: JSON.stringify({ items: send }) });
@@ -355,6 +377,36 @@ async function apply(ids, qty) {
 
 const move  = id => askQty(id);
 const send1 = id => apply([id]);
+
+//  Qabul qilishdan oldingi bitta savol: keyingi tsexga qachon
+//  topshiriladi. Qaysi ustunga yozilishini SERVER hal qiladi — ekranda
+//  boshliqqa ustun nomi emas, savolning javobi kerak.
+function askAccept(ids, qty) {
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="accBox" onclick="if(event.target===this)closeAcc()">
+      <div class="modal" style="max-width:360px">
+        <h2 style="margin-bottom:4px">Qabul qilish</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">
+          ${ids.length > 1 ? ids.length + ' ta konver' : 'Konver'} sizning
+          tsexingizga o'tadi. Keyingi tsexga qachon topshirasiz?</p>
+        <label>Topshirish sanasi</label>
+        <input id="accVal" type="date" style="font-size:18px">
+        <button class="primary" style="width:100%;margin-top:16px"
+          onclick="okAcc([${ids}], ${qty == null ? 'null' : qty})">Qabul qildim</button>
+        <button style="width:100%;margin-top:8px" onclick="closeAcc()">Bekor qilish</button>
+      </div>
+    </div>`);
+  setTimeout(() => $('accVal')?.focus(), 50);
+}
+
+const closeAcc = () => $('accBox')?.remove();
+
+function okAcc(ids, qty) {
+  const v = $('accVal').value;
+  if (!v) return toast('Sana tanlanmadi', true);
+  closeAcc();
+  apply(ids, qty, v);
+}
 
 // ─────────────────────────────────────────── NECHTASI O'TADI
 //

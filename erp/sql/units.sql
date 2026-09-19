@@ -465,6 +465,11 @@ CREATE TABLE IF NOT EXISTS unit_requests (
   --  BOSHIDAN biladi — tasdiqlangandan keyin jurnaldan qidirib
   --  belgilash ortiqcha ish bo'lardi.
   is_stock    BOOLEAN NOT NULL DEFAULT false,
+  --  ★ KEYINGI TSEXGA TOPSHIRISH SANASI. Marshrutdan o'zi chiqmaydigan
+  --  tsexda MAJBURIY (izoh: `sql/register.sql`, `shops.plan_auto`):
+  --  korpusda yo'l uzun va u kunni boshliqdan boshqa hech kim ayta
+  --  olmaydi. Tasdiqlanganda konverning reja ustuniga ko'chadi.
+  next_on     DATE,
   --  Tasdiqlangach ochilgan konver: so'rovdan konverga yo'l qoladi.
   unit_id     INT  REFERENCES production_units(id)
 );
@@ -472,6 +477,7 @@ CREATE TABLE IF NOT EXISTS unit_requests (
 --  Jadval allaqachon yaratilgan bazada ustun CREATE ichidan kelmaydi.
 ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS conveyor_no TEXT;
 ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS is_stock BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS next_on DATE;
 
 --  Kutayotganlar ro'yxati kun bo'yi ochiq turadi — indeks o'shanga.
 CREATE INDEX IF NOT EXISTS idx_unit_req_pending ON unit_requests(shop_id, created_at)
@@ -497,7 +503,7 @@ SELECT q.id, q.qty, q.color, q.fabric, q.started_on, q.note,
        --  So'rov yozilayotganda muddat ko'rinib tursin: marshrut uzunligi
        --  (har bo'limda bir kun — izoh: sql/register.sql).
        (SELECT COUNT(*) FROM v_product_route r WHERE r.product_id = q.product_id) AS steps,
-       q.is_stock
+       q.is_stock, q.next_on
 FROM unit_requests q
 JOIN products p        ON p.id = q.product_id
 JOIN product_groups g  ON g.id = p.group_id

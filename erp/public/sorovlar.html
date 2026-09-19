@@ -52,6 +52,12 @@
       <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
     <div><label>Boshlanish sanasi</label>
       <input id="fStart" type="date" onchange="eta()"></div>
+    <!--  Keyingi tsexga topshirish sanasi. Korpusda MAJBURIY: yo'l uzun,
+          quritish va kamera navbati bor va u kunni boshliqdan boshqa
+          hech kim ayta olmaydi. Stulda katak yashiriladi — sana
+          marshrutdan o'zi chiqadi (izoh: sql/register.sql). -->
+    <div id="planBox" hidden><label id="planLbl">Keyingi tsexga topshirish</label>
+      <input id="fPlan" type="date"></div>
     <div><label>Rangi</label>
       <input id="fColor" list="colors" placeholder="ixtiyoriy"></div>
     <div><label>Matosi</label>
@@ -101,7 +107,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
   (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const d8 = (v) => !v ? '' : String(v).slice(0, 10).split('-').reverse().join('.');
 
-let ref = null, mahsulotlar = [], data = { rows: [], can_approve: false };
+let ref = null, mahsulotlar = [], planKerak = false;
+let data = { rows: [], can_approve: false };
 
 const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
                  rejected:['bad','rad etildi'], cancelled:['','bekor qilindi'] };
@@ -135,6 +142,11 @@ async function taklif(majburan) {
     const r = await App.api('/api/units/requests/next-no?product_id='
       + encodeURIComponent(pid));
     $('fNo').value = r.conveyor_no;
+    //  Katak keyingi tsexning NOMI bilan yoziladi: «keyingi tsex» degan
+    //  umumiy so'z o'rniga «Lak tsexiga topshirish» deb tursin.
+    planKerak = !!r.plan_required;
+    $('planBox').hidden = !planKerak;
+    $('planLbl').textContent = `${r.next_shop}ga topshirish`;
   } catch { /* taklif bermadi — xodim o'zi yozadi */ }
 }
 
@@ -212,6 +224,7 @@ async function send() {
     product_id:  Number($('fProduct').value) || null,
     conveyor_no: $('fNo').value.trim(),
     is_stock:    $('fStock').checked,
+    next_on:     $('fPlan').value || null,
     qty:        Number($('fQty').value) || 0,
     color:      $('fColor').value.trim() || null,
     fabric:     $('fFabric').value.trim() || null,
@@ -221,6 +234,10 @@ async function send() {
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
   if (!it.conveyor_no) { $('fNo').focus(); return alert('Konver raqami kiritilmagan'); }
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
+  if (planKerak && !it.next_on) {
+    $('fPlan').focus();
+    return alert($('planLbl').textContent + ' sanasi kiritilmagan');
+  }
   try {
     await App.api('/api/units/requests', { method: 'POST', body: JSON.stringify(it) });
     //  Mahsulot va sana JOYIDA qoladi: boshliq ketma-ket bir necha qator
@@ -229,7 +246,7 @@ async function send() {
     //  qolib ketsa ikkinchi qator o'sha raqam bilan ketardi.
     $('fNo').value = ''; $('fQty').value = 1;
     $('fColor').value = ''; $('fFabric').value = '';
-    $('fNote').value = ''; $('fStock').checked = false;
+    $('fNote').value = ''; $('fStock').checked = false; $('fPlan').value = '';
     //  Keyingi raqam darrov taklif qilinadi: qator ketma-ket
     //  kiritilganda har safar qo'lda terib o'tirmasin.
     await taklif(true);

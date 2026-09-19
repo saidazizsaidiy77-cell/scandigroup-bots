@@ -100,7 +100,32 @@ o'tsa bitta katakcha belgilanadi. Qaysi tsexniki ekani marshrutni
 BOSHLAYDIGAN qadamdan chiqadi, turgan joyidan emas: stul lak bo'limiga
 o'tganda ham stul tsexiniki bo'lib qoladi.
 
-**Boshliq muddatni o'z ekranidan qo'yadi** (`production.plan`,
+**★ MUDDAT ZANJIRI — HAR TSEX O'ZIDAN KEYINGISIGA SANA QO'YADI**
+(zavod qarori, 2026-09). Sanasi marshrutdan o'zi chiqmaydigan tsexda
+(korpus) u MAJBURIY va uch joyda so'raladi:
+
+    kiritayotganda   →  Lak tsexiga topshirish sanasi
+    lak qabul qilganda →  Qadoqlash tsexiga topshirish sanasi
+    qadoqlash qabul qilganda →  T/M omborga topshirish sanasi
+
+Aks holda sana faqat birinchi tsexda qo'yilardi va zanjirning o'rtasi
+ko'rinmasdi. **Stulda hech biri so'ralmaydi** — sana marshrutdan o'zi
+chiqadi (`shops.plan_auto`).
+
+Ekranda har doim BITTA sana so'raladi, chunki boshliqning savoli bitta:
+keyingi tsexga qachon beraman. **Qaysi ustunga yozilishini SERVER hal
+qiladi** — `keyingiTsex()` oldinda qaysi tsex turganini topadi,
+`planUstunlar()` esa sanani `lak_planned_on`, `pack_planned_on` yoki
+`fg_planned_on` ga yozadi (va har uchalasida `next_shop_planned_on`).
+Qoida **bitta joyda**, uch yo'l ham shundan o'tadi: so'rov, qabul
+qilish va boshliqning sana katagi. Ikkiga bo'linsa bir joyda qo'yilgan
+kun ikkinchisida ko'rinmay qolardi.
+
+Qabul qilishda sana `POST /api/units/move` ning `plan_on` maydonida
+keladi va faqat TSEX ALMASHGANDA talab qilinadi: tsex ichidagi harakat
+(arra → freza) rejaga tegmaydi.
+
+**Boshliq muddatni o'z ekranidan ham qo'yadi** (`production.plan`,
 `POST /api/units/:id/plan`, bo'limlar ekranidagi sana katagi). Unga
 jurnal ochilmaydi va ochilishi ham kerak emas — u yerda narx, mijoz va
 butun zavodning konverlari turadi; bu huquq esa FAQAT reja sanalarini

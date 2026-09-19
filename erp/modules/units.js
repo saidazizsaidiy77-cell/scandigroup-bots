@@ -361,6 +361,41 @@ async function nextConveyorNo(client = db, letter = 'K', width = 4) {
   return prefix + String(rows[0].n).padStart(width, '0');
 }
 
+/*  ★ «QACHON TOPSHIRILADI» — BITTA QOIDA, UCH JOYDA ISHLATILADI.
+ *
+ *  Ekranda har doim bitta sana so'raladi, chunki boshliqning savoli
+ *  bitta: keyingi tsexga qachon beraman. Qaysi USTUNGA yozilishini
+ *  server hal qiladi — oldinda lak tursa lak sanasi, qadoqlash bo'lsa
+ *  qadoqlash, tsex qolmagan bo'lsa T/M ombor.
+ *
+ *  Uch joy: konver so'rovi (kiritayotganda), tsexdan tsexga qabul
+ *  qilish, va boshliqning o'z ekranidagi sana katagi. Uchalasi bir xil
+ *  javob berishi shart — aks holda bir joyda qo'yilgan kun ikkinchisida
+ *  ko'rinmay qolardi.
+ */
+async function keyingiTsex(client, productId, stepNo, owner, curShop) {
+  return (await client.query(
+    `SELECT sh.id, sh.name, sh.milestone, COALESCE(sh.plan_auto, false) AS auto
+       FROM v_product_route pr
+       JOIN sections sc ON sc.id = pr.section_id
+       JOIN shops    sh ON sh.id = sc.shop_id
+      WHERE pr.product_id = $1
+        AND ($2::int IS NULL OR pr.step_no > $2)
+        AND COALESCE($3::int, sc.shop_id) IS DISTINCT FROM $4::int
+      ORDER BY pr.step_no LIMIT 1`,
+    [productId, stepNo, owner, curShop])).rows[0] || null;
+}
+
+//  Sana qaysi ustunlarga yoziladi. Keyingi tsex bo'lmasa — oldinda
+//  T/M ombor turadi va sana o'shaniki.
+function planUstunlar(milestone, due) {
+  const set = [['next_shop_planned_on', due]];
+  if (milestone === 'lak')       set.push(['lak_planned_on', due]);
+  else if (milestone === 'pack') set.push(['pack_planned_on', due]);
+  else                           set.push(['fg_planned_on', due]);
+  return set;
+}
+
 //  Mahsulot qaysi tsexniki — raqamning harfi ham shundan chiqadi.
 async function noStyleOf(client, productId) {
   const r = (await client.query(
@@ -453,7 +488,19 @@ router.get('/requests/next-no', need(...REQUEST), wrap(async (req, res) => {
   const pid = Number(req.query.product_id) || null;
   if (!pid) return res.status(400).json({ error: 'Mahsulot tanlanmagan' });
   const { letter, width } = await noStyleOf(db, pid);
-  res.json({ conveyor_no: await nextConveyorNo(db, letter, width) });
+  //  Sahifa shu bitta so'rovdan hammasini oladi: taklif qilingan raqam,
+  //  keyingi tsexning NOMI (katakning yorlig'i o'sha bo'ladi) va sana
+  //  majburiymi. Ikkinchi so'rov yozilmadi.
+  const shopId = await shopOfProduct(db, pid);
+  const tsex = (await db.query(
+    `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
+    [shopId])).rows[0];
+  const keyingi = await keyingiTsex(db, pid, null, null, shopId);
+  res.json({
+    conveyor_no: await nextConveyorNo(db, letter, width),
+    next_shop:   keyingi?.name || 'T/M ombor',
+    plan_required: !tsex?.auto,
+  });
 }));
 
 router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
@@ -507,6 +554,19 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       if (scope && (!shopId || !scope.includes(shopId)))
         throw new Error('Bu mahsulot boshqa tsexniki');
 
+      //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
+      //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
+      //  `shops.plan_auto`). Korpusda yo'l uzun va u kunni boshliqdan
+      //  boshqa hech kim ayta olmaydi; stulda esa formula o'zi
+      //  hisoblaydi va sana so'ralmaydi.
+      const tsex = (await client.query(
+        `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
+        [shopId])).rows[0];
+      const keyingi = await keyingiTsex(client, it.product_id, null, null, shopId);
+      const due = String(it.next_on || '').trim() || null;
+      if (!tsex?.auto && !due)
+        throw new Error(`${keyingi?.name || 'T/M ombor'}ga topshirish sanasi kiritilmagan`);
+
       //  Bo'lim berilsa marshrutda borligi tekshiriladi — `createOne()`
       //  dagi bilan bir xil qoida. Tasdiqlash paytida emas, SHU YERDA:
       //  xato bo'lim bilan yozilgan so'rov direktorning ro'yxatiga
@@ -521,11 +581,11 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       const q = (await client.query(
         `INSERT INTO unit_requests
            (product_id, qty, color, fabric, started_on, section_id, note,
-            shop_id, created_by, conveyor_no, is_stock)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+            shop_id, created_by, conveyor_no, is_stock, next_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
         [it.product_id, qty, trim(it.color), trim(it.fabric),
          it.started_on || null, it.section_id || null, it.note || null,
-         shopId, req.user.id, no, it.is_stock === true])).rows[0];
+         shopId, req.user.id, no, it.is_stock === true, due])).rows[0];
       created.push(q.id);
     }
     await audit(req, { module: 'production', action: 'request', entity: 'unit_requests',
@@ -570,6 +630,17 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
       //  kiritayotgan odamga boshidan ma'lum.
       is_stock: q.is_stock,
     });
+
+    //  Kiritayotganda qo'yilgan «keyingi tsexga topshirish» sanasi
+    //  konverga ko'chadi — qaysi ustunga ekanini bitta qoida hal qiladi.
+    if (q.next_on) {
+      const keyingi = await keyingiTsex(client, q.product_id, null, null, q.shop_id);
+      const set = planUstunlar(keyingi?.milestone, q.next_on);
+      await client.query(
+        `UPDATE production_units SET ${
+          set.map((c, i) => `${c[0]} = $${i + 2}::date`).join(', ')} WHERE id = $1`,
+        [u.id, ...set.map((c) => c[1])]);
+    }
 
     await client.query(
       `UPDATE unit_requests
@@ -1225,14 +1296,9 @@ router.post('/:id/plan',
     const fg  = kun(req.body.fg_on);
 
     const set = [];
-    if (due !== undefined) {
-      set.push(['next_shop_planned_on', due]);
-      //  Oldinda tsex bo'lmasa (qadoqlashdan keyin) topshirish OMBORGA
-      //  bo'ladi — o'sha sana fg rejasiga yoziladi.
-      if (u.milestone === 'lak')       set.push(['lak_planned_on', due]);
-      else if (u.milestone === 'pack') set.push(['pack_planned_on', due]);
-      else                             set.push(['fg_planned_on', due]);
-    }
+    //  Oldinda tsex bo'lmasa (qadoqlashdan keyin) topshirish OMBORGA
+    //  bo'ladi — qoida `planUstunlar()` da, uch joyda bir xil.
+    if (due !== undefined) set.push(...planUstunlar(u.milestone, due));
     if (fg !== undefined) set.push(['fg_planned_on', fg]);
     if (!set.length) return res.status(400).json({ error: 'Sana yuborilmadi' });
 
@@ -1473,7 +1539,8 @@ async function clonePart(client, req, u, n, { toSection = null, movedOn = null,
 //  o'tsa, u yerda bitta 10 lik qator qoladi va bo'sh qolgan qator
 //  o'chiriladi (tarixi qo'shilgan qatorga ko'chiriladi). Shu sababdan
 //  ustalar donama-dona o'tkazsa ham qatorlar ko'payib ketmaydi.
-async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_defect, defect_reason, note }) {
+async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_defect,
+                                      defect_reason, note, plan_on }) {
   const u = (await client.query(
     `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`, [unit_id])).rows[0];
   if (!u) throw new Error('Konver topilmadi');
@@ -1496,9 +1563,13 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
   }
 
   const sec = (await client.query(
-    `SELECT s.is_exit, s.shop_id, sh.name AS shop, sh.milestone
+    `SELECT s.is_exit, s.shop_id, sh.name AS shop, sh.milestone,
+            --  Marshrutdagi o'rni: undan keyin qaysi tsex turganini
+            --  topish uchun kerak (izoh: keyingiTsex).
+            (SELECT step_no FROM v_product_route
+              WHERE product_id = $2 AND section_id = s.id) AS step_no
        FROM sections s JOIN shops sh ON sh.id = s.shop_id
-      WHERE s.id = $1`, [target])).rows[0];
+      WHERE s.id = $1`, [target, u.product_id])).rows[0];
 
   // ★ JAVOBGAR TSEX
   //   Bo'lim konver QAYERDA ekanini aytadi, javobgar tsex esa KIM uni
@@ -1568,9 +1639,34 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
   // o'tganda tozalanadi. Holat va T/M ombor sanasiga esa tegilmaydi:
   // chiqish bo'limiga kirish mahsulotni omborga tushirmaydi, uni ombor
   // mudiri qabul qiladi (POST /stock/accept).
-  if (shopChanged)
+  //
+  //  ★ QABUL QILGAN TSEX O'ZIDAN KEYINGISIGA MUDDAT QO'YADI.
+  //
+  //  Konver boshqa tsexdan kelgan bo'lsa, uni olgan boshliq o'sha
+  //  zahoti «men buni qachon topshiraman» degan savolga javob beradi:
+  //  lak tsexi qadoqlashga, qadoqlash esa T/M omborga. Aks holda sana
+  //  faqat birinchi tsexda qo'yilardi va zanjirning o'rtasi
+  //  ko'rinmasdi.
+  //
+  //  Sanasi MARSHRUTDAN o'zi chiqadigan tsexda (stul) so'ralmaydi.
+  if (shopChanged) {
+    const keyingi = await keyingiTsex(client, u.product_id, sec.step_no, owner, toShop);
+    const tsex = (await client.query(
+      `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
+      [toShop])).rows[0];
+    const due = String(plan_on || '').trim() || null;
+    if (!tsex?.auto && from && !due)
+      throw new Error(`${u.conveyor_no}: ${keyingi?.name || 'T/M ombor'}ga ` +
+        `topshirish sanasi kiritilmagan`);
+
+    const set = planUstunlar(keyingi?.milestone, due);
+    //  Reja tozalanadi va yangisi yoziladi: eski tsexning sanasi
+    //  yangisiniki bo'lib qolmasin.
     await client.query(
-      `UPDATE production_units SET next_shop_planned_on = NULL WHERE id = $1`, [row]);
+      `UPDATE production_units SET ${
+        set.map((c, i) => `${c[0]} = $${i + 2}::date`).join(', ')} WHERE id = $1`,
+      [row, ...set.map((c) => c[1])]);
+  }
 
   const move = (await client.query(
     `INSERT INTO unit_moves (unit_id, section_id, from_section_id, moved_on,
@@ -2093,7 +2189,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
   const scope = scopeOf(req);
 
   const shops = (await db.query(
-    `SELECT id, name, sort FROM shops
+    `SELECT id, name, sort, COALESCE(plan_auto, false) AS plan_auto FROM shops
       WHERE ($1::int[] IS NULL OR id = ANY($1))
       ORDER BY sort, name`, [scope])).rows;
   if (!shops.length) return res.json({ shops: [], shop: null, sections: [], inbox: [] });

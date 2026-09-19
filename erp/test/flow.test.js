@@ -86,7 +86,11 @@ test('jo\'natilmagan konverni keyingi tsex qabul qila olmaydi', async () => {
   const board = await lak('GET', '/api/units/board');
   assert.ok(board.body.inbox.some((x) => x.id === u.id), 'jo\'natilgach inbox\'da');
 
-  const move = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  //  Sanasiz qabul qilib bo'lmaydi: olgan tsex keyingisiga muddat qo'yadi.
+  assert.equal((await lak('POST', '/api/units/move',
+    { items: [{ unit_id: u.id }] })).status, 400);
+  const move = await lak('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, plan_on: '2026-09-25' }] });
   assert.equal(move.status, 200, move.text);
   assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
     [u.id])).s, AST1);
@@ -647,8 +651,10 @@ test('keyingi tsex konverning bir qismini qabul qila oladi', async () => {
   // Korpus «Lak tsexiga jo'natdim» deydi — belgi butun qatorga qo'yiladi
   assert.equal((await korpus('POST', '/api/units/handover', { items: [u.id] })).status, 200);
 
-  // Lak tsexi 4 tasini oladi, 6 tasi korpusda qoladi
-  const r = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id, qty: 4 }] });
+  // Lak tsexi 4 tasini oladi, 6 tasi korpusda qoladi. Qabul qilayotgan
+  // tsex keyingisiga muddat qo'yadi — shuning uchun sana bilan.
+  const r = await lak('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, qty: 4, plan_on: '2026-09-25' }] });
   assert.equal(r.status, 200, r.text);
   const holat = async () => (await require('../db').db.query(
     `SELECT p.qty, s.code AS bolim, p.handover_on IS NOT NULL AS jonatilgan
@@ -661,7 +667,8 @@ test('keyingi tsex konverning bir qismini qabul qila oladi', async () => {
   ], 'qolgani jo\'natilgan holida turadi, o\'tgani lak tsexida');
 
   // Qolgan 6 tasi ham qabul qilinadi — belgi saqlangani uchun
-  assert.equal((await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] })).status, 200);
+  assert.equal((await lak('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, plan_on: '2026-09-25' }] })).status, 200);
   assert.deepEqual(await holat(), [{ qty: 10, bolim: 'BOY-AST1', jonatilgan: false }],
     'hammasi lak tsexida bitta qator bo\'lib qo\'shildi');
 
@@ -2296,11 +2303,14 @@ test('ombor harakatida kim qabul qilgani ko\'rinadi va filtr ishlaydi', async ()
       `SELECT s.is_exit FROM production_units u
          JOIN sections s ON s.id = u.current_section_id WHERE u.id = $1`, [u.id]);
     if (at && at.is_exit) break;
-    let mv = await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+    //  Tsexdan tsexga qabul qilishda muddat majburiy, tsex ichida esa
+    //  e'tiborga olinmaydi — har o'tkazishda yuborilaveradi.
+    const it = { unit_id: u.id, plan_on: '2026-09-25' };
+    let mv = await admin('POST', '/api/units/move', { items: [it] });
     if (mv.status !== 200) {
       assert.equal((await admin('POST', '/api/units/handover',
         { items: [u.id] })).status, 200);
-      mv = await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+      mv = await admin('POST', '/api/units/move', { items: [it] });
     }
     assert.equal(mv.status, 200, mv.text);
   }
@@ -2857,7 +2867,7 @@ test('konver so\'rovi: tsex boshlig\'i yozadi, tasdiqlovchi ochadi', async () =>
   //  Usta o'z tsexining mahsulotiga so'rov yozadi.
   const q = await korpus('POST', '/api/units/requests',
     { product_id: PENAL, qty: 7, color: 'Oq', started_on: '2026-09-02',
-      conveyor_no: 'S-7001' });
+      conveyor_no: 'S-7001', next_on: '2026-09-20' });
   assert.equal(q.status, 200, q.text);
   const id = q.body.created[0];
 
@@ -2905,7 +2915,7 @@ test('konver so\'rovi: tsex boshlig\'i yozadi, tasdiqlovchi ochadi', async () =>
 
 test('konver so\'rovi: rad etiladi va o\'zi bekor qiladi', async () => {
   const a = (await korpus('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 2, conveyor_no: 'S-7003' })).body.created[0];
+    { product_id: PENAL, qty: 2, conveyor_no: 'S-7003', next_on: '2026-09-20' })).body.created[0];
   const r = await admin('POST', `/api/units/requests/${a}/reject`,
     { note: 'Xom ashyo yo\'q' });
   assert.equal(r.status, 200, r.text);
@@ -2914,7 +2924,7 @@ test('konver so\'rovi: rad etiladi va o\'zi bekor qiladi', async () => {
   //  So'rovchining o'zi bekor qilsa boshqa yozuv bo'ladi: rad etish
   //  direktorniki, bekor qilish o'zinikidir.
   const b = (await korpus('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 3, conveyor_no: 'S-7004' })).body.created[0];
+    { product_id: PENAL, qty: 3, conveyor_no: 'S-7004', next_on: '2026-09-20' })).body.created[0];
   const c = await korpus('POST', `/api/units/requests/${b}/reject`, { note: 'adashdim' });
   assert.equal(c.body.status, 'cancelled');
 
@@ -2924,7 +2934,7 @@ test('konver so\'rovi: rad etiladi va o\'zi bekor qiladi', async () => {
   //  Usta boshqa xodimning so'rovini bekor qila olmaydi. Javob 400:
   //  so'rov «topilmadi» deyiladi, kimniki ekani aytilmaydi.
   const d = (await admin('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 4, conveyor_no: 'S-7005' })).body.created[0];
+    { product_id: PENAL, qty: 4, conveyor_no: 'S-7005', next_on: '2026-09-20' })).body.created[0];
   assert.equal((await lak('POST', `/api/units/requests/${d}/reject`)).status, 400);
   assert.equal((await H.id(`SELECT status FROM unit_requests WHERE id = $1`, [d])).status,
     'pending', 'begona so\'rov joyida qoladi');
@@ -2939,13 +2949,14 @@ test('so\'rovda konver raqami majburiy va band raqam qabul qilinmaydi', async ()
   assert.match(yoq.body.error, /raqami kiritilmagan/);
 
   const a = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', is_stock: true });
+    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', is_stock: true,
+      next_on: '2026-09-20' });
   assert.equal(a.status, 200, a.text);
 
   //  Navbatda turgan raqam ikkinchi marta olinmaydi — aks holda
   //  direktor tasdiqlaganda yiqilardi va sababi unga ko'rinmasdi.
   const band = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001' });
+    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' });
   assert.equal(band.status, 400, band.text);
   assert.match(band.body.error, /band/);
 
@@ -2959,7 +2970,7 @@ test('so\'rovda konver raqami majburiy va band raqam qabul qilinmaydi', async ()
 
   //  Endi konver mavjud — o'sha raqam bilan yangi so'rov ham bo'lmaydi.
   assert.equal((await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001' })).status, 400);
+    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' })).status, 400);
 });
 
 test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () => {
@@ -2983,6 +2994,55 @@ test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () =>
   assert.notEqual(st2.conveyor_no, st.conveyor_no);
   assert.equal(Number(st2.conveyor_no.split('-')[1]),
                Number(st.conveyor_no.split('-')[1]) + 1);
+});
+
+test('muddat zanjiri: har tsex o\'zidan keyingisiga sana qo\'yadi', async () => {
+  //  Korpusda kiritayotgan odam LAK sanasini qo'yadi, lak qabul
+  //  qilganda QADOQLASH, qadoqlash qabul qilganda T/M OMBOR.
+  const kir = await xodim('Sinov zanjir', 'kirituvchi');
+
+  //  Sanasiz so'rov o'tmaydi va xabar qaysi tsex ekanini aytadi.
+  const yoq = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, conveyor_no: 'S-9001' });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /Lak tsexiga topshirish/);
+
+  const q = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, conveyor_no: 'S-9001', next_on: '2026-09-20' });
+  assert.equal(q.status, 200, q.text);
+  const ok = await admin('POST', `/api/units/requests/${q.body.created[0]}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+
+  //  Sana konverga LAK ustuniga tushdi.
+  const r1 = (await admin('GET', '/api/units/?conveyor_no=S-9001')).body[0];
+  assert.equal(String(r1.lak_on).slice(0, 10), '2026-09-20');
+  assert.equal(r1.lak_src, 'reja');
+
+  //  Korpus bo'ylab haydab, lak tsexiga topshiramiz.
+  const SHKUR2 = (await H.id(`SELECT id FROM sections WHERE code='KOR-SHKUR'`)).id;
+  assert.equal((await admin('PATCH', '/api/units/' + ok.body.unit_id,
+    { section_id: SHKUR2 })).status, 200);
+  assert.equal((await korpus('POST', '/api/units/handover',
+    { items: [ok.body.unit_id] })).status, 200);
+
+  //  LAK QABUL QILADI — endi QADOQLASH sanasi majburiy.
+  const lakYoq = await lak('POST', '/api/units/move', { items: [{ unit_id: ok.body.unit_id }] });
+  assert.equal(lakYoq.status, 400, lakYoq.text);
+  assert.match(lakYoq.body.error, /Qadoqlash tsexiga topshirish/);
+  assert.equal((await lak('POST', '/api/units/move',
+    { items: [{ unit_id: ok.body.unit_id, plan_on: '2026-10-01' }] })).status, 200);
+
+  const r2 = (await admin('GET', '/api/units/?conveyor_no=S-9001')).body[0];
+  assert.equal(String(r2.pack_on).slice(0, 10), '2026-10-01');
+  assert.equal(r2.pack_src, 'reja');
+
+  //  STULDA esa so'ralmaydi: sana marshrutdan o'zi chiqadi.
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const st = await admin('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, conveyor_no: 'S-9002' });
+  assert.equal(st.status, 200, st.text);
 });
 
 /* ============================================================================
@@ -3064,7 +3124,7 @@ test('xodimga rol biriktirilsa huquqi darrov ishlaydi', async () => {
   assert.equal((await kir('POST', '/api/units/', {
     items: [{ product_id: PENAL, qty: 1, section_id: ARRA }] })).status, 403);
   const q = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 2, conveyor_no: 'S-7006' });
+    { product_id: PENAL, qty: 2, conveyor_no: 'S-7006', next_on: '2026-09-20' });
   assert.equal(q.status, 200, q.text);
 
   //  Rolni ALMASHTIRISH ham ishlaydi va eskisi qoladi emas.
@@ -3095,7 +3155,7 @@ test('kiritgan ochmaydi, rahbariyat tasdiqlaydi', async () => {
   //  So'rov esa uniki.
   const q = await kir('POST', '/api/units/requests',
     { product_id: PENAL, qty: 4, fabric: 'Velur', started_on: '2026-09-10',
-      conveyor_no: 'S-7007' });
+      conveyor_no: 'S-7007', next_on: '2026-09-20' });
   assert.equal(q.status, 200, q.text);
   const id = q.body.created[0];
 
