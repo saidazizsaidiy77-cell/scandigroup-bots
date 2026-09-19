@@ -796,6 +796,11 @@ const closeShip = () => { $('modalRoot').innerHTML = ''; };
 //  «Yo'lda» degan holat ataylab ko'rinadi: do'kondan chiqqan, lekin
 //  omborga yetib kelmagan mahsulot qoldiqda hali vitrinada turadi va
 //  mudir uni javonda izlab yurmasin.
+//  ★ HOLAT KIMNI KUTAYOTGANINI AYTADI, o'zini emas. Hujjat uch qo'ldan
+//  o'tadi va har bosqichda tugma FAQAT bittasida chiqadi — qolganlar
+//  «nega bosilmayapti» deb o'ylamasin. Vitrina nomi ham yoziladi:
+//  T/M mudiri ro'yxatda o'nta hujjat ko'radi va qaysi do'kondan javob
+//  kutilayotganini bilishi kerak.
 const RET_HOLAT = {
   new:       ['warn', 'vitrina tasdig\'ini kutmoqda'],
   confirmed: ['warn', "yo'lda — T/M qabul qilishini kutmoqda"],
@@ -846,7 +851,11 @@ function retTarkib(r) {
 }
 
 function retRow(r) {
-  const [cls, matn] = RET_HOLAT[r.status] || ['', r.status];
+  const [cls, holat] = RET_HOLAT[r.status] || ['', r.status];
+  //  «vitrina tasdig'ini kutmoqda» degan yozuv QAYSI vitrina ekanini
+  //  aytmasdi: ro'yxatda uchta do'kon aralash turadi.
+  const matn = r.status === 'new'
+    ? `${esc(r.from_warehouse)} tasdig'ini kutmoqda` : holat;
   //  Tugma HOLATGA qarab: navbat kimda ekanini ekran o'zi aytadi.
   const amal = r.status === 'new' && !isTM()
     ? `<button class="primary" onclick="retDo(${r.id},'confirm')">Tasdiqlash</button>
