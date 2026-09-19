@@ -29,25 +29,25 @@
   <div class="card">
     <h2>Kanal kesimi</h2>
     <table><thead><tr><th>Kanal</th><th class="num">Mijoz</th>
-      <th class="num">Dona</th><th class="num">Summa, $</th></tr></thead>
+      <th class="num">Chiqdi, $</th><th class="num">Kutilmoqda, $</th></tr></thead>
       <tbody id="tCh"></tbody></table>
   </div>
   <div class="card">
     <h2>Respublika kesimi</h2>
     <table><thead><tr><th>Respublika</th><th class="num">Mijoz</th>
-      <th class="num">Dona</th><th class="num">Summa, $</th></tr></thead>
+      <th class="num">Chiqdi, $</th><th class="num">Kutilmoqda, $</th></tr></thead>
       <tbody id="tCo"></tbody></table>
   </div>
   <div class="card">
     <h2>Region kesimi</h2>
     <table><thead><tr><th>Region</th><th>Respublika</th><th class="num">Mijoz</th>
-      <th class="num">Dona</th><th class="num">Summa, $</th></tr></thead>
+      <th class="num">Chiqdi, $</th><th class="num">Kutilmoqda, $</th></tr></thead>
       <tbody id="tRg"></tbody></table>
   </div>
   <div class="card">
     <h2>Savdo menejeri kesimi</h2>
     <table><thead><tr><th>Menejer</th><th class="num">Mijoz</th>
-      <th class="num">Zakaz</th><th class="num">Summa, $</th></tr></thead>
+      <th class="num">Chiqdi, $</th><th class="num">Kutilmoqda, $</th></tr></thead>
       <tbody id="tMg"></tbody></table>
   </div>
 </div>
@@ -106,24 +106,40 @@ async function load(){
     App.api('/api/units/customers'), App.api('/api/units/customers/stats')]);
   customers = c.customers; channels = c.channels; managers = c.managers;
 
+  //  ★ IKKI SUMMA. «Chiqdi» — mijoz OLGAN mahsulot, foyda-zarar bilan
+  //  bir xil o'q; «Kutilmoqda» — hali zavodda turgani (tsexda yoki
+  //  omborda). Ilgari bittasi turardi va ikkalasi qo'shilib ketardi:
+  //  direktor uni sotuv deb o'qirdi, holbuki mahsulotning yarmi
+  //  zavodda edi. Narxsiz konver nolga qo'shiladi, shuning uchun
+  //  qator ostida ularning soni aytiladi (izoh: sql/units.sql).
+  const kut = (r) => r.no_price
+    ? `${money(r.waiting_amount)}<div class="muted" style="font-size:11px"
+         title="Bu konverlarga narx yozilmagan — summaga nol bo'lib qo'shilgan"
+         >${r.no_price} ta narxsiz</div>`
+    : money(r.waiting_amount);
+
   $('tCh').innerHTML = s.byChannel.length ? s.byChannel.map(r =>
     `<tr><td>${esc(r.channel_name)}</td><td class="num">${r.customers}</td>
-      <td class="num">${r.qty}</td><td class="num">${money(r.amount)}</td></tr>`).join('')
+      <td class="num">${money(r.shipped_amount)}</td>
+      <td class="num">${kut(r)}</td></tr>`).join('')
     : '<tr><td class="muted" colspan="4">Mijoz kiritilmagan</td></tr>';
   $('tCo').innerHTML = s.byCountry.length ? s.byCountry.map(r =>
     `<tr><td>${esc(r.country)}</td><td class="num">${r.customers}</td>
-      <td class="num">${r.qty}</td><td class="num">${money(r.amount)}</td></tr>`).join('')
+      <td class="num">${money(r.shipped_amount)}</td>
+      <td class="num">${kut(r)}</td></tr>`).join('')
     : '<tr><td class="muted" colspan="4">Mijoz kiritilmagan</td></tr>';
   // Region bitta qator: qaysi davlatlardan ekani yonida kulrang yoziladi.
   $('tRg').innerHTML = s.byRegion.length ? s.byRegion.map(r =>
     `<tr><td><b>${esc(r.region)}</b></td>
       <td class="muted" style="font-size:12px">${esc(r.countries || '')}</td>
-      <td class="num">${r.customers}</td><td class="num">${r.qty}</td>
-      <td class="num">${money(r.amount)}</td></tr>`).join('')
+      <td class="num">${r.customers}</td>
+      <td class="num">${money(r.shipped_amount)}</td>
+      <td class="num">${kut(r)}</td></tr>`).join('')
     : '<tr><td class="muted" colspan="5">Mijoz kiritilmagan</td></tr>';
   $('tMg').innerHTML = s.byManager.length ? s.byManager.map(r =>
     `<tr><td>${esc(r.manager_name)}</td><td class="num">${r.customers}</td>
-      <td class="num">${r.orders}</td><td class="num">${money(r.amount)}</td></tr>`).join('')
+      <td class="num">${money(r.shipped_amount)}</td>
+      <td class="num">${kut(r)}</td></tr>`).join('')
     : '<tr><td class="muted" colspan="4">Mijoz kiritilmagan</td></tr>';
   render();
 }

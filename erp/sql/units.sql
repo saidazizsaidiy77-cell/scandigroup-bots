@@ -371,24 +371,52 @@ GROUP BY u.order_no, COALESCE(c.name, 'T/M ombor');
 
 -- ★ Kanal kesimi: qaysi kanal qancha sotuv keltirdi.
 --   Reklama byudjetini taqsimlashda asosiy ko'rsatkich.
-CREATE OR REPLACE VIEW v_channel_sales AS
+--  ★ IKKI SUMMA: CHIQIB KETDI va KUTILMOQDA (zavod qarori, 2026-09).
+--
+--  Ilgari bitta «SUMMA» ustuni turardi va u mijozga BIRIKTIRILGAN
+--  hamma konverni qo'shardi: tsexda yurgani ham, omborda turgani ham,
+--  chiqib ketgani ham. Direktor uni sotuv deb o'qirdi, holbuki
+--  mahsulotning yarmi hali zavodda turgan bo'lardi.
+--
+--  Endi ikkita raqam va ikkalasi ham o'z savoliga javob beradi:
+--    chiqdi      — mijoz OLGAN mahsulot (foyda-zarar bilan bir xil o'q)
+--    kutilmoqda  — hali zavodda: tsexda yoki omborda
+--
+--  DONA ustuni OLIB TASHLANDI: stul DONA bilan, penal KOMPLEKT bilan
+--  sanaladi va ularni qo'shib bo'lmaydi — yig'indi hech narsa
+--  anglatmasdi (izoh: `product_groups.uom`).
+--
+--  Narxsiz konver NOLGA qo'shiladi (`total_amount = qty ×
+--  COALESCE(unit_price, 0)`), shuning uchun sahifa narxi yozilmagan
+--  konver borligini alohida aytadi — aks holda «60 dona, 1 000 $»
+--  degan qator tushunarsiz bo'lib qolardi.
+--
+--  DROP + CREATE: ustunlar o'zgardi, `CREATE OR REPLACE` esa faqat
+--  oxiriga qo'sha oladi (2-qoida). Bu view'lardan boshqa hech narsa
+--  o'qimaydi — faqat `/api/units/customers/stats`.
+DROP VIEW IF EXISTS v_channel_sales;
+CREATE VIEW v_channel_sales AS
 SELECT COALESCE(ch.name, 'Kiritilmagan') AS channel_name, c.channel,
        COUNT(DISTINCT c.id)              AS customers,
        COUNT(u.id)                       AS units,
-       COALESCE(SUM(u.qty), 0)           AS qty,
-       COALESCE(SUM(u.total_amount), 0)  AS amount
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0) AS shipped_amount,
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status <> 'shipped'), 0) AS waiting_amount,
+       COUNT(*) FILTER (WHERE u.id IS NOT NULL AND u.unit_price IS NULL) AS no_price
 FROM customers c
 LEFT JOIN customer_channels ch ON ch.code = c.channel
 LEFT JOIN production_units u   ON u.customer_id = c.id AND u.status <> 'cancelled'
 WHERE c.active
 GROUP BY ch.name, c.channel;
 
--- Respublika kesimi — eksport yo'nalishlarini ko'rish uchun
-CREATE OR REPLACE VIEW v_country_sales AS
+-- Respublika kesimi — eksport yo'nalishlarini ko'rish uchun.
+-- Ikki summa: izoh yuqorida (`v_channel_sales`).
+DROP VIEW IF EXISTS v_country_sales;
+CREATE VIEW v_country_sales AS
 SELECT COALESCE(c.country, 'Kiritilmagan') AS country,
        COUNT(DISTINCT c.id)                AS customers,
-       COALESCE(SUM(u.qty), 0)             AS qty,
-       COALESCE(SUM(u.total_amount), 0)    AS amount
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0) AS shipped_amount,
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status <> 'shipped'), 0) AS waiting_amount,
+       COUNT(*) FILTER (WHERE u.id IS NOT NULL AND u.unit_price IS NULL) AS no_price
 FROM customers c
 LEFT JOIN production_units u ON u.customer_id = c.id AND u.status <> 'cancelled'
 WHERE c.active
@@ -412,20 +440,23 @@ SELECT MIN(TRIM(COALESCE(NULLIF(TRIM(c.region), ''), 'Kiritilmagan'))) AS region
                   ', ' ORDER BY COALESCE(NULLIF(TRIM(c.country), ''), 'Kiritilmagan'))
          AS countries,
        COUNT(DISTINCT c.id)             AS customers,
-       COALESCE(SUM(u.qty), 0)          AS qty,
-       COALESCE(SUM(u.total_amount), 0) AS amount
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0) AS shipped_amount,
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status <> 'shipped'), 0) AS waiting_amount,
+       COUNT(*) FILTER (WHERE u.id IS NOT NULL AND u.unit_price IS NULL) AS no_price
 FROM customers c
 LEFT JOIN production_units u ON u.customer_id = c.id AND u.status <> 'cancelled'
 WHERE c.active
 GROUP BY LOWER(TRIM(COALESCE(NULLIF(TRIM(c.region), ''), 'Kiritilmagan')));
 
 -- ★ Savdo menejeri kesimi — sotuv jamoasining natijasi
-CREATE OR REPLACE VIEW v_manager_sales AS
+DROP VIEW IF EXISTS v_manager_sales;
+CREATE VIEW v_manager_sales AS
 SELECT COALESCE(m.name, 'Biriktirilmagan') AS manager_name, c.manager_id,
        COUNT(DISTINCT c.id)                AS customers,
        COUNT(DISTINCT u.order_no)          AS orders,
-       COALESCE(SUM(u.qty), 0)             AS qty,
-       COALESCE(SUM(u.total_amount), 0)    AS amount
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0) AS shipped_amount,
+       COALESCE(SUM(u.total_amount) FILTER (WHERE u.status <> 'shipped'), 0) AS waiting_amount,
+       COUNT(*) FILTER (WHERE u.id IS NOT NULL AND u.unit_price IS NULL) AS no_price
 FROM customers c
 LEFT JOIN workers m          ON m.id = c.manager_id
 LEFT JOIN production_units u ON u.customer_id = c.id AND u.status <> 'cancelled'

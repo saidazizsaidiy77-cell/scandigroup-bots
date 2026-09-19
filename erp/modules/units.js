@@ -58,10 +58,12 @@ router.get('/customers/stats', need('production.view', 'sales.view'), wrap(async
   if (ownOf(req)) return res.json({ byChannel: [], byCountry: [],
                                     byRegion: [], byManager: [] });
   const [byChannel, byCountry, byRegion, byManager] = await Promise.all([
-    db.query(`SELECT * FROM v_channel_sales ORDER BY amount DESC, customers DESC`),
-    db.query(`SELECT * FROM v_country_sales ORDER BY amount DESC, customers DESC`),
-    db.query(`SELECT * FROM v_region_sales  ORDER BY amount DESC, customers DESC`),
-    db.query(`SELECT * FROM v_manager_sales ORDER BY amount DESC, customers DESC`),
+    //  Saralash CHIQIB KETGANI bo'yicha: kesimning birinchi savoli
+    //  «kim qancha sotdi», kutilayotgani esa undan keyingi gap.
+    db.query(`SELECT * FROM v_channel_sales ORDER BY shipped_amount DESC, customers DESC`),
+    db.query(`SELECT * FROM v_country_sales ORDER BY shipped_amount DESC, customers DESC`),
+    db.query(`SELECT * FROM v_region_sales  ORDER BY shipped_amount DESC, customers DESC`),
+    db.query(`SELECT * FROM v_manager_sales ORDER BY shipped_amount DESC, customers DESC`),
   ]);
   res.json({ byChannel: byChannel.rows, byCountry: byCountry.rows,
              byRegion: byRegion.rows, byManager: byManager.rows });

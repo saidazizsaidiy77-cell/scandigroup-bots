@@ -1328,6 +1328,26 @@ doirasi bor xodim YOZGAN mijoz o'sha zahoti O'ZINIKI bo'ladi — aks
 holda u mijozni kiritadi-yu, saqlangan zahoti ro'yxatdan yo'qolardi.
 Menejerni boshqa odamga ko'chirish doirasi yo'q xodimning ishi.
 
+**★ KESIM KARTOCHKALARIDA IKKI SUMMA** (`v_channel_sales`,
+`v_country_sales`, `v_region_sales`, `v_manager_sales`; zavod qarori,
+2026-09). Ilgari bitta «SUMMA» ustuni turardi va u mijozga
+BIRIKTIRILGAN hamma konverni qo'shardi: tsexda yurgani ham, omborda
+turgani ham, chiqib ketgani ham. Direktor uni sotuv deb o'qirdi,
+holbuki mahsulotning yarmi hali zavodda edi. Endi ikkita raqam:
+
+  **Chiqdi, $** — mijoz OLGAN mahsulot (`status = 'shipped'`),
+  foyda-zarar bilan bir xil o'q; saralash ham shu bo'yicha.
+  **Kutilmoqda, $** — hali zavodda turgani: tsexda yoki omborda.
+
+**DONA ustuni olib tashlandi**: stul DONA bilan, penal KOMPLEKT bilan
+sanaladi va ularni qo'shib bo'lmaydi — yig'indi hech narsa anglatmasdi
+(`product_groups.uom`).
+
+**Narxsiz konver NOLGA qo'shiladi** (`total_amount = qty ×
+COALESCE(unit_price, 0)`), shuning uchun qator ostida ularning soni
+yoziladi: «60 dona, 1 000 $» degan javob aks holda tushunarsiz edi.
+Raqamning o'zi yolg'on emas — tushuntirilmagani yolg'on bo'lardi.
+
 **Mijozlar kesimi (`/customers/stats`) doirasi bor xodimga berilmaydi**:
 «qaysi kanalda qancha sotildi» degan javob boshqa menejerlarning
 raqamini ham ichiga olardi. Kartochkalar chizilmaydi, sahifa ishlayveradi.
