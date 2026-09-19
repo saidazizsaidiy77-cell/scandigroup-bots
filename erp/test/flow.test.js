@@ -2499,6 +2499,53 @@ test('ta\'minotchiga to\'lov moddasi bilan yoziladi', async () => {
 //  nimaga sarflaganini O'ZI yozadi va shu bilan pul qo'lidan chiqadi.
 //  Lekin hamma hamma narsani emas — tsex boshlig'i faqat o'ziga
 //  ochilgan guruhga yoza oladi.
+test('tsex boshlig\'i ham qo\'lidagi pulni sarflaydi', async () => {
+  //  ★ Hujjatdagi qoida («tsex boshliqlari faqat oylik uchun») kodda
+  //  bajarilmagan edi: `tsex_usta` da `cash.entry` yo'q edi va qo'lida
+  //  pul turgan boshliq sarfini YOZA OLMASDI — «Mening pulim» sahifasi
+  //  unga umuman ochilmasdi. Pul kassirga og'zaki aytilib qolardi.
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov usta pulli'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name='Sinov usta pulli')`);
+  const u = (await H.id(`SELECT id FROM workers WHERE name='Sinov usta pulli'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'tsex_usta') ON CONFLICT DO NOTHING`, [u]);
+  const usta = H.api(base, await H.sessionFor('Sinov usta pulli'));
+
+  //  Belgisi yo'q ekan — sahifa ochiladi, lekin sarf yozilmaydi.
+  //  Huquqning O'ZI hech kimga pul bermaydi.
+  const modda = (await H.id(`SELECT id FROM expense_items LIMIT 1`)).id;
+  const yoq = await usta('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 10,
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /podotchyot/);
+
+  //  Belgi qo'yiladi (guruh berilmadi — demak hammasi) va pul beriladi.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + u,
+    { can_hold_cash: true })).status, 200);
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: u,
+    currency: 'USD', amount: 300 })).status, 200);
+
+  //  Endi o'zi yozadi va pul qo'lidan chiqadi.
+  const ok = await usta('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 70,
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [u])).total_usd), 230);
+
+  //  Kassa unga baribir OCHILMAYDI: moliyaviy hisobot ham, boshqa
+  //  xodimning puli ham ko'rinmaydi — `cash.entry` faqat o'z qo'lidagi
+  //  pulni beradi.
+  assert.equal((await usta('GET', '/api/cash/pl')).status, 403);
+  assert.equal((await usta('PATCH', '/api/cash/ops/1')).status, 403);
+});
+
 test('podotchyot olgan xodim sarfini o\'zi yozadi, faqat ochilgan guruhga', async () => {
   const { db } = require('../db');
   const kassir = H.api(base, await H.sessionFor('Sinov kassir'));

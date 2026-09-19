@@ -149,6 +149,17 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  faqat oylik uchun, ombor mudiri hamma harajat uchun.
   ('omborchi',     'cash.entry'),
   ('ishlab_boshl', 'cash.entry'),
+  --  ★ TSEX BOSHLIG'I HAM PODOTCHYOT OLADI. Yuqoridagi izoh buni
+  --  allaqachon aytib turardi («tsex boshliqlari faqat oylik uchun»),
+  --  lekin huquqning O'ZI berilmagan edi: qo'lida pul turgan boshliq
+  --  sarfini yoza olmasdi — «Mening pulim» sahifasi unga umuman
+  --  ochilmasdi va pul kassirga og'zaki aytilib qolardi.
+  --
+  --  Huquqning o'zi hech kimga pul BERMAYDI: kassa qoldig'i ham,
+  --  boshqa xodimning puli ham ko'rinmaydi, va «Qo'liga pul beriladi»
+  --  belgisi qo'yilmagan boshliqda sahifa bo'sh turadi — server ham
+  --  rad etadi (`modules/cash.js`, `can_hold_cash`).
+  ('tsex_usta',    'cash.entry'),
 
   --  Kassir pulni sanab oladi, chiqim qiladi va tuzatadi — ya'ni
   --  `cash.manage`. `cash.entry` ning o'zi faqat «o'z qo'lidagi pul»
