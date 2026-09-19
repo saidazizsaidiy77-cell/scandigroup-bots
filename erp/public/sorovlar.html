@@ -88,7 +88,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
   (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const d8 = (v) => !v ? '' : String(v).slice(0, 10).split('-').reverse().join('.');
 
-let ref = null, data = { rows: [], can_approve: false };
+let ref = null, mahsulotlar = [], data = { rows: [], can_approve: false };
 
 const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
                  rejected:['bad','rad etildi'], cancelled:['','bekor qilindi'] };
@@ -98,7 +98,7 @@ const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
 //  Formula serverdagi bilan bir xil (izoh: sql/register.sql):
 //  oxirgi bo'limdan keyingi kun = boshlanish + qadamlar soni.
 function eta() {
-  const p = ref?.products.find((x) => String(x.id) === $('fProduct').value);
+  const p = mahsulotlar.find((x) => String(x.id) === $('fProduct').value);
   const start = $('fStart').value;
   if (!p || !start || !p.steps) { $('etaLine').textContent = ''; return; }
   const d = new Date(start + 'T00:00:00');
@@ -113,8 +113,21 @@ async function load() {
     ref = r;
     //  Mahsulot ro'yxati GURUH bilan: zavodda «Milano penal» deyiladi,
     //  «penal» deb emas — turi nomning yonida turishi kerak.
+    //
+    //  ★ RO'YXAT TSEX DOIRASI BO'YICHA QISQARADI. Xodimga tsex
+    //  biriktirilgan bo'lsa (Xodimlar sahifasida) faqat o'sha tsexning
+    //  mahsuloti ko'rinadi: stul kiritadigan odam oldida penal turib,
+    //  har safar o'rtasidan izlab o'tirmasin. Doirasi bo'lmaganda
+    //  hammasi turaveradi.
+    //
+    //  Chegara baribir SERVERDA (`modules/units.js`, `shopOfProduct`):
+    //  ro'yxatni qisqartirish qulaylik, himoya emas.
+    const doira = App.me()?.scope_shop_ids || [];
+    mahsulotlar = doira.length
+      ? ref.products.filter((p) => doira.includes(p.shop_id))
+      : ref.products;
     $('fProduct').innerHTML = '<option value="">— tanlang —</option>'
-      + ref.products.map((p) => `<option value="${p.id}">${
+      + mahsulotlar.map((p) => `<option value="${p.id}">${
           esc(p.name)}${p.size_label ? ' · ' + esc(p.size_label) : ''} · ${
           esc(p.group_name)}</option>`).join('');
     $('colors').innerHTML  = sug.colors.map((c) => `<option value="${esc(c)}">`).join('');

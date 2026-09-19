@@ -284,7 +284,20 @@ yozadi, aks holda boshliq nima so'raganini keyin solishtirib bo'lmasdi.
 Chegara so'rashda ham bor: tsexi biriktirilgan xodim FAQAT o'z
 tsexining mahsulotiga so'rov yozadi (mahsulot qaysi tsexniki —
 `owner_shop_id`, bo'lmasa marshrutning birinchi qadami). Doirasi
-bo'lmagan xodim (ma'lumot kirituvchi) hamma mahsulotga yozadi. Bo'lim so'ralmaydi: konver
+bo'lmagan xodim hamma mahsulotga yozadi.
+
+**Ro'yxatning O'ZI ham shu doira bo'yicha qisqaradi**: stul kiritadigan
+odamga faqat stullar ko'rinadi — penal oldida turib, har safar
+o'rtasidan izlab o'tirmasin. Buning uchun `/api/ref` har mahsulot yonida
+`shop_id` ni ham beradi (javobgar tsex → marshrutni boshlaydigan
+bo'limning tsexi), sahifa esa uni xodimning `scope_shop_ids` i bilan
+solishtiradi. **Bu QULAYLIK, himoya emas**: chegara baribir serverda
+(`shopOfProduct`) — ro'yxatni chetlab, id ni qo'lda yuborsa ham qabul
+qilinmaydi.
+
+Doira **Xodimlar sahifasida** qo'yiladi: rol yonidagi «Barcha tsex»
+ro'yxatidan tsex tanlanadi. Kodga ism ham, tsex ham yozilmaydi
+(4-qoida). Bo'lim so'ralmaydi: konver
 «boshlanmagan» bo'lib ochiladi va boshliq uni o'z ekranidan bir bosishda
 ishga tushiradi.
 

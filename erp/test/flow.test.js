@@ -2864,6 +2864,16 @@ test('konver so\'rovi: tsex boshlig\'i yozadi, tasdiqlovchi ochadi', async () =>
   assert.equal((await korpus('POST', '/api/units/requests',
     { product_id: STUL, qty: 1 })).status, 400);
 
+  //  Ro'yxatning O'ZI ham tsex bo'yicha qisqaradi: har mahsulot yonida
+  //  qaysi tsexniki ekani keladi va sahifa shu bo'yicha filtrlaydi.
+  const ref = (await korpus('GET', '/api/ref')).body;
+  const st = ref.products.find((x) => x.id === STUL);
+  const pn = ref.products.find((x) => x.id === PENAL);
+  const STULTSEX = (await H.id(`SELECT id FROM shops WHERE code = 'STUL'`)).id;
+  const KORTSEX  = (await H.id(`SELECT id FROM shops WHERE code = 'KORPUS'`)).id;
+  assert.equal(st.shop_id, STULTSEX, 'stul \u2014 stul tsexiniki');
+  assert.equal(pn.shop_id, KORTSEX,  'penal \u2014 korpus tsexiniki');
+
   //  Tasdiqlash uning ishi emas.
   assert.equal((await korpus('POST', `/api/units/requests/${id}/approve`)).status, 403);
 

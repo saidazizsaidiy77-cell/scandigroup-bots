@@ -37,11 +37,22 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
       //  `steps` — marshrutdagi bo'limlar soni. Muddat shundan chiqadi
       //  (har bo'limda bir kun, izoh: sql/register.sql), ya'ni konver
       //  so'ralayotganda ham «omborga qachon tushadi» darrov ko'rinadi.
+      //
+      //  `shop_id` — mahsulot QAYSI TSEXNIKI: javobgar tsex, u bo'lmasa
+      //  marshrutni boshlaydigan bo'limning tsexi. Tsexi biriktirilgan
+      //  xodimga ro'yxat shu ustun bo'yicha qisqaradi — stul kiritadigan
+      //  odam oldida penal turmasin. Chegara baribir SERVERDA
+      //  (`modules/units.js`, `shopOfProduct`): ro'yxatni qisqartirish
+      //  qulaylik, himoya emas.
       db.query(`SELECT p.*, g.name AS group_name, g.line_id,
-                       COALESCE(r.steps, 0)::int AS steps
+                       COALESCE(r.steps, 0)::int AS steps,
+                       COALESCE(g.owner_shop_id, r.shop_id) AS shop_id
                   FROM products p JOIN product_groups g ON g.id = p.group_id
-                  LEFT JOIN (SELECT product_id, COUNT(*) AS steps
-                               FROM v_product_route GROUP BY product_id) r
+                  LEFT JOIN (SELECT pr.product_id, COUNT(*) AS steps,
+                                    (array_agg(sc.shop_id ORDER BY pr.step_no))[1] AS shop_id
+                               FROM v_product_route pr
+                               JOIN sections sc ON sc.id = pr.section_id
+                              GROUP BY pr.product_id) r
                          ON r.product_id = p.id
                  -- Guruh tartibi saytdan qo'yiladi (product_groups.sort),
                  -- shuning uchun ro'yxat kod bo'yicha emas, shu tartibda
