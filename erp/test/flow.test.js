@@ -2522,7 +2522,7 @@ test('tsex boshlig\'i ham qo\'lidagi pulni sarflaydi', async () => {
     to_kind: 'expense', currency: 'USD', amount: 10,
     expense_item_id: modda, pl_month: '2026-09' });
   assert.equal(yoq.status, 400, yoq.text);
-  assert.match(yoq.body.error, /podotchyot/);
+  assert.match(yoq.body.error, /korxona puli yo'q/);
 
   //  Belgi qo'yiladi (guruh berilmadi — demak hammasi) va pul beriladi.
   assert.equal((await admin('PATCH', '/api/admin/workers/' + u,
@@ -2544,6 +2544,51 @@ test('tsex boshlig\'i ham qo\'lidagi pulni sarflaydi', async () => {
   //  pulni beradi.
   assert.equal((await usta('GET', '/api/cash/pl')).status, 403);
   assert.equal((await usta('PATCH', '/api/cash/ops/1')).status, 403);
+});
+
+test('qo\'lida pul turgan odam belgisisiz ham hisob beradi', async () => {
+  //  ★ Belgi («Qo'liga pul beriladi») KELAJAK haqida: kassadan bu
+  //  odamga pul berish mumkinmi. Qo'lida ALLAQACHON turgan pulga esa
+  //  u tegishli emas — pul boshlang'ich qoldiqdan, mijozdan yoki belgi
+  //  keyin olib tashlanganidan kelib qolgan bo'lishi mumkin.
+  //
+  //  Ilgari faqat belgi qaralardi va o'sha pul TIQILIB qolardi: xodim
+  //  sarfini yoza olmasdi, kassir esa uni faqat «Boshlang'ich qoldiq»
+  //  bilan tuzatib qo'yishi mumkin edi — ya'ni haqiqiy harajat
+  //  foyda-zarardan yashirinib ketardi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov tiqilgan pul'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name='Sinov tiqilgan pul')`);
+  const u = (await H.id(`SELECT id FROM workers WHERE name='Sinov tiqilgan pul'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'omborchi') ON CONFLICT DO NOTHING`, [u]);
+  //  Belgisi ATAYLAB yo'q, lekin boshlang'ich qoldiqda puli bor.
+  await db.query(`UPDATE workers SET can_hold_cash = false,
+                    opening_usd = 400, opening_on = DATE '2026-09-01' WHERE id = $1`, [u]);
+  const x = H.api(base, await H.sessionFor('Sinov tiqilgan pul'));
+
+  //  Tugma chiqadimi degan savolga `/refs` javob beradi.
+  const refs = (await x('GET', '/api/cash/refs')).body;
+  assert.equal(refs.my.hold, false, 'belgisi yo\'q');
+  assert.equal(refs.my.puli, true, 'lekin qo\'lida pul bor');
+
+  const modda = (await H.id(`SELECT id FROM expense_items LIMIT 1`)).id;
+  const ok = await x('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 150,
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [u])).total_usd), 250);
+
+  //  Pul tugagach tugma ham yo'qoladi: qo'lida hech narsa qolmadi.
+  assert.equal((await x('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 250,
+    expense_item_id: modda, pl_month: '2026-09' })).status, 200);
+  const bosh = await x('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 10,
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(bosh.status, 400, bosh.text);
+  assert.match(bosh.body.error, /korxona puli yo'q/);
 });
 
 test('podotchyot olgan xodim sarfini o\'zi yozadi, faqat ochilgan guruhga', async () => {
@@ -2570,7 +2615,7 @@ test('podotchyot olgan xodim sarfini o\'zi yozadi, faqat ochilgan guruhga', asyn
     to_kind: 'expense', currency: 'USD', amount: 50,
     expense_item_id: modda, pl_month: '2026-09' });
   assert.equal(yoq.status, 400, yoq.text);
-  assert.match(yoq.body.error, /podotchyot/);
+  assert.match(yoq.body.error, /korxona puli yo'q/);
 
   //  Belgilanadi va faqat BITTA guruh ochiladi
   assert.equal((await admin('PATCH', '/api/admin/workers/' + b,

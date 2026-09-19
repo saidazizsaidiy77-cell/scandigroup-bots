@@ -145,7 +145,23 @@ function drawHead() {
   if (isAcc() || (isMe() && savdo)) btn.push(['in', isMe() ? 'Mijozdan pul olindi' : 'Kirim']);
   //  Qo'lida pul bo'lgan xodim sarfini o'zi yozadi — podotchyot shu
   //  bilan yopiladi (izoh: sql/cash.sql).
-  if (isMe() && refs.my && refs.my.hold) btn.push(['spend', 'Harajat yozish']);
+  //  Belgisi bor YOKI qo'lida pul turgan odam sarfini yozadi: belgi
+  //  kelajak haqida, qo'lidagi pul esa bugungi haqiqat (izoh:
+  //  modules/cash.js).
+  if (isMe() && refs.my && (refs.my.hold || refs.my.puli))
+    btn.push(['spend', 'Harajat yozish']);
+  //  ★ KASSIR XODIMNING QO'LIDAGI PULDAN HAM HARAJAT YOZADI.
+  //
+  //  Podotchyotni xodimning O'ZI yopishi — asosiy yo'l. Lekin hamma
+  //  xodim dasturga kirmaydi: u chekni kassirning qo'liga beradi va
+  //  o'sha pul qo'lida osilib qolardi. Kassir sahifasida faqat
+  //  «Boshlang'ich qoldiq» turardi, ya'ni pulni faqat TUZATIB qo'yish
+  //  mumkin edi — bu esa harajatni foyda-zarardan yashirib yuborardi.
+  //
+  //  Bu yerda turishining sababi: harajatning ikkinchi tomoni KASSA
+  //  EMAS, harajat moddasi. Berish va qabul qilish kassaning oynasida,
+  //  chunki u yerda ikkinchi tomoni baribir kassa — bu esa unday emas.
+  if (W && boss) btn.push(['spend', 'Harajat yozish']);
   if (isAcc() && boss) {
     if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
     //  Berish va qabul qilish yonma-yon turadi — bitta ishning ikki
@@ -162,15 +178,15 @@ function drawHead() {
   //  «Harajat yozish» tugmasini topolmay, uni kassirdan so'rab
   //  yurardi — ekran esa nima yetishmayotganini aytmasdi. Bo'sh joy
   //  savol, sababi yozilgan joy javob.
-  const ozim = isMe() && refs.my && !refs.my.hold;
   const puli = Number(here.total_usd || 0) !== 0;
+  const ozim = isMe() && refs.my && !refs.my.hold && !refs.my.puli;
   $('btnBar').innerHTML = btn.map(([k, t], i) =>
     `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')
     + (!isMe() && boss ? `<button class="ic" title="Boshlang'ich qoldiq"
          onclick="openOpening()">✎ Boshlang'ich qoldiq</button>` : '')
-    + (ozim ? `<span class="muted" style="font-size:13px">${puli
-        ? "Qo'lingizdagi pulni sarflash uchun Xodimlar sahifasida sizga «Qo'liga pul beriladi» belgisi qo'yilishi kerak."
-        : "Sizga podotchyot berilmaydi — kerak bo'lsa Xodimlar sahifasida «Qo'liga pul beriladi» belgilanadi."}</span>` : '');
+    + (ozim ? `<span class="muted" style="font-size:13px"
+        >Qo'lingizda korxona puli yo'q — podotchyot berilsa bu yerda
+         «Harajat yozish» tugmasi chiqadi.</span>` : '');
 
   $('tabs').innerHTML = [['in', 'Kirim'], ['out', 'Chiqim'], ['all', 'Hammasi']]
     .map(([k, t]) => `<button ${k === tab ? 'class="primary"' : ''}

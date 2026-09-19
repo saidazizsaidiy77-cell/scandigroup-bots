@@ -46,7 +46,11 @@ function outGroups() {
   //  Xodim o'z sarfini yozayotgan bo'lsa ro'yxatda faqat HARAJAT
   //  guruhlari, ustiga unga ochilganlari: ta'minotchiga to'lov ham,
   //  boshqa xodimga pul berish ham uning ishi emas.
-  const ozi = form === 'spend';
+  //  O'Z sahifasida ro'yxat unga ochilgan guruhlar bilan qisqaradi.
+  //  Kassir BOSHQA xodimning sahifasida yozayotgan bo'lsa esa hammasi
+  //  turadi: u hujjatni qo'lida ushlab turibdi va uni yozib qo'yishi
+  //  kerak — cheklov xodimning O'ZI yozganida ma'noga ega.
+  const ozi = form === 'spend' && isMe();
   const ruxsat = (refs.my && refs.my.groups) || [];
   const g = ozi ? [] : [['supplier', "Ta'minotchiga to'lov"],
                         ['worker',   "Xodim qo'liga pul (podotchyot)"]];
@@ -379,7 +383,12 @@ async function saveOp() {
   //  SHU kassa doim bir tomonda: kirimda oluvchi, chiqimda beruvchi.
   //  Menejerda esa u o'zi (`me`) — serverda ham shunday qo'yiladi.
   const meSide = { kind: 'worker', id: refs.me.id };
+  //  ★ XODIMNING SAHIFASIDA TOMON O'SHA XODIM, kassa emas: qo'lidagi
+  //  puldan yozilgan harajat uning qo'lidan chiqishi kerak. Ilgari bu
+  //  yerda kassa turardi va sahifa kassaning id sini topa olmay
+  //  «Qayerdan tanlanmagan» deb yiqilardi.
   const acc = isMe() ? meSide
+    : W ? { kind: 'worker', id: here.id }
     : { kind: 'account', id: (refs.accounts.find(a => a.code === A) || {}).id };
   const other = kind === 'expense' ? { kind: 'expense', id: null }
                                    : { kind, id: Number(id) };

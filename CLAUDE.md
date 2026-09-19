@@ -1078,6 +1078,26 @@ nimaga sarflaganini O'ZI yozadi («Mening pulim» sahifasidagi «Harajat
 yozish»). Pul qo'lidan chiqadi va harajatga aylanadi, podotchyot shu
 bilan yopiladi. Kassirga og'zaki aytib, u yozib o'tirmaydi.
 
+**★ QO'LIDA PUL BOR ODAM UNI HAR DOIM HISOBDAN CHIQARA OLADI.** Belgi
+(«Qo'liga pul beriladi») KELAJAK haqida: kassadan bu odamga pul berish
+mumkinmi. Qo'lida ALLAQACHON turgan pulga esa u tegishli emas — pul
+boshlang'ich qoldiqdan, mijozdan yoki belgi keyin olib tashlanganidan
+kelib qolgan bo'lishi mumkin.
+
+Ilgari faqat belgi qaralardi va o'sha pul TIQILIB qolardi: xodim
+sarfini yoza olmasdi, kassir esa uni faqat «Boshlang'ich qoldiq» bilan
+TUZATIB qo'yishi mumkin edi — ya'ni haqiqiy harajat foyda-zarardan
+yashirinib ketardi. Shart endi «belgisi bor YOKI qo'lida pul bor», va
+pul tugagach tugma o'zi yo'qoladi.
+
+**Kassir ham xodimning sahifasidan harajat yozadi** (`/kassa.html?a=w12`,
+«Harajat yozish»). Hamma xodim dasturga kirmaydi: u chekni kassirning
+qo'liga beradi va o'sha pul qo'lida osilib qolardi. Tugma SHU YERDA
+turishining sababi: harajatning ikkinchi tomoni KASSA EMAS, harajat
+moddasi — berish va qabul qilish kassaning oynasida, chunki u yerda
+ikkinchi tomoni baribir kassa. Kassir yozayotganda guruh cheklovi
+qo'yilmaydi: cheklov xodimning O'ZI yozganida ma'noga ega.
+
 Lekin hamma hamma narsani yoza olmaydi: **qaysi harajat guruhlariga
 sarflay olishi XODIMDA belgilanadi** (`worker_expense_groups`) — ombor
 mudiri va korpus boshlig'i barcha harajatni qiladi, tsex boshliqlari

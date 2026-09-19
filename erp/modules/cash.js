@@ -97,9 +97,11 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  va kerak bo'lsa ustidan yoziladi. Kurs kunda bir marta
     //  o'zgaradi, operatsiya esa kuniga o'nlab bo'ladi.
     //  O'zim haqimda: podotchyot olamanmi va qaysi guruhga sarflayman
-    db.query(`SELECT w.can_hold_cash, g.group_code
+    db.query(`SELECT w.can_hold_cash, g.group_code,
+                     COALESCE(c.uzs, 0) <> 0 OR COALESCE(c.usd, 0) <> 0 AS puli
                 FROM workers w
                 LEFT JOIN worker_expense_groups g ON g.worker_id = w.id
+                LEFT JOIN v_worker_cash c ON c.id = w.id
                WHERE w.id = $1`, [req.user.id]),
     db.query(`SELECT rate FROM cash_ops
                WHERE rate IS NOT NULL AND status = 'ok'
@@ -111,7 +113,11 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     payable: payable.rows,
     //  O'ZIM: qo'limga pul beriladimi va qaysi guruhlarga sarflay
     //  olaman. Bo'sh ro'yxat — hamma guruh.
+    //  `hold` — kassadan pul BERILADIMI; `puli` — qo'lida ALLAQACHON
+    //  turibdimi. Sarf tugmasi ikkalasining birortasiga qaraydi:
+    //  belgisi yo'q, lekin puli bor odam ham hisob berishi kerak.
     my: { hold: !!(meniki.rows[0] || {}).can_hold_cash,
+          puli: !!(meniki.rows[0] || {}).puli,
           groups: meniki.rows.map((r) => r.group_code).filter(Boolean) },
     rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null,
     me: { id: req.user.id, name: req.user.name }, boss,
@@ -330,11 +336,26 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
       //  harajat guruhiga sarflay olishi shundan tekshiriladi va
       //  moddasiz to'lov foyda-zarardan yo'qolib ketardi.
       if (!item_id) throw new Error('Harajat moddasi tanlanmagan');
+      //  ★ QO'LIDA PUL BOR ODAM UNI HAR DOIM HISOBDAN CHIQARA OLADI.
+      //
+      //  Belgi («Qo'liga pul beriladi») KELAJAK haqida: kassadan bu
+      //  odamga pul berish mumkinmi. Qo'lida ALLAQACHON turgan pulga
+      //  esa u tegishli emas — pul boshlang'ich qoldiqdan, mijozdan
+      //  yoki belgi keyin olib tashlanganidan kelib qolgan bo'lishi
+      //  mumkin.
+      //
+      //  Ilgari faqat belgi qaralardi va o'sha pul TIQILIB qolardi:
+      //  xodim sarfini yoza olmasdi, kassir esa uni faqat
+      //  «Boshlang'ich qoldiq» bilan TUZATIB qo'yishi mumkin edi —
+      //  ya'ni haqiqiy harajat foyda-zarardan yashirinib ketardi.
       const w = (await client.query(
-        `SELECT can_hold_cash FROM workers WHERE id = $1 AND active`,
-        [req.user.id])).rows[0];
-      if (!w || !w.can_hold_cash)
-        throw new Error('Sizga podotchyot berilmaydi — harajat yozib bo\'lmaydi');
+        `SELECT w.can_hold_cash,
+                COALESCE(c.uzs, 0) <> 0 OR COALESCE(c.usd, 0) <> 0 AS puli
+           FROM workers w
+           LEFT JOIN v_worker_cash c ON c.id = w.id
+          WHERE w.id = $1 AND w.active`, [req.user.id])).rows[0];
+      if (!w || !(w.can_hold_cash || w.puli))
+        throw new Error('Qo\'lingizda korxona puli yo\'q — harajat yozib bo\'lmaydi');
       const ok = (await client.query(
         `SELECT 1 FROM expense_items i
           WHERE i.id = $1
