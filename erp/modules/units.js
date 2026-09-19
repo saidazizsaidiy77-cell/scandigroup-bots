@@ -496,10 +496,28 @@ router.get('/requests/next-no', need(...REQUEST), wrap(async (req, res) => {
     `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
     [shopId])).rows[0];
   const keyingi = await keyingiTsex(db, pid, null, null, shopId);
+
+  //  ★ MUDDAT SAHIFADA HISOBLANMAYDI, shu yerdan keladi. Formula
+  //  endi ikkita — korpusda bosqichlar zanjiri, stulda marshrut
+  //  qadamlari — va ikkalasini sahifaga ko'chirish nusxani ikkiga
+  //  ko'paytirardi. Qoida BITTA joyda: `muddat_zanjir` va `ish_kuni`.
+  const boshlanish = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.started_on || ''))
+    ? req.query.started_on : null;
+  let plan = null;
+  if (boshlanish) plan = (await db.query(
+    `SELECT z.lak_on, z.pack_on,
+            COALESCE(z.fg_on, ish_kuni($2::date, r.steps)) AS fg_on,
+            z.fg_on IS NOT NULL AS chain, r.steps
+       FROM (SELECT COUNT(*)::int AS steps FROM v_product_route
+              WHERE product_id = $3) r
+       LEFT JOIN LATERAL muddat_zanjir($1, $2::date) z ON true`,
+    [shopId, boshlanish, pid])).rows[0];
+
   res.json({
     conveyor_no: await nextConveyorNo(db, letter, width),
     next_shop:   keyingi?.name || 'T/M ombor',
     plan_required: !tsex?.auto,
+    plan,
   });
 }));
 
@@ -513,9 +531,14 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
     //  `sql/units.sql` da, `shops.plan_auto` esa `sql/register.sql` da
     //  qoʻshiladi — u migratsiyada KEYIN yuradi, yaʻni toza bazada
     //  view oʻsha ustunni topa olmasdi va sayt koʻtarilmasdi.
-    `SELECT q.*, COALESCE(sh.plan_auto, false) AS auto
+    `SELECT q.*, COALESCE(sh.plan_auto, false) AS auto,
+            --  T/M omborga tushish kuni SERVERDA: korpusda bosqichlar
+            --  zanjiri, stulda marshrut qadamlari — sahifa qaysi biri
+            --  ekanini bilishi shart emas.
+            COALESCE(z.fg_on, ish_kuni(q.started_on, q.steps)) AS fg_on
        FROM v_unit_requests q
        LEFT JOIN shops sh ON sh.id = q.shop_id
+       LEFT JOIN LATERAL muddat_zanjir(q.shop_id, q.started_on) z ON true
       WHERE ($1::text IS NULL OR q.status = $1)
         AND ($2::int[] IS NULL OR q.shop_id = ANY($2))
       ORDER BY (q.status = 'pending') DESC, q.created_at DESC
@@ -1693,12 +1716,20 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
   //  faqat birinchi tsexda qo'yilardi va zanjirning o'rtasi
   //  ko'rinmasdi.
   //
-  //  Sanasi MARSHRUTDAN o'zi chiqadigan tsexda (stul) so'ralmaydi.
+  //  Sanasi o'zi chiqadigan tsexda so'ralmaydi.
+  //
+  //  ★ BELGI KONVERNING EGASINIKI, QABUL QILGAN TSEXNIKI EMAS. Konver
+  //  qaysi tsexniki ekani marshrutni BOSHLAYDIGAN qadamdan chiqadi
+  //  (`shopOfProduct`, izoh: CLAUDE.md) — turgan joyidan emas: stul lak
+  //  bo'limiga o'tganda ham stul tsexiniki bo'lib qoladi va qoidasi
+  //  o'zgarmasligi kerak. Ilgari qabul qilgan tsexning belgisi
+  //  o'qilardi va lak tsexi `plan_auto` bo'lmagani uchun STULDA ham
+  //  sana so'ralardi — holbuki stulda u marshrutdan o'zi chiqadi.
   if (shopChanged) {
     const keyingi = await keyingiTsex(client, u.product_id, sec.step_no, owner, toShop);
     const tsex = (await client.query(
       `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
-      [toShop])).rows[0];
+      [await shopOfProduct(client, u.product_id)])).rows[0];
     const due = String(plan_on || '').trim() || null;
     if (!tsex?.auto && from && !due)
       throw new Error(`${u.conveyor_no}: ${keyingi?.name || 'T/M ombor'}ga ` +

@@ -60,8 +60,9 @@ bog'lanadi, shuning uchun ombor qoldig'i ham dona emas, konver hisobida.
 `route_templates` + `route_steps`, mahsulotga `route_template_id` orqali
 biriktiriladi. Haqiqiy manba: **`sql/routes.sql`** — tartib faqat shu yerda.
 
-**★ MUDDAT MARSHRUTDAN HISOBLANADI: har bo'limda BIR KUN** (zavod qarori,
-2026-09). Sana konverning boshlangan kunidan va qadam raqamidan chiqadi
+**★ MUDDAT MARSHRUTDAN HISOBLANADI: har bo'limda BIR KUN** (zavod
+qarori, 2026-09) — STULDA. Korpusda formula boshqa: bosqichlar zanjiri,
+pastda. Sana konverning boshlangan kunidan va qadam raqamidan chiqadi
 (`v_unit_step_plan`, `v_unit_plan`, `sql/register.sql`):
 
     N-qadamga kirish   =  started_on + (N − 1) ISH KUNI
@@ -76,11 +77,13 @@ oltitasi bor (dushanba–shanba). Sana hech qachon yakshanbaga tushmaydi;
 boshlanish kuni yakshanbaga to'g'ri kelsa dushanbadan sanaladi.
 
 Formula BITTA joyda — `ish_kuni(sana, kun)` funksiyasi
-(`sql/register.sql`). Sahifadagi nusxa (`sorovlar.html`, `kunQo`) faqat
-javobni darrov ko'rsatish uchun va aynan shu natijani berishi shart:
-ikki nusxa ikki xil kun aytsa, ekrandagi va'da jurnaldagidan farq qilib
-qolardi. Lak va qadoqlash
-sanalari ham shundan — o'sha tsexning marshrutdagi birinchi qadami.
+(`sql/register.sql`). **Sahifada nusxasi YO'Q**: `sorovlar.html` sanani
+serverdan so'raydi (`GET /api/units/requests/next-no?started_on=`) va
+faqat ko'rsatadi. Ilgari nusxa bor edi va ikki formula paydo bo'lgach
+ikkalasini ham ko'chirish kerak bo'lardi — bittasini tahrir qilib,
+ikkinchisini unutish uchun bitta deploy yetardi va ekrandagi va'da
+jurnaldagidan farq qilib qolardi. Lak va qadoqlash sanalari ham
+shundan — o'sha tsexning marshrutdagi birinchi qadami.
 
 Eski hisob (`v_unit_eta`, `MAX(qty/quvvat) + SUM(1/quvvat)`) olib
 tashlandi. U ikki narsani talab qilardi: har bo'limning quvvati
@@ -97,31 +100,58 @@ boshlig'i qo'lda qo'ygan, formuladan USTUN) → **marshrut** (formula).
 Zahiraga marshrut sanasi chiqarilmaydi: u buyurtma kutadi, marshrut
 kutmaydi.
 
-**★ FORMULA HAMMA TSEXDA ISHLAMAYDI** (`shops.plan_auto`, zavod qarori
-2026-09). **Stulda** sana marshrutdan o'zi chiqadi: yo'li qisqa
-(6–8 bo'lim) va bir tekis yuradi. **Korpusda** esa katak BO'SH
-tug'iladi va **tsex boshlig'i o'zi qo'yadi**: marshruti o'n to'qqiz
-bo'lim, quritish va kamera navbati bor, va o'sha kunni boshliqdan
-boshqa hech kim to'g'ri ayta olmaydi. Bo'sh katak bu yerda «unutilgan»
-emas, «boshliq qo'yadi» degani.
+**★ HAR TSEXDA O'Z FORMULASI** (`shops.plan_auto` va `plan_*_days`,
+zavod qarori 2026-09). Sana ikkala tsexda ham avtomat, lekin **bir xil
+formula bilan emas**.
 
-Belgi TSEXDA, kodda emas — omborning `perm` i va xodimning
-`can_hold_cash` i bilan bir xil idiom: ertaga korpus ham avtomatga
-o'tsa bitta katakcha belgilanadi. Qaysi tsexniki ekani marshrutni
+**Stulda — MARSHRUT QADAMLARI**: yo'li qisqa (6–8 bo'lim) va bir tekis
+yuradi, shuning uchun har bo'limda bir ish kuni degan hisob to'g'ri
+javob beradi.
+
+**Korpusda (sp, penal, kamod, stol) — BOSQICHLAR ZANJIRI**: o'n to'qqiz
+bo'limning ba'zisida konver bir necha kun turadi (quritish, kamera
+navbati), ba'zisidan bir kunda o'tadi — qadamlarni sanash u yerda
+yolg'on kun berardi. Zavod o'lchagani bo'lim emas, BOSQICHLAR
+orasidagi masofa:
+
+    boshlanish  →  lak tsexi         6 ish kuni
+    lak tsexi   →  qadoqlash tsexi   6 ish kuni
+    qadoqlash   →  T/M ombor         1 ish kuni
+
+Misol: 19-sentabr (shanba) boshlangan konver **26-sentabr** ertalab lak
+tsexiga kiradi, **3-oktabr** qadoqlashga topshiriladi va **5-oktabr**
+omborga qabul qilinadi — yakshanbalar (20-sen, 27-sen, 4-okt) tashlab
+ketilgan.
+
+Zanjir `muddat_zanjir(tsex, boshlanish)` funksiyasida, BITTA joyda: uni
+jurnal ham, so'rovlar ro'yxati ham shundan oladi. Uchala raqam ham
+to'ldirilgan bo'lishi shart — yarmi kiritilgani o'rtadagi sanani
+jimgina noto'g'ri chiqarardi, shuning uchun yo hammasi, yo hech qaysisi
+(bo'sh bo'lsa tsex marshrut qadamlari bilan hisoblaydi).
+
+Raqamlar TSEXDA, kodda emas — omborning `perm` i va xodimning
+`can_hold_cash` i bilan bir xil idiom: zavod 6 ni 7 ga o'zgartirsa
+bitta katakcha tahrirlanadi. Qaysi tsexniki ekani marshrutni
 BOSHLAYDIGAN qadamdan chiqadi, turgan joyidan emas: stul lak bo'limiga
-o'tganda ham stul tsexiniki bo'lib qoladi.
+o'tganda ham stul tsexiniki bo'lib qoladi va qoidasi o'zgarmaydi.
 
-**★ MUDDAT ZANJIRI — HAR TSEX O'ZIDAN KEYINGISIGA SANA QO'YADI**
-(zavod qarori, 2026-09). Sanasi marshrutdan o'zi chiqmaydigan tsexda
-(korpus) u MAJBURIY va uch joyda so'raladi:
+**★ SANA QO'LDA HAM QO'YILADI, LEKIN MAJBURIY EMAS.** Ilgari korpusda
+u UCH joyda majburiy so'ralardi (kiritayotganda, lak qabul qilganda,
+qadoqlash qabul qilganda), chunki formula u tsexda ishlamasdi. Endi
+zanjir sanani o'zi hisoblaydi va majburiylik olib tashlandi: formulani
+to'ldirib, ustiga o'sha kunni qo'lda ham yozdirish bitta ishni ikki
+marta qildirardi.
 
-    kiritayotganda   →  Lak tsexiga topshirish sanasi
-    lak qabul qilganda →  Qadoqlash tsexiga topshirish sanasi
-    qadoqlash qabul qilganda →  T/M omborga topshirish sanasi
+**Qo'l YO'QOLMADI**: boshliq yozgan kun formuladan USTUN turadi
+(`reja` → `marshrut`) va bo'sh yuborilgani «tegma» emas, «yo'q»
+degani — olib tashlansa zanjir qaytib keladi. Uch yo'l ham ochiq
+qolaveradi: so'rovda, qabul qilishda va bo'limlar ekranidagi sana
+katagida.
 
-Aks holda sana faqat birinchi tsexda qo'yilardi va zanjirning o'rtasi
-ko'rinmasdi. **Stulda hech biri so'ralmaydi** — sana marshrutdan o'zi
-chiqadi (`shops.plan_auto`).
+Majburiylik belgisi konverning EGASINIKI, qabul qilgan tsexniki emas:
+stul lak tsexiga kirganda ham stul tsexiniki bo'lib qoladi
+(`shopOfProduct`). Ilgari qabul qilgan tsexning belgisi o'qilardi va
+lak tsexida `plan_auto` yo'qligi uchun STULDA ham sana so'ralardi.
 
 Ekranda har doim BITTA sana so'raladi, chunki boshliqning savoli bitta:
 keyingi tsexga qachon beraman. **Qaysi ustunga yozilishini SERVER hal

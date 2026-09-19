@@ -41,7 +41,7 @@
     yoki administrator.</p>
   <div class="form">
     <div class="wide"><label>Mahsulot</label>
-      <select id="fProduct" onchange="eta(); taklif()"></select></div>
+      <select id="fProduct" onchange="taklif()"></select></div>
     <!--  Konver raqami MAJBURIY: zavod uni o'z daftarida yuritadi va
           mahsulotning o'ziga yozib qo'yadi. Tizim bergan raqam bilan
           qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
@@ -51,7 +51,7 @@
     <div><label>Soni</label>
       <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
     <div><label>Boshlanish sanasi</label>
-      <input id="fStart" type="date" onchange="eta()"></div>
+      <input id="fStart" type="date" onchange="taklif()"></div>
     <!--  Keyingi tsexga topshirish sanasi. Korpusda MAJBURIY: yo'l uzun,
           quritish va kamera navbati bor va u kunni boshliqdan boshqa
           hech kim ayta olmaydi. Stulda katak yashiriladi — sana
@@ -115,50 +115,29 @@ let data = { rows: [], can_approve: false };
 const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
                  rejected:['bad','rad etildi'], cancelled:['','bekor qilindi'] };
 
-//  Omborga tushish kuni SHU YERDA ham hisoblanadi: boshliq sanani
-//  tanlayotganda natijani darrov ko'rsin, so'rov yuborib kutmasin.
-//  Formula serverdagi bilan bir xil (izoh: sql/register.sql):
-//  oxirgi bo'limdan keyingi kun = boshlanish + qadamlar soni.
-//  ★ YAKSHANBA HISOBGA OLINMAYDI — zavod o'sha kuni ishlamaydi.
-//  Formulaning o'zi bazada (`ish_kuni`, izoh: sql/register.sql); bu
-//  yerdagi nusxa faqat sahifa javobni DARROV ko'rsatishi uchun va
-//  natijasi aynan bir xil bo'lishi shart.
+//  ★ MUDDAT SAHIFADA HISOBLANMAYDI — SERVERDAN KELADI.
 //
-//  `Number()` SHART: bazadan kelgan son matn bo'lib qolishi mumkin
-//  (`COUNT(*)` bigint) va matn bilan qo'shilganda `19 + '8'` → `'198'`
-//  bo'lib ketardi.
-const kunQo = (boshlanish, kun) => {
-  const d = new Date(String(boshlanish).slice(0, 10) + 'T00:00:00');
-  //  Boshlanish yakshanbaga tushsa dushanbadan sanaladi.
-  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
-  const p = (d.getDay() + 6) % 7;        // 0 = dushanba … 5 = shanba
-  const t = p + Math.max(Number(kun) || 0, 0);
-  d.setDate(d.getDate() - p + Math.floor(t / 6) * 7 + (t % 6));
-  //  ★ MATN qaytaradi, `Date` emas. `new Date('...T00:00:00')` MAHALLIY
-  //  yarim tun beradi, `toISOString()` esa uni UTC ga aylantiradi:
-  //  Toshkentda (UTC+5) 12-oktabr yarim tuni 11-oktabr 19:00 boʻlib
-  //  chiqardi va ekranda bir kun OLDINGI sana turardi — ustiga
-  //  yakshanba, yaʻni formula hech qachon aytmaydigan kun.
-  const ik = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${ik(d.getMonth() + 1)}-${ik(d.getDate())}`;
-};
+//  Formula endi ikkita: korpusda bosqichlar zanjiri (boshlanish → lak
+//  → qadoqlash → ombor, har biri o'z kun soni bilan), stulda esa
+//  marshrut qadamlari (har bo'limda bir kun). Ikkalasini sahifaga
+//  ko'chirish nusxani ikkiga ko'paytirardi va ekrandagi va'da jurnaldagi
+//  sanadan ajralib qolishi uchun bitta tahrir yetardi.
+//
+//  Qoida bazada: `ish_kuni()` va `muddat_zanjir()` (izoh: sql/register.sql).
+//  Sahifa faqat KO'RSATADI. Narxi — mahsulot yoki sana o'zgarganda
+//  bitta kichik so'rov; u baribir raqam taklifi bilan birga ketadi.
 
-function eta() {
-  const p = mahsulotlar.find((x) => String(x.id) === $('fProduct').value);
-  const start = $('fStart').value;
-  if (!p || !start || !Number(p.steps)) { $('etaLine').textContent = ''; return; }
-  const d = kunQo(start, p.steps);
-  //  ★ FORMULA HAMMA TSEXDA ISHLAMAYDI (`shops.plan_auto`). Stulda
-  //  bu sana jurnalga OʻZI tushadi; korpusda esa katak boʻsh
-  //  tugʻiladi va tsex boshligʻi qoʻyadi — marshrutdan chiqqan kun u
-  //  yerda TAXMIN. Belgisiz yozilsa direktor uni vaʻda deb oʻqirdi.
-  $('etaLine').innerHTML = planKerak
-    ? `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, har birida bir ish `
-      + `kuni — T/M omborga taxminan <b>${d8(d)}</b> kuni tushadi. `
-      + `<span class="muted">Aniq kunni tsex boshlig'i qo'yadi.</span>`
-    : `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, `
-      + `har birida bir ish kuni — T/M omborga <b>${d8(d)}</b> `
-      + `kuni tushadi. <span class="muted">Yakshanba hisobga olinmaydi.</span>`;
+function eta(plan) {
+  if (!plan || !plan.fg_on) { $('etaLine').textContent = ''; return; }
+  //  Zanjirda uchala bekat ham ko'rsatiladi: boshliqning savoli
+  //  «qachon omborda bo'ladi» dan oldin «qachon lakka beraman».
+  $('etaLine').innerHTML = plan.chain
+    ? `Lak tsexi <b>${d8(plan.lak_on)}</b> · Qadoqlash <b>${d8(plan.pack_on)}</b> `
+      + `· T/M ombor <b>${d8(plan.fg_on)}</b> `
+      + `<span class="muted">Yakshanba hisobga olinmaydi.</span>`
+    : `Marshrutda <b>${Number(plan.steps)}</b> ta bo'lim, har birida bir ish `
+      + `kuni — T/M omborga <b>${d8(plan.fg_on)}</b> kuni tushadi. `
+      + `<span class="muted">Yakshanba hisobga olinmaydi.</span>`;
 }
 
 //  ★ KEYINGI RAQAMNI TAKLIF QILADI. Zavod raqamni o'z daftarida
@@ -170,20 +149,21 @@ function eta() {
 //  bo'lsa ustidan yozilmaydi.
 async function taklif(majburan) {
   const pid = $('fProduct').value;
-  if (!pid) return;
-  if (!majburan && $('fNo').value.trim()) return;
+  if (!pid) { eta(null); return; }
+
   try {
     const r = await App.api('/api/units/requests/next-no?product_id='
-      + encodeURIComponent(pid));
-    $('fNo').value = r.conveyor_no;
+      + encodeURIComponent(pid)
+      + '&started_on=' + encodeURIComponent($('fStart').value || ''));
+    //  Raqam ustidan YOZILMAYDI: xodim qog'ozdagisini kiritgan bo'lishi
+    //  mumkin. Majburan — faqat saqlangandan keyin, katak tozalanganda.
+    if (majburan || !$('fNo').value.trim()) $('fNo').value = r.conveyor_no;
+    eta(r.plan);
     //  Katak keyingi tsexning NOMI bilan yoziladi: «keyingi tsex» degan
     //  umumiy so'z o'rniga «Lak tsexiga topshirish» deb tursin.
     planKerak = !!r.plan_required;
     $('planBox').hidden = !planKerak;
     $('planLbl').textContent = `${r.next_shop}ga topshirish`;
-    //  Muddat satri `planKerak` ga qarab boshqacha yoziladi, u esa
-    //  shu so'rovdan keyin ma'lum bo'ladi — shuning uchun qayta.
-    eta();
   } catch { /* taklif bermadi — xodim o'zi yozadi */ }
 }
 
@@ -229,12 +209,11 @@ function draw() {
     const st = STATUS[r.status] || ['', r.status];
     //  Omborga tushish kuni so'rovda ham ko'rinadi: direktor tasdiqlashdan
     //  oldin «bu qachon tayyor bo'ladi» degan savolga javob ko'rsin.
-    //  Sanasi marshrutdan o'zi chiqmaydigan tsexda (korpus) bu TAXMIN:
-    //  jurnalda katak bo'sh tug'iladi va tsex boshlig'i o'zi qo'yadi.
+    //  Sana SERVERDA hisoblangan (`fg_on`). Tsexi avtomat bo'lmasa bu
+    //  TAXMIN: jurnalda katak bo'sh tug'iladi va boshliq o'zi qo'yadi.
     let fg = '';
-    if (r.started_on && Number(r.steps))
-      fg = (r.auto ? '' : '<span class="muted">≈ </span>')
-         + d8(kunQo(r.started_on, r.steps))
+    if (r.fg_on)
+      fg = (r.auto ? '' : '<span class="muted">≈ </span>') + d8(r.fg_on)
          + (r.auto ? '' : '<div class="muted" style="font-size:12px">taxmin</div>');
     const act = [];
     if (r.status === 'pending' && data.can_approve)

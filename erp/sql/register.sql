@@ -61,6 +61,28 @@ UPDATE shops SET milestone = 'pack' WHERE code = 'QADOQ' AND milestone IS NULL;
 --  o'tsa bitta katakcha belgilanadi, kodga tegilmaydi.
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_auto BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ KORPUSDA MUDDAT BOSQICHMA-BOSQICH SANALADI (zavod qarori, 2026-09).
+--
+--  Korpusda (sp, penal, kamod, stol) «har bo'limda bir kun» ishlamaydi:
+--  o'n to'qqiz bo'limning ba'zisida bir necha kun turadi, ba'zisidan
+--  bir kunda o'tadi. Zavod o'lchagani — BOSQICHLAR orasidagi masofa:
+--
+--      boshlanish  →  lak tsexi         6 ish kuni
+--      lak tsexi   →  qadoqlash tsexi   6 ish kuni
+--      qadoqlash   →  T/M ombor         1 ish kuni
+--
+--  Misol: 19-sentabr (shanba) boshlangan konver 26-sentabr ertalab lak
+--  tsexiga kiradi, 3-oktabrda qadoqlashga topshiriladi va 5-oktabrda
+--  omborga qabul qilinadi (yakshanbalar tashlab ketilgan).
+--
+--  Raqamlar TSEXDA, kodda emas — `plan_auto` va `no_prefix` bilan bir xil
+--  idiom: zavod 6 ni 7 ga o'zgartirsa bitta katakcha tahrirlanadi.
+--  Uchalasi ham bo'sh bo'lsa zanjir ishlamaydi va tsex eskicha,
+--  marshrut qadamlari bo'yicha hisoblaydi (stul shunday).
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_lak_days  INT;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_pack_days INT;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_fg_days   INT;
+
 --  ★ KONVER RAQAMINING KO'RINISHI — TSEXDA (zavod qarori, 2026-09).
 --
 --      S26-104   S — stul, 26 — 2026 yil, 104 — ketma-ketligi
@@ -84,6 +106,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'raqam-korinishi') THEN
     UPDATE shops SET no_prefix = 'S', no_width = 3 WHERE code = 'STUL';
     INSERT INTO migration_flags (key) VALUES ('raqam-korinishi');
+  END IF;
+  --  Korpus endi ham avtomat, lekin BOSHQA formula bilan: bosqichlar
+  --  orasidagi masofa (yuqoridagi izoh). Tsex boshlig'ining qo'lda
+  --  qo'ygan sanasi baribir ustun turadi — formula uni bosmaydi.
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'korpus-muddat') THEN
+    UPDATE shops SET plan_auto = true,
+                     plan_lak_days = 6, plan_pack_days = 6, plan_fg_days = 1
+     WHERE code = 'KORPUS';
+    INSERT INTO migration_flags (key) VALUES ('korpus-muddat');
   END IF;
 END $$;
 
@@ -142,6 +173,33 @@ BEGIN
   RETURN d - p + (t / 6) * 7 + (t % 6);
 END $$;
 
+--  ★ BOSQICHLAR ZANJIRI — BITTA JOYDA.
+--
+--  Uch sana ketma-ket chiqadi: lak boshlanishdan, qadoqlash lakdan,
+--  ombor qadoqlashdan. Har qadamda yakshanba tashlanadi (`ish_kuni`).
+--
+--  Funksiya bo'lgani uchun uni jurnal ham, so'rovlar ro'yxati ham
+--  bitta manbadan oladi: ikki nusxada bo'lsa biri ertaga ikkinchisidan
+--  boshqa kun aytardi va ekrandagi va'da jurnaldagidan farq qilardi.
+--
+--  Uchala raqam ham to'ldirilgan bo'lishi SHART. Yarmi kiritilgan
+--  zanjir o'rtadagi sanani jimgina noto'g'ri chiqarardi — shuning
+--  uchun yo hammasi, yo hech qaysisi: qator umuman qaytarilmaydi va
+--  tsex marshrut qadamlari bo'yicha hisoblashda qoladi.
+CREATE OR REPLACE FUNCTION muddat_zanjir(p_shop INT, p_start DATE)
+RETURNS TABLE (lak_on DATE, pack_on DATE, fg_on DATE)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE s RECORD; l DATE; q DATE;
+BEGIN
+  IF p_shop IS NULL OR p_start IS NULL THEN RETURN; END IF;
+  SELECT plan_lak_days AS ld, plan_pack_days AS pd, plan_fg_days AS fd
+    INTO s FROM shops WHERE id = p_shop;
+  IF NOT FOUND OR s.ld IS NULL OR s.pd IS NULL OR s.fd IS NULL THEN RETURN; END IF;
+  l := ish_kuni(p_start, s.ld);
+  q := ish_kuni(l, s.pd);
+  RETURN QUERY SELECT l, q, ish_kuni(q, s.fd);
+END $$;
+
 CREATE OR REPLACE VIEW v_unit_step_plan AS
 --  step_no — ROW_NUMBER(), ya'ni bigint; int ga keltiriladi.
 --  Sana yakshanbani chetlab o'tib qo'shiladi (izoh: `ish_kuni`).
@@ -170,11 +228,17 @@ SELECT unit_id, shop_id, MIN(on_date) AS on_date
 --  lekin T/M ombor sanasi BOR: u marshrutning to'liq uzunligidan
 --  chiqadi va joyni bilishni talab qilmaydi. Eski hisobda bunday
 --  konver muddatsiz qolardi.
-CREATE OR REPLACE VIEW v_unit_plan AS
+--  DROP + CREATE: ustunlar qo'shildi va ma'nosi o'zgardi (`fg_on` endi
+--  zanjirni ham hisobga oladi), `CREATE OR REPLACE` esa ustunni faqat
+--  oxiriga qo'sha oladi. View'dan faqat `v_unit_register` osilib turadi
+--  va u shu faylda, shundan keyin qayta quriladi.
+DROP VIEW IF EXISTS v_unit_plan CASCADE;
+CREATE VIEW v_unit_plan AS
 WITH oxiri AS (
   --  Oxirgi bo'limdan KEYINGI ish kuni omborga tushadi — ya'ni
   --  qadamlar soniga teng ish kuni (izoh: `ish_kuni`).
   SELECT sp.unit_id, MAX(sp.step_no) AS steps,
+         MAX(u.started_on) AS started_on,
          ish_kuni(MAX(u.started_on), MAX(sp.step_no)::int) AS fg_on
     FROM v_unit_step_plan sp
     JOIN production_units u ON u.id = sp.unit_id
@@ -190,8 +254,25 @@ brk AS (   -- turgan joyidan keyin tsex almashadigan birinchi qadam
 --  hisoblanadimi yoki yo'qmi shu hal qiladi (`shops.plan_auto`).
 --  Turgan joyi emas — stul lak bo'limiga o'tganda ham stul tsexiniki
 --  bo'lib qoladi va qoidasi o'zgarmasligi kerak.
-SELECT o.unit_id, o.steps, o.fg_on,
-       sp.on_date AS next_shop_on,
+--
+--  ★ IKKI XIL FORMULA, BITTA USTUN. Stulda sana marshrut QADAMLARIDAN
+--  chiqadi (har bo'limda bir kun), korpusda esa BOSQICHLAR zanjiridan
+--  (`muddat_zanjir`): o'n to'qqiz bo'limning ba'zisida konver bir necha
+--  kun turadi va qadamlarni sanash u yerda yolg'on kun berardi.
+--  Qaysi biri ishlashini tsexning o'zi aytadi — `plan_*_days` to'ldirilgan
+--  bo'lsa zanjir, bo'lmasa qadamlar.
+SELECT o.unit_id, o.steps,
+       COALESCE(z.lak_on,  lk.on_date) AS lak_on,
+       COALESCE(z.pack_on, pk.on_date) AS pack_on,
+       COALESCE(z.fg_on,   o.fg_on)    AS fg_on,
+       --  Keyingi tsexga o'tish kuni ham o'sha manbadan: zanjirda
+       --  oldinda lak tursa lak kuni, qadoqlash tursa qadoqlash kuni.
+       --  Zanjirda uchinchi bekat yo'q, shuning uchun boshqa tsex
+       --  oldinda tursa sana ham yo'q — taxmin qilinmaydi.
+       COALESCE(CASE WHEN z.lak_on IS NOT NULL THEN
+                  CASE sh.milestone WHEN 'lak'  THEN z.lak_on
+                                    WHEN 'pack' THEN z.pack_on END
+                END, sp.on_date) AS next_shop_on,
        sh.name    AS next_shop,
        COALESCE(bsh.plan_auto, false) AS auto
   FROM oxiri o
@@ -201,7 +282,16 @@ SELECT o.unit_id, o.steps, o.fg_on,
   LEFT JOIN LATERAL (
     SELECT s1.shop_id FROM v_unit_step_plan s1
      WHERE s1.unit_id = o.unit_id ORDER BY s1.step_no LIMIT 1) first ON true
-  LEFT JOIN shops bsh       ON bsh.id = first.shop_id;
+  LEFT JOIN shops bsh       ON bsh.id = first.shop_id
+  --  Zanjir tsexnikidir; bo'sh qaytsa marshrut qadamlari ishlaydi.
+  LEFT JOIN LATERAL muddat_zanjir(first.shop_id, o.started_on) z ON true
+  --  Marshrut qadamlari bo'yicha lak va qadoqlash tsexiga kirish kuni.
+  --  Qator bo'lmasligi ham javob: stul qadoqlash tsexiga BORMAYDI —
+  --  u o'z tsexida qadoqlanadi va o'sha yerdan omborga tushadi.
+  LEFT JOIN v_unit_plan_shop lk ON lk.unit_id = o.unit_id
+       AND lk.shop_id = (SELECT id FROM shops WHERE milestone = 'lak'  LIMIT 1)
+  LEFT JOIN v_unit_plan_shop pk ON pk.unit_id = o.unit_id
+       AND pk.shop_id = (SELECT id FROM shops WHERE milestone = 'pack' LIMIT 1);
 
 -- ------------------------------------------------------------ ★ JURNAL
 -- Ishlab chiqarish boshlig'ining jadvali. Bu view FAQAT shu faylda
@@ -284,20 +374,22 @@ SELECT
   u.color,
   u.fabric,
 
-  -- Lak tsexi: fakt → reja → taxmin
+  -- Lak tsexi: fakt → reja → taxmin.
+  -- Taxmin `v_unit_plan` dan keladi va u ikki formulani o'zi tanlaydi:
+  -- korpusda bosqichlar zanjiri, stulda marshrut qadamlari.
   COALESCE(u.lak_on, u.lak_planned_on,
-           CASE WHEN pl.auto AND NOT u.is_stock THEN lak.on_date END) AS lak_on,
+           CASE WHEN pl.auto AND NOT u.is_stock THEN pl.lak_on END) AS lak_on,
   CASE WHEN u.lak_on         IS NOT NULL THEN 'fakt'
        WHEN u.lak_planned_on IS NOT NULL THEN 'reja'
-       WHEN pl.auto AND lak.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
+       WHEN pl.auto AND pl.lak_on IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS lak_src,
 
   -- Qadoqlash tsexi: savdo mijozga muddat aytishda shunga qaraydi
   COALESCE(u.pack_on, u.pack_planned_on,
-           CASE WHEN pl.auto AND NOT u.is_stock THEN pk.on_date END) AS pack_on,
+           CASE WHEN pl.auto AND NOT u.is_stock THEN pl.pack_on END) AS pack_on,
   CASE WHEN u.pack_on         IS NOT NULL THEN 'fakt'
        WHEN u.pack_planned_on IS NOT NULL THEN 'reja'
-       WHEN pl.auto AND pk.on_date IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
+       WHEN pl.auto AND pl.pack_on IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS pack_src,
 
   -- Reja bor, fakt yo'q va muddat o'tib ketgan — nazorat shu ustunda
@@ -321,8 +413,4 @@ JOIN product_groups g  ON g.id = p.group_id
 LEFT JOIN sections cur ON cur.id = u.current_section_id
 LEFT JOIN v_unit_place pp ON pp.unit_id = u.id
 LEFT JOIN v_unit_plan pl  ON pl.unit_id = u.id
-LEFT JOIN customers c     ON c.id = u.customer_id
-LEFT JOIN v_unit_plan_shop lak ON lak.unit_id = u.id
-     AND lak.shop_id = (SELECT id FROM shops WHERE milestone = 'lak'  LIMIT 1)
-LEFT JOIN v_unit_plan_shop pk  ON pk.unit_id = u.id
-     AND pk.shop_id  = (SELECT id FROM shops WHERE milestone = 'pack' LIMIT 1);
+LEFT JOIN customers c     ON c.id = u.customer_id;
