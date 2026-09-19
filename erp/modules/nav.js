@@ -1,0 +1,209 @@
+// ============================================================================
+//  NAVBAT — MENYUDAGI BELGI
+//
+//  ★ NAVBAT XODIMNI O'ZI TOPADI (zavod qarori, 2026-09).
+//
+//  Xodim kun bo'yi bitta sahifada o'tirmaydi: direktor jurnalda, tsex
+//  boshlig'i bo'limlar ekranida, ombor mudiri qoldiqda bo'ladi. Ilgari
+//  navbatni BILISH uchun tegishli sahifani ochib ko'rishdan boshqa yo'l
+//  yo'q edi — ertalab jo'natilgan konver kechgacha qabul qilinmay
+//  turardi va buni hech kim sezmasdi.
+//
+//  Shuning uchun har bo'limning navbati MENYUDA raqam bo'lib turadi:
+//  qaysi sahifada tursa ham ko'radi. Belgi ikki joyda — bo'lim nomida
+//  va sahifa havolasida (bo'lim yopiq bo'lsa ostki qator umuman
+//  chizilmaydi), ustiga brauzer yorlig'ida.
+//
+//  ★ NAVBAT — QILINADIGAN ISH, «YANGI YOZUV» EMAS.
+//
+//  Ro'yxatga raqam qo'yish oson, lekin har kuni turadigan raqamga ko'z
+//  o'rganib qoladi va keyin haqiqiy navbat o'sha to'da orasida
+//  ko'rinmay ketadi. Shuning uchun bu yerda FAQAT kimdir harakat
+//  qilishini kutayotgan narsa sanaladi va faqat O'SHA odamga
+//  ko'rsatiladi: tasdiqlamaydigan xodimga so'rov navbati, ombor
+//  mudiri bo'lmagan xodimga qabul navbati chiqmaydi.
+//
+//  Doira bu yerda ham CHEGARA: tsex boshlig'i o'z tsexiga
+//  jo'natilganini, vitrina sotuvchisi o'z nuqtasining hujjatini,
+//  menejer o'z buyurtmasini sanaydi.
+//
+//  ★ RAQAM RO'YXAT BILAN BIR XIL BO'LISHI SHART. Har navbat o'z
+//  sahifasidagi ro'yxatning SHARTINI takrorlaydi — ikkinchi marta
+//  yozilgan shart bir kun ro'yxatdan ajralib ketardi: menyuda «3»
+//  turib, sahifada ikkitasi ko'rinardi. Shuning uchun har navbat
+//  uchun test bor va u raqamni ro'yxatning UZUNLIGI bilan
+//  solishtiradi (test/flow.test.js).
+// ============================================================================
+const express = require('express');
+const { db, wrap } = require('../db');
+const { ownOf } = require('../auth');
+const { scopeOf } = require('./units');
+
+const router = express.Router();
+
+const bor  = (req, ...p) => p.some((x) => req.user.permissions.includes(x));
+const whOf = (req) => {
+  const ids = req.user.scope_warehouse_ids || [];
+  return ids.length ? ids : null;
+};
+const chanOf = (req) => {
+  const c = req.user.scope_channels || [];
+  return c.length ? c : null;
+};
+
+const son = async (sql, params = []) => (await db.query(sql, params)).rows[0].n;
+
+//  Har navbat: qaysi sahifada turgani, qaysi bo'limda va nechtaligi.
+//  `izoh` — belgining ustiga sichqoncha olib borilganda chiqadigan gap:
+//  raqamning O'ZI nimani anglatishini aytmasa, uni ochib ko'rishdan
+//  boshqa yo'l qolmasdi.
+const NAVBATLAR = [
+
+  //  1. KONVER SO'ROVI — tasdiqlovchining navbati.
+  //  Shart `modules/units.js` dagi `/requests/pending` bilan bir xil.
+  async (req) => {
+    if (!bor(req, 'production.approve')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM unit_requests WHERE status = 'pending'`);
+    return [{ page: '/sorovlar.html', mod: 'production', n,
+              izoh: `${n} ta konver so'rovi tasdiq kutmoqda` }];
+  },
+
+  //  2. TSEXGA JO'NATILGAN KONVER va 3. YANGI BUYURTMA — tsex
+  //  boshlig'ining navbati, bo'limlar ekranida (`/harakat.html`).
+  //
+  //  Ikkalasi BITTA so'rovdan chiqadi: joinlari bir xil va ikki marta
+  //  so'rash bejiz bo'lardi.
+  //
+  //  Faqat DOIRASI BOR xodimga: konver qabul qilish tsexning ishi,
+  //  direktorniki emas — unga butun zavodning topshirig'i raqam bo'lib
+  //  turgani har kuni ko'ziga tushadigan, hech qachon nolga tushmaydigan
+  //  son bo'lardi.
+  async (req) => {
+    const scope = scopeOf(req);
+    if (!scope || !bor(req, 'production.entry', 'production.view')) return [];
+    const { rows } = await db.query(
+      //  Shart `modules/units.js` dagi `/board` bilan bir xil:
+      //  `inbox` — keyingi qadami MENDA, egasi boshqa tsex va
+      //  jo'natilgan; `new_bron` — shu xodim qatorni ochganidan
+      //  keyin tushgan bron.
+      `SELECT COUNT(*) FILTER (
+                WHERE r.section_id IS NOT NULL
+                  AND pu.handover_on IS NOT NULL
+                  AND pu.handover_shop_id = r.owner_shop_id
+                  AND kel.shop_id = ANY($1)
+                  AND COALESCE(r.owner_shop_id, ns.shop_id) <> kel.shop_id
+              )::int AS qabul,
+              COUNT(*) FILTER (
+                WHERE COALESCE(r.owner_shop_id, ns.shop_id) = ANY($1)
+                  AND bk.last_at IS NOT NULL
+                  AND bk.last_at > COALESCE(sn.seen_at, '-infinity'::timestamptz)
+              )::int AS bron
+         FROM v_unit_register r
+         JOIN production_units pu ON pu.id = r.id
+         JOIN product_groups g    ON g.id = r.group_id
+         LEFT JOIN LATERAL (
+           SELECT pr.section_id FROM v_product_route pr
+            WHERE pr.product_id = r.product_id
+              AND (r.step_no IS NULL OR pr.step_no > r.step_no)
+            ORDER BY pr.step_no LIMIT 1) nx ON true
+         LEFT JOIN sections ns ON ns.id = nx.section_id
+         LEFT JOIN LATERAL (SELECT COALESCE(g.owner_shop_id, ns.shop_id) AS shop_id) kel ON true
+         LEFT JOIN LATERAL (SELECT MAX(x.changed_at) AS last_at
+                              FROM unit_reservations x
+                             WHERE x.unit_id = r.id) bk ON true
+         LEFT JOIN unit_bron_seen sn ON sn.unit_id = r.id AND sn.worker_id = $2
+        WHERE r.status = 'production'`, [scope, req.user.id]);
+    const { qabul, bron } = rows[0];
+    return [
+      { page: '/harakat.html', mod: 'production', n: qabul,
+        izoh: `${qabul} ta konver tsexingizga jo'natilgan — qabul qilinmagan` },
+      { page: '/harakat.html', mod: 'production', n: bron,
+        izoh: `${bron} ta konverga yangi buyurtma tushdi` },
+    ];
+  },
+
+  //  4. OMBORGA JO'NATILGAN KONVER — ombor mudirining navbati.
+  //  Shart `modules/units.js` dagi `/stock/inbox` bilan bir xil.
+  //
+  //  Huquqi KO'RISH emas, QABUL QILISH: qoldiqni savdo ham ko'radi,
+  //  lekin mahsulotni omborga u kiritmaydi.
+  async (req) => {
+    if (!bor(req, 'warehouse.move', 'warehouse.manage', 'production.manage')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n
+         FROM v_unit_register r
+         JOIN production_units u ON u.id = r.id
+         JOIN sections sc        ON sc.id = u.current_section_id AND sc.is_exit
+        WHERE r.status = 'production' AND u.handover_on IS NOT NULL`);
+    return [{ page: '/omborlar.html', mod: 'warehouse', n,
+              izoh: `${n} ta konver omborga jo'natilgan — qabul qilinmagan` }];
+  },
+
+  //  5. CHIQARISHNI KUTAYOTGAN BUYURTMA — ombor mudirining ikkinchi
+  //  navbati. Shart `modules/sales.js` dagi `/shipping` bilan bir xil.
+  async (req) => {
+    if (!bor(req, 'warehouse.move', 'warehouse.manage', 'production.manage')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM v_sales_orders WHERE status = 'to_ship'`);
+    return [{ page: '/omborlar.html', mod: 'warehouse', n,
+              izoh: `${n} ta buyurtma chiqarishni kutmoqda` }];
+  },
+
+  //  6. VITRINADAN QAYTARISH — hujjat IKKI odamning navbatida turadi
+  //  va ikkalasiga boshqa bosqichi ko'rinadi (izoh: warehouse.js):
+  //    · vitrinadagi xodim  — `new`, o'z nuqtasiniki, o'zi yozmagani;
+  //    · T/M ombor mudiri   — `confirmed`, do'kondan chiqqani.
+  async (req) => {
+    const tm  = bor(req, 'warehouse.manage');
+    const vit = whOf(req);
+    //  Na qabul qiladi, na vitrinasi bor — hujjat uning navbatida
+    //  hech qachon turmaydi, demak raqam ham chizilmaydi. Nol
+    //  qaytarish ham bo'lardi, lekin o'shanda menyuda hech qachon
+    //  yonmaydigan belgi turib qolardi.
+    if (!tm && !vit) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM wh_returns
+        WHERE (status = 'confirmed' AND $1)
+           OR (status = 'new' AND $2::int[] IS NOT NULL
+               AND from_warehouse_id = ANY($2)
+               --  Yozgan odam O'ZI tasdiqlay olmaydi (ikki odam
+               --  qoidasi) — uning navbatida ham turmaydi.
+               AND created_by IS DISTINCT FROM $3)`,
+      [tm, vit, req.user.id]);
+    return [{ page: '/omborlar.html', mod: 'warehouse', n,
+              izoh: `${n} ta qaytarish hujjati sizni kutmoqda` }];
+  },
+
+  //  7. OMBORGA YUBORISHNI KUTAYOTGAN BUYURTMA — menejerning navbati.
+  //  Bronning HAMMASI omborga yetib kelgan, ya'ni buyurtma chiqarishga
+  //  tayyor va endi ombor mudiriga yuboriladi. Yetib kelmaganida tugma
+  //  baribir ishlamaydi — uni navbat deb ko'rsatish yolg'on bo'lardi.
+  //
+  //  Doira savdodagi bilan bir xil: yo'nalish (`channelsOf`) va
+  //  o'z buyurtmasi (`ownOf`).
+  async (req) => {
+    if (!bor(req, 'sales.manage')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM v_sales_orders
+        WHERE status IN ('new', 'reserved')
+          AND qty > 0 AND in_warehouse_qty >= qty
+          AND ($1::text[] IS NULL OR channel = ANY($1))
+          AND ($2::int IS NULL OR manager_id = $2)`,
+      [chanOf(req), ownOf(req)]);
+    return [{ page: '/buyurtmalar.html', mod: 'sales', n,
+              izoh: `${n} ta buyurtma tayyor — omborga yuborilmagan` }];
+  },
+];
+
+//  So'rov ATAYLAB yengil: sahifa uni har daqiqada qayta o'qiydi
+//  (izoh: `public/app.js`, `navbatTick`). Nol bo'lgan navbat ham
+//  qaytadi — klient o'zi ajratadi va kelasi safar raqam paydo
+//  bo'lganda sahifa yangilanishini kutmaydi.
+router.get('/', wrap(async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Kirish kerak' });
+  const navbat = (await Promise.all(NAVBATLAR.map((f) => f(req)))).flat();
+  res.json({ navbat });
+}));
+
+module.exports = router;

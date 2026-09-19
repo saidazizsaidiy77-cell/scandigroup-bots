@@ -2126,8 +2126,13 @@ const WH_PICK = `(SELECT w.id FROM warehouses w
                      AND (w.perm IS NULL OR w.perm = ANY($8::text[]))
                      AND ($9::int[] IS NULL OR w.id = ANY($9) OR w.code = 'TM'))`;
 
+//  Tsex doirasi bor xodimga faqat T/M ombor ochiladi: bo'sh massiv
+//  qaytadi va `WH_PICK` dagi shart `w.code = 'TM'` shoxiga tushadi.
+//  Qoida `modules/warehouse.js` dagi `whScope` bilan bir xil — u
+//  yerda sababi bilan yozilgan.
 const whIds = (req) => {
   const ids = req.user?.scope_warehouse_ids || [];
+  if (!ids.length && (req.user?.scope_shop_ids || []).length) return [];
   return ids.length ? ids : null;
 };
 

@@ -59,6 +59,7 @@ async function startServer() {
   app.use('/api/warehouse', require('../modules/warehouse'));
   app.use('/api/sales', require('../modules/sales'));
   app.use('/api/cash', require('../modules/cash'));
+  app.use('/api/navbat', require('../modules/nav'));
 
   const server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));

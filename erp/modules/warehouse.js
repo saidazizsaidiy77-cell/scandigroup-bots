@@ -49,8 +49,25 @@ const bad = (msg) => Object.assign(new Error(msg), { status: 400 });
 const SCOPE = `(w.perm IS NULL OR w.perm = ANY($1::text[]))
            AND ($2::int[] IS NULL OR w.id = ANY($2) OR w.code = 'TM')`;
 
+//  ★ TSEX DOIRASI BOR XODIMGA FAQAT T/M OMBOR (zavod qarori, 2026-09).
+//
+//  Tsex boshlig'iga ombor bitta savolga javob beradi: «ertaga nima
+//  so'rashim kerak, javonda nechta turibdi». Bu savol T/M omborga
+//  tegishli — vitrina ko'rgazma, xom ashyo esa ta'minotniki. Ilgari
+//  uchala vitrina ham ro'yxatda turardi va u har safar keraksiz
+//  kartochkalar orasidan o'z javonini izlab o'tirardi.
+//
+//  Doira bo'sh massiv bo'lib qaytadi, NULL emas: so'rovdagi shart
+//  o'sha holda `w.code = 'TM'` shoxiga tushadi va T/M ombor
+//  ochiqligicha qoladi (`SCOPE`). Ikkinchi shart yozilmadi —
+//  yozilsa u yerdan uzilib ketardi.
+//
+//  Vitrina sotuvchisida nuqtasi bor, shuning uchun bu qoida unga
+//  tegmaydi; ombor mudiri va savdo boshlig'ida esa tsex doirasi yo'q.
 const whScope = (req) => {
   const ids = req.user?.scope_warehouse_ids || [];
+  if (!ids.length && (req.user?.scope_shop_ids || []).length)
+    return [req.user.permissions, []];
   return [req.user.permissions, ids.length ? ids : null];
 };
 
@@ -468,7 +485,11 @@ async function nextRetNo(client) {
 //  faqat o'z nuqtasinikini.
 const retVisible = (req) => {
   const ids = req.user?.scope_warehouse_ids || [];
-  return ids.length ? ids : null;
+  if (ids.length) return ids;
+  //  Tsex doirasi bor xodimga vitrina umuman ochilmaydi (`whScope`),
+  //  demak uning qaytarish hujjati ham yo'q: bo'sh massiv hech bir
+  //  omborga to'g'ri kelmaydi va ro'yxat bo'sh chiqadi.
+  return (req.user?.scope_shop_ids || []).length ? [] : null;
 };
 
 router.get('/fg/returns', need(...RET, 'warehouse.view'), wrap(async (req, res) => {

@@ -272,6 +272,15 @@ ham noma'lum bo'lib qolardi. Konverning BIR QISMI qaytadi: 6 talikdan
 2 tasi — qolgani vitrinada qoladi va konver qabul qilishda bo'linadi
 (`clonePart`).
 
+**Hujjatda NIMA borligi ro'yxatda turadi** (`v_wh_returns.items`):
+mahsulot, uning TURI, rangi va soni. Tasdiqlaydigan odam javondagi
+mahsulotni aynan shu ro'yxat bilan solishtiradi — ilgari katakda
+qatorlar SONI turardi («2») va nima qaytayotganini bilish uchun
+hujjatni ochib ko'rishdan boshqa yo'l yo'q edi. Turi ham yoziladi:
+zavodda bitta nom ikki guruhda uchraydi va faqat nomi ko'rinsa qaysi
+biri ekani noaniq qolardi. Hujjat yozish oynasida ham shu — bir xil
+savol, bir xil javob.
+
 Hujjat raqami **`V26-0001`** (konver `K`, zakaz `Z`, pul `P`), saqlashda
 beriladi. Rad etish ham, yozgan odamning bekor qilishi ham bitta
 yo'ldan (`/reject`), lekin holati boshqa: `rejected` — boshqaniki,
@@ -457,16 +466,8 @@ BILISH uchun o'sha sahifani ochib ko'rishdan boshqa yo'l yo'q edi va
 ertalab yozilgan so'rov kechgacha turib qolardi. Ikki yo'l bilan
 aytiladi va ikkalasi bir-biriga bog'liq emas:
 
-  1. **Menyudagi belgi** — `GET /api/units/requests/pending` bitta son
-     qaytaradi, `public/app.js` (`sorovTick`) uni har daqiqada qayta
-     o'qiydi. Belgi IKKI joyda: bo'lim nomida va sahifa havolasida —
-     bo'lim yopiq bo'lsa ostki qator umuman chizilmaydi. Sahifa
-     sarlavhasiga ham yoziladi (`(3) ZELTA`): boshqa tabda turgan odam
-     yorliqning O'ZIDAN ko'radi. Bitta zanjir va faqat oyna ochiq
-     turganda — buyurtmalardagi `planTick` bilan bir xil qoida.
-
-     Tasdiqlamaydigan xodimga NOL qaytadi: navbat uning ishi emas va
-     har kuni turgan raqamga ko'z o'rganib qolardi.
+  1. **Menyudagi belgi** — pastda, «Navbat» bo'limida: so'rov navbati
+     o'sha yerdagi navbatlardan bittasi.
 
   2. **Telegram** — belgi faqat sayt ochiq bo'lganda ko'rinadi,
      direktorning cho'ntagida esa telefon turadi. So'rov yozilganda
@@ -1306,6 +1307,75 @@ qolaveradi.
 
 ---
 
+## Navbat — menyudagi belgi
+
+**★ NAVBAT XODIMNI O'ZI TOPADI** (zavod qarori, 2026-09).
+
+Xodim kun bo'yi bitta sahifada o'tirmaydi: direktor jurnalda, tsex
+boshlig'i bo'limlar ekranida, ombor mudiri qoldiqda bo'ladi. Ilgari
+navbatni BILISH uchun tegishli sahifani ochib ko'rishdan boshqa yo'l
+yo'q edi — ertalab jo'natilgan konver kechgacha qabul qilinmay turardi
+va buni hech kim sezmasdi.
+
+Shuning uchun har bo'limning navbati MENYUDA raqam bo'lib turadi:
+qaysi sahifada tursa ham ko'radi. Belgi IKKI joyda — bo'lim nomida va
+sahifa havolasida (bo'lim yopiq bo'lsa ostki qator umuman chizilmaydi,
+ya'ni faqat bo'lim belgisi ko'rinadi). Sahifa sarlavhasiga ham
+yoziladi (`(3) ZELTA`): boshqa tabda turgan odam yorliqning O'ZIDAN
+ko'radi. Bitta zanjir va faqat oyna ochiq turganda — buyurtmalardagi
+`planTick` bilan bir xil qoida.
+
+Navbatlar (`erp/modules/nav.js`, `GET /api/navbat`):
+
+| Sahifa | Navbat | Kimga |
+|---|---|---|
+| `/sorovlar.html` | tasdiq kutayotgan konver so'rovi | `production.approve` |
+| `/harakat.html` | tsexga jo'natilgan, qabul qilinmagan konver | tsex doirasi bor `production.entry` |
+| `/harakat.html` | konverga tushgan YANGI buyurtma (`unit_bron_seen`) | o'sha |
+| `/omborlar.html` | omborga jo'natilgan, qabul qilinmagan konver | `warehouse.move`/`manage` |
+| `/omborlar.html` | chiqarishni kutayotgan buyurtma (`to_ship`) | o'sha |
+| `/omborlar.html` | vitrinadan qaytarish hujjati | T/M da `confirmed`, vitrinada `new` |
+| `/buyurtmalar.html` | bronning hammasi omborga kelgan, lekin yuborilmagan buyurtma | `sales.manage` |
+
+**★ NAVBAT — QILINADIGAN ISH, «YANGI YOZUV» EMAS.** Ro'yxatga raqam
+qo'yish oson, lekin har kuni turadigan raqamga ko'z o'rganib qoladi va
+keyin haqiqiy navbat o'sha to'da orasida ko'rinmay ketadi. Shuning
+uchun faqat KIMDIR HARAKAT QILISHINI kutayotgan narsa sanaladi va
+faqat O'SHA odamga: tasdiqlamaydigan xodimga so'rov navbati, ombor
+mudiri bo'lmagan xodimga qabul navbati umuman chizilmaydi. Nol
+qaytarish ham bo'lardi, lekin o'shanda menyuda hech qachon
+yonmaydigan belgi turib qolardi.
+
+Doira bu yerda ham CHEGARA: tsex boshlig'i o'z tsexiga jo'natilganini,
+vitrina sotuvchisi o'z nuqtasining hujjatini, menejer o'z buyurtmasini
+sanaydi (`scopeOf`, `whScope`, `channelsOf`, `ownOf`). Tsexga
+topshirilgan konver FAQAT doirasi bor xodimga sanaladi: direktorga
+butun zavodning topshirig'i hech qachon nolga tushmaydigan raqam
+bo'lib turardi.
+
+**Qaysi navbat kimniki ekani SERVERDA hal qilinadi.** `public/app.js`
+(`navbatTick`) huquqni ham, doirani ham tekshirmaydi — u faqat
+kelgan raqamni chizadi: ikki joyda yozilgan qoida bir kun bir-biridan
+ajralib ketardi va ekranda ko'rinmaydigan sahifaning raqami turib
+qolardi. Belgi AYNAN o'z joyiga tushishi uchun menyu havolalarida
+`data-mod` va `data-page` turadi — manzildan ajratib olish ham mumkin
+edi, lekin bir nechta modulda turgan sahifa `?m=` bilan keladi.
+
+Bitta bo'limda bir nechta navbat bo'ladi (omborda uchta) — bo'lim
+nomidagi raqam ularning YIG'INDISI, izohda esa har biri alohida
+yoziladi: aks holda «5» degan raqam nimadan yig'ilganini ochib
+ko'rmasdan bilib bo'lmasdi.
+
+**★ RAQAM RO'YXAT BILAN BIR XIL BO'LISHI SHART.** Har navbat o'z
+sahifasidagi ro'yxatning SHARTINI takrorlaydi — ikkinchi marta
+yozilgan shart bir kun ro'yxatdan ajralib ketardi: menyuda «3» turib,
+sahifada ikkitasi ko'rinardi. Shuning uchun har navbat uchun test bor
+va u raqamni ro'yxatning UZUNLIGI bilan solishtiradi
+(`test/flow.test.js`).
+
+Modul `erp/server.js` da ham, `erp/test/helper.js` da ham ulanadi:
+test o'z ilovasini o'zi quradi.
+
 ## Kim nima ko'radi
 
 Huquqlar: `permissions` → `roles` → `role_permissions` → `worker_roles`.
@@ -1354,6 +1424,22 @@ shart qo'shilmaydi. Xodim o'zi tanlagan turlar ham shu ro'yxat bilan
 KESISHTIRILADI: doiradan tashqaridagini qo'lda yozib ham ochib
 bo'lmaydi. Doirasi yo'q xodimda (ombor mudiri, savdo, rahbariyat)
 hammasi turaveradi.
+
+**★ OMBORLAR RO'YXATI HAM QISQARADI** (zavod qarori, 2026-09): tsex
+doirasi bor xodimga FAQAT T/M ombor ochiladi. Uning savoli bitta —
+«javonda nechta turibdi, ertaga nima so'rayman» — va u T/M omborga
+tegishli: vitrina ko'rgazma, xom ashyo esa ta'minotniki. Ilgari uchala
+vitrina ham ro'yxatda turardi va u har safar keraksiz kartochkalar
+orasidan o'z javonini izlab o'tirardi.
+
+Doira bo'sh MASSIV bo'lib qaytadi, NULL emas (`whScope`,
+`modules/warehouse.js`; `whIds`, `modules/units.js`): so'rovdagi mavjud
+shart o'sha holda `w.code = 'TM'` shoxiga tushadi va ikkinchi shart
+yozilmaydi — yozilsa u birinchisidan uzilib ketardi. Vitrina
+sotuvchisida nuqtasi bor, ya'ni qoida unga tegmaydi; ombor mudiri va
+savdo boshlig'ida esa tsex doirasi yo'q. Vitrinadan qaytarish
+hujjatlari ham shu bilan yopiladi (`retVisible`) — vitrina ko'rinmasa
+uning hujjati ham uniki emas.
 
 **Vitrina doirasi** — `worker_roles.scope_warehouse_id`. Vitrinalar
 shaharning uch nuqtasida va har birida o'z sotuvchisi bor. Sotuvchiga
@@ -1534,6 +1620,7 @@ erp/
   backup.js            pg_dump → fayl
   sql/                 migratsiya, migrate.js dagi tartibda
   modules/             express router'lar
+                       nav.js — menyudagi navbat belgisi (bitta joyda)
   public/              sahifalar; app.js — menyu va sessiya
                        yukxati.js — yuk xati hujjati (ikki sahifa chizadi)
                        kassa-form.js — kirim/chiqim orderi oynasi

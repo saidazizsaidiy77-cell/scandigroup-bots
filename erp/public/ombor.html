@@ -824,10 +824,25 @@ function drawRet() {
     ${canRetNew() ? `<div class="row" style="margin-bottom:12px">
       <button class="primary" onclick="retNew()">+ Qaytarish hujjati</button></div>` : ''}
     ${list.length ? `<div class="card"><div style="overflow-x:auto"><table>
-      <thead><tr><th>Hujjat</th><th>Qayerdan</th><th class="num">Qator</th>
+      <thead><tr><th>Hujjat</th><th>Qayerdan</th><th>Mahsulot</th>
         <th class="num">Soni</th><th>Holat</th><th>Kim</th><th></th></tr></thead>
       <tbody>${list.map(retRow).join('')}</tbody></table></div></div>`
     : `<div class="card"><p class="muted">Qaytarish hujjati yo'q.</p></div>`}`;
+}
+
+//  ★ HUJJATDA NIMA BORLIGI RO'YXATDA TURADI. Ilgari bu katakda
+//  qatorlar SONI turardi («2») va u hech narsa aytmasdi: tasdiqlaydigan
+//  odam javondagi mahsulotni hujjat bilan solishtiradi, ya'ni nomini
+//  ham, TURINI ham ko'rishi kerak. Ikki qatordan ko'pi yig'iladi —
+//  qolgani hujjat ichida.
+function retTarkib(r) {
+  const it = r.items || [];
+  if (!it.length) return `<span class="muted">${r.lines} qator</span>`;
+  const bitta = (x) => `${esc(x.product || '')}${x.product_type
+      ? ` <span class="muted">${esc(x.product_type)}</span>` : ''}${x.color
+      ? ` <span class="muted">· ${esc(x.color)}</span>` : ''} × ${x.qty}`;
+  return it.slice(0, 2).map((x) => `<div>${bitta(x)}</div>`).join('')
+    + (it.length > 2 ? `<div class="muted">+${it.length - 2} ta</div>` : '');
 }
 
 function retRow(r) {
@@ -850,7 +865,7 @@ function retRow(r) {
   return `<tr>
     <td><b>${esc(r.doc_no || '')}</b></td>
     <td>${esc(r.from_warehouse)}</td>
-    <td class="num">${r.lines}</td><td class="num">${r.qty}</td>
+    <td>${retTarkib(r)}</td><td class="num">${r.qty}</td>
     <td><span class="tag ${cls}">${matn}</span>${r.decide_note
       ? `<div class="muted" style="font-size:12px">${esc(r.decide_note)}</div>` : ''}</td>
     <td class="muted" style="font-size:12px">${kim}</td>
@@ -903,8 +918,10 @@ async function retNew() {
             <th class="num">Qaytadi</th></tr></thead>
           <tbody>${list.map((x) => `<tr>
             <td><b>${esc(x.conveyor_no)}</b></td>
-            <td>${esc(x.product)}${x.color
-              ? `<div class="muted" style="font-size:12px">${esc(x.color)}</div>` : ''}</td>
+            <td>${esc(x.product)}
+              <div class="muted" style="font-size:12px">${
+                [x.product_type, x.color, x.fabric].filter(Boolean).map(esc).join(' · ')
+              }</div></td>
             <td class="num">${x.qty}</td>
             <td class="num"><input type="number" min="0" max="${x.qty}" value="0"
               data-unit="${x.id}" class="retq"

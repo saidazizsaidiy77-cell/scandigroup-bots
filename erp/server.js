@@ -54,6 +54,9 @@ app.use('/api/import', require('./modules/import'));
 app.use('/api/warehouse', require('./modules/warehouse'));
 app.use('/api/sales', require('./modules/sales'));
 app.use('/api/cash', require('./modules/cash'));
+// Menyudagi navbat belgisi: har bo'limda nechta ish kutayotgani.
+// Huquq tekshiruvi modul ichida — har navbat o'z egasiga ko'rinadi.
+app.use('/api/navbat', require('./modules/nav'));
 // app.use('/api/payroll',    require('./modules/payroll'));     // maosh
 
 // Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:

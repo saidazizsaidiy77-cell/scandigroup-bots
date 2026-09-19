@@ -428,7 +428,15 @@ SELECT r.id, r.doc_no, r.status, r.note,
        r.accepted_on,  r.accepted_by,  aw.name AS accepted_by_name,
        r.decided_at, r.decide_note, dw.name AS decided_by_name,
        COALESCE(i.lines, 0)::int AS lines,
-       COALESCE(i.qty, 0)::int   AS qty
+       COALESCE(i.qty, 0)::int   AS qty,
+       --  ★ HUJJATDA NIMA BORLIGI RO'YXATDA TURADI. Ilgari faqat
+       --  «2 qator · 2 dona» yozilardi va nima qaytayotganini bilish
+       --  uchun hujjatni ochib ko'rishdan boshqa yo'l yo'q edi —
+       --  tasdiqlaydigan odam esa javondagi mahsulotni AYNAN shu
+       --  ro'yxat bilan solishtiradi. Turi ham yoziladi: zavodda
+       --  bitta nom ikki guruhda uchraydi va faqat nomi ko'rinsa
+       --  qaysi biri ekani noaniq qolardi.
+       COALESCE(i.items, '[]'::json) AS items
   FROM wh_returns r
   JOIN warehouses w   ON w.id = r.from_warehouse_id
   LEFT JOIN workers cw ON cw.id = r.created_by
@@ -436,5 +444,13 @@ SELECT r.id, r.doc_no, r.status, r.note,
   LEFT JOIN workers aw ON aw.id = r.accepted_by
   LEFT JOIN workers dw ON dw.id = r.decided_by
   LEFT JOIN LATERAL (
-    SELECT COUNT(*) AS lines, SUM(qty) AS qty
-      FROM wh_return_items x WHERE x.return_id = r.id) i ON true;
+    SELECT COUNT(*) AS lines, SUM(x.qty) AS qty,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'conveyor_no', x.conveyor_no, 'product', p.name,
+             'product_type', g.name, 'color', pu.color, 'fabric', pu.fabric,
+             'qty', x.qty) ORDER BY x.id) AS items
+      FROM wh_return_items x
+      LEFT JOIN production_units pu ON pu.id = x.unit_id
+      LEFT JOIN products p          ON p.id  = pu.product_id
+      LEFT JOIN product_groups g    ON g.id  = p.group_id
+     WHERE x.return_id = r.id) i ON true;

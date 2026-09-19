@@ -2622,6 +2622,24 @@ test('tsex doirasi T/M ombor qoldig\'ida ham ishlaydi', async () => {
   const hammasi = (await admin('GET', '/api/warehouse/fg/summary')).body.rows;
   const t2 = [...new Set(hammasi.map((r) => r.product_type))];
   assert.ok(t2.includes('Stul') && t2.includes('Penal'));
+
+  //  ★ OMBOR RO'YXATI HAM QISQARADI: tsex boshlig'ining savoli
+  //  «javonda nechta turibdi» — u T/M omborga tegishli. Vitrina
+  //  ko'rgazma, xom ashyo esa ta'minotniki: uchala vitrina ro'yxatda
+  //  turgani uni har safar o'z javonini izlashga majbur qilardi.
+  const omborlar = (await aziz('GET', '/api/warehouse/list')).body.rows;
+  assert.deepEqual(omborlar.map((w) => w.code), ['TM'],
+    'tsex doirasi bor xodimga faqat T/M ombor');
+
+  //  Chegara SERVERDA: kodini qo'lda yozib ham ochib bo'lmaydi.
+  const vitr = await H.id(
+    `SELECT code FROM warehouses WHERE kind='fg' AND code <> 'TM' LIMIT 1`);
+  const soxtaWh = await aziz('GET', '/api/warehouse/fg/summary?w=' + vitr.code);
+  assert.equal(soxtaWh.status, 400, soxtaWh.text);
+
+  //  Ombor mudirida esa hammasi ochiq qolaveradi.
+  const barcha = (await admin('GET', '/api/warehouse/list')).body.rows;
+  assert.ok(barcha.length > 1 && barcha.some((w) => w.code === vitr.code));
 });
 
 test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
@@ -2701,6 +2719,22 @@ test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
       WHERE conveyor_no = $1 AND warehouse_id = $2 AND status = 'fg'`,
     [u.conveyor_no, tm]);
   assert.equal(kelgan.q, 2, 'T/M ga 2 tasi keldi');
+
+  //  ★ HUJJATDA NIMA BORLIGI RO'YXATDA TURADI: tasdiqlaydigan odam
+  //  javondagi mahsulotni AYNAN shu ro'yxat bilan solishtiradi.
+  //  Turi ham kerak — faqat nomi ko'rinsa qaysi guruh ekani noaniq
+  //  qolardi.
+  const hujjat = (await boshliq('GET', '/api/warehouse/fg/returns')).body.rows
+    .find((r) => r.id === d.body.id);
+  assert.ok(hujjat.items?.length, 'hujjat tarkibi keladi');
+  assert.equal(hujjat.items[0].product_type, 'Penal');
+  assert.equal(hujjat.items[0].color, 'Venge');
+  assert.equal(hujjat.items[0].qty, 2);
+
+  //  Hujjat yozish ro'yxatida ham turi bor — bir xil savol, bir xil javob.
+  const nomzodlar = (await boshliq('GET',
+    '/api/warehouse/fg/returns/candidates?w=' + vitr.code)).body.rows;
+  assert.ok(nomzodlar.every((x) => x.product && x.product_type));
 
   //  Ombor tarixida ham yozuv bor: vitrinada chiqim, T/M da kirim.
   const harakat = await H.id(
@@ -3889,6 +3923,60 @@ test('PIN bazada ochiq matnda turmaydi va uning bilan kiriladi', async () => {
   //  Blokda to'g'ri PIN ham qabul qilinmaydi — aks holda cheklovning
   //  ma'nosi qolmasdi.
   assert.equal((await yoq('POST', '/api/auth/pin', { pin: '0000' })).status, 429);
+});
+
+test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
+  //  ★ NAVBAT XODIMNI O'ZI TOPADI (zavod qarori, 2026-09). Belgi
+  //  menyuda turadi, ya'ni xodim qaysi sahifada bo'lsa ham ko'radi.
+  //
+  //  Bu test IKKI narsani ushlaydi:
+  //
+  //    1. RAQAM RO'YXAT BILAN BIR XIL. Har navbat o'z sahifasidagi
+  //       ro'yxatning shartini takrorlaydi va ikki joyda yozilgan
+  //       shart bir kun bir-biridan ajralib ketardi: menyuda «3»
+  //       turib, sahifada ikkitasi ko'rinardi.
+  //
+  //    2. NAVBAT FAQAT EGASIGA KO'RINADI. Har kuni turadigan raqamga
+  //       ko'z o'rganib qoladi va keyin haqiqiy navbat o'sha to'da
+  //       orasida ko'rinmay ketardi.
+  const sonOf = (nav, page) => nav.filter((q) => q.page === page)
+    .reduce((a, q) => a + q.n, 0);
+
+  const navR = await admin('GET', '/api/navbat');
+  assert.equal(navR.status, 200, navR.text);
+  const nav = navR.body.navbat;
+  assert.ok(Array.isArray(nav) && nav.length, 'navbat keladi');
+
+  //  Konver so'rovi — tasdiqlovchining navbati.
+  assert.equal(sonOf(nav, '/sorovlar.html'),
+    Number((await admin('GET', '/api/units/requests/pending')).body.n));
+
+  //  Ombor: qabul qilish va chiqarish. Ikkalasi bitta sahifada
+  //  turadi, shuning uchun raqam ikkala ro'yxatning yig'indisi.
+  const inbox = (await admin('GET', '/api/units/stock/inbox')).body.length;
+  const ship  = (await admin('GET', '/api/sales/shipping')).body.rows.length;
+  const qayt  = (await admin('GET', '/api/warehouse/fg/returns')).body.rows
+    .filter((r) => r.status === 'confirmed').length;
+  assert.equal(sonOf(nav, '/omborlar.html'), inbox + ship + qayt);
+
+  //  Savdo: bronning hammasi omborga yetib kelgan, lekin hali
+  //  yuborilmagan buyurtma. Yetib kelmaganida tugma baribir
+  //  ishlamaydi — uni navbat deb ko'rsatish yolg'on bo'lardi.
+  const tayyor = (await admin('GET', '/api/sales/orders')).body.rows
+    .filter((o) => ['new', 'reserved'].includes(o.status)
+                && o.qty > 0 && o.in_warehouse_qty >= o.qty).length;
+  assert.equal(sonOf(nav, '/buyurtmalar.html'), tayyor);
+
+  //  ★ NAVBAT EGASINIKI. Kirituvchida tasdiq huquqi ham, ombor
+  //  harakati ham yo'q: unga bu raqamlar umuman chizilmaydi.
+  const kir = await xodim('Sinov navbat kirituvchi', 'kirituvchi');
+  const kn = (await kir('GET', '/api/navbat')).body.navbat;
+  assert.equal(sonOf(kn, '/sorovlar.html'), 0);
+  assert.ok(!kn.some((q) => q.page === '/omborlar.html'),
+    'ombor navbati kirituvchiga chizilmaydi');
+
+  //  Kirmagan odamga umuman javob berilmaydi.
+  assert.equal((await H.api(base, null)('GET', '/api/navbat')).status, 401);
 });
 
 test('yakun', async () => {

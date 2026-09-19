@@ -407,11 +407,16 @@ const App = (() => {
       .map((m) => {
         const on = m.code === active ? ' class="on"' : '';
         const first = open.find((p) => inMod(p, m.code) && p.href);
-        if (first) return `<a href="${hrefFor(first, m.code)}"${on}>${m.name}</a>`;
+        //  `data-mod` / `data-page` — navbat belgisi shu bo'yicha
+        //  qo'yiladi (`navbatTick`). Manzildan ajratib olish ham
+        //  mumkin edi, lekin bir nechta modulda turgan sahifa
+        //  `?m=` bilan keladi va qaysi bo'limniki ekani manzildan
+        //  emas, shu yerdan aniq ko'rinadi.
+        if (first) return `<a href="${hrefFor(first, m.code)}" data-mod="${m.code}"${on}>${m.name}</a>`;
         // Sahifasi yo'q, lekin bo'limlari rejalashtirilgan modul: reja
         // sahifasiga olib boradi — nima kutilayotgani ko'rinib tursin.
         if (open.some((p) => inMod(p, m.code)))
-          return `<a href="/modul.html?m=${m.code}"${on}>${m.name}</a>`;
+          return `<a href="/modul.html?m=${m.code}" data-mod="${m.code}"${on}>${m.name}</a>`;
         return `<span class="soon" title="Bu bo'lim hali yozilmagan">${m.name}</span>`;
       }).join('');
 
@@ -425,12 +430,12 @@ const App = (() => {
       ? `<a href="/modul.html?m=${active}"${here === '/modul.html' ? ' class="on"' : ''}>Bo'limlar</a>`
       : '';
     const links = sub.map((p) =>
-      `<a href="${hrefFor(p, active)}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`).join('');
+      `<a href="${hrefFor(p, active)}" data-page="${p.href}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`).join('');
     const subRow = (sub.length + (plan ? 1 : 0)) > 1
       ? `<nav class="nav sub">${links}${plan}</nav>` : '';
 
     top.insertAdjacentHTML('afterend', `<nav class="nav mods">${mods}</nav>${subRow}`);
-    sorovTick();
+    navbatTick();
 
     // Sarlavha bosh sahifaga olib borsin — odam avval shuni bosadi
     const brand = top.querySelector('.brand');
@@ -440,47 +445,71 @@ const App = (() => {
     }
   }
 
-  //  ★ NAVBATDAGI SO'ROVLAR MENYUDA TURADI.
+  //  ★ NAVBAT XODIMNI O'ZI TOPADI — BELGI MENYUDA TURADI.
   //
-  //  Tasdiqlovchi kun bo'yi so'rovlar sahifasida o'tirmaydi: u jurnalda,
-  //  hisobotda yoki boshqa bo'limda bo'ladi. Ilgari navbatni BILISH
-  //  uchun o'sha sahifani ochib ko'rishdan boshqa yo'l yo'q edi va
-  //  ertalab yozilgan so'rov kechgacha turib qolardi.
+  //  Xodim kun bo'yi bitta sahifada o'tirmaydi: direktor jurnalda,
+  //  tsex boshlig'i bo'limlar ekranida, ombor mudiri qoldiqda bo'ladi.
+  //  Ilgari navbatni BILISH uchun tegishli sahifani ochib ko'rishdan
+  //  boshqa yo'l yo'q edi va ertalab jo'natilgan konver kechgacha
+  //  qabul qilinmay turardi.
   //
-  //  Shuning uchun belgi MENYUDA: qaysi sahifada tursa ham ko'radi.
-  //  Ikkita joyda — bo'lim nomida va sahifa havolasida: bo'lim yopiq
-  //  bo'lsa ostki qator umuman chizilmaydi.
+  //  Shuning uchun belgi MENYUDA, ikki joyda: bo'lim nomida va sahifa
+  //  havolasida — bo'lim yopiq bo'lsa ostki qator umuman chizilmaydi,
+  //  ya'ni faqat bo'lim belgisi ko'rinadi va u yerga bosiladi.
+  //  Sahifa sarlavhasiga ham yoziladi (`(3) ZELTA`): boshqa tabda
+  //  turgan odam yorliqning O'ZIDAN ko'radi.
   //
-  //  Sahifa sarlavhasiga ham yoziladi: brauzerning boshqa tabida
-  //  turgan odam yorliqning O'ZIDAN ko'radi, sahifani ochmasdan.
+  //  Qaysi navbat kimniki ekani SERVERDA hal qilinadi
+  //  (`modules/nav.js`): bu yerda huquq ham, doira ham tekshirilmaydi —
+  //  ikki joyda yozilgan qoida bir kun bir-biridan ajralib ketardi va
+  //  ekranda ko'rinmaydigan sahifaning raqami turib qolardi.
   //
   //  BITTA zanjir bilan va faqat oyna ochiq turganda — buyurtmalar
   //  sahifasidagi `planTick` bilan bir xil qoida: brauzer tabni
   //  uxlatganda so'rov ham to'xtaydi.
-  let sorovTimer = null;
+  let navbatTimer = null;
+  let navbat = [];
   const BAZA_TITLE = document.title;
 
-  async function sorovTick() {
-    clearTimeout(sorovTimer);
-    if (!me || !can('production.approve')) return;
-    let n = 0;
-    try { n = Number((await api('/api/units/requests/pending')).n) || 0; }
+  async function navbatTick() {
+    clearTimeout(navbatTimer);
+    if (!me) return;
+    try { navbat = (await api('/api/navbat')).navbat || []; }
     catch { /* tarmoq uzildi — belgi eskicha qoladi, xato ko'rsatilmaydi */ }
+    chizNavbat();
+    if (document.visibilityState !== 'hidden')
+      navbatTimer = setTimeout(navbatTick, 60000);
+  }
 
-    document.title = n ? `(${n}) ${BAZA_TITLE}` : BAZA_TITLE;
+  //  Bitta bo'limda bir nechta navbat bo'ladi (omborda: qabul qilish,
+  //  chiqarish, qaytarish) — bo'lim nomidagi raqam ularning YIG'INDISI,
+  //  izohda esa har biri alohida yoziladi. Aks holda «5» degan raqam
+  //  nimadan yig'ilganini ochib ko'rmasdan bilib bo'lmasdi.
+  function chizNavbat() {
+    const jami = navbat.reduce((s, q) => s + q.n, 0);
+    document.title = jami ? `(${jami}) ${BAZA_TITLE}` : BAZA_TITLE;
+
+    const son = new Map(), izoh = new Map();
+    for (const q of navbat) {
+      if (!q.n) continue;
+      for (const k of [`p:${q.page}`, `m:${q.mod}`]) {
+        son.set(k, (son.get(k) || 0) + q.n);
+        izoh.set(k, [...(izoh.get(k) || []), q.izoh]);
+      }
+    }
+
     for (const a of document.querySelectorAll('.nav a')) {
       a.querySelector('.badge')?.remove();
-      const bu = a.getAttribute('href') || '';
-      const sahifa = bu.startsWith('/sorovlar.html');
-      const bolim  = bu.includes('m=production') || bu.startsWith('/jurnal.html');
-      if (n && (sahifa || bolim))
-        a.insertAdjacentHTML('beforeend',
-          ` <span class="badge" title="${n} ta so'rov tasdiq kutmoqda">${n}</span>`);
+      const k = a.dataset.mod ? `m:${a.dataset.mod}`
+              : a.dataset.page ? `p:${a.dataset.page}` : null;
+      const n = k && son.get(k);
+      if (!n) continue;
+      a.insertAdjacentHTML('beforeend',
+        ` <span class="badge" title="${izoh.get(k).join(' \u00b7 ')}">${n}</span>`);
     }
-    if (document.visibilityState !== 'hidden') sorovTimer = setTimeout(sorovTick, 60000);
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'hidden') sorovTick();
+    if (document.visibilityState !== 'hidden') navbatTick();
   });
 
   // Sahifa shu bilan boshlanadi:
