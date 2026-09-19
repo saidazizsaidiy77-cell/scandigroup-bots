@@ -1085,15 +1085,16 @@ esa faqat oylik uchun. Cheklov GURUH bo'yicha: yangi modda qo'shilsa
 ro'yxat o'zi kengayadi. **Qator yo'q = hamma guruh** — tsex doirasi
 bilan bir xil qoida (`scope_shop_id`).
 
-Huquqi `cash.entry`, ya'ni `omborchi`, `ishlab_boshl` va **`tsex_usta`**
-ham oladi — lekin bu unga kassani ochmaydi: qoldiq ham, boshqa xodimning
+Huquqi `cash.entry`, ya'ni `omborchi`, `ishlab_boshl`, **`tsex_usta`**
+va **`taminotchi`** ham oladi — lekin bu unga kassani ochmaydi: qoldiq ham, boshqa xodimning
 puli ham ko'rinmaydi. Tsex boshlig'ida u ilgari YO'Q edi: qoida shu
 yerda yozilib turardi («tsex boshliqlari faqat oylik uchun»), lekin
 huquqning o'zi berilmagani uchun qo'lida pul turgan boshliqqa «Mening
 pulim» sahifasi umuman ochilmasdi va sarf kassirga og'zaki aytilib
 qolardi. **Huquqning O'ZI hech kimga pul bermaydi**: «Qo'liga pul
 beriladi» belgisi qo'yilmagan xodimda sahifa bo'sh turadi va server ham
-rad etadi. Tomonlarni ham server qo'yadi: xodim yuborgan `from_kind`
+rad etadi — lekin endi SABABINI yozib turadi: tugmani topolmagan odam
+uni kassirdan so'rab yurardi va ekran nima yetishmayotganini aytmasdi. Tomonlarni ham server qo'yadi: xodim yuborgan `from_kind`
 e'tiborga olinmaydi, pul FAQAT o'z qo'lidan chiqadi. «Mijozdan pul
 olindi» tugmasi esa savdo huquqi bor xodimda — tsex boshlig'iga u
 tugma ko'rsatilmaydi.

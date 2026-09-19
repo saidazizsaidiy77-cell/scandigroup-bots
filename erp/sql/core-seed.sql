@@ -160,6 +160,11 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  belgisi qo'yilmagan boshliqda sahifa bo'sh turadi — server ham
   --  rad etadi (`modules/cash.js`, `can_hold_cash`).
   ('tsex_usta',    'cash.entry'),
+  --  Ta'minotchi ham: u bozorga naqd pul bilan boradi va qaytib kelib
+  --  nimaga sarflaganini yozadi — bu roldagi odamning asosiy ishi.
+  --  Yuqoridagi izoh («ta'minotchi bozorga ketgan») buni allaqachon
+  --  aytib turardi, huquqning o'zi esa berilmagan edi.
+  ('taminotchi',   'cash.entry'),
 
   --  Kassir pulni sanab oladi, chiqim qiladi va tuzatadi — ya'ni
   --  `cash.manage`. `cash.entry` ning o'zi faqat «o'z qo'lidagi pul»

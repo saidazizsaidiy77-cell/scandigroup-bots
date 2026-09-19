@@ -158,10 +158,19 @@ function drawHead() {
   //  Boshlang'ich qoldiq kassada ham, xodimning qo'lida ham bor: tizim
   //  ishga tushgan kuni pul ikkala joyda turgan edi. Yozadigan odam
   //  bitta — kassir (`cash.manage`).
+  //  ★ TUGMA YO'Q BO'LSA SABABI YOZILADI. Qo'lida pul turgan odam
+  //  «Harajat yozish» tugmasini topolmay, uni kassirdan so'rab
+  //  yurardi — ekran esa nima yetishmayotganini aytmasdi. Bo'sh joy
+  //  savol, sababi yozilgan joy javob.
+  const ozim = isMe() && refs.my && !refs.my.hold;
+  const puli = Number(here.total_usd || 0) !== 0;
   $('btnBar').innerHTML = btn.map(([k, t], i) =>
     `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')
     + (!isMe() && boss ? `<button class="ic" title="Boshlang'ich qoldiq"
-         onclick="openOpening()">✎ Boshlang'ich qoldiq</button>` : '');
+         onclick="openOpening()">✎ Boshlang'ich qoldiq</button>` : '')
+    + (ozim ? `<span class="muted" style="font-size:13px">${puli
+        ? "Qo'lingizdagi pulni sarflash uchun Xodimlar sahifasida sizga «Qo'liga pul beriladi» belgisi qo'yilishi kerak."
+        : "Sizga podotchyot berilmaydi — kerak bo'lsa Xodimlar sahifasida «Qo'liga pul beriladi» belgilanadi."}</span>` : '');
 
   $('tabs').innerHTML = [['in', 'Kirim'], ['out', 'Chiqim'], ['all', 'Hammasi']]
     .map(([k, t]) => `<button ${k === tab ? 'class="primary"' : ''}
