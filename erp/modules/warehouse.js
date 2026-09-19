@@ -16,7 +16,7 @@
 const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
-const { clonePart } = require('./units');
+const { clonePart, scopeOf } = require('./units');
 
 const router = express.Router();
 const READ = ['warehouse.view', 'production.view'];
@@ -135,14 +135,52 @@ const NORM = (col) => `NULLIF(TRIM(COALESCE(${col}, '')), '')`;
 //  (`product_type=Penal,Kamod`) — bitta tanlov ham shu yo'ldan o'tadi.
 const PICK = `($5::text IS NULL OR product_type = ANY(string_to_array($5, ',')))`;
 
+//  ★ TSEX DOIRASI OMBOR QOLDIG'IDA HAM (zavod qarori, 2026-09).
+//
+//  Stul kiritadigan xodimga T/M omborda faqat STULLAR ko'rinadi: u
+//  ertaga nima so'rashni hal qilish uchun javonda nechta stul
+//  turganini biladi, penal esa uning ishi emas va ro'yxatning
+//  o'rtasidan har safar izlab o'tirmasin.
+//
+//  Tayanch NUQTA — mahsulot guruhi: qaysi tsexniki ekani guruhning
+//  javobgar tsexidan, u bo'sh bo'lsa marshrutning BIRINCHI qadamidan
+//  chiqadi (`shopOfProduct` bilan bir xil qoida).
+//
+//  Bu QULAYLIK, himoya emas: jurnal baribir hammaga ochiq va o'sha
+//  konverlar u yerda turadi. Shuning uchun mavjud `product_type`
+//  filtriga aylantiriladi — so'rovga ikkinchi shart qo'shilmaydi.
+//  Xodim o'zi tanlagan turlar ham shu ro'yxat bilan KESISHTIRILADI:
+//  doiradan tashqaridagini qo'lda yozib ham ochib bo'lmaydi.
+async function typeScope(req, asked) {
+  const scope = scopeOf(req);
+  if (!scope) return asked || null;
+  const { rows } = await db.query(
+    `SELECT g.name FROM product_groups g
+      WHERE COALESCE(g.owner_shop_id,
+              (SELECT sc.shop_id
+                 FROM products p
+                 JOIN v_product_route r ON r.product_id = p.id
+                 JOIN sections sc       ON sc.id = r.section_id
+                WHERE p.group_id = g.id
+                ORDER BY r.step_no LIMIT 1)) = ANY($1)`, [scope]);
+  const ruxsat = rows.map((r) => r.name);
+  if (!ruxsat.length) return '\u2014';
+  const tanlangan = asked ? String(asked).split(',').map((x) => x.trim()) : ruxsat;
+  const kesishma = tanlangan.filter((n) => ruxsat.includes(n));
+  //  Kesishma bo'sh — hech narsa ko'rsatilmaydi: bo'sh ro'yxat
+  //  doiradan tashqaridagini ochib berishdan halolroq.
+  return kesishma.length ? kesishma.join(',') : '\u2014';
+}
+
 router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);
+  const turlar = await typeScope(req, req.query.product_type);
   const params = [req.query.from || null, req.query.to || null, req.query.q || null,
-                  wh.id, req.query.product_type || null];
+                  wh.id, turlar];
   //  Qoldiq so'rovlarida sana ISHLATILMAYDI (u hozirgi holat), shuning
   //  uchun ular uchun alohida ro'yxat: bog'lanmagan parametr qolsa
   //  Postgres «could not determine data type of parameter» deb yiqiladi.
-  const nowParams = [req.query.q || null, wh.id, req.query.product_type || null];
+  const nowParams = [req.query.q || null, wh.id, turlar];
   const nowSearch = `($1::text IS NULL OR product ILIKE '%' || $1 || '%'
                    OR product_type ILIKE '%' || $1 || '%'
                    OR color ILIKE '%' || $1 || '%'
@@ -442,6 +480,28 @@ router.get('/fg/returns', need(...RET, 'warehouse.view'), wrap(async (req, res) 
       LIMIT 200`, [retVisible(req), req.query.status || null]);
   res.json({ rows });
 }));
+
+//  Hujjat yozish uchun SHU VITRINANING tekis qoldig'i. `/fg/units`
+//  mahsulot bo'yicha ishlaydi (qoldiq jadvalidagi qator ochilganda
+//  chaqiriladi), bu yerda esa javonda nima turgan bo'lsa hammasi
+//  kerak: boshliq konver raqamini qo'lda terib o'tirmasin.
+//
+//  Bron qo'yilgani chiqmaydi: u mijozniki bo'lib turibdi va hujjatga
+//  tushsa server baribir rad etardi — ro'yxatda turgani faqat
+//  chalg'itardi.
+router.get('/fg/returns/candidates', need(...RET, 'warehouse.view'),
+  wrap(async (req, res) => {
+    const wh = await whOf(req, req.query.w);
+    if (wh.code === 'TM')
+      return res.status(400).json({ error: 'T/M ombordan qaytarilmaydi' });
+    const { rows } = await db.query(
+      `SELECT id, conveyor_no, product, product_type, uom, color, fabric, qty
+         FROM v_fg_units
+        WHERE warehouse_id = $1 AND COALESCE(reserved_qty, 0) = 0
+        ORDER BY product, conveyor_no
+        LIMIT 500`, [wh.id]);
+    res.json({ rows, warehouse: wh });
+  }));
 
 router.get('/fg/returns/:id', need(...RET, 'warehouse.view'), wrap(async (req, res) => {
   const r = (await db.query(

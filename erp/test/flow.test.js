@@ -2576,6 +2576,54 @@ test('tsex boshlig\'i ham qo\'lidagi pulni sarflaydi', async () => {
   assert.equal((await usta('PATCH', '/api/cash/ops/1')).status, 403);
 });
 
+test('tsex doirasi T/M ombor qoldig\'ida ham ishlaydi', async () => {
+  //  ★ Stul kiritadigan xodimga T/M omborda faqat STULLAR ko'rinadi:
+  //  u ertaga nima so'rashni hal qilish uchun javonda nechta stul
+  //  turganini biladi, penal esa uning ishi emas.
+  //
+  //  Bu QULAYLIK, himoya emas — jurnal baribir hammaga ochiq. Lekin
+  //  xodim o'zi tanlagan turlar ham doira bilan KESISHTIRILADI:
+  //  doiradan tashqaridagini qo'lda yozib ham ochib bo'lmaydi.
+  const { db } = require('../db');
+  const stulTsex = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov stul kirituvchi'
+                   WHERE NOT EXISTS
+                     (SELECT 1 FROM workers WHERE name='Sinov stul kirituvchi')`);
+  const w = (await H.id(
+    `SELECT id FROM workers WHERE name='Sinov stul kirituvchi'`)).id;
+  await db.query(
+    `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id)
+     VALUES ($1,'kirituvchi',$2)
+     ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_shop_id = $2`,
+    [w, stulTsex]);
+  const aziz = H.api(base, await H.sessionFor('Sinov stul kirituvchi'));
+
+  //  Omborda ikkala tur ham bo'lsin.
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  assert.equal((await admin('POST', '/api/units/', { items: [
+    { product_id: STUL,  qty: 4, is_opening: true, fg_on: '2026-09-03' },
+    { product_id: PENAL, qty: 2, is_opening: true, fg_on: '2026-09-03' },
+  ] })).status, 200);
+
+  const q = await aziz('GET', '/api/warehouse/fg/summary');
+  assert.equal(q.status, 200, q.text);
+  const turlar = [...new Set(q.body.rows.map((r) => r.product_type))];
+  assert.ok(turlar.includes('Stul'), 'stullar ko\'rinadi');
+  assert.ok(!turlar.includes('Penal'), 'penal ko\'rinmaydi');
+
+  //  Qo'lda so'ralgani ham kesishtiriladi — doiradan chiqib bo'lmaydi.
+  const soxta = await aziz('GET', '/api/warehouse/fg/summary?product_type=Penal');
+  assert.equal(soxta.status, 200, soxta.text);
+  assert.equal(soxta.body.rows.length, 0, 'doiradan tashqaridagi ochilmaydi');
+
+  //  Doirasi yo'q xodimda hammasi turadi.
+  const hammasi = (await admin('GET', '/api/warehouse/fg/summary')).body.rows;
+  const t2 = [...new Set(hammasi.map((r) => r.product_type))];
+  assert.ok(t2.includes('Stul') && t2.includes('Penal'));
+});
+
 test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
   async () => {
   //  ★ UCH ODAM, UCH BOSQICH (zavod qarori, 2026-09). Vitrinadagi
@@ -2664,6 +2712,14 @@ test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
   //  Ikkinchi marta qabul qilinmaydi.
   assert.equal((await admin('POST',
     `/api/warehouse/fg/returns/${d.body.id}/accept`)).status, 400);
+
+  //  Hujjat yozish ro'yxati: shu vitrinada turgani, bron qo'yilgani
+  //  chiqmaydi. T/M dan esa qaytarilmaydi — u yerga qaytariladi.
+  const nomzod = (await boshliq('GET',
+    '/api/warehouse/fg/returns/candidates?w=' + vitr.code)).body.rows;
+  assert.ok(Array.isArray(nomzod));
+  assert.equal((await boshliq('GET',
+    '/api/warehouse/fg/returns/candidates?w=TM')).status, 400);
 
   //  ★ ENDI U ODDIY T/M QOLDIG'I: hohlagan savdo xodimi buyurtma yozadi.
   //  Vitrinada turganda savdoga umuman chiqmasdi.

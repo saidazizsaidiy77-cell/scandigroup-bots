@@ -2605,3 +2605,6 @@ module.exports.refreshStock = refreshStock;
 // Savdo buyurtmaga konverning bir qismini biriktirganda ishlatadi
 // (modules/sales.js): bo'lish qoidasi bitta joyda tursin.
 module.exports.clonePart = clonePart;
+//  Tsex doirasi ombor sahifasida ham kerak: stul kiritadigan xodimga
+//  T/M omborda faqat stullar ko'rinadi (izoh: modules/warehouse.js).
+module.exports.scopeOf = scopeOf;

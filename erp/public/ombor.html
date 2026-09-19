@@ -73,6 +73,17 @@ let rows = [], tab = 'stock', canAccept = false, canLedger = false;
 //  Chiqariladigan buyurtmalar: savdo omborga yuborganlari. Mudir
 //  mashinaga ortilganini ko'zi bilan ko'rib tasdiqlaydi.
 let ship = [], canShip = false;
+//  ★ VITRINADAN QAYTARISH (izoh: sql/warehouse.sql). Bitta tab uch xil
+//  odamga uch xil ish ko'rsatadi — chunki hujjat uch qo'ldan o'tadi:
+//  boshliq yozadi, vitrina tasdiqlaydi, T/M qabul qiladi. Alohida
+//  sahifa qilinmadi: hujjat OMBOR haqida va mudir kun bo'yi shu
+//  sahifada turadi.
+let rets = [], canRet = false;
+//  Hujjatni vitrinasi BIRIKTIRILMAGAN savdo xodimi yozadi (boshliq,
+//  bosh ofis): vitrina sotuvchisi o'z qoldig'ini o'zi yozib, o'zi
+//  berib yuborardi. Chegara baribir serverda — bu tugmaning ko'rinishi.
+const canRetNew = () => canRet && !isTM()
+  && App.can('sales.manage') && !(App.me()?.scope_warehouse_ids || []).length;
 //  Jo'natish ro'yxatining filtri. Mudirda ertalab o'nlab buyurtma
 //  turadi va savoli aniq: «bugun nima chiqadi», «falonchining zakazi
 //  qaysi», «Z-638 qayerda». Ro'yxat kichik — filtr KLIENTDA ishlaydi,
@@ -91,13 +102,19 @@ const money = v => v == null ? ''
 // Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
 // qoldiqni ochib, kutayotgan mahsulotni ko'rmay qolishi mumkin.
 const ALL_TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'],
-                  ['ship', "Jo'natish"], ['moves', 'Harakat']];
+                  ['ship', "Jo'natish"], ['ret', 'Qaytarish'],
+                  ['moves', 'Harakat']];
 //  «Qabul qilish» faqat T/M omborda: ishlab chiqarish vitrinaga
 //  to'g'ridan-to'g'ri topshirmaydi, mahsulot u yerga T/M ombordan
 //  ko'chiriladi.
 const isTM = () => !WH || WH === 'TM';
 const tabs = () => ALL_TABS.filter(([k]) => (k !== 'inbox' || (canAccept && isTM()))
                                          && (k !== 'ship' || (canShip && isTM()))
+                                         //  Qaytarish tabi ish BORLIGIDA chiqadi:
+                                         //  hujjat yo'q bo'lsa bo'sh tab faqat joy
+                                         //  egallardi. Yozadigan odamga esa har
+                                         //  doim — u yangisini shu yerdan ochadi.
+                                         && (k !== 'ret' || (canRet && (rets.length || canRetNew())))
                                          && (k !== 'moves' || canLedger));
 function drawTabs() {
   // Bitta tab — tab emas: tanlash imkoni yo'q qator faqat joy egallaydi.
@@ -106,7 +123,8 @@ function drawTabs() {
   $('tabs').innerHTML = T.map(([k, t]) =>
     `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')">${t}${
       k === 'inbox' && rows.length ? ` <b>${rows.length}</b>` : ''}${
-      k === 'ship' && ship.length ? ` <b>${ship.length}</b>` : ''}</button>`).join('');
+      k === 'ship' && ship.length ? ` <b>${ship.length}</b>` : ''}${
+      k === 'ret' && retKutmoqda() ? ` <b>${retKutmoqda()}</b>` : ''}</button>`).join('');
 }
 async function go(k) {
   tab = k; drawTabs();
@@ -114,6 +132,7 @@ async function go(k) {
   if (k === 'inbox') return load();
   if (k === 'stock') return loadStock();
   if (k === 'ship') return loadShip();
+  if (k === 'ret') return loadRet();
   return loadMoves();
 }
 
@@ -764,6 +783,158 @@ function doShip(id) {
 
 const closeShip = () => { $('modalRoot').innerHTML = ''; };
 
+// ══════════════════════════════════════════ VITRINADAN QAYTARISH
+//
+//  Hujjat UCH qo'ldan o'tadi va har bosqichda boshqa odam bosadi
+//  (izoh: sql/warehouse.sql). Shuning uchun tugma HOLATGA qarab
+//  chiziladi, huquqqa emas: server baribir ikkalasini ham tekshiradi.
+//
+//      new        vitrina tasdiqlaydi   «Tasdiqlash»
+//      confirmed  T/M qabul qiladi      «Qabul qilish»
+//      accepted   tugadi
+//
+//  «Yo'lda» degan holat ataylab ko'rinadi: do'kondan chiqqan, lekin
+//  omborga yetib kelmagan mahsulot qoldiqda hali vitrinada turadi va
+//  mudir uni javonda izlab yurmasin.
+const RET_HOLAT = {
+  new:       ['warn', 'vitrina tasdig\'ini kutmoqda'],
+  confirmed: ['warn', "yo'lda — T/M qabul qilishini kutmoqda"],
+  accepted:  ['ok',   'qabul qilindi'],
+  rejected:  ['bad',  'rad etildi'],
+  cancelled: ['',     'bekor qilindi'],
+};
+
+//  Tabdagi raqam: MENDAN nima kutilmoqda. T/M da yo'ldagilar, vitrinada
+//  tasdiqlanmaganlar — boshqa birovning navbati raqam bo'lib turmasin.
+const retKutmoqda = () =>
+  rets.filter((r) => r.status === (isTM() ? 'confirmed' : 'new')).length;
+
+async function loadRet() {
+  rets = (await App.api('/api/warehouse/fg/returns')).rows;
+  drawTabs();
+  drawRet();
+}
+
+function drawRet() {
+  //  T/M da HAMMA vitrinaning qaytarishi ko'rinadi (ustunda qaysi
+  //  do'kondan kelayotgani yoziladi), vitrinada esa faqat o'ziniki —
+  //  chegara serverda, doira bo'yicha.
+  const list = rets;
+  $('body').innerHTML = `
+    ${canRetNew() ? `<div class="row" style="margin-bottom:12px">
+      <button class="primary" onclick="retNew()">+ Qaytarish hujjati</button></div>` : ''}
+    ${list.length ? `<div class="card"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Hujjat</th><th>Qayerdan</th><th class="num">Qator</th>
+        <th class="num">Soni</th><th>Holat</th><th>Kim</th><th></th></tr></thead>
+      <tbody>${list.map(retRow).join('')}</tbody></table></div></div>`
+    : `<div class="card"><p class="muted">Qaytarish hujjati yo'q.</p></div>`}`;
+}
+
+function retRow(r) {
+  const [cls, matn] = RET_HOLAT[r.status] || ['', r.status];
+  //  Tugma HOLATGA qarab: navbat kimda ekanini ekran o'zi aytadi.
+  const amal = r.status === 'new' && !isTM()
+    ? `<button class="primary" onclick="retDo(${r.id},'confirm')">Tasdiqlash</button>
+       <button onclick="retNo(${r.id})">Rad etish</button>`
+    : r.status === 'confirmed' && isTM() && canAccept
+    ? `<button class="primary" onclick="retDo(${r.id},'accept')">Qabul qilish</button>`
+    : r.status === 'new' && canRetNew()
+    ? `<button onclick="retNo(${r.id})">Bekor qilish</button>` : '';
+  //  Kim ustuni oxirgi harakatni aytadi: hujjat qayerda turganini
+  //  bilish uchun uni ochib ko'rish shart emas.
+  const kim = r.status === 'accepted'
+    ? `${esc(r.accepted_by_name || '')} · ${d8(r.accepted_on)}`
+    : r.status === 'confirmed'
+    ? `${esc(r.confirmed_by_name || '')} · ${d8(r.confirmed_on)}`
+    : r.decide_note ? `${esc(r.decided_by_name || '')}` : esc(r.created_by_name || '');
+  return `<tr>
+    <td><b>${esc(r.doc_no || '')}</b></td>
+    <td>${esc(r.from_warehouse)}</td>
+    <td class="num">${r.lines}</td><td class="num">${r.qty}</td>
+    <td><span class="tag ${cls}">${matn}</span>${r.decide_note
+      ? `<div class="muted" style="font-size:12px">${esc(r.decide_note)}</div>` : ''}</td>
+    <td class="muted" style="font-size:12px">${kim}</td>
+    <td class="num">${amal}</td></tr>`;
+}
+
+async function retDo(id, amal) {
+  try {
+    await App.api(`/api/warehouse/fg/returns/${id}/${amal}`, { method: 'POST' });
+    toast(amal === 'accept' ? 'T/M omborga qabul qilindi' : 'Tasdiqlandi');
+    //  Qabul qilingach qoldiq ham o'zgardi — ikkalasi qayta o'qiladi.
+    await loadRet();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function retNo(id) {
+  //  Sabab MAJBURIY: nega bo'lmaganini bilmasa, boshliq ertaga o'sha
+  //  hujjatni yana yozardi (konver so'rovi bilan bir xil qoida).
+  const sabab = prompt('Sababi?');
+  if (sabab == null) return;
+  try {
+    await App.api(`/api/warehouse/fg/returns/${id}/reject`,
+      { method: 'POST', body: JSON.stringify({ note: sabab }) });
+    toast('Yopildi');
+    await loadRet();
+  } catch (e) { toast(e.message, true); }
+}
+
+//  ★ HUJJAT SHU VITRINANING QOLDIG'IDAN YOZILADI. Konver raqamini
+//  qo'lda terish yo'q: javonda nima turgan bo'lsa o'sha ro'yxatda
+//  turadi va yoniga nechta qaytayotgani yoziladi. Bo'sh qoldirilgan
+//  qator hujjatga tushmaydi.
+async function retNew() {
+  let bor = [];
+  try {
+    bor = (await App.api('/api/warehouse/fg/returns/candidates?w='
+      + encodeURIComponent(WH))).rows;
+  } catch (e) { return toast(e.message, true); }
+  const list = bor.filter((x) => Number(x.qty) > 0);
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closeRet()">
+      <div class="modal" style="max-width:720px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Qaytarish hujjati</h1>
+          <button onclick="closeRet()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:12px">${esc(whName || '')} → T/M ombor.
+          Vitrina xodimi tasdiqlagandan keyin mahsulot yo'lga chiqadi.</p>
+        ${list.length ? `<div style="overflow-x:auto;max-height:50vh"><table>
+          <thead><tr><th>Konver</th><th>Mahsulot</th><th class="num">Bor</th>
+            <th class="num">Qaytadi</th></tr></thead>
+          <tbody>${list.map((x) => `<tr>
+            <td><b>${esc(x.conveyor_no)}</b></td>
+            <td>${esc(x.product)}${x.color
+              ? `<div class="muted" style="font-size:12px">${esc(x.color)}</div>` : ''}</td>
+            <td class="num">${x.qty}</td>
+            <td class="num"><input type="number" min="0" max="${x.qty}" value="0"
+              data-unit="${x.id}" class="retq"
+              style="width:80px;text-align:right"></td></tr>`).join('')}</tbody>
+        </table></div>
+        <div style="margin-top:12px"><label>Izoh</label>
+          <input id="retNote" placeholder="ixtiyoriy"></div>
+        <button class="primary" style="margin-top:14px" onclick="retSave()"
+          >Hujjatni yozish</button>`
+        : `<p class="muted">Bu vitrinada qaytaradigan mahsulot yo'q.</p>`}
+      </div></div>`;
+}
+const closeRet = () => { $('modalRoot').innerHTML = ''; };
+
+async function retSave() {
+  const items = [...document.querySelectorAll('.retq')]
+    .map((i) => ({ unit_id: Number(i.dataset.unit), qty: Number(i.value) || 0 }))
+    .filter((x) => x.qty > 0);
+  if (!items.length) return toast('Birorta ham qator tanlanmadi', true);
+  try {
+    const r = await App.api('/api/warehouse/fg/returns', { method: 'POST',
+      body: JSON.stringify({ items, note: $('retNote').value.trim() || null }) });
+    toast(`${r.doc_no} yozildi`);
+    closeRet();
+    tab = 'ret';
+    await loadRet();
+  } catch (e) { toast(e.message, true); }
+}
+
+
 async function okShip(id) {
   try {
     await App.api(`/api/sales/orders/${id}/ship`, { method: 'POST',
@@ -906,6 +1077,15 @@ App.start(async () => {
   // buyurtma borligini ko'radi.
   if (canShip && isTM()) {
     try { ship = (await App.api('/api/sales/shipping')).rows; } catch { ship = []; }
+  }
+  //  Qaytarish hujjatlari oldindan o'qiladi: tabda raqam bo'lib tursin
+  //  va ochmasa ham navbat borligi ko'rinsin — qabul qilish va
+  //  jo'natish bilan bir xil qoida.
+  canRet = App.can('sales.manage', 'warehouse.manage', 'production.manage',
+                   'warehouse.view');
+  if (canRet) {
+    try { rets = (await App.api('/api/warehouse/fg/returns')).rows; }
+    catch { rets = []; }
   }
   drawTabs();
   await (tab === 'inbox' ? draw() : loadStock());

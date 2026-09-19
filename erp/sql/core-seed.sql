@@ -165,6 +165,12 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  Yuqoridagi izoh («ta'minotchi bozorga ketgan») buni allaqachon
   --  aytib turardi, huquqning o'zi esa berilmagan edi.
   ('taminotchi',   'cash.entry'),
+  --  ★ KONVER KIRITADIGAN XODIMGA OMBOR QOLDIG'I. U ertaga nima
+  --  so'rashni hal qilish uchun javonda nechta turganini bilishi
+  --  kerak edi — ilgari buni tsex boshlig'idan so'rab yurardi.
+  --  Tsex doirasi u yerda ham ishlaydi: stul kiritadigan odamga
+  --  faqat stullar ko'rinadi (izoh: modules/warehouse.js, `typeScope`).
+  ('kirituvchi',   'warehouse.view'),
 
   --  Kassir pulni sanab oladi, chiqim qiladi va tuzatadi — ya'ni
   --  `cash.manage`. `cash.entry` ning o'zi faqat «o'z qo'lidagi pul»

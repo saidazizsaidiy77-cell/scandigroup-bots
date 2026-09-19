@@ -1314,7 +1314,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | Rol | Huquq | Ko'radi |
 |---|---|---|
 | `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi, muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi |
-| `kirituvchi` | `production.entry`, `production.request` | **faqat «Konver qo'shish»**: ishlab chiqarishga nima kirishini yozadi, konverni rahbariyat ochadi. Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
+| `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»** va **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi. Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
@@ -1336,6 +1336,24 @@ tayyor mahsulot turadi); `warehouse.material` — xom ashyo, MDF, furnitura
 (ombor mudiri va ta'minot; savdoga ko'rinmaydi). Yangi ombor qo'shilganda
 huquq shu qatorga yoziladi, modulga tegilmaydi. Ko'rinadigan ombor bitta
 bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
+
+**★ TSEX DOIRASI OMBOR QOLDIG'IDA HAM** (zavod qarori, 2026-09).
+Stul kiritadigan xodimga T/M omborda faqat STULLAR ko'rinadi: u ertaga
+nima so'rashni hal qilish uchun javonda nechta stul turganini biladi,
+penal esa uning ishi emas va ro'yxatning o'rtasidan har safar izlab
+o'tirmasin. Ilgari u buni tsex boshlig'idan so'rab yurardi.
+
+Tayanch nuqta — mahsulot GURUHI: qaysi tsexniki ekani guruhning
+javobgar tsexidan, u bo'sh bo'lsa marshrutning BIRINCHI qadamidan
+chiqadi (`shopOfProduct` bilan bir xil qoida).
+
+Bu **QULAYLIK, himoya emas**: jurnal baribir hammaga ochiq va o'sha
+konverlar u yerda turadi. Shuning uchun mavjud `product_type` filtriga
+aylantiriladi (`typeScope`, `modules/warehouse.js`) — so'rovga ikkinchi
+shart qo'shilmaydi. Xodim o'zi tanlagan turlar ham shu ro'yxat bilan
+KESISHTIRILADI: doiradan tashqaridagini qo'lda yozib ham ochib
+bo'lmaydi. Doirasi yo'q xodimda (ombor mudiri, savdo, rahbariyat)
+hammasi turaveradi.
 
 **Vitrina doirasi** — `worker_roles.scope_warehouse_id`. Vitrinalar
 shaharning uch nuqtasida va har birida o'z sotuvchisi bor. Sotuvchiga
