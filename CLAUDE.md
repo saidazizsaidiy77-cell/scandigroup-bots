@@ -114,14 +114,16 @@ navbati), ba'zisidan bir kunda o'tadi — qadamlarni sanash u yerda
 yolg'on kun berardi. Zavod o'lchagani bo'lim emas, BOSQICHLAR
 orasidagi masofa:
 
-    boshlanish  →  lak tsexi         6 ish kuni
-    lak tsexi   →  qadoqlash tsexi   6 ish kuni
-    qadoqlash   →  T/M ombor         1 ish kuni
+    penal, kamod, sp        lak +6   qadoqlash +6   ombor +1
+    stol                    lak +4   qadoqlash +5   ombor +0
 
-Misol: 19-sentabr (shanba) boshlangan konver **26-sentabr** ertalab lak
-tsexiga kiradi, **3-oktabr** qadoqlashga topshiriladi va **5-oktabr**
-omborga qabul qilinadi — yakshanbalar (20-sen, 27-sen, 4-okt) tashlab
-ketilgan.
+19-sentabrdan (shanba) boshlanganda, yakshanbalarsiz:
+
+    penal/kamod/sp   26-sen lak  ·  3-okt qadoqlash  ·  5-okt ombor
+    stol             24-sen lak  · 30-sen qadoqlash  · 30-sen ombor
+
+Stol qadoqlangan KUNIYOQ omborga topshiriladi (`+0`): yo'li qisqaroq,
+prisadka va kromka yo'q.
 
 Zanjir `muddat_zanjir(tsex, boshlanish)` funksiyasida, BITTA joyda: uni
 jurnal ham, so'rovlar ro'yxati ham shundan oladi. Uchala raqam ham
@@ -129,9 +131,13 @@ to'ldirilgan bo'lishi shart — yarmi kiritilgani o'rtadagi sanani
 jimgina noto'g'ri chiqarardi, shuning uchun yo hammasi, yo hech qaysisi
 (bo'sh bo'lsa tsex marshrut qadamlari bilan hisoblaydi).
 
-Raqamlar TSEXDA, kodda emas — omborning `perm` i va xodimning
+Raqamlar BAZADA, kodda emas — omborning `perm` i va xodimning
 `can_hold_cash` i bilan bir xil idiom: zavod 6 ni 7 ga o'zgartirsa
-bitta katakcha tahrirlanadi. Qaysi tsexniki ekani marshrutni
+bitta katakcha tahrirlanadi. Ikki qavat: TSEXda (`shops.plan_*_days`)
+umumiy qoida turadi, GURUHda (`product_groups.plan_*_days`) esa undan
+chetga chiqish — stol korpus tsexida yuradi, lekin o'z kun soni bilan.
+Guruhniki ustun. Shu sababdan yangi guruh qo'shilganda u jim qolmaydi:
+raqami yozilmasa tsexnikini oladi va formula almashib ketmaydi. Qaysi tsexniki ekani marshrutni
 BOSHLAYDIGAN qadamdan chiqadi, turgan joyidan emas: stul lak bo'limiga
 o'tganda ham stul tsexiniki bo'lib qoladi va qoidasi o'zgarmaydi.
 

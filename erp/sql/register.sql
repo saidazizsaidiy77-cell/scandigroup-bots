@@ -83,6 +83,19 @@ ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_lak_days  INT;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_pack_days INT;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_fg_days   INT;
 
+--  ★ KUN SONI GURUHDA HAM BO'LADI va u tsexnikidan USTUN turadi.
+--
+--  Bitta tsexning ichida mahsulotlar bir xil yurmaydi: penal, kamod va
+--  sp — 6/6/1, STOL esa 4/5/0 (marshruti qisqaroq: prisadka va kromka
+--  yo'q, qadoqlangan kuniyoq omborga topshiriladi). Tsexdagi raqam
+--  UMUMIY qoida bo'lib qolaveradi, guruhniki esa undan chetga chiqish.
+--
+--  Shu sababdan yangi guruh qo'shilganda u jim qolmaydi: raqami
+--  yozilmasa tsexnikini oladi, ya'ni formula almashib ketmaydi.
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS plan_lak_days  INT;
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS plan_pack_days INT;
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS plan_fg_days   INT;
+
 --  ★ KONVER RAQAMINING KO'RINISHI — TSEXDA (zavod qarori, 2026-09).
 --
 --      S26-104   S — stul, 26 — 2026 yil, 104 — ketma-ketligi
@@ -115,6 +128,14 @@ BEGIN
                      plan_lak_days = 6, plan_pack_days = 6, plan_fg_days = 1
      WHERE code = 'KORPUS';
     INSERT INTO migration_flags (key) VALUES ('korpus-muddat');
+  END IF;
+  --  Stol korpus tsexiniki, lekin yo'li qisqaroq (zavod qarori):
+  --  19-sentabr arradan boshlansa 24-sentabr lak tsexiga kiradi,
+  --  30-sentabr qadoqlashga kiradi va O'SHA KUNI omborga topshiriladi.
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'stol-muddat') THEN
+    UPDATE product_groups SET plan_lak_days = 4, plan_pack_days = 5, plan_fg_days = 0
+     WHERE code = 'STL';
+    INSERT INTO migration_flags (key) VALUES ('stol-muddat');
   END IF;
 END $$;
 
@@ -186,14 +207,29 @@ END $$;
 --  zanjir o'rtadagi sanani jimgina noto'g'ri chiqarardi — shuning
 --  uchun yo hammasi, yo hech qaysisi: qator umuman qaytarilmaydi va
 --  tsex marshrut qadamlari bo'yicha hisoblashda qoladi.
-CREATE OR REPLACE FUNCTION muddat_zanjir(p_shop INT, p_start DATE)
+--  Argumenti o'zgardi (mahsulot qo'shildi), shuning uchun DROP: `CREATE
+--  OR REPLACE` boshqa imzoni ALMASHTIRMAYDI, yoniga ikkinchisini qo'shib
+--  qo'yardi va view eskisiga bog'lanib qolardi. CASCADE undan osilib
+--  turgan `v_unit_plan` va `v_unit_register` ni tushiradi — ikkalasi ham
+--  shu faylda, shundan keyin qayta quriladi.
+DROP FUNCTION IF EXISTS muddat_zanjir(INT, DATE) CASCADE;
+
+CREATE OR REPLACE FUNCTION muddat_zanjir(p_shop INT, p_product INT, p_start DATE)
 RETURNS TABLE (lak_on DATE, pack_on DATE, fg_on DATE)
 LANGUAGE plpgsql STABLE AS $$
 DECLARE s RECORD; l DATE; q DATE;
 BEGIN
-  IF p_shop IS NULL OR p_start IS NULL THEN RETURN; END IF;
-  SELECT plan_lak_days AS ld, plan_pack_days AS pd, plan_fg_days AS fd
-    INTO s FROM shops WHERE id = p_shop;
+  IF p_start IS NULL THEN RETURN; END IF;
+  --  Guruhniki tsexnikidan ustun: stol korpus tsexida yuradi, lekin
+  --  o'z kun soni bilan.
+  SELECT COALESCE(g.plan_lak_days,  sh.plan_lak_days)  AS ld,
+         COALESCE(g.plan_pack_days, sh.plan_pack_days) AS pd,
+         COALESCE(g.plan_fg_days,   sh.plan_fg_days)   AS fd
+    INTO s
+    FROM (SELECT p_shop AS id) x
+    LEFT JOIN shops sh ON sh.id = x.id
+    LEFT JOIN products pr       ON pr.id = p_product
+    LEFT JOIN product_groups g  ON g.id = pr.group_id;
   IF NOT FOUND OR s.ld IS NULL OR s.pd IS NULL OR s.fd IS NULL THEN RETURN; END IF;
   l := ish_kuni(p_start, s.ld);
   q := ish_kuni(l, s.pd);
@@ -239,6 +275,7 @@ WITH oxiri AS (
   --  qadamlar soniga teng ish kuni (izoh: `ish_kuni`).
   SELECT sp.unit_id, MAX(sp.step_no) AS steps,
          MAX(u.started_on) AS started_on,
+         MAX(u.product_id) AS product_id,
          ish_kuni(MAX(u.started_on), MAX(sp.step_no)::int) AS fg_on
     FROM v_unit_step_plan sp
     JOIN production_units u ON u.id = sp.unit_id
@@ -284,7 +321,7 @@ SELECT o.unit_id, o.steps,
      WHERE s1.unit_id = o.unit_id ORDER BY s1.step_no LIMIT 1) first ON true
   LEFT JOIN shops bsh       ON bsh.id = first.shop_id
   --  Zanjir tsexnikidir; bo'sh qaytsa marshrut qadamlari ishlaydi.
-  LEFT JOIN LATERAL muddat_zanjir(first.shop_id, o.started_on) z ON true
+  LEFT JOIN LATERAL muddat_zanjir(first.shop_id, o.product_id, o.started_on) z ON true
   --  Marshrut qadamlari bo'yicha lak va qadoqlash tsexiga kirish kuni.
   --  Qator bo'lmasligi ham javob: stul qadoqlash tsexiga BORMAYDI —
   --  u o'z tsexida qadoqlanadi va o'sha yerdan omborga tushadi.

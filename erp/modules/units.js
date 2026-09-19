@@ -510,7 +510,7 @@ router.get('/requests/next-no', need(...REQUEST), wrap(async (req, res) => {
             z.fg_on IS NOT NULL AS chain, r.steps
        FROM (SELECT COUNT(*)::int AS steps FROM v_product_route
               WHERE product_id = $3) r
-       LEFT JOIN LATERAL muddat_zanjir($1, $2::date) z ON true`,
+       LEFT JOIN LATERAL muddat_zanjir($1, $3, $2::date) z ON true`,
     [shopId, boshlanish, pid])).rows[0];
 
   res.json({
@@ -538,7 +538,7 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
             COALESCE(z.fg_on, ish_kuni(q.started_on, q.steps)) AS fg_on
        FROM v_unit_requests q
        LEFT JOIN shops sh ON sh.id = q.shop_id
-       LEFT JOIN LATERAL muddat_zanjir(q.shop_id, q.started_on) z ON true
+       LEFT JOIN LATERAL muddat_zanjir(q.shop_id, q.product_id, q.started_on) z ON true
       WHERE ($1::text IS NULL OR q.status = $1)
         AND ($2::int[] IS NULL OR q.shop_id = ANY($2))
       ORDER BY (q.status = 'pending') DESC, q.created_at DESC

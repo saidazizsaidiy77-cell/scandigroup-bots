@@ -2832,6 +2832,21 @@ test('muddat: korpusda bosqichlar zanjiri, stulda marshrut qadamlari', async () 
   assert.equal(r1.pack_src, 'marshrut');
   assert.equal(r1.fg_src, 'marshrut');
 
+  //  ★ STOL KORPUS TSEXINIKI, LEKIN O'Z KUN SONI BILAN (4/5/0):
+  //  19-sentabr arradan boshlansa 24-sentabr lak tsexiga kiradi,
+  //  30-sentabr qadoqlashga kiradi va O'SHA KUNI omborga topshiriladi.
+  //  Raqam GURUHDA (`product_groups.plan_*_days`) va tsexnikidan
+  //  ustun turadi — aks holda stol ham 6/6/1 bo'lib qolardi.
+  const STOL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STL' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const sl = (await admin('POST', '/api/units/', { items: [{
+    product_id: STOL, qty: 1, started_on: '2026-09-19' }] })).body.created[0];
+  const r5 = (await admin('GET', '/api/units/?conveyor_no=' + sl.conveyor_no)).body[0];
+  assert.equal(String(r5.lak_on).slice(0, 10),  '2026-09-24', 'stol: lak');
+  assert.equal(String(r5.pack_on).slice(0, 10), '2026-09-30', 'stol: qadoqlash');
+  assert.equal(String(r5.fg_on).slice(0, 10),   '2026-09-30', 'stol: o\'sha kuni omborga');
+
   //  Stulda formula BOSHQA: har bo'limda bir ish kuni. Qadoqlash
   //  tsexiga stul umuman bormaydi — o'z tsexida qadoqlanadi, shuning
   //  uchun o'sha ustun bo'sh va bu xato emas.
