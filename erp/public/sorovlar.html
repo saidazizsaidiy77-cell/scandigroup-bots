@@ -58,10 +58,14 @@
           marshrutdan o'zi chiqadi (izoh: sql/register.sql). -->
     <div id="planBox" hidden><label id="planLbl">Keyingi tsexga topshirish</label>
       <input id="fPlan" type="date"></div>
+    <!--  Rang va mato — RO'YXATDAN, qo'lda yozilmaydi. Bitta «Venge» va
+          bitta «venge» ombor qoldig'ini ikkiga bo'lib yuborardi va savdo
+          ro'yxatida bir xil rang ikki marta turardi. Yangi rang zavodning
+          qarori: u jurnal orqali kiritiladi. -->
     <div><label>Rangi</label>
-      <input id="fColor" list="colors" placeholder="ixtiyoriy"></div>
+      <select id="fColor"></select></div>
     <div><label>Matosi</label>
-      <input id="fFabric" list="fabrics" placeholder="ixtiyoriy"></div>
+      <select id="fFabric"></select></div>
     <div class="wide"><label>Izoh</label>
       <input id="fNote" placeholder="ixtiyoriy"></div>
     <!--  Zahira — buyurtmasiz, oldindan ishlanadigan mahsulot. Kutish
@@ -72,8 +76,6 @@
       <input type="checkbox" id="fStock" style="width:auto">
       <span>Zahira uchun — buyurtmasiz, oldindan ishlanadi</span></label></div>
   </div>
-  <datalist id="colors"></datalist>
-  <datalist id="fabrics"></datalist>
   <div class="eta" id="etaLine"></div>
   <div class="row" style="margin-top:14px">
     <button class="primary" onclick="send()">+ Konver qo'shish</button>
@@ -173,8 +175,12 @@ async function load() {
       + mahsulotlar.map((p) => `<option value="${p.id}">${
           esc(p.name)}${p.size_label ? ' · ' + esc(p.size_label) : ''} · ${
           esc(p.group_name)}</option>`).join('');
-    $('colors').innerHTML  = sug.colors.map((c) => `<option value="${esc(c)}">`).join('');
-    $('fabrics').innerHTML = sug.fabrics.map((c) => `<option value="${esc(c)}">`).join('');
+    //  Bo'sh qiymat birinchi: rang zahiraga kiritilayotganda hali
+    //  ma'lum bo'lmaydi — mijoz aytganda bo'yaladi.
+    const royxat = (v) => '<option value="">\u2014 yo\'q \u2014</option>'
+      + v.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    $('fColor').innerHTML  = royxat(sug.colors);
+    $('fFabric').innerHTML = royxat(sug.fabrics);
     if (!$('fStart').value) $('fStart').value = new Date().toISOString().slice(0, 10);
     $('newCard').hidden = !App.can('production.request');
   }
@@ -226,8 +232,8 @@ async function send() {
     is_stock:    $('fStock').checked,
     next_on:     $('fPlan').value || null,
     qty:        Number($('fQty').value) || 0,
-    color:      $('fColor').value.trim() || null,
-    fabric:     $('fFabric').value.trim() || null,
+    color:      $('fColor').value || null,
+    fabric:     $('fFabric').value || null,
     started_on: $('fStart').value || null,
     note:       $('fNote').value.trim() || null,
   };

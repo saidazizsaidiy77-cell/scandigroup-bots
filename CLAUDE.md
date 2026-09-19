@@ -325,6 +325,15 @@ chiqmaydi.
 holda so'rov navbatda turib, direktor bosganda yiqilardi va sababi unga
 ko'rinmasdi.
 
+**★ RANG VA MATO FAQAT BORIDAN** (zavod qarori, 2026-09). So'rov
+oynasida ikkalasi ham RO'YXAT, qo'lda yozilmaydi: bitta «Venge» va
+bitta «venge » (oxirida bo'shliq bilan) ombor qoldig'ini ikkiga bo'lib
+yuborardi va savdo ro'yxatida bir xil rang ikki marta turardi. Yangi
+rang — zavodning qarori, terish xatosi emas: u jurnal orqali
+(`production.units`) kiritiladi va shundan keyin ro'yxatda paydo
+bo'ladi. Tekshiruv serverda, katta-kichik harfga qaramaydi. Bo'sh
+qoldirish mumkin: zahiraga kiritilayotganda rang hali ma'lum emas.
+
 **Zahira belgisi ham so'rovda** (`is_stock`): buyurtmasiz, oldindan
 ishlanayotgani kiritayotgan odamga boshidan ma'lum — tasdiqlangandan
 keyin jurnaldan qidirib belgilash ortiqcha ish bo'lardi.

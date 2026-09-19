@@ -2996,6 +2996,36 @@ test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () =>
                Number(st.conveyor_no.split('-')[1]) + 1);
 });
 
+test('so\'rovda rang va mato faqat boridan tanlanadi', async () => {
+  const kir = await xodim('Sinov rangchi', 'kirituvchi');
+
+  //  Zavodda ishlatilmagan rang qabul qilinmaydi: bitta «Venge» va
+  //  bitta «venge» ombor qoldig'ini ikkiga bo'lib yuborardi.
+  const yangi = await kir('POST', '/api/units/requests', {
+    product_id: PENAL, qty: 1, conveyor_no: 'S-9101',
+    next_on: '2026-09-20', color: 'Yangi rang o\'ylab topilgan' });
+  assert.equal(yangi.status, 400, yangi.text);
+  assert.match(yangi.body.error, /ro'yxatda yo'q/);
+
+  //  Bor rang o'tadi — katta-kichik harf farq qilmaydi.
+  const bor = (await H.id(
+    `SELECT color FROM production_units WHERE color IS NOT NULL LIMIT 1`)).color;
+  const ok = await kir('POST', '/api/units/requests', {
+    product_id: PENAL, qty: 1, conveyor_no: 'S-9101',
+    next_on: '2026-09-20', color: bor.toLowerCase() });
+  assert.equal(ok.status, 200, ok.text);
+
+  //  Rangsiz ham bo'ladi: zahiraga kiritilayotganda u hali ma'lum emas.
+  assert.equal((await kir('POST', '/api/units/requests', {
+    product_id: PENAL, qty: 1, conveyor_no: 'S-9102',
+    next_on: '2026-09-20' })).status, 200);
+
+  //  Mato ham shunday.
+  assert.equal((await kir('POST', '/api/units/requests', {
+    product_id: PENAL, qty: 1, conveyor_no: 'S-9103',
+    next_on: '2026-09-20', fabric: 'Bunaqa mato yo\'q' })).status, 400);
+});
+
 test('muddat zanjiri: har tsex o\'zidan keyingisiga sana qo\'yadi', async () => {
   //  Korpusda kiritayotgan odam LAK sanasini qo'yadi, lak qabul
   //  qilganda QADOQLASH, qadoqlash qabul qilganda T/M OMBOR.
@@ -3153,8 +3183,12 @@ test('kiritgan ochmaydi, rahbariyat tasdiqlaydi', async () => {
     product_id: PENAL, qty: 1, section_id: ARRA }] })).status, 403);
 
   //  So'rov esa uniki.
+  //  Mato zavodda ALLAQACHON ishlatilganlardan tanlanadi (izoh:
+  //  `modules/units.js`) — shuning uchun boridan olinadi.
+  const mato = (await H.id(
+    `SELECT fabric FROM production_units WHERE fabric IS NOT NULL LIMIT 1`)).fabric;
   const q = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 4, fabric: 'Velur', started_on: '2026-09-10',
+    { product_id: PENAL, qty: 4, fabric: mato, started_on: '2026-09-10',
       conveyor_no: 'S-7007', next_on: '2026-09-20' });
   assert.equal(q.status, 200, q.text);
   const id = q.body.created[0];
@@ -3169,7 +3203,7 @@ test('kiritgan ochmaydi, rahbariyat tasdiqlaydi', async () => {
     `SELECT qty, fabric, conveyor_no FROM production_units WHERE id = $1`,
     [ok.body.unit_id]);
   assert.equal(u.qty, 4);
-  assert.equal(u.fabric, 'Velur');
+  assert.equal(u.fabric, mato);
   //  ★ Raqam SO'ROVDAN keladi — tizim o'zinikini bermaydi.
   assert.equal(u.conveyor_no, 'S-7007');
 

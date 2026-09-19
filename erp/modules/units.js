@@ -554,6 +554,27 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       if (scope && (!shopId || !scope.includes(shopId)))
         throw new Error('Bu mahsulot boshqa tsexniki');
 
+      //  ★ RANG VA MATO FAQAT BORIDAN (zavod qarori, 2026-09).
+      //
+      //  Kiritayotgan xodim yangi rang yoki mato O'YLAB TOPMAYDI: bitta
+      //  «Venge» va bitta «venge » (oxirida bo'shliq bilan) ombor
+      //  qoldig'ini ikkiga bo'lib yuborardi va savdo ro'yxatida bir xil
+      //  rang ikki marta turardi. Yangi rang — zavodning qarori, terish
+      //  xatosi emas: u jurnal orqali (`production.units`) kiritiladi.
+      //
+      //  Solishtirish katta-kichik harfga qaramaydi: ro'yxatdan
+      //  tanlangani baribir aynan mos tushadi, bu tekshiruv esa qo'lda
+      //  yuborilgan so'rov uchun.
+      for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
+        const v = trim(it[maydon]);
+        if (!v) continue;
+        const bor = (await client.query(
+          `SELECT 1 FROM production_units
+            WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
+        if (!bor) throw new Error(
+          `${nom} «${v}» ro'yxatda yo'q \u2014 boridan tanlang`);
+      }
+
       //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
       //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
       //  `shops.plan_auto`). Korpusda yo'l uzun va u kunni boshliqdan
