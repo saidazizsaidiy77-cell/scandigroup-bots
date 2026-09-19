@@ -4053,6 +4053,79 @@ test('inkassator hamma mijozdan pul oladi, savdosi esa o\'zicha qoladi', async (
     true);
 });
 
+test('inkassatorning qo\'lidagi pul faqat kassaga topshiriladi', async () => {
+  //  ★ Podotchyot olgan xodimning qo'lidagi pul HARAJATGA aylanadi:
+  //  ombor mudiri bozorga boradi va sarfini o'zi yozadi. Inkassator
+  //  esa mijozdan pul YIG'ADI — uning bitta yo'li bor, kassaga
+  //  topshirish. Sarflash u yerda harajat emas, pulning yo'qolishi
+  //  bo'lardi.
+  //
+  //  Belgi XODIMDA (`can_spend_cash`) va standarti — YOZADI: qo'lida
+  //  pul turgan odam uni hisobdan chiqara olsin degan qoida joyida
+  //  qoladi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name, can_hold_cash)
+                  VALUES ('Sinov yigimchi', true) ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  SELECT id, 'sotuvchi' FROM workers WHERE name='Sinov yigimchi'
+                  ON CONFLICT DO NOTHING`);
+  const wid = (await H.id(`SELECT id FROM workers WHERE name='Sinov yigimchi'`)).id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE active ORDER BY id LIMIT 1`)).id;
+
+  //  Qo'liga 200 $ beriladi.
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: wid,
+    currency: 'USD', amount: 200 })).status, 200);
+
+  //  Belgisi turganda sarfini O'ZI yozadi — eskicha.
+  const u = H.api(base, await H.sessionFor('Sinov yigimchi'));
+  assert.equal((await u('GET', '/api/cash/refs')).body.my.sarflaydi, true);
+  const bor = await u('POST', '/api/cash/ops', {
+    to_kind: 'expense', expense_item_id: modda, pl_month: '2026-09',
+    currency: 'USD', amount: 20 });
+  assert.equal(bor.status, 200, bor.text);
+
+  //  ★ BELGI OLIB TASHLANDI — endi faqat kassaga topshiradi.
+  await db.query(`UPDATE workers SET can_spend_cash = false WHERE id=$1`, [wid]);
+  const ink = H.api(base, await H.sessionFor('Sinov yigimchi'));
+  assert.equal((await ink('GET', '/api/cash/refs')).body.my.sarflaydi, false);
+  const yoq = await ink('POST', '/api/cash/ops', {
+    to_kind: 'expense', expense_item_id: modda, pl_month: '2026-09',
+    currency: 'USD', amount: 20 });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /faqat kassaga topshiriladi/);
+
+  //  Kassir ham o'sha qo'ldan harajat yoza olmaydi: pul baribir
+  //  shu qo'ldan chiqadi, demak qoida bitta.
+  const kyoq = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'worker', from_id: wid, to_kind: 'expense',
+    expense_item_id: modda, pl_month: '2026-09', currency: 'USD', amount: 20 });
+  assert.equal(kyoq.status, 400, kyoq.text);
+
+  //  ★ KASSAGA TOPSHIRISH ESA OCHIQ QOLADI — buni kassir yozadi.
+  const ok = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'worker', from_id: wid, to_kind: 'account', to_id: kassa,
+    currency: 'USD', amount: 180 });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_worker_cash WHERE id=$1`, [wid])).total_usd), 0,
+    'qo\'lida hech narsa qolmadi');
+
+  //  Belgi Xodimlar sahifasidan qo'yiladi va yuborilmasa tegilmaydi.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + wid,
+    { can_spend_cash: true })).status, 200);
+  assert.equal((await H.id(
+    `SELECT can_spend_cash FROM workers WHERE id=$1`, [wid])).can_spend_cash, true);
+  await db.query(`UPDATE workers SET can_spend_cash = false WHERE id=$1`, [wid]);
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + wid,
+    { phone: '+998900000001' })).status, 200);
+  assert.equal((await H.id(
+    `SELECT can_spend_cash FROM workers WHERE id=$1`, [wid])).can_spend_cash, false);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

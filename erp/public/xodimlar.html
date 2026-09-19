@@ -199,6 +199,20 @@ function openForm(id){
                 <span class="muted" style="font-size:12px">· inkassator: «Mijozdan
                   pul olindi» ro'yxatida barcha mijoz turadi, savdo bo'limidagi
                   doirasi o'zgarmaydi</span></span>
+            </div>
+
+            <!--  ★ QO'LIDAGI PULNI SARFLAYDIMI. Podotchyot olgan
+                  xodimning pulidan harajat yoziladi — ombor mudiri
+                  bozorga boradi. Inkassatorning qo'lidagi pul esa
+                  mijozdan yig'ilgani va uning bitta yo'li bor:
+                  kassaga topshiriladi. Standarti — YOZADI, belgi
+                  olib tashlanadigan joy bitta (izoh: sql/cash.sql). -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:10px">
+              <input type="checkbox" id="wSpend" style="width:auto"
+                     ${w && w.can_spend_cash === false ? '' : 'checked'}>
+              <span style="flex:1">Qo'lidagi pulni harajatga yozadi
+                <span class="muted" style="font-size:12px">· belgilanmasa pul
+                  faqat kassaga topshiriladi — inkassator shunday</span></span>
             </div></div>
 
           <div><label>Rollar</label>
@@ -274,6 +288,7 @@ async function save(id){
     tg_id: $('wTg').value.trim() || null,
     can_hold_cash: $('wCash').checked,
     cash_all_customers: $('wInkas').checked,
+    can_spend_cash: $('wSpend').checked,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
     roles,

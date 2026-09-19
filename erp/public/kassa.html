@@ -148,7 +148,10 @@ function drawHead() {
   //  Belgisi bor YOKI qo'lida pul turgan odam sarfini yozadi: belgi
   //  kelajak haqida, qo'lidagi pul esa bugungi haqiqat (izoh:
   //  modules/cash.js).
-  if (isMe() && refs.my && (refs.my.hold || refs.my.puli))
+  //  ★ Inkassatorda tugma YO'Q: uning qo'lidagi pul mijozdan
+  //  yig'ilgan va uning bitta yo'li bor — kassaga topshiriladi
+  //  (izoh: sql/cash.sql, `can_spend_cash`).
+  if (isMe() && refs.my && (refs.my.hold || refs.my.puli) && refs.my.sarflaydi)
     btn.push(['spend', 'Harajat yozish']);
   //  ★ KASSIR XODIMNING QO'LIDAGI PULDAN HAM HARAJAT YOZADI.
   //
@@ -161,7 +164,10 @@ function drawHead() {
   //  Bu yerda turishining sababi: harajatning ikkinchi tomoni KASSA
   //  EMAS, harajat moddasi. Berish va qabul qilish kassaning oynasida,
   //  chunki u yerda ikkinchi tomoni baribir kassa — bu esa unday emas.
-  if (W && boss) btn.push(['spend', 'Harajat yozish']);
+  //  Belgisi olib tashlangan xodimda bu tugma ham chiqmaydi: pul
+  //  baribir o'sha qo'ldan chiqadi va server rad etadi.
+  if (W && boss && here.can_spend_cash !== false)
+    btn.push(['spend', 'Harajat yozish']);
   if (isAcc() && boss) {
     if ((refs.workers || []).length) btn.push(['take', 'Xodimdan qabul qilish']);
     //  Berish va qabul qilish yonma-yon turadi — bitta ishning ikki
@@ -180,13 +186,19 @@ function drawHead() {
   //  savol, sababi yozilgan joy javob.
   const puli = Number(here.total_usd || 0) !== 0;
   const ozim = isMe() && refs.my && !refs.my.hold && !refs.my.puli;
+  //  Tugma yo'qligining IKKINCHI sababi: pul bor, lekin u sarflanmaydi.
+  //  Bo'sh joy savol, sababi yozilgan joy javob.
+  const faqatKassaga = isMe() && refs.my && refs.my.sarflaydi === false;
   $('btnBar').innerHTML = btn.map(([k, t], i) =>
     `<button ${i === 0 ? 'class="primary"' : ''} onclick="openForm('${k}')">${t}</button>`).join('')
     + (!isMe() && boss ? `<button class="ic" title="Boshlang'ich qoldiq"
          onclick="openOpening()">✎ Boshlang'ich qoldiq</button>` : '')
     + (ozim ? `<span class="muted" style="font-size:13px"
         >Qo'lingizda korxona puli yo'q — podotchyot berilsa bu yerda
-         «Harajat yozish» tugmasi chiqadi.</span>` : '');
+         «Harajat yozish» tugmasi chiqadi.</span>` : '')
+    + (faqatKassaga ? `<span class="muted" style="font-size:13px"
+        >Qo'lingizdagi pul faqat asosiy kassaga topshiriladi —
+         kassir qabul qilganda hisobingiz yopiladi.</span>` : '');
 
   $('tabs').innerHTML = [['in', 'Kirim'], ['out', 'Chiqim'], ['all', 'Hammasi']]
     .map(([k, t]) => `<button ${k === tab ? 'class="primary"' : ''}

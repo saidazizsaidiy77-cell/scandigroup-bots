@@ -1239,6 +1239,36 @@ yuborgan menejer baribir rad etiladi. Belgi XODIMDA va Xodimlar
 sahifasida, «Qo'liga pul beriladi» ning yonida — kodga na ism, na
 lavozim yoziladi (4-qoida).
 
+**★ UNING QO'LIDAGI PUL SARFLANMAYDI** (`workers.can_spend_cash`,
+zavod qarori 2026-09). Podotchyot olgan xodimning qo'lidagi pul
+HARAJATGA aylanadi: ombor mudiri bozorga boradi va nimaga
+sarflaganini o'zi yozadi. Inkassatorning qo'lidagi pul esa boshqa
+narsa — u mijozdan yig'ilgan korxona puli va uning **bitta yo'li
+bor: asosiy kassaga topshiriladi**. Sarflash u yerda harajat emas,
+pulning yo'qolishi bo'lardi.
+
+Belgi `can_hold_cash` ni almashtirmaydi — ikkalasi boshqa savolga
+javob beradi:
+
+    can_hold_cash    kassadan bu odamga pul BERILADIMI
+    can_spend_cash   qo'lidagi pulni HARAJATGA yozadimi
+
+Standarti **`true`**: «qo'lida pul bor odam uni har doim hisobdan
+chiqara oladi» degan qoida joyida qoladi va pul tiqilib qolmaydi.
+Belgi olib tashlanadigan joy bitta — inkassator.
+
+Tekshiruv **serverda va BITTA joyda** (`modules/cash.js`, tomonlar
+qo'yilgandan keyin): xodimning o'zi yozganida ham, kassir uning
+sahifasidan yozganida ham pul baribir o'sha qo'ldan chiqadi, ya'ni
+ikki yo'l ham shu qoidadan o'tadi. Ekranda tugma umuman chizilmaydi
+va sababi yozilib turadi — tugmani topolmagan odam uni kassirdan
+so'rab yurardi.
+
+**Kassaga topshirish esa ochiq qoladi va uni KASSIR yozadi**: pulni
+u ko'radi, sanab oladi va keyin qabul qiladi («Xodimdan qabul
+qilish»). Ro'yxatda qo'lida puli bor xodimlar summasi bilan turadi —
+kassir sanaganini ekrandagi raqam bilan solishtiradi.
+
 **Mijoz balansi to'ldi**: `boshlang'ich qarz + chiqib ketgan mahsulot −
 TO'LOVLAR`. Shu sababdan `v_customer_sales` va `v_customer_ledger`
 **`sql/cash.sql` ga ko'chirildi** — ular endi `cash_ops` ni o'qiydi, u

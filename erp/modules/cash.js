@@ -107,7 +107,7 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  va kerak bo'lsa ustidan yoziladi. Kurs kunda bir marta
     //  o'zgaradi, operatsiya esa kuniga o'nlab bo'ladi.
     //  O'zim haqimda: podotchyot olamanmi va qaysi guruhga sarflayman
-    db.query(`SELECT w.can_hold_cash, g.group_code,
+    db.query(`SELECT w.can_hold_cash, w.can_spend_cash, g.group_code,
                      COALESCE(c.uzs, 0) <> 0 OR COALESCE(c.usd, 0) <> 0 AS puli
                 FROM workers w
                 LEFT JOIN worker_expense_groups g ON g.worker_id = w.id
@@ -128,6 +128,10 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  belgisi yo'q, lekin puli bor odam ham hisob berishi kerak.
     my: { hold: !!(meniki.rows[0] || {}).can_hold_cash,
           puli: !!(meniki.rows[0] || {}).puli,
+          //  Qo'lidagi pulni harajatga yozadimi. Inkassatorda YO'Q:
+          //  uning qo'lidagi pul mijozdan yig'ilgani va uning bitta
+          //  yo'li bor — kassaga topshiriladi (izoh: sql/cash.sql).
+          sarflaydi: (meniki.rows[0] || {}).can_spend_cash !== false,
           groups: meniki.rows.map((r) => r.group_code).filter(Boolean) },
     rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null,
     me: { id: req.user.id, name: req.user.name }, boss,
@@ -159,7 +163,7 @@ router.get('/list', need(...ANY), wrap(async (req, res) => {
   //  kerak» degan savolning javobi. Zavodning yigirmata xodimini
   //  chiqarish ikkalasiga ham javob bermasdi.
   const workers = boss ? (await db.query(
-    `SELECT c.*
+    `SELECT c.*, w.can_spend_cash
        FROM v_worker_cash c
        JOIN workers w ON w.id = c.id
       WHERE w.active AND (w.can_hold_cash OR c.uzs <> 0 OR c.usd <> 0)
@@ -384,6 +388,25 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
                              WHERE g.worker_id = $2 AND g.group_code = i.group_code))`,
         [item_id, req.user.id])).rowCount;
       if (!ok) throw new Error('Bu harajat guruhi sizga ochilmagan');
+    }
+
+    //  ★ INKASSATORNING QO'LIDAGI PUL SARFLANMAYDI (zavod qarori,
+    //  2026-09; `workers.can_spend_cash`). Podotchyot olgan xodimning
+    //  qo'lidagi pul harajatga aylanadi — ombor mudiri bozorga boradi
+    //  va sarfini o'zi yozadi. Inkassator esa mijozdan pul YIG'ADI va
+    //  uning bitta yo'li bor: kassaga topshiriladi. Sarflash u yerda
+    //  harajat emas, pulning yo'qolishi bo'lardi.
+    //
+    //  Tekshiruv SHU YERDA, `sarf` blokida emas: pul o'sha qo'ldan
+    //  kassir yozganda ham chiqadi (`/kassa.html?a=w12`), ya'ni ikki
+    //  yo'l ham bitta qoidadan o'tishi kerak.
+    if (from_kind === 'worker' && (to_kind === 'expense' || to_kind === 'supplier')) {
+      const s = (await client.query(
+        `SELECT name, can_spend_cash FROM workers WHERE id = $1`, [from_id])).rows[0];
+      if (s && s.can_spend_cash === false)
+        throw new Error(from_id === req.user.id
+          ? 'Qo\'lingizdagi pul faqat kassaga topshiriladi — harajat yozilmaydi'
+          : `${s.name}: qo'lidagi pul faqat kassaga topshiriladi`);
     }
 
     await assertSide(client, from_kind, from_id, req);

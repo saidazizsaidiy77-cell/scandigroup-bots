@@ -372,6 +372,29 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_hold_cash BOOLEAN NOT NULL DEFA
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS cash_all_customers
   BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ QO'LIDAGI PULNI HARAJATGA YOZADIMI (zavod qarori, 2026-09).
+--
+--  Podotchyot olgan xodimning qo'lidagi pul SARFLANADI: ombor mudiri
+--  bozorga boradi va nimaga ketganini o'zi yozadi. Inkassatorning
+--  qo'lidagi pul esa boshqa narsa — u mijozdan yig'ilgan korxona puli
+--  va uning bitta yo'li bor: KASSAGA topshiriladi. Sarflash u yerda
+--  harajat emas, yo'qolish bo'lardi.
+--
+--  Belgi `can_hold_cash` ni ALMASHTIRMAYDI, ikkalasi boshqa savolga
+--  javob beradi:
+--
+--    can_hold_cash    kassadan bu odamga pul BERILADIMI
+--    can_spend_cash   qo'lidagi pulni HARAJATGA yozadimi
+--
+--  Standarti `true`: qo'lida pul turgan odam uni hisobdan chiqara
+--  olishi — allaqachon qo'yilgan qoida va u pulning tiqilib
+--  qolishidan saqlaydi. Belgi OLIB TASHLANADIGAN joy bitta:
+--  inkassator. Tekshiruv serverda, xodimning O'ZI yozganida ham,
+--  kassir uning sahifasidan yozganida ham — pul baribir o'sha
+--  qo'ldan chiqadi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_spend_cash
+  BOOLEAN NOT NULL DEFAULT true;
+
 --  ★ QO'LIDAGI PULNI NIMAGA SARFLASHI MUMKIN.
 --
 --  Pul «hisob berish sharti bilan» beriladi: xodim sarflab, nimaga
