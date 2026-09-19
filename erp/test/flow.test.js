@@ -2964,6 +2964,38 @@ test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
   assert.equal(r2.fg_src, 'reja');
 });
 
+test('xodimga rol biriktirilsa huquqi darrov ishlaydi', async () => {
+  //  Konver yaratish huquqi ROL orqali keladi. Sinov shu yo'lni HTTP
+  //  bilan yuradi: `worker_roles` ga to'g'ridan-to'g'ri yozish
+  //  Xodimlar sahifasi qiladigan ishni sinamasdi.
+  const w = await admin('POST', '/api/admin/workers',
+    { name: 'Sinov kiritувchi HTTP', pin: '8421',
+      roles: [{ code: 'kirituvchi' }] });
+  assert.equal(w.status, 200, w.text);
+
+  const perms = (await H.id(
+    `SELECT array_agg(permission_code ORDER BY permission_code) AS p
+       FROM v_worker_permissions WHERE worker_id = $1`, [w.body.id])).p;
+  assert.ok(perms.includes('production.units'),
+    'kirituvchi konver yaratadi: ' + perms);
+  assert.ok(perms.includes('production.view'), 'jurnal ochiladi');
+
+  //  Yaratilgan xodim konverni HAQIQATAN ocha oladi.
+  const kir = H.api(base, await H.sessionFor('Sinov kiritувchi HTTP'));
+  const u = await kir('POST', '/api/units/', {
+    items: [{ product_id: PENAL, qty: 1, section_id: ARRA }] });
+  assert.equal(u.status, 200, u.text);
+
+  //  Rolni ALMASHTIRISH ham ishlaydi va eskisi qoladi emas.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + w.body.id,
+    { roles: [{ code: 'tsex_usta', scope_shop_id: null }] })).status, 200);
+  const p2 = (await H.id(
+    `SELECT array_agg(permission_code ORDER BY permission_code) AS p
+       FROM v_worker_permissions WHERE worker_id = $1`, [w.body.id])).p;
+  assert.ok(!p2.includes('production.units'), 'eski rol qolmaydi');
+  assert.ok(p2.includes('production.plan'), 'yangi rol keladi');
+});
+
 /* ============================================================================
  *  PIN — IZ VA URINISHLAR
  *
