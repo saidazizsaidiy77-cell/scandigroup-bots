@@ -488,7 +488,12 @@ CREATE INDEX IF NOT EXISTS idx_unit_req_pending ON unit_requests(shop_id, create
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unit_req_no ON unit_requests(conveyor_no)
   WHERE status = 'pending' AND conveyor_no IS NOT NULL;
 
-CREATE OR REPLACE VIEW v_unit_requests AS
+--  DROP + CREATE, `CREATE OR REPLACE` EMAS: `steps` ustuni bigint edi
+--  va int ga o'zgartirilyapti, replace esa ustun TURINI o'zgartira
+--  olmaydi («cannot change data type of view column»). Unga bog'liq
+--  boshqa view yo'q, shuning uchun DROP xavfsiz.
+DROP VIEW IF EXISTS v_unit_requests;
+CREATE VIEW v_unit_requests AS
 SELECT q.id, q.qty, q.color, q.fabric, q.started_on, q.note,
        q.status, q.created_at, q.decided_at, q.decide_note,
        q.product_id, p.name AS product, p.sku, p.size_label,
@@ -502,7 +507,13 @@ SELECT q.id, q.qty, q.color, q.fabric, q.started_on, q.note,
        q.unit_id, COALESCE(q.conveyor_no, u.conveyor_no) AS conveyor_no,
        --  So'rov yozilayotganda muddat ko'rinib tursin: marshrut uzunligi
        --  (har bo'limda bir kun — izoh: sql/register.sql).
-       (SELECT COUNT(*) FROM v_product_route r WHERE r.product_id = q.product_id) AS steps,
+       --
+       --  ★ `::int` SHART. `COUNT(*)` bigint qaytaradi, `pg` esa bigint'ni
+       --  MATN qilib beradi (JavaScript soni uni to'liq ko'tara olmaydi).
+       --  Sahifada `sana.getDate() + steps` yozilgan edi va matn bilan
+       --  qo'shilganda 19 + «8» → «198» bo'lib, omborga tushish kuni
+       --  yarim yil keyinga surilib ketardi.
+       (SELECT COUNT(*) FROM v_product_route r WHERE r.product_id = q.product_id)::int AS steps,
        q.is_stock, q.next_on
 FROM unit_requests q
 JOIN products p        ON p.id = q.product_id

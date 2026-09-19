@@ -2996,6 +2996,30 @@ test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () =>
                Number(st.conveyor_no.split('-')[1]) + 1);
 });
 
+test('so\'rov ro\'yxatida marshrut uzunligi SON bo\'lib keladi', async () => {
+  //  `COUNT(*)` bigint qaytaradi va `pg` uni MATN qilib beradi. Sahifa
+  //  `sana.getDate() + steps` deb hisoblaydi: matn bilan qo'shilganda
+  //  19 + «8» → «198» bo'lib, omborga tushish kuni yarim yil keyinga
+  //  surilib ketardi. Shuning uchun view'da `::int`.
+  const kir = await xodim('Sinov son', 'kirituvchi');
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const q = await kir('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, conveyor_no: 'S-9201', started_on: '2026-09-19' });
+  assert.equal(q.status, 200, q.text);
+
+  const row = (await kir('GET', '/api/units/requests'))
+    .body.rows.find((r) => r.id === q.body.created[0]);
+  assert.equal(typeof row.steps, 'number', 'qadamlar soni SON: ' + typeof row.steps);
+  assert.ok(row.steps > 0 && row.steps < 40, 'marshrut uzunligi: ' + row.steps);
+
+  //  Sahifadagi hisob: boshlanish + qadamlar soni.
+  const d = new Date('2026-09-19T00:00:00');
+  d.setDate(d.getDate() + row.steps);
+  assert.equal(d.getFullYear(), 2026, 'omborga tushish kuni o\'sha yilda qoladi');
+});
+
 test('so\'rovda rang va mato faqat boridan tanlanadi', async () => {
   const kir = await xodim('Sinov rangchi', 'kirituvchi');
 

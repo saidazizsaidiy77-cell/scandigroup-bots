@@ -119,13 +119,22 @@ const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
 //  tanlayotganda natijani darrov ko'rsin, so'rov yuborib kutmasin.
 //  Formula serverdagi bilan bir xil (izoh: sql/register.sql):
 //  oxirgi bo'limdan keyingi kun = boshlanish + qadamlar soni.
+//  ★ `Number()` SHART. Bazadan kelgan son matn bo'lib qolishi mumkin
+//  (`COUNT(*)` bigint), matn bilan qo'shilganda esa `19 + '8'` → `'198'`
+//  bo'lib, sana yarim yil keyinga surilib ketardi. Bazada ham `::int`
+//  qo'yilgan, bu ikkinchi to'siq.
+const kunQo = (boshlanish, kun) => {
+  const d = new Date(String(boshlanish).slice(0, 10) + 'T00:00:00');
+  d.setDate(d.getDate() + Number(kun));
+  return d;
+};
+
 function eta() {
   const p = mahsulotlar.find((x) => String(x.id) === $('fProduct').value);
   const start = $('fStart').value;
-  if (!p || !start || !p.steps) { $('etaLine').textContent = ''; return; }
-  const d = new Date(start + 'T00:00:00');
-  d.setDate(d.getDate() + p.steps);
-  $('etaLine').innerHTML = `Marshrutda <b>${p.steps}</b> ta bo'lim, `
+  if (!p || !start || !Number(p.steps)) { $('etaLine').textContent = ''; return; }
+  const d = kunQo(start, p.steps);
+  $('etaLine').innerHTML = `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, `
     + `har birida bir kun — T/M omborga <b>${d8(d.toISOString())}</b> kuni tushadi.`;
 }
 
@@ -195,11 +204,7 @@ function draw() {
     //  Omborga tushish kuni so'rovda ham ko'rinadi: direktor tasdiqlashdan
     //  oldin «bu qachon tayyor bo'ladi» degan savolga javob ko'rsin.
     let fg = '';
-    if (r.started_on && r.steps) {
-      const d = new Date(String(r.started_on).slice(0, 10) + 'T00:00:00');
-      d.setDate(d.getDate() + r.steps);
-      fg = d8(d.toISOString());
-    }
+    if (r.started_on && Number(r.steps)) fg = d8(kunQo(r.started_on, r.steps).toISOString());
     const act = [];
     if (r.status === 'pending' && data.can_approve)
       act.push(`<button class="primary" onclick="approve(${r.id})">Tasdiqlash</button>`);
