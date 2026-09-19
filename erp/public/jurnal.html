@@ -34,10 +34,12 @@
       <select id="fFason" onchange="load()"></select></div>
     <div style="flex:1;min-width:160px"><label>Tsex</label>
       <select id="fShop" onchange="shopChanged()"></select></div>
-    <!-- "Qayerda" ustuni bo'yicha. Tsex tanlanmaguncha bo'sh: 24 ta bo'limni
-         bitta ro'yxatga tashlash izlashni osonlashtirmaydi. -->
+    <!-- "Qayerda" ustuni bo'yicha. Tsex tanlanmaguncha faqat
+         «Boshlanmagan» turadi: 24 ta bo'limni bitta ro'yxatga tashlash
+         izlashni osonlashtirmaydi, lekin bo'limsiz konverni izlash
+         tsex tanlanishini talab qilmaydi (izoh: modules/units.js). -->
     <div style="flex:1;min-width:150px"><label>Bo'lim</label>
-      <select id="fSection" onchange="load()" disabled></select></div>
+      <select id="fSection" onchange="load()"></select></div>
     <div style="flex:1;min-width:170px"><label>Mijoz nomi</label>
       <select id="fCust" onchange="load()"></select></div>
     <button onclick="clearFilters()">Filtrni tozalash</button>
@@ -172,6 +174,9 @@ async function boot(){
     ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   $('fCust').innerHTML = '<option value="">Barchasi</option>' +
     customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  //  Bo'lim ro'yxati tsex tanlangach to'ladi, lekin «Boshlanmagan»
+  //  boshidanoq turadi — u bo'lim emas, «bo'limi yo'q» degani.
+  $('fSection').innerHTML = SECTION_BOSH;
 
   // Guruh va mahsulot nomi ro'yxati katalogdan chiqadi — jurnalda faqat
   // haqiqatan mavjud bo'lganlari tanlanadi.
@@ -205,6 +210,13 @@ async function boot(){
 // ishlatilmaydigan katak faqat panelni og'irlashtiradi.
 const FILTERS = ['fOrder', 'fFason', 'fShop', 'fSection', 'fCust'];
 
+//  Bo'lim ro'yxatining doimiy boshi. «Boshlanmagan» — bo'lim EMAS,
+//  «bo'limi yo'q» degani: konver tasdiqlangan, raqami bor, lekin hali
+//  hech bir bo'limda turmaydi va uni besh yuz qator orasidan ko'z
+//  bilan terib olib bo'lmasdi.
+const SECTION_BOSH = '<option value="">Barchasi</option>'
+  + '<option value="yoq">— Boshlanmagan —</option>';
+
 // Bo'lim ro'yxati tanlangan tsexga bog'liq. Tsex almashtirilganda eski
 // bo'lim tanlovi qolib ketmasin — u boshqa tsexniki bo'lib, jadval bo'sh
 // chiqardi va sababi ko'rinmasdi.
@@ -215,9 +227,12 @@ function shopChanged(){
   const list = shop
     ? ref.sections.filter(sc => sc.shop_id === shop || (sc.run_by || []).includes(shop))
     : [];
-  $('fSection').innerHTML = '<option value="">Barchasi</option>' +
+  //  ★ «BOSHLANMAGAN» HAR DOIM TURADI — tsex tanlangan-tanlanmaganidan
+  //  qat'i nazar: bo'limsiz konverda javobgar tsex bo'sh bo'lishi
+  //  mumkin (u marshrutning birinchi qadamidan chiqadi) va ikki filtr
+  //  birga qo'yilsa ro'yxat bo'sh chiqardi.
+  $('fSection').innerHTML = SECTION_BOSH +
     list.map(sc => `<option value="${sc.id}">${esc(sc.name)}</option>`).join('');
-  $('fSection').disabled = !list.length;
   load();
 }
 
@@ -266,8 +281,7 @@ function params(){
 
 function clearFilters(){
   for (const id of FILTERS) $(id).value = '';
-  $('fSection').innerHTML = '<option value="">Barchasi</option>';
-  $('fSection').disabled = true;
+  $('fSection').innerHTML = SECTION_BOSH;
   groupSel.clear();
   drawGroups();
   load();

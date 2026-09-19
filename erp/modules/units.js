@@ -214,6 +214,11 @@ const channelsOf = (req) => {
   return c.length ? c : null;
 };
 
+//  «Bo'limi yo'q» filtri: `section_id=yoq`. Ro'yxat ham, Excel ham
+//  bitta yerdan o'qiydi — ikki joyda yozilsa biri ikkinchisidan
+//  ajralib ketardi.
+const boshlanmagan = (q) => String(q.section_id || '') === 'yoq';
+
 function registerQuery(q, limit, scope = null) {
   // Bo'sh katak har doim oxirida tursin: saralash sababi — nimadir izlash,
   // "—" esa izlanayotgan narsa emas.
@@ -261,12 +266,28 @@ function registerQuery(q, limit, scope = null) {
         AND ($11::int[] IS NULL OR owner_shop_id = ANY($11))
         -- "Qayerda" ustuni bo'yicha: tsex tanlangach bo'lim ham tanlanadi
         AND ($12::int   IS NULL OR section_id = $12)
+        --  ★ BOSHLANMAGAN — bo'limsiz kiritilgan konver: tasdiqlandi,
+        --  raqami bor, lekin hali hech bir bo'limda turmaydi. Ular
+        --  jurnalda oddiy qator bo'lib yuradi va besh yuz qator
+        --  orasidan ko'z bilan terib olinmasdi — tsex ekranining
+        --  tepasida ro'yxati bor, lekin u FAQAT bitta tsexniki.
+        --
+        --  «Bo'lim» filtrining ichida turadi, chunki savol o'sha:
+        --  konver QAYERDA. Tsex tanlanishini talab qilmaydi —
+        --  bo'limsiz konverda javobgar tsex bo'sh bo'lishi mumkin
+        --  (u marshrutning birinchi qadamidan chiqadi) va ikki filtr
+        --  birga qo'yilsa ro'yxat bo'sh chiqardi.
+        AND (NOT $13::boolean OR section_id IS NULL)
       ORDER BY ${col} ${way} NULLS LAST, conveyor_no DESC
       LIMIT ${limit}`,
     params: [q.order_no || null, q.conveyor_no || null, q.customer_id || null,
              q.shop_id || null, q.status || null, q.from || null, q.to || null,
              q.q || null, groupIds(q), q.fason_id || null, scope,
-             q.section_id || null],
+             //  `section_id=yoq` — bo'lim EMAS, «bo'limi yo'q» degani.
+             //  Alohida parametr yozilmadi: savol bitta va filtr ham
+             //  bitta bo'lsin — Excelga chiqarish ham shu yo'ldan o'tadi.
+             boshlanmagan(q) ? null : (q.section_id || null),
+             boshlanmagan(q)],
   };
 }
 

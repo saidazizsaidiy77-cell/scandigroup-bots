@@ -497,6 +497,19 @@ qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
 stul tsexi. Tsex ekranining tepasida «Boshlanmagan» ro'yxati bo'lib
 turadi, tugmasi marshrutning birinchi bo'limini yozadi («→ Arra»).
 
+**Jurnalda ham filtri bor**: «Bo'lim» ro'yxatining boshida
+**«— Boshlanmagan —»** turadi (`section_id=yoq`). Tsex ekranidagi
+ro'yxat FAQAT bitta tsexniki, jurnalda esa butun zavod ko'rinadi —
+ilgari bo'limsiz konverni besh yuz qator orasidan ko'z bilan terib
+olish kerak edi.
+
+Filtr **tsex tanlanishini talab qilmaydi** va shu sababdan ro'yxatning
+eng boshida: bo'limsiz konverda javobgar tsex bo'sh bo'lishi mumkin (u
+marshrutning birinchi qadamidan chiqadi) va ikki filtr birga qo'yilsa
+ro'yxat bo'sh chiqardi. `yoq` — bo'lim EMAS, «bo'limi yo'q» degani;
+alohida parametr yozilmadi, chunki savol bitta va Excelga chiqarish
+ham shu yo'ldan o'tadi (`registerQuery`).
+
 **O'lchov birligi** (`product_groups.uom`) — stul DONA bilan, penal, kamod,
 sp va stol KOMPLEKT bilan sanaladi. Guruhga biriktiriladi, mahsulotga emas.
 Ombor yig'indisi shu sababdan bitta raqam emas: `by_uom` bo'lib chiqadi —

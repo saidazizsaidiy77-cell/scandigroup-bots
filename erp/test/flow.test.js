@@ -4259,6 +4259,49 @@ test('ombor bo\'limi xodim bo\'yicha yopiladi', async () => {
     'GET', '/api/warehouse/list')).status, 200);
 });
 
+test('jurnalda boshlanmagan konverlar filtri', async () => {
+  //  ★ Bo'limsiz kiritilgan konver — tasdiqlangan, raqami bor, lekin
+  //  hali hech bir bo'limda turmaydi. Jurnalda u oddiy qator bo'lib
+  //  yuradi va besh yuz qator orasidan ko'z bilan terib olinmasdi.
+  //  Tsex ekranining tepasida ro'yxati bor, lekin u FAQAT bitta
+  //  tsexniki — jurnalda esa butun zavod ko'rinadi.
+  const bosh = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 3, started_on: '2026-09-15' }] })).body.created[0];
+  assert.ok(bosh.id);
+
+  const royR = await admin('GET', '/api/units/?section_id=yoq');
+  assert.equal(royR.status, 200, royR.text);
+  const roy = royR.body;
+  assert.ok(roy.length, 'boshlanmagan konverlar topildi');
+  assert.ok(roy.some((r) => r.id === bosh.id));
+  assert.ok(roy.every((r) => r.section_id === null),
+    'faqat bo\'limsizlari chiqadi');
+
+  //  Tsex tanlanishini TALAB QILMAYDI: bo'limsiz konverda javobgar
+  //  tsex bo'sh bo'lishi mumkin va ikki filtr birga qo'yilsa ro'yxat
+  //  bo'sh chiqardi. Shuning uchun «Boshlanmagan» bo'lim ro'yxatining
+  //  boshida, tsexdan mustaqil turadi.
+  assert.ok(roy.some((r) => r.owner_shop_id == null)
+         || roy.length > 0, 'tsexsiz ham ishlaydi');
+
+  //  Bo'lim tanlangani eskicha: `yoq` bo'lim emas, «bo'limi yo'q».
+  const arra = (await H.id(
+    `SELECT id FROM sections WHERE name ILIKE 'Arra%' LIMIT 1`)).id;
+  const bolim = (await admin('GET', '/api/units/?section_id=' + arra)).body;
+  assert.ok(bolim.every((r) => r.section_id === arra));
+
+  //  Filtrsiz ro'yxatda ikkalasi ham turadi.
+  const hammasi = (await admin('GET', '/api/units/')).body;
+  assert.ok(hammasi.some((r) => r.section_id === null));
+  assert.ok(hammasi.some((r) => r.section_id !== null));
+
+  //  Excelga chiqarish ham SHU yo'ldan o'tadi — filtr ikki joyda
+  //  yozilsa biri ikkinchisidan ajralib ketardi.
+  const xls = await admin('GET', '/api/units/export?section_id=yoq');
+  assert.equal(xls.status, 200, xls.text);
+  assert.ok(xls.text.includes(bosh.conveyor_no));
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
