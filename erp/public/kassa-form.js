@@ -38,11 +38,20 @@ const SIDE_LIST = (kind) => ({
 //  Ta'minotchi va xodim ham shu yerda — kassir uchun ular ham
 //  «qayerga» degan savolning javobi, harajat guruhlaridan farqi yo'q.
 function outGroups() {
-  //  Ta'minotchi va xodim HAR DOIM ro'yxatda: ular zavodda bor
-  //  yo'nalish, ro'yxati bo'sh bo'lgani esa boshqa gap. Ilgari bo'sh
-  //  bo'lsa qator umuman chiqmasdi va kassir «xodimga pul berish
-  //  yo'q ekan» deb o'ylardi — endi tanlanadi va ikkinchi katak nima
-  //  qilish kerakligini aytadi.
+  //  ★ TA'MINOTCHIGA TO'LOV — TA'MINOT GURUHINING ICHIDA, yuqorida
+  //  EMAS (zavod qarori). U harajat guruhi bilan bir qatorda turardi
+  //  va bitta ishga ikkita yo'l ochilib qolgandi: yuqoridagi yorliq
+  //  ham, «Ta'minot → Ta'minotchilarga to'lov» ham. Ikkinchisi to'g'ri
+  //  yo'l — u harajat MODDASINI ham yozadi, ya'ni to'lov foyda-zararda
+  //  o'z qatorida qoladi; birinchisi esa moddasiz o'tib ketardi.
+  //
+  //  Uchinchi bosqich (qaysi ta'minotchi) o'zgarmadi: u moddaning
+  //  belgisidan chiqadi (`needs_supplier`, izoh: sql/cash.sql).
+  //
+  //  Xodim esa qoladi: uning to'lovi harajat emas — korxonaning puli
+  //  bir joydan ikkinchisiga ko'chadi va hech qanday moddasi yo'q.
+  //  Ro'yxati bo'sh bo'lsa ham turadi: ilgari qator umuman chiqmasdi
+  //  va kassir «xodimga pul berish yo'q ekan» deb o'ylardi.
   //  Xodim o'z sarfini yozayotgan bo'lsa ro'yxatda faqat HARAJAT
   //  guruhlari, ustiga unga ochilganlari: ta'minotchiga to'lov ham,
   //  boshqa xodimga pul berish ham uning ishi emas.
@@ -52,8 +61,7 @@ function outGroups() {
   //  kerak — cheklov xodimning O'ZI yozganida ma'noga ega.
   const ozi = form === 'spend' && isMe();
   const ruxsat = (refs.my && refs.my.groups) || [];
-  const g = ozi ? [] : [['supplier', "Ta'minotchiga to'lov"],
-                        ['worker',   "Xodim qo'liga pul (podotchyot)"]];
+  const g = ozi ? [] : [['worker', "Xodim qo'liga pul (podotchyot)"]];
   (refs.groups || []).forEach(x => {
     if (ozi && ruxsat.length && !ruxsat.includes(x.code)) return;
     if ((refs.items || []).some(i => i.group_code === x.code))
@@ -65,8 +73,7 @@ function outGroups() {
 //  Ikkinchi bosqich: tanlangan guruhning ichi. Qiymat baribir
 //  «tur:id» bo'lib qoladi — saqlash yo'li bitta (saveOp).
 function outItems(g) {
-  if (g === 'supplier') return (refs.suppliers || []).map(x => [`supplier:${x.id}`, x.name]);
-  if (g === 'worker')   return (refs.payable   || []).map(x => [`worker:${x.id}`, x.name]);
+  if (g === 'worker') return (refs.payable || []).map(x => [`worker:${x.id}`, x.name]);
   if (g && g.startsWith('g:')) {
     const code = g.slice(2);
     return (refs.items || []).filter(i => i.group_code === code)
@@ -173,8 +180,7 @@ function outSecond() {
   const box = $('fItemBox');
   if (!box) return;
   box.hidden = !g;
-  $('fItemLab').textContent = g === 'supplier' ? "Ta'minotchi"
-    : g === 'worker' ? 'Xodim' : 'Harajat moddasi';
+  $('fItemLab').textContent = g === 'worker' ? 'Xodim' : 'Harajat moddasi';
   //  Ro'yxat bo'sh bo'lsa sababi yoziladi: bo'sh ro'yxat «tizim
   //  ishlamayapti» degan taassurot qoldirardi.
   $('fItem').innerHTML = list.length
@@ -182,7 +188,6 @@ function outSecond() {
       list.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')
     : `<option value="">${g === 'worker'
         ? "— qo'liga pul beriladigan xodim belgilanmagan —"
-        : g === 'supplier' ? "— ta'minotchi ro'yxati bo'sh —"
         : '— modda yo\'q —'}</option>`;
   //  Qidiruv katagi UZUN ro'yxatda kerak: qirqta ta'minotchini ko'z
   //  bilan qidirib bo'lmaydi, oltita moddani esa qidirish shart emas.

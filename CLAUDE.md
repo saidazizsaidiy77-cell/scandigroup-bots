@@ -1013,10 +1013,18 @@ zahoti so'raladi.
 **★ CHIQIM IKKI BOSQICH: avval GURUH, keyin uning ichidagi.** Bitta
 ro'yxatda o'ttizta «Guruh · Modda» qatori turardi va kassir kerakligini
 topguncha butun ro'yxatni o'qib chiqardi. Endi «Kimga» da avval
-to'qqizta harajat guruhi ko'rinadi, ustiga **Ta'minotchiga to'lov** va
-**Xodim qo'liga pul** — kassir uchun ular ham «qayerga» degan savolning
-javobi, guruhlardan farqi yo'q. Tanlangach ikkinchi katak ochiladi va
-faqat o'shaning ichidagilar turadi.
+to'qqizta harajat guruhi ko'rinadi, ustiga **Xodim qo'liga pul** —
+kassir uchun u ham «qayerga» degan savolning javobi, guruhlardan farqi
+yo'q: xodimga berilgan pul harajat EMAS, korxonaning puli bir joydan
+ikkinchisiga ko'chadi va uning moddasi yo'q. Tanlangach ikkinchi katak
+ochiladi va faqat o'shaning ichidagilar turadi.
+
+**Ta'minotchiga to'lov esa yuqorida TURMAYDI** (zavod qarori): u
+«Ta'minot» guruhining ichida, «Ta'minotchilarga to'lov» moddasi bo'lib.
+Ilgari ikkalasi ham bor edi va bitta ishga ikkita yo'l ochilib qolgandi:
+guruh ichidagisi harajat MODDASINI ham yozadi, ya'ni to'lov
+foyda-zararda o'z qatorida qoladi — yuqoridagi yorliq esa moddasiz
+o'tib ketardi va hisobotdan yo'qolardi.
 
 **★ TA'MINOTCHIGA TO'LOVDA UCHINCHI BOSQICH.** «Ta'minotchilarga
 to'lov» moddasi tanlansa QAYSI ta'minotchi ekani so'raladi: pul ma'lum
