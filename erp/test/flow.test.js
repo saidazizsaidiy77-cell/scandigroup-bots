@@ -3012,6 +3012,12 @@ test('boshlang\'ich qoldiq faqat boshqaruvchida', async () => {
   //  Fayldan yuklash ham o'sha yo'l.
   assert.equal((await kir('POST', '/api/import/units', {})).status, 403);
 
+  //  Hisobotlar ham uniki emas: zavod ko'rinishi va panel rahbariyatniki.
+  for (const yol of ['/api/factory', '/api/dashboard', '/api/wip'])
+    assert.equal((await kir('GET', yol)).status, 403, yol);
+  //  Jurnal esa ochiq — uning ishi o'sha yerda.
+  assert.equal((await kir('GET', '/api/units/')).status, 200);
+
   //  Boshqaruvchida ikkalasi ham ishlayveradi.
   assert.equal((await admin('POST', '/api/units/', { items: [{
     product_id: PENAL, qty: 1, section_id: ARRA, is_opening: true }] })).status, 200);

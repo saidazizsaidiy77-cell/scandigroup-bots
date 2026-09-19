@@ -96,10 +96,11 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('ishlab_boshl', 'production.reports'), ('ishlab_boshl', 'warehouse.view'),
   ('ishlab_boshl', 'warehouse.material'),
 
-  -- Ma'lumot kirituvchi: jurnal va qoldiqni to'ldiradi, lekin marshrut,
-  -- bo'lim quvvati va spravochniklarga tegmaydi.
+  -- Ma'lumot kirituvchining ishi BITTA: konver kiritish va jurnalni
+  -- to'ldirish. Boshlang'ich qoldiq (`production.manage`, izoh:
+  -- `modules/units.js`) ham, hisobotlar (pastdagi DELETE) ham unda yo'q.
   ('kirituvchi',   'production.view'), ('kirituvchi', 'production.entry'),
-  ('kirituvchi',   'production.units'), ('kirituvchi', 'production.reports'),
+  ('kirituvchi',   'production.units'),
 
   -- Tsex ustasida FAQAT o'tkazish huquqi. production.view jurnal, zavod
   -- ko'rinishi va panelni ochadi — ustaga bularning hammasi ortiqcha
@@ -179,6 +180,19 @@ DELETE FROM role_permissions
 -- moduli orqali ochiladi (u yozilgunga qadar — kirituvchi orqali).
 DELETE FROM role_permissions
  WHERE role_code = 'sotuvchi' AND permission_code = 'production.units';
+
+-- Ma'lumot kirituvchidan hisobotlar olib tashlandi (zavod qarori,
+-- 2026-09). Uning ishi bitta: konver kiritish va jurnalni to'ldirish.
+-- `production.reports` esa zavod ko'rinishini va boshqaruv panelini
+-- ochardi — butun zavodning yuklamasi, bo'lim navbatlari va kunlik
+-- ko'rsatkichlari. Bu rahbariyatning ko'rinishi; kiritadigan xodimda u
+-- faqat menyuni to'ldirib turardi.
+--
+-- INSERT dan o'chirishning O'ZI yetmaydi: `ON CONFLICT DO NOTHING`
+-- mavjud bazadagi qatorni olib tashlamaydi, ya'ni eski huquq joyida
+-- qolib ketardi.
+DELETE FROM role_permissions
+ WHERE role_code = 'kirituvchi' AND permission_code = 'production.reports';
 
 -- Rol nomi va ko'rinishi ham kodda. ON CONFLICT DO NOTHING eski bazada
 -- nomni yangilamaydi, shuning uchun alohida yoziladi.

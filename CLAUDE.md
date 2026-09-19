@@ -1033,7 +1033,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | Rol | Huquq | Ko'radi |
 |---|---|---|
 | `tsex_usta` | `production.entry`, `production.request`, `production.plan` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi va muddat rejasini qo'yadi |
-| `kirituvchi` | + `production.units`, `production.reports` | jurnal (konver kiritadi), hisobotlar — **boshlang'ich qoldiq YO'Q** |
+| `kirituvchi` | + `production.units` | faqat jurnal: konver kiritadi va to'ldiradi. **Boshlang'ich qoldiq ham, hisobotlar ham YO'Q** |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor |
