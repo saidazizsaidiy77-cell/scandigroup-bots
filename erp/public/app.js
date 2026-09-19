@@ -136,7 +136,7 @@ const App = (() => {
     { code: 'sales',      name: 'Savdo',                perm: ['sales.view', 'sales.manage'] },
     { code: 'purchasing', name: "Ta'minot",             perm: ['purchasing.view', 'purchasing.manage'] },
     { code: 'warehouse',  name: 'Ombor',                perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
-    { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage'] },
+    { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage', 'production.request', 'production.approve'] },
     { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
     { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
     //  Hisobotlar ikki xil: ishlab chiqarishniki (`production.reports`)
@@ -166,6 +166,13 @@ const App = (() => {
       title: 'Ishlab chiqarish jurnali', lead: 'Konveyer raqami bo\'yicha',
       text: "Har mahsulot: bosh sana, K\u2116, Z\u2116, rang, mato, tsex, bo'lim, mijoz, narx, muddatlar",
       perm: ['production.view'] },
+    //  Konver so'rovi: tsex boshlig'i yozadi, direktor tasdiqlaydi
+    //  (izoh: sql/units.sql). Ikkala huquq ham shu sahifani ochadi —
+    //  biri yozish, ikkinchisi tasdiqlash uchun.
+    { href: '/sorovlar.html', mod: 'production', nav: "Konver so'rovlari",
+      title: "Konver so'rovlari", lead: 'Tsex boshlig\'i → direktor',
+      text: "Ishlab chiqarishga nima kirishini tsex boshlig'i so'raydi, konverni direktor ochadi",
+      perm: ['production.request', 'production.approve'] },
     { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
       title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',
       text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",

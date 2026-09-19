@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Konver so'rovlari · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+<style>
+  /*  Tsex boshlig'i buni TELEFONDA to'ldiradi: maydonlar bir ustunga
+      tushadi va tugma barmoq bilan bosiladigan bo'lib qoladi. */
+  .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .form .wide{grid-column:1/-1}
+  .eta{font-size:13px;color:var(--muted,#6e757d);margin-top:6px}
+  .eta b{color:inherit;font-weight:600}
+  @media (max-width:620px){ .form{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Konver so'rovlari</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<!--  So'rov yozish kartochkasi faqat so'rash huquqi borida chiziladi.
+      Tasdiqlovchida (direktor) u ham ko'rinadi — u ham so'rov yoza
+      oladigan bo'lsa; huquqi bo'lmasa kartochka umuman chizilmaydi. -->
+<div class="card" id="newCard" hidden>
+  <h2 style="margin:0 0 4px">Yangi so'rov</h2>
+  <p class="muted" style="margin:0 0 14px">
+    Ishlab chiqarishga nima kirishini siz yozasiz, konverni direktor ochadi.</p>
+  <div class="form">
+    <div class="wide"><label>Mahsulot</label>
+      <select id="fProduct" onchange="eta()"></select></div>
+    <div><label>Soni</label>
+      <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
+    <div><label>Boshlanish sanasi</label>
+      <input id="fStart" type="date" onchange="eta()"></div>
+    <div><label>Rangi</label>
+      <input id="fColor" list="colors" placeholder="ixtiyoriy"></div>
+    <div><label>Matosi</label>
+      <input id="fFabric" list="fabrics" placeholder="ixtiyoriy"></div>
+    <div class="wide"><label>Izoh</label>
+      <input id="fNote" placeholder="ixtiyoriy"></div>
+  </div>
+  <datalist id="colors"></datalist>
+  <datalist id="fabrics"></datalist>
+  <div class="eta" id="etaLine"></div>
+  <div class="row" style="margin-top:14px">
+    <button class="primary" onclick="send()">So'rov yuborish</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin-bottom:10px">
+    <h2 style="margin:0">Ro'yxat</h2>
+    <div><label>Holat</label>
+      <select id="fStatus" onchange="load()">
+        <option value="pending">Kutmoqda</option>
+        <option value="">Hammasi</option>
+        <option value="approved">Tasdiqlangan</option>
+        <option value="rejected">Rad etilgan</option>
+        <option value="cancelled">Bekor qilingan</option>
+      </select></div>
+  </div>
+  <div style="overflow-x:auto"><table>
+    <thead><tr><th>Mahsulot</th><th class="num">Soni</th><th>Rang · mato</th>
+      <th>Boshlanish</th><th>T/M omborga</th><th>Tsex</th><th>Kim so'radi</th>
+      <th>Holat</th><th></th></tr></thead>
+    <tbody id="tRows"></tbody>
+  </table></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const d8 = (v) => !v ? '' : String(v).slice(0, 10).split('-').reverse().join('.');
+
+let ref = null, data = { rows: [], can_approve: false };
+
+const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
+                 rejected:['bad','rad etildi'], cancelled:['','bekor qilindi'] };
+
+//  Omborga tushish kuni SHU YERDA ham hisoblanadi: boshliq sanani
+//  tanlayotganda natijani darrov ko'rsin, so'rov yuborib kutmasin.
+//  Formula serverdagi bilan bir xil (izoh: sql/register.sql):
+//  oxirgi bo'limdan keyingi kun = boshlanish + qadamlar soni.
+function eta() {
+  const p = ref?.products.find((x) => String(x.id) === $('fProduct').value);
+  const start = $('fStart').value;
+  if (!p || !start || !p.steps) { $('etaLine').textContent = ''; return; }
+  const d = new Date(start + 'T00:00:00');
+  d.setDate(d.getDate() + p.steps);
+  $('etaLine').innerHTML = `Marshrutda <b>${p.steps}</b> ta bo'lim, `
+    + `har birida bir kun — T/M omborga <b>${d8(d.toISOString())}</b> kuni tushadi.`;
+}
+
+async function load() {
+  if (!ref) {
+    const [r, sug] = await Promise.all([App.api('/api/ref'), App.api('/api/units/suggest')]);
+    ref = r;
+    //  Mahsulot ro'yxati GURUH bilan: zavodda «Milano penal» deyiladi,
+    //  «penal» deb emas — turi nomning yonida turishi kerak.
+    $('fProduct').innerHTML = '<option value="">— tanlang —</option>'
+      + ref.products.map((p) => `<option value="${p.id}">${
+          esc(p.name)}${p.size_label ? ' · ' + esc(p.size_label) : ''} · ${
+          esc(p.group_name)}</option>`).join('');
+    $('colors').innerHTML  = sug.colors.map((c) => `<option value="${esc(c)}">`).join('');
+    $('fabrics').innerHTML = sug.fabrics.map((c) => `<option value="${esc(c)}">`).join('');
+    if (!$('fStart').value) $('fStart').value = new Date().toISOString().slice(0, 10);
+    $('newCard').hidden = !App.can('production.request');
+  }
+  data = await App.api('/api/units/requests?status=' + encodeURIComponent($('fStatus').value));
+  draw();
+}
+
+function draw() {
+  const rows = data.rows;
+  $('tRows').innerHTML = rows.length ? rows.map((r) => {
+    const st = STATUS[r.status] || ['', r.status];
+    //  Omborga tushish kuni so'rovda ham ko'rinadi: direktor tasdiqlashdan
+    //  oldin «bu qachon tayyor bo'ladi» degan savolga javob ko'rsin.
+    let fg = '';
+    if (r.started_on && r.steps) {
+      const d = new Date(String(r.started_on).slice(0, 10) + 'T00:00:00');
+      d.setDate(d.getDate() + r.steps);
+      fg = d8(d.toISOString());
+    }
+    const act = [];
+    if (r.status === 'pending' && data.can_approve)
+      act.push(`<button class="primary" onclick="approve(${r.id})">Tasdiqlash</button>`);
+    if (r.status === 'pending')
+      act.push(`<button onclick="reject(${r.id}, ${data.can_approve})">${
+        data.can_approve ? 'Rad etish' : 'Bekor qilish'}</button>`);
+    return `<tr>
+      <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
+        <div class="muted" style="font-size:12px">${esc(r.product_type)}</div></td>
+      <td class="num">${r.qty}${r.uom ? ' <span class="muted">' + esc(r.uom) + '</span>' : ''}</td>
+      <td class="muted">${[r.color, r.fabric].filter(Boolean).map(esc).join(' · ') || '—'}</td>
+      <td>${d8(r.started_on) || '<span class="muted">—</span>'}</td>
+      <td>${fg || '<span class="muted">—</span>'}</td>
+      <td class="muted">${esc(r.shop || '')}</td>
+      <td class="muted">${esc(r.created_by_name || '')}
+        <div style="font-size:12px">${d8(r.created_at)}</div></td>
+      <td><span class="tag ${st[0]}">${st[1]}</span>
+        ${r.conveyor_no ? `<div class="muted" style="font-size:12px">${esc(r.conveyor_no)}</div>` : ''}
+        ${r.decide_note ? `<div class="muted" style="font-size:12px">${esc(r.decide_note)}</div>` : ''}</td>
+      <td class="act">${act.join(' ')}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9" class="muted">So\'rov yo\'q</td></tr>';
+}
+
+async function send() {
+  const it = {
+    product_id: Number($('fProduct').value) || null,
+    qty:        Number($('fQty').value) || 0,
+    color:      $('fColor').value.trim() || null,
+    fabric:     $('fFabric').value.trim() || null,
+    started_on: $('fStart').value || null,
+    note:       $('fNote').value.trim() || null,
+  };
+  if (!it.product_id) return alert('Mahsulot tanlanmagan');
+  if (it.qty <= 0)    return alert('Soni kiritilmagan');
+  try {
+    await App.api('/api/units/requests', { method: 'POST', body: JSON.stringify(it) });
+    //  Mahsulot va sana JOYIDA qoladi: boshliq ketma-ket bir necha qator
+    //  yozadi va har safar qaytadan tanlab o'tirmasin.
+    $('fQty').value = 1; $('fColor').value = ''; $('fFabric').value = '';
+    $('fNote').value = '';
+    $('fStatus').value = 'pending';
+    await load();
+  } catch (e) { alert(e.message); }
+}
+
+async function approve(id) {
+  if (!confirm('Konver ochilsinmi? So\'ralgan soni bilan ochiladi.')) return;
+  try {
+    const r = await App.api(`/api/units/requests/${id}/approve`, { method: 'POST' });
+    alert('Konver ochildi: ' + r.conveyor_no);
+    await load();
+  } catch (e) { alert(e.message); }
+}
+
+async function reject(id, boss) {
+  //  Sabab so'raladi: boshliq nega bo'lmaganini bilmasa, o'sha so'rovni
+  //  ertaga yana yozardi.
+  const note = prompt(boss ? 'Rad etish sababi:' : 'Bekor qilish sababi:');
+  if (note === null) return;
+  try {
+    await App.api(`/api/units/requests/${id}/reject`,
+      { method: 'POST', body: JSON.stringify({ note: note || null }) });
+    await load();
+  } catch (e) { alert(e.message); }
+}
+
+App.start(load, 'production.request', 'production.approve');
+</script>
+</body>
+</html>

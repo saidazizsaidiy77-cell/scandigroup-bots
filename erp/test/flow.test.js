@@ -2753,6 +2753,118 @@ test('aylanma kapital: ustun 15-sana va oy oxiri, aktiv − passiv = sof', async
   assert.ok('wip_shops' in d, 'tsex kesimi keladi');
 });
 
+test('jurnalda mahsulot ham tuzatiladi, lekin bron va marshrut chegara', async () => {
+  const u = await newUnit();
+  const KAMOD = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'KAMOD' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+
+  //  Penal va kamod bitta marshrutdan yuradi — Arrada turgan konver
+  //  yangi marshrutda ham o'z joyini topadi.
+  const ok = await admin('PATCH', '/api/units/' + u.id, { product_id: KAMOD });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal((await H.id(`SELECT product_id p FROM production_units WHERE id=$1`,
+    [u.id])).p, KAMOD);
+
+  //  Jamlanma yozuv ham ko'chadi: zavod ko'rinishida eski mahsulot
+  //  yasalayotgandek turmasin.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM flow_log f
+       JOIN unit_moves m ON m.flow_log_id = f.id AND m.unit_id = $1
+      WHERE f.product_id <> $2`, [u.id, KAMOD])).n, 0);
+
+  //  Stul boshqa marshrutdan yuradi: Arra uning bo'limi emas.
+  const bad = await admin('PATCH', '/api/units/' + u.id, { product_id: STUL });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /marshrutida yo'q/);
+
+  //  Tarixga tegadi — ma'lumot kirituvchida bu huquq yo'q.
+  //  Nomi ATAYLAB boshqacha: `xodim()` ismga qarab tekshirmaydi va
+  //  bir xil nom ikkinchi xodim yaratib yuborardi.
+  const kir = await xodim('Sinov kirituvchi 2', 'kirituvchi');
+  assert.equal((await kir('PATCH', '/api/units/' + u.id,
+    { product_id: KAMOD })).status, 403);
+});
+
+/* ============================================================================
+ *  KONVER SO'ROVI — tsex boshlig'i yozadi, direktor tasdiqlaydi
+ *
+ *  Chegara singanda tsex boshqa tsexning ishini ochib yuborardi, tasdiq
+ *  singanda esa konver hech kimning qarorisiz paydo bo'lardi.
+ * ========================================================================== */
+test('konver so\'rovi: tsex boshlig\'i yozadi, tasdiqlovchi ochadi', async () => {
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+
+  //  Usta o'z tsexining mahsulotiga so'rov yozadi.
+  const q = await korpus('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 7, color: 'Oq', started_on: '2026-09-02' });
+  assert.equal(q.status, 200, q.text);
+  const id = q.body.created[0];
+
+  //  Boshqa tsexning mahsulotiga esa yoza olmaydi — chegara serverda.
+  assert.equal((await korpus('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1 })).status, 400);
+
+  //  Tasdiqlash uning ishi emas.
+  assert.equal((await korpus('POST', `/api/units/requests/${id}/approve`)).status, 403);
+
+  //  So'rov hali KONVER EMAS: jurnalda ham, qoldiqda ham yo'q.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM production_units WHERE qty = 7 AND color = 'Oq'`)).n, 0);
+
+  //  Tasdiqlovchi ochadi — so'ralgan soni bilan.
+  const ok = await admin('POST', `/api/units/requests/${id}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+  assert.ok(ok.body.conveyor_no);
+
+  const u = await H.id(`SELECT qty, color, started_on, status FROM production_units
+                         WHERE id = $1`, [ok.body.unit_id]);
+  assert.equal(u.qty, 7);
+  assert.equal(u.color, 'Oq');
+  assert.equal(u.status, 'production');
+
+  //  Ikkinchi marta tasdiqlab bo'lmaydi: aks holda bitta so'rovdan
+  //  ikkita konver ochilardi.
+  assert.equal((await admin('POST', `/api/units/requests/${id}/approve`)).status, 400);
+
+  const row = (await korpus('GET', '/api/units/requests?status=approved'))
+    .body.rows.find((r) => r.id === id);
+  assert.equal(row.status, 'approved');
+  assert.equal(row.conveyor_no, ok.body.conveyor_no);
+});
+
+test('konver so\'rovi: rad etiladi va o\'zi bekor qiladi', async () => {
+  const a = (await korpus('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 2 })).body.created[0];
+  const r = await admin('POST', `/api/units/requests/${a}/reject`,
+    { note: 'Xom ashyo yo\'q' });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.status, 'rejected');
+
+  //  So'rovchining o'zi bekor qilsa boshqa yozuv bo'ladi: rad etish
+  //  direktorniki, bekor qilish o'zinikidir.
+  const b = (await korpus('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 3 })).body.created[0];
+  const c = await korpus('POST', `/api/units/requests/${b}/reject`, { note: 'adashdim' });
+  assert.equal(c.body.status, 'cancelled');
+
+  //  Hal qilingan so'rov qayta hal qilinmaydi.
+  assert.equal((await admin('POST', `/api/units/requests/${b}/approve`)).status, 400);
+
+  //  Usta boshqa xodimning so'rovini bekor qila olmaydi. Javob 400:
+  //  so'rov «topilmadi» deyiladi, kimniki ekani aytilmaydi.
+  const d = (await admin('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 4 })).body.created[0];
+  assert.equal((await lak('POST', `/api/units/requests/${d}/reject`)).status, 400);
+  assert.equal((await H.id(`SELECT status FROM unit_requests WHERE id = $1`, [d])).status,
+    'pending', 'begona so\'rov joyida qoladi');
+});
+
 /* ============================================================================
  *  MUDDAT REJASI — HAR BO'LIMDA BIR KUN
  *

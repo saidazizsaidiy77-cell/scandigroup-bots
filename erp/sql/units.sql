@@ -404,3 +404,81 @@ LEFT JOIN workers m          ON m.id = c.manager_id
 LEFT JOIN production_units u ON u.customer_id = c.id AND u.status <> 'cancelled'
 WHERE c.active
 GROUP BY m.name, c.manager_id;
+
+-- ============================================================================
+--  ★ KONVER SO'ROVI — tsex boshlig'i yozadi, direktor tasdiqlaydi
+--
+--  Zavod qarori (2026-09): ishlab chiqarishga nima kirishini KORPUS va
+--  STUL tsexlarining boshliqlari o'zlari biladi — kun boshida nima
+--  yig'ilishini ular rejalashtiradi. Lekin konverning ochilishi pulga
+--  tegadi: xom ashyo sarflanadi, ishbay oylik shu raqamga yoziladi va
+--  ombor qoldig'i o'zgaradi. Shuning uchun so'rovni boshliq yozadi,
+--  konverni esa DIREKTOR (yoki admin) ochadi.
+--
+--  ★ NEGA ALOHIDA JADVAL, `production_units.status = 'draft'` EMAS.
+--  Konver jadvali butun tizimning o'qi: jurnal, ombor qoldig'i, WIP,
+--  bron, balans va o'nlab view shundan o'qiydi. Yarim haqiqiy qator
+--  o'sha yerda tursa, uni HAR BIR so'rovda chetlab o'tish kerak bo'lardi
+--  va bitta esdan chiqqan joy tasdiqlanmagan mahsulotni qoldiqqa
+--  qo'shib yuborardi. Alohida jadvalda esa so'rov konver EMAS —
+--  tasdiqlangunga qadar u hech qayerda ko'rinmaydi.
+--
+--  Tasdiqlangach `createOne()` chaqiriladi, ya'ni konver ODATDAGI yo'ldan
+--  yaratiladi: raqami ham, harakat yozuvi ham, jamlanma hisobot ham
+--  bir xil. Ikkinchi yaratish yo'li yozilmadi — u bir kun birinchisidan
+--  orqada qolardi.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS unit_requests (
+  id          SERIAL PRIMARY KEY,
+  product_id  INT  NOT NULL REFERENCES products(id),
+  qty         INT  NOT NULL CHECK (qty > 0),
+  color       TEXT,
+  fabric      TEXT,
+  --  Qachon ishga tushadi. Muddat shundan hisoblanadi (har bo'limda bir
+  --  kun), ya'ni boshliq kun tanlab, mahsulot qachon omborga tushishini
+  --  so'rov yozayotganda ko'radi.
+  started_on  DATE,
+  --  Qaysi bo'limdan boshlanadi. Bo'sh bo'lsa konver «boshlanmagan»
+  --  bo'lib ochiladi va tsex ekranining tepasida turadi.
+  section_id  INT  REFERENCES sections(id),
+  note        TEXT,
+  --  Qaysi tsex so'radi: ro'yxat va chegara shu ustundan yuradi.
+  shop_id     INT  REFERENCES shops(id),
+  status      TEXT NOT NULL DEFAULT 'pending'
+              CHECK (status IN ('pending','approved','rejected','cancelled')),
+  created_by  INT  REFERENCES workers(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  decided_by  INT  REFERENCES workers(id),
+  decided_at  TIMESTAMPTZ,
+  --  Rad etilgan bo'lsa sababi: boshliq nega bo'lmaganini bilishi kerak,
+  --  aks holda o'sha so'rovni ertaga yana yozardi.
+  decide_note TEXT,
+  --  Tasdiqlangach ochilgan konver: so'rovdan konverga yo'l qoladi.
+  unit_id     INT  REFERENCES production_units(id)
+);
+
+--  Kutayotganlar ro'yxati kun bo'yi ochiq turadi — indeks o'shanga.
+CREATE INDEX IF NOT EXISTS idx_unit_req_pending ON unit_requests(shop_id, created_at)
+  WHERE status = 'pending';
+
+CREATE OR REPLACE VIEW v_unit_requests AS
+SELECT q.id, q.qty, q.color, q.fabric, q.started_on, q.note,
+       q.status, q.created_at, q.decided_at, q.decide_note,
+       q.product_id, p.name AS product, p.sku, p.size_label,
+       g.name AS product_type, g.uom,
+       q.shop_id, sh.name AS shop,
+       q.section_id, sc.name AS section,
+       q.created_by, w.name AS created_by_name,
+       q.decided_by, d.name AS decided_by_name,
+       q.unit_id, u.conveyor_no,
+       --  So'rov yozilayotganda muddat ko'rinib tursin: marshrut uzunligi
+       --  (har bo'limda bir kun — izoh: sql/register.sql).
+       (SELECT COUNT(*) FROM v_product_route r WHERE r.product_id = q.product_id) AS steps
+FROM unit_requests q
+JOIN products p        ON p.id = q.product_id
+JOIN product_groups g  ON g.id = p.group_id
+LEFT JOIN shops sh     ON sh.id = q.shop_id
+LEFT JOIN sections sc  ON sc.id = q.section_id
+LEFT JOIN workers w    ON w.id = q.created_by
+LEFT JOIN workers d    ON d.id = q.decided_by
+LEFT JOIN production_units u ON u.id = q.unit_id;

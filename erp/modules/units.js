@@ -384,6 +384,170 @@ router.get('/next-no', need(...UNITS), wrap(async (_req, res) => {
   res.json({ conveyor_no: await nextConveyorNo() });
 }));
 
+/* ============================================================================
+ *  ★ KONVER SO'ROVI — tsex boshlig'i yozadi, direktor tasdiqlaydi
+ *
+ *  Nega alohida jadval va nega ikki bosqich — izoh: `sql/units.sql`.
+ *  Bu yerda faqat chegaralar:
+ *
+ *    · So'rovchi FAQAT o'z tsexining mahsulotiga so'rov yozadi. Qaysi
+ *      tsexniki ekani mahsulotdan chiqadi: guruhga javobgar tsex
+ *      biriktirilgan bo'lsa — o'sha, aks holda marshrutning birinchi
+ *      qadami turgan tsex (izoh: `sql/catalog-groups.sql`).
+ *    · So'rovchi o'z tsexining so'rovlarini ko'radi, tasdiqlovchi —
+ *      hammasini.
+ *    · Tasdiqlash konverni ODATDAGI `createOne()` bilan ochadi: raqam,
+ *      harakat yozuvi va jamlanma hisobot bir xil yo'ldan o'tadi.
+ * ========================================================================== */
+const REQUEST = ['production.request', 'production.approve'];
+
+//  Mahsulot qaysi tsexniki. Javobgar tsex — konverni KIM boshqarayotgani,
+//  turgan joyi emas: stul lak tsexining bo'limida ishlansa ham stul
+//  tsexiniki bo'lib qoladi.
+async function shopOfProduct(client, productId) {
+  const r = (await client.query(
+    `SELECT COALESCE(g.owner_shop_id,
+              (SELECT sc.shop_id FROM v_product_route r
+                 JOIN sections sc ON sc.id = r.section_id
+                WHERE r.product_id = p.id ORDER BY r.step_no LIMIT 1)) AS shop_id
+       FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE p.id = $1`, [productId])).rows[0];
+  return r ? r.shop_id : null;
+}
+
+router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
+  const scope = scopeOf(req);
+  //  Tasdiqlovchida doira bo'lmaydi, boshliqda esa bo'ladi. Chegara
+  //  SERVERDA: klient `shop_id` yuborsa ham o'z tsexidan chiqa olmaydi.
+  const mine = scope && !req.user.permissions.includes('production.approve');
+  const { rows } = await db.query(
+    `SELECT * FROM v_unit_requests
+      WHERE ($1::text IS NULL OR status = $1)
+        AND ($2::int[] IS NULL OR shop_id = ANY($2))
+      ORDER BY (status = 'pending') DESC, created_at DESC
+      LIMIT 300`,
+    [req.query.status || null, mine ? scope : null]);
+  res.json({ rows, can_approve: req.user.permissions.includes('production.approve') });
+}));
+
+router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
+  if (!items.length) return res.status(400).json({ error: 'Qator yo\'q' });
+  const scope = scopeOf(req);
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const created = [];
+    for (const it of items) {
+      if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
+      const qty = Number(it.qty) || 0;
+      if (qty <= 0) throw new Error('Soni kiritilmagan');
+
+      const shopId = await shopOfProduct(client, it.product_id);
+      if (scope && (!shopId || !scope.includes(shopId)))
+        throw new Error('Bu mahsulot boshqa tsexniki');
+
+      //  Bo'lim berilsa marshrutda borligi tekshiriladi — `createOne()`
+      //  dagi bilan bir xil qoida. Tasdiqlash paytida emas, SHU YERDA:
+      //  xato bo'lim bilan yozilgan so'rov direktorning ro'yxatiga
+      //  chiqib, o'sha yerda yiqilardi.
+      if (it.section_id) {
+        const ok = (await client.query(
+          `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
+          [it.product_id, it.section_id])).rowCount;
+        if (!ok) throw new Error('Tanlangan bo\'lim bu mahsulot marshrutida yo\'q');
+      }
+
+      const q = (await client.query(
+        `INSERT INTO unit_requests
+           (product_id, qty, color, fabric, started_on, section_id, note,
+            shop_id, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [it.product_id, qty, trim(it.color), trim(it.fabric),
+         it.started_on || null, it.section_id || null, it.note || null,
+         shopId, req.user.id])).rows[0];
+      created.push(q.id);
+    }
+    await audit(req, { module: 'production', action: 'request', entity: 'unit_requests',
+                       entity_id: created.length, payload: { count: created.length } }, client);
+    await client.query('COMMIT');
+    res.json({ created });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+}));
+
+//  ★ TASDIQLASH KONVERNI OCHADI.
+//
+//  So'ralgani AYNAN o'sha holida ochiladi: soni ham, rangi ham
+//  o'zgartirilmaydi. Tasdiqlovchi boshqacha xohlasa rad etadi va sababini
+//  yozadi — aks holda boshliq nima so'raganini, direktor nima ochganini
+//  keyin solishtirib bo'lmasdi.
+router.post('/requests/:id/approve', need('production.approve'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    //  Ikki odam bir vaqtda tasdiqlasa ikkita konver ochilardi: qator
+    //  qulflanadi va holati qayta o'qiladi.
+    const q = (await client.query(
+      `SELECT * FROM unit_requests WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!q) throw new Error('So\'rov topilmadi');
+    if (q.status !== 'pending') throw new Error('Bu so\'rov allaqachon hal qilingan');
+
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
+    const u = await createOne(client, req, {
+      product_id: q.product_id, qty: q.qty, color: q.color, fabric: q.fabric,
+      started_on: q.started_on, section_id: q.section_id,
+      entered_section_on: q.started_on, note: q.note,
+    });
+
+    await client.query(
+      `UPDATE unit_requests
+          SET status = 'approved', decided_by = $2, decided_at = NOW(),
+              decide_note = $3, unit_id = $4
+        WHERE id = $1`, [id, req.user.id, req.body.note || null, u.id]);
+    await audit(req, { module: 'production', action: 'approve', entity: 'unit_requests',
+                       entity_id: id, payload: { unit_id: u.id } }, client);
+    await client.query('COMMIT');
+    res.json({ conveyor_no: u.conveyor_no, unit_id: u.id });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    if (e.code === '23505')
+      return res.status(409).json({ error: 'Bu konveyer raqami allaqachon mavjud' });
+    return res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+}));
+
+//  Rad etish va so'rovchining o'zi bekor qilishi — bitta yo'l.
+//  So'rovchi faqat O'Z so'rovini bekor qiladi, tasdiqlovchi esa rad etadi;
+//  sabab ikkalasida ham yoziladi.
+router.post('/requests/:id/reject', need(...REQUEST), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const boss = req.user.permissions.includes('production.approve');
+  const { rows } = await db.query(
+    `UPDATE unit_requests
+        SET status = CASE WHEN $3::boolean THEN 'rejected' ELSE 'cancelled' END,
+            decided_by = $2, decided_at = NOW(), decide_note = $4
+      WHERE id = $1 AND status = 'pending'
+        --  Tasdiqlovchi bo'lmagan xodim faqat o'zi yozgan so'rovni
+        --  bekor qiladi: boshqa tsexning navbatini tozalab bo'lmaydi.
+        AND ($3::boolean OR created_by = $2)
+      RETURNING id, status`, [id, req.user.id, boss, req.body.note || null]);
+  if (!rows[0]) return res.status(400).json({
+    error: 'So\'rov topilmadi yoki allaqachon hal qilingan' });
+  await audit(req, { module: 'production', action: rows[0].status,
+                     entity: 'unit_requests', entity_id: id,
+                     payload: { note: req.body.note || null } });
+  res.json({ ok: true, status: rows[0].status });
+}));
+
 router.get('/:id/history', need('production.view'), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT m.moved_on, m.moved_at, sc.name AS section, sh.name AS shop,
@@ -399,14 +563,19 @@ router.get('/:id/history', need('production.view'), wrap(async (req, res) => {
 // Shu konver yura oladigan bo'limlar — tahrirlash oynasidagi ro'yxat uchun.
 // Hamma bo'limni ko'rsatib, keyin "marshrutda yo'q" deb rad etish yomon:
 // xodim nega bo'lmasligini bilmaydi va taxmin qilib o'tiradi.
+//  `?product_id=` berilsa BOSHQA mahsulotning marshruti qaytadi: jurnalda
+//  mahsulot tuzatilayotganda ro'yxat yangi marshrutga almashishi kerak,
+//  aks holda xodim eski bo'limni tanlab, saqlashda rad javob olardi.
 router.get('/:id/route', need('production.view', 'production.entry'), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT r.step_no, sc.id, sc.name, sc.is_exit, sh.name AS shop
        FROM production_units u
-       JOIN v_product_route r ON r.product_id = u.product_id
+       JOIN v_product_route r
+         ON r.product_id = COALESCE($2::int, u.product_id)
        JOIN sections sc ON sc.id = r.section_id
        JOIN shops sh    ON sh.id = sc.shop_id
-      WHERE u.id = $1 ORDER BY r.step_no`, [req.params.id]);
+      WHERE u.id = $1 ORDER BY r.step_no`,
+    [req.params.id, req.query.product_id || null]);
   res.json(rows);
 }));
 
@@ -561,7 +730,7 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
 router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   const { order_no, customer_id, unit_price, ship_on, next_shop_planned_on, note, status,
           color, fabric, lak_planned_on, pack_planned_on,
-          lak_on, pack_on, fg_on, conveyor_no, qty, section_id } = req.body;
+          lak_on, pack_on, fg_on, conveyor_no, qty, section_id, product_id } = req.body;
 
   // ★ TARIXGA TEGADIGAN MAYDONLAR
   //
@@ -585,6 +754,11 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   const RESTRICTED = {
     conveyor_no: 'Konveyer raqami',
     qty:         'Soni',
+    //  Mahsulot konverning O'ZI: marshruti, muddati, ombor qoldig'idagi
+    //  qatori va jamlanma hisobotlari hammasi shundan chiqadi. Qog'oz
+    //  jurnaldan ko'chirishda xato mahsulot tanlanishi oddiy hol,
+    //  shuning uchun tuzatib bo'ladi — lekin faqat boshliqqa.
+    product_id:  'Mahsulot',
     section_id:  'Mahsulot turgan joy',
     lak_on:      'Lak tsexiga kirgan sana',
     pack_on:     'Qadoqlash tsexiga kirgan sana',
@@ -608,6 +782,8 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
 
   const nextSection = section_id != null && String(section_id).trim() !== ''
     ? Number(section_id) : null;
+  const nextProduct = product_id != null && String(product_id).trim() !== ''
+    ? Number(product_id) : null;
 
   // Uchalasi bitta tranzaksiyada: har biri konverning o'zidan tashqari
   // JAMLANMA yozuvga ham tegadi, va yarim o'zgargan holat hisobotni
@@ -615,7 +791,7 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   //   · raqam — flow_log.note da turadi (hisobot va qaytarish shuni qidiradi)
   //   · soni  — flow_log.qty_ok va T/M ombor qoldig'ida (fg_stock)
   //   · joyi  — unit_moves va flow_log dagi oxirgi yozuvning bo'limi
-  if (nextNo || nextQty != null || nextSection != null) {
+  if (nextNo || nextQty != null || nextSection != null || nextProduct != null) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -668,6 +844,73 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
         await audit(req, { module: 'production', action: 'qty', entity: 'unit',
                            entity_id: req.params.id,
                            payload: { from: u.qty, to: nextQty } }, client);
+      }
+
+      //  ★ MAHSULOTNI ALMASHTIRISH.
+      //
+      //  Uchta narsa tekshiriladi, uchalasi ham jimgina noto'g'ri
+      //  ishlashning oldini oladi:
+      //
+      //    · chiqib ketgan konver — u mijozning yuk xatida va balansida
+      //      turibdi, mahsulotini o'zgartirish hujjatni yolg'on qilardi;
+      //    · bronda turgani — mijozga AYNAN shu mahsulot va'da qilingan;
+      //    · turgan bo'limi yangi marshrutda bo'lishi shart — aks holda
+      //      konver marshrutdan tashqarida qolib, usta ekranida
+      //      «keyingi bo'lim» tugmasi yo'qolardi.
+      if (nextProduct != null && nextProduct !== u.product_id) {
+        if (u.status === 'shipped')
+          throw new Error(`${u.conveyor_no}: chiqib ketgan konverning mahsuloti ` +
+            `o'zgartirilmaydi`);
+        const bron = (await client.query(
+          `SELECT COALESCE(SUM(qty), 0)::int AS n FROM unit_reservations
+            WHERE unit_id = $1`, [req.params.id])).rows[0].n;
+        if (bron)
+          throw new Error(`${u.conveyor_no}: ${bron} tasi buyurtmada — ` +
+            `avval konverni qaytaring`);
+
+        const np = (await client.query(
+          `SELECT name FROM products WHERE id = $1 AND active`,
+          [nextProduct])).rows[0];
+        if (!np) throw new Error('Mahsulot topilmadi');
+
+        //  Joyi ham shu so'rovda o'zgarayotgan bo'lsa YANGISI tekshiriladi:
+        //  ikkalasi birga yuborilganda tekshiruv eskisini rad etardi.
+        const sec = nextSection != null ? nextSection : (await client.query(
+          `SELECT current_section_id AS s FROM production_units WHERE id = $1`,
+          [req.params.id])).rows[0].s;
+        if (sec) {
+          const ok = (await client.query(
+            `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
+            [nextProduct, sec])).rowCount;
+          if (!ok) throw new Error(`${u.conveyor_no}: konver turgan bo'lim ` +
+            `«${np.name}» marshrutida yo'q — avval joyini o'zgartiring`);
+        }
+
+        await client.query(
+          `UPDATE production_units SET product_id = $2 WHERE id = $1`,
+          [req.params.id, nextProduct]);
+        //  Jamlanma hisobotlar mahsulot bo'yicha yig'iladi — konverning
+        //  harakat yozuvlari ham yangi mahsulotga o'tkaziladi, aks holda
+        //  zavod ko'rinishida eski mahsulot yasalayotgandek turardi.
+        //  Nishon soni bilan bir xil: bog'lanish ustuni bo'lsa u,
+        //  bo'lmasa izohdagi konveyer raqami.
+        const rno = nextNo || u.conveyor_no;
+        await client.query(
+          `UPDATE flow_log SET product_id = $2
+            WHERE id IN (SELECT flow_log_id FROM unit_moves
+                          WHERE unit_id = $1 AND flow_log_id IS NOT NULL)
+               OR note = $3 OR note LIKE $3 || ' ·%'`,
+          [req.params.id, nextProduct, rno]);
+
+        //  T/M ombor qoldig'i mahsulot kesimida yuritiladi: eskisidan
+        //  chiqadi, yangisiga qo'shiladi.
+        if (u.status === 'fg') {
+          await refreshStock(client, u.product_id);
+          await refreshStock(client, nextProduct);
+        }
+        await audit(req, { module: 'production', action: 'product', entity: 'unit',
+                           entity_id: req.params.id,
+                           payload: { from: u.product_id, to: nextProduct } }, client);
       }
 
       // Joyi oxirida: soni o'zgargan bo'lsa, T/M ombor hisobi yangi soni

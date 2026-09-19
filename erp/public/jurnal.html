@@ -620,6 +620,26 @@ function dateField(id, label, r, kind){
     }</p>` : ''}</div>`;
 }
 
+//  Mahsulot almashtirilganda bo'limlar ro'yxati YANGI marshrutdan
+//  o'qiladi. Eski bo'lim yangi marshrutda ham bo'lsa tanlangan bo'lib
+//  qoladi; bo'lmasa ro'yxat bo'sh tanlov bilan ochiladi va ostida sabab
+//  yoziladi — server baribir rad etadi, lekin buni SAQLASHDAN OLDIN
+//  aytgan ma'qul.
+async function reroute(id){
+  const sel = $('eSection'); if (!sel) return;
+  const was = sel.value;
+  const route = await App.api(`/api/units/${id}/route?product_id=`
+    + encodeURIComponent($('eProduct').value));
+  const bor = route.some(x => String(x.id) === String(was));
+  sel.innerHTML = (bor ? '' : '<option value="">— bo\'limni tanlang —</option>')
+    + route.map(x => `<option value="${x.id}" ${
+        String(x.id) === String(was) ? 'selected' : ''
+      }>${esc(x.shop)} · ${esc(x.name)}</option>`).join('');
+  const note = $('eRouteNote');
+  if (note) note.textContent = bor ? ''
+    : 'Konver turgan bo\'lim yangi mahsulot marshrutida yo\'q — joyini tanlang.';
+}
+
 async function edit(id){
   const r = rows.find(x => x.id === id);
   const manage = App.can('production.manage');
@@ -646,6 +666,19 @@ async function edit(id){
             <div style="flex:1"><label>Soni</label>
               <input id="eQty" type="number" min="1" step="1" value="${r.qty}"></div>
           </div>
+          <!-- Mahsulotning O'ZI ham tuzatiladi: qog'oz jurnaldan
+               ko'chirishda boshqa fason tanlab qo'yish oddiy hol va
+               keyin konverni butunlay o'chirib, qayta kiritishdan boshqa
+               yo'l qolmasdi — u esa konveyer raqamini yo'qotardi.
+               Mahsulot almashsa MARSHRUT ham almashadi, shuning uchun
+               quyidagi bo'limlar ro'yxati shu zahoti qayta o'qiladi. -->
+          <div><label>Mahsulot</label>
+            <select id="eProduct" onchange="reroute(${r.id})">
+              ${ref.products.map(p => `<option value="${p.id}"
+                ${p.id === r.product_id ? 'selected' : ''}>${esc(p.name)}${
+                  p.size_label ? ' · ' + esc(p.size_label) : ''} · ${
+                  esc(p.group_name)}</option>`).join('')}
+            </select></div>
           <!-- Mahsulot qayerda turgani. Ro'yxatda faqat shu mahsulotning
                marshrutidagi bo'limlar — boshqasini tanlab bo'lmaydi, chunki
                marshrutdan tashqarida "keyingi bo'lim" hisoblanmaydi va usta
@@ -656,6 +689,7 @@ async function edit(id){
               ${route.map(x => `<option value="${x.id}"
                 ${x.id === r.section_id ? 'selected' : ''}>${esc(x.shop)} · ${esc(x.name)}</option>`).join('')}
             </select></div>
+          <p class="muted bad" id="eRouteNote" style="font-size:12px;margin-top:-8px"></p>
           <p class="muted" style="font-size:12px;margin-top:-8px">Uchalasi ham
             jurnalda, hisobotlarda va T/M ombor qoldig'ida almashadi. Joyni
             tuzatish yangi harakat qo'shmaydi — tarixdagi oxirgi yozuv
@@ -835,6 +869,7 @@ async function saveEdit(id){
       ...($('eConv') ? { conveyor_no: $('eConv').value.trim() } : {}),
       ...($('eQty')  ? { qty: $('eQty').value.trim() } : {}),
       ...($('eSection') ? { section_id: $('eSection').value } : {}),
+      ...($('eProduct') ? { product_id: $('eProduct').value } : {}),
       order_no: $('eOrder').value.trim() || null,
       customer_id,
       unit_price: $('ePrice').value === '' ? null : $('ePrice').value,

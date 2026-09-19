@@ -221,6 +221,43 @@ Telegram xabari **hozircha yozilmadi** (zavod qarori): ekrandagi belgi
 yetarli. Navbat jadvali (`notifications`) va `erp/notify.js` bazada
 tayyor turibdi — kerak bo'lganda yuboruvchi ulanadi, sahifaga tegilmaydi.
 
+**★ KONVER SO'ROVI — tsex boshlig'i yozadi, direktor tasdiqlaydi**
+(`unit_requests`, `/sorovlar.html`, `sql/units.sql`). Zavod qarori
+(2026-09): ishlab chiqarishga nima kirishini KORPUS va STUL tsexlarining
+boshliqlari o'zlari biladi — kun boshida nima yig'ilishini ular
+rejalashtiradi. Lekin konverning ochilishi pulga tegadi: xom ashyo
+sarflanadi, ishbay oylik shu raqamga yoziladi va ombor qoldig'i
+o'zgaradi. Shuning uchun so'rovni boshliq yozadi, konverni esa
+**direktor** (yoki admin) ochadi.
+
+Huquqi ikkita: `production.request` (tsex_usta, ishlab_boshl) va
+`production.approve` (direktor, ishlab_boshl, admin). `production.units`
+dan alohida — u konverni TO'G'RIDAN-TO'G'RI ochadi, bu esa navbatga
+qo'yadi.
+
+**Alohida jadval, `status='draft'` EMAS.** Konver jadvali butun tizimning
+o'qi: jurnal, ombor qoldig'i, WIP, bron, balans va o'nlab view shundan
+o'qiydi. Yarim haqiqiy qator o'sha yerda tursa, uni har bir so'rovda
+chetlab o'tish kerak bo'lardi va bitta esdan chiqqan joy tasdiqlanmagan
+mahsulotni qoldiqqa qo'shib yuborardi.
+
+Tasdiqlangach konver ODATDAGI `createOne()` bilan ochiladi: raqami ham,
+harakat yozuvi ham, jamlanma hisobot ham bir xil yo'ldan o'tadi.
+**So'ralgani AYNAN o'sha holida** ochiladi — soni ham, rangi ham
+o'zgartirilmaydi: tasdiqlovchi boshqacha xohlasa rad etadi va sababini
+yozadi, aks holda boshliq nima so'raganini keyin solishtirib bo'lmasdi.
+
+Chegara so'rashda ham bor: boshliq FAQAT o'z tsexining mahsulotiga
+so'rov yozadi (mahsulot qaysi tsexniki — `owner_shop_id`, bo'lmasa
+marshrutning birinchi qadami). Bo'lim so'ralmaydi: konver
+«boshlanmagan» bo'lib ochiladi va boshliq uni o'z ekranidan bir bosishda
+ishga tushiradi.
+
+Rad etish ham, so'rovchining o'zi bekor qilishi ham bitta yo'ldan
+(`/reject`), lekin holati boshqa: `rejected` — direktorniki,
+`cancelled` — o'zinikidir. Sabab ikkalasida ham so'raladi: boshliq nega
+bo'lmaganini bilmasa, o'sha so'rovni ertaga yana yozardi.
+
 **Boshlanmagan konver** — bo'limsiz kiritilgan. U marshrutining BIRINCHI
 qadamiga qarab egasini topadi: penal/kamod/sp/stol — korpus tsexi, stul —
 stul tsexi. Tsex ekranining tepasida «Boshlanmagan» ro'yxati bo'lib
@@ -1006,7 +1043,20 @@ Bu filtr emas, **chegara**: `scopeOf(req)` orqali so'rovga qo'shiladi,
 klient uni o'chira olmaydi.
 
 **Tarixga tegadigan maydonlar** faqat `production.manage` da: konveyer
-raqami, soni, turgan joyi, FAKT sanalar. Tekshiruv **serverda**
+raqami, soni, **mahsulot**, turgan joyi, FAKT sanalar.
+
+**Mahsulotni jurnaldan tuzatish mumkin**: qog'oz jurnaldan ko'chirishda
+boshqa fason tanlab qo'yish oddiy hol va keyin konverni o'chirib, qayta
+kiritishdan boshqa yo'l qolmasdi — u esa konveyer raqamini yo'qotardi.
+Uchta chegara bor: chiqib ketgan konverning mahsuloti o'zgarmaydi (u
+mijozning yuk xatida va balansida), bronda turgani ham (mijozga AYNAN
+shu mahsulot va'da qilingan), va turgan bo'limi yangi marshrutda
+bo'lishi shart — aks holda konver marshrutdan tashqarida qolib, usta
+ekranida «keyingi bo'lim» tugmasi yo'qolardi. Mahsulot almashsa
+`flow_log` yozuvlari ham ko'chadi (zavod ko'rinishida eski mahsulot
+yasalayotgandek turmasin) va T/M ombor qoldig'i ikkala mahsulot bo'yicha
+qayta hisoblanadi. Oynada mahsulot tanlanganda bo'limlar ro'yxati shu
+zahoti YANGI marshrutdan o'qiladi. Tekshiruv **serverda**
 (`modules/units.js`, `RESTRICTED`) — katakni yashirish himoya emas.
 
 **Ombor qoldig'i — AYLANMA.** Jadvalda to'rtta raqam: **Kirdi ·

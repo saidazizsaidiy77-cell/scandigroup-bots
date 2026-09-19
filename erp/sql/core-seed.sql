@@ -16,6 +16,13 @@ INSERT INTO permissions (code, module, name) VALUES
   -- alohida, chunki jurnalni sotuvchi ham ko'radi (o'z buyurtmasi qayerda
   -- turganini biladi), zavod yuklamasi esa uning ishi emas.
   ('production.reports','production', 'Zavod ko''rinishi va boshqaruv paneli'),
+  --  ★ KONVER SO'ROVI ikki huquqqa bo'lingan (izoh: sql/units.sql).
+  --  So'rashni tsex boshlig'i qiladi, ochishni esa direktor: konverning
+  --  ochilishi xom ashyoga, ishbay oylikka va ombor qoldig'iga tegadi.
+  --  `production.units` dan alohida: u konverni TO'G'RIDAN-TO'G'RI
+  --  ochadi, bu esa faqat navbatga qo'yadi.
+  ('production.request','production', 'Konver so''rovi: tsex boshlig''i yozadi'),
+  ('production.approve','production', 'Konver so''rovini tasdiqlash'),
   -- Xom ashyo va tayyor mahsulot ombori (rejada)
   ('warehouse.view',    'warehouse',  'Ombor qoldiqlarini ko''rish'),
   ('warehouse.move',    'warehouse',  'Kirim / chiqim / ko''chirish'),
@@ -70,12 +77,16 @@ INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'direktor', code FROM permissions WHERE code LIKE '%.view'
 UNION ALL SELECT 'direktor', 'cash.manage'
 UNION ALL SELECT 'direktor', 'production.reports'
+--  Direktor konver so'rovini TASDIQLAYDI: qolgan hamma joyda u faqat
+--  qaraydi, bu esa uning qarori (izoh: sql/units.sql).
+UNION ALL SELECT 'direktor', 'production.approve'
 UNION ALL SELECT 'direktor', 'admin.audit'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('ishlab_boshl', 'production.view'),  ('ishlab_boshl', 'production.entry'),
   ('ishlab_boshl', 'production.units'), ('ishlab_boshl', 'production.manage'),
+  ('ishlab_boshl', 'production.request'), ('ishlab_boshl', 'production.approve'),
   ('ishlab_boshl', 'production.reports'), ('ishlab_boshl', 'warehouse.view'),
   ('ishlab_boshl', 'warehouse.material'),
 
@@ -88,7 +99,9 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   -- ko'rinishi va panelni ochadi — ustaga bularning hammasi ortiqcha
   -- ma'lumot: u kuniga bitta ekranga qaraydi va bitta tugma bosadi.
   -- Ortiqcha sahifa foyda bermaydi, faqat chalkashtiradi.
-  ('tsex_usta',    'production.entry'),
+  --  Tsex boshlig'i ishlab chiqarishga nima kirishini o'zi rejalashtiradi,
+  --  lekin konverni o'zi ochmaydi — so'rov yozadi (izoh: sql/units.sql).
+  ('tsex_usta',    'production.entry'), ('tsex_usta', 'production.request'),
   ('operator',     'production.entry'),
 
   -- Ombor mudiri: zavodning HAMMA omborini ko'radi — tayyor mahsulot,

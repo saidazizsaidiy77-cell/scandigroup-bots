@@ -34,8 +34,15 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
                                     AND g.owner_shop_id <> sc.shop_id), '{}') AS run_by
                   FROM sections sc JOIN shops sh ON sh.id = sc.shop_id
                  WHERE sc.active ORDER BY sh.sort, sc.sort`),
-      db.query(`SELECT p.*, g.name AS group_name, g.line_id
+      //  `steps` — marshrutdagi bo'limlar soni. Muddat shundan chiqadi
+      //  (har bo'limda bir kun, izoh: sql/register.sql), ya'ni konver
+      //  so'ralayotganda ham «omborga qachon tushadi» darrov ko'rinadi.
+      db.query(`SELECT p.*, g.name AS group_name, g.line_id,
+                       COALESCE(r.steps, 0)::int AS steps
                   FROM products p JOIN product_groups g ON g.id = p.group_id
+                  LEFT JOIN (SELECT product_id, COUNT(*) AS steps
+                               FROM v_product_route GROUP BY product_id) r
+                         ON r.product_id = p.id
                  -- Guruh tartibi saytdan qo'yiladi (product_groups.sort),
                  -- shuning uchun ro'yxat kod bo'yicha emas, shu tartibda
                  -- chiqadi: Penal · Kamod · Sp · Stol · Stul
