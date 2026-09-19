@@ -509,10 +509,16 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
   //  SERVERDA: klient `shop_id` yuborsa ham o'z tsexidan chiqa olmaydi.
   const mine = scope && !req.user.permissions.includes('production.approve');
   const { rows } = await db.query(
-    `SELECT * FROM v_unit_requests
-      WHERE ($1::text IS NULL OR status = $1)
-        AND ($2::int[] IS NULL OR shop_id = ANY($2))
-      ORDER BY (status = 'pending') DESC, created_at DESC
+    //  ★ `plan_auto` VIEW DA EMAS, shu yerda. `v_unit_requests`
+    //  `sql/units.sql` da, `shops.plan_auto` esa `sql/register.sql` da
+    //  qoʻshiladi — u migratsiyada KEYIN yuradi, yaʻni toza bazada
+    //  view oʻsha ustunni topa olmasdi va sayt koʻtarilmasdi.
+    `SELECT q.*, COALESCE(sh.plan_auto, false) AS auto
+       FROM v_unit_requests q
+       LEFT JOIN shops sh ON sh.id = q.shop_id
+      WHERE ($1::text IS NULL OR q.status = $1)
+        AND ($2::int[] IS NULL OR q.shop_id = ANY($2))
+      ORDER BY (q.status = 'pending') DESC, q.created_at DESC
       LIMIT 300`,
     [req.query.status || null, mine ? scope : null]);
   res.json({ rows, can_approve: req.user.permissions.includes('production.approve') });

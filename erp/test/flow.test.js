@@ -3020,6 +3020,33 @@ test('so\'rov ro\'yxatida marshrut uzunligi SON bo\'lib keladi', async () => {
   assert.equal(d.getFullYear(), 2026, 'omborga tushish kuni o\'sha yilda qoladi');
 });
 
+test('so\'rov ro\'yxati sana AVTOMATMI deb aytadi', async () => {
+  //  ★ FORMULA HAMMA TSEXDA ISHLAMAYDI (`shops.plan_auto`). Stulda
+  //  T/M ombor sanasi marshrutdan o'zi chiqadi, korpusda esa katak
+  //  bo'sh tug'iladi va tsex boshlig'i qo'yadi — ya'ni sahifada
+  //  ko'rsatilgan kun u yerda TAXMIN va shunday belgilanishi kerak.
+  //  Belgi ro'yxat so'rovidan keladi: `v_unit_requests` `units.sql` da,
+  //  `plan_auto` esa `register.sql` da — view uni o'qiy olmaydi.
+  const kir = await xodim('Sinov avto', 'kirituvchi');
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+
+  const a = await kir('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, conveyor_no: 'S-9401', started_on: '2026-09-19' });
+  assert.equal(a.status, 200, a.text);
+  const b = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, conveyor_no: 'K-9402',
+      started_on: '2026-09-19', next_on: '2026-09-25' });
+  assert.equal(b.status, 200, b.text);
+
+  const rows = (await kir('GET', '/api/units/requests')).body.rows;
+  const st = rows.find((r) => r.id === a.body.created[0]);
+  const kor = rows.find((r) => r.id === b.body.created[0]);
+  assert.equal(st.auto, true,  'stulda sana marshrutdan o\'zi chiqadi');
+  assert.equal(kor.auto, false, 'korpusda sanani tsex boshlig\'i qo\'yadi');
+});
+
 test('so\'rovda rang va mato faqat boridan tanlanadi', async () => {
   const kir = await xodim('Sinov rangchi', 'kirituvchi');
 

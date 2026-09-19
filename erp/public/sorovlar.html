@@ -134,7 +134,13 @@ const kunQo = (boshlanish, kun) => {
   const p = (d.getDay() + 6) % 7;        // 0 = dushanba … 5 = shanba
   const t = p + Math.max(Number(kun) || 0, 0);
   d.setDate(d.getDate() - p + Math.floor(t / 6) * 7 + (t % 6));
-  return d;
+  //  ★ MATN qaytaradi, `Date` emas. `new Date('...T00:00:00')` MAHALLIY
+  //  yarim tun beradi, `toISOString()` esa uni UTC ga aylantiradi:
+  //  Toshkentda (UTC+5) 12-oktabr yarim tuni 11-oktabr 19:00 boʻlib
+  //  chiqardi va ekranda bir kun OLDINGI sana turardi — ustiga
+  //  yakshanba, yaʻni formula hech qachon aytmaydigan kun.
+  const ik = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${ik(d.getMonth() + 1)}-${ik(d.getDate())}`;
 };
 
 function eta() {
@@ -142,9 +148,17 @@ function eta() {
   const start = $('fStart').value;
   if (!p || !start || !Number(p.steps)) { $('etaLine').textContent = ''; return; }
   const d = kunQo(start, p.steps);
-  $('etaLine').innerHTML = `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, `
-    + `har birida bir ish kuni — T/M omborga <b>${d8(d.toISOString())}</b> `
-    + `kuni tushadi. <span class="muted">Yakshanba hisobga olinmaydi.</span>`;
+  //  ★ FORMULA HAMMA TSEXDA ISHLAMAYDI (`shops.plan_auto`). Stulda
+  //  bu sana jurnalga OʻZI tushadi; korpusda esa katak boʻsh
+  //  tugʻiladi va tsex boshligʻi qoʻyadi — marshrutdan chiqqan kun u
+  //  yerda TAXMIN. Belgisiz yozilsa direktor uni vaʻda deb oʻqirdi.
+  $('etaLine').innerHTML = planKerak
+    ? `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, har birida bir ish `
+      + `kuni — T/M omborga taxminan <b>${d8(d)}</b> kuni tushadi. `
+      + `<span class="muted">Aniq kunni tsex boshlig'i qo'yadi.</span>`
+    : `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, `
+      + `har birida bir ish kuni — T/M omborga <b>${d8(d)}</b> `
+      + `kuni tushadi. <span class="muted">Yakshanba hisobga olinmaydi.</span>`;
 }
 
 //  ★ KEYINGI RAQAMNI TAKLIF QILADI. Zavod raqamni o'z daftarida
@@ -167,6 +181,9 @@ async function taklif(majburan) {
     planKerak = !!r.plan_required;
     $('planBox').hidden = !planKerak;
     $('planLbl').textContent = `${r.next_shop}ga topshirish`;
+    //  Muddat satri `planKerak` ga qarab boshqacha yoziladi, u esa
+    //  shu so'rovdan keyin ma'lum bo'ladi — shuning uchun qayta.
+    eta();
   } catch { /* taklif bermadi — xodim o'zi yozadi */ }
 }
 
@@ -212,8 +229,13 @@ function draw() {
     const st = STATUS[r.status] || ['', r.status];
     //  Omborga tushish kuni so'rovda ham ko'rinadi: direktor tasdiqlashdan
     //  oldin «bu qachon tayyor bo'ladi» degan savolga javob ko'rsin.
+    //  Sanasi marshrutdan o'zi chiqmaydigan tsexda (korpus) bu TAXMIN:
+    //  jurnalda katak bo'sh tug'iladi va tsex boshlig'i o'zi qo'yadi.
     let fg = '';
-    if (r.started_on && Number(r.steps)) fg = d8(kunQo(r.started_on, r.steps).toISOString());
+    if (r.started_on && Number(r.steps))
+      fg = (r.auto ? '' : '<span class="muted">≈ </span>')
+         + d8(kunQo(r.started_on, r.steps))
+         + (r.auto ? '' : '<div class="muted" style="font-size:12px">taxmin</div>');
     const act = [];
     if (r.status === 'pending' && data.can_approve)
       act.push(`<button class="primary" onclick="approve(${r.id})">Tasdiqlash</button>`);
