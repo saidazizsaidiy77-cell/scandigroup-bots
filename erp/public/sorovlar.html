@@ -119,13 +119,21 @@ const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
 //  tanlayotganda natijani darrov ko'rsin, so'rov yuborib kutmasin.
 //  Formula serverdagi bilan bir xil (izoh: sql/register.sql):
 //  oxirgi bo'limdan keyingi kun = boshlanish + qadamlar soni.
-//  ★ `Number()` SHART. Bazadan kelgan son matn bo'lib qolishi mumkin
-//  (`COUNT(*)` bigint), matn bilan qo'shilganda esa `19 + '8'` → `'198'`
-//  bo'lib, sana yarim yil keyinga surilib ketardi. Bazada ham `::int`
-//  qo'yilgan, bu ikkinchi to'siq.
+//  ★ YAKSHANBA HISOBGA OLINMAYDI — zavod o'sha kuni ishlamaydi.
+//  Formulaning o'zi bazada (`ish_kuni`, izoh: sql/register.sql); bu
+//  yerdagi nusxa faqat sahifa javobni DARROV ko'rsatishi uchun va
+//  natijasi aynan bir xil bo'lishi shart.
+//
+//  `Number()` SHART: bazadan kelgan son matn bo'lib qolishi mumkin
+//  (`COUNT(*)` bigint) va matn bilan qo'shilganda `19 + '8'` → `'198'`
+//  bo'lib ketardi.
 const kunQo = (boshlanish, kun) => {
   const d = new Date(String(boshlanish).slice(0, 10) + 'T00:00:00');
-  d.setDate(d.getDate() + Number(kun));
+  //  Boshlanish yakshanbaga tushsa dushanbadan sanaladi.
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+  const p = (d.getDay() + 6) % 7;        // 0 = dushanba … 5 = shanba
+  const t = p + Math.max(Number(kun) || 0, 0);
+  d.setDate(d.getDate() - p + Math.floor(t / 6) * 7 + (t % 6));
   return d;
 };
 
@@ -135,7 +143,8 @@ function eta() {
   if (!p || !start || !Number(p.steps)) { $('etaLine').textContent = ''; return; }
   const d = kunQo(start, p.steps);
   $('etaLine').innerHTML = `Marshrutda <b>${Number(p.steps)}</b> ta bo'lim, `
-    + `har birida bir kun — T/M omborga <b>${d8(d.toISOString())}</b> kuni tushadi.`;
+    + `har birida bir ish kuni — T/M omborga <b>${d8(d.toISOString())}</b> `
+    + `kuni tushadi. <span class="muted">Yakshanba hisobga olinmaydi.</span>`;
 }
 
 //  ★ KEYINGI RAQAMNI TAKLIF QILADI. Zavod raqamni o'z daftarida

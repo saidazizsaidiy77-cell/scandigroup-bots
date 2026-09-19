@@ -3105,6 +3105,42 @@ test('muddat zanjiri: har tsex o\'zidan keyingisiga sana qo\'yadi', async () => 
  *  Sana savdo mijozga aytadigan va'daga aylanadi, shuning uchun formulaning
  *  o'zi sinaladi: qadam raqami bo'yicha, boshlangan kundan.
  * ========================================================================== */
+test('yakshanba hisobga olinmaydi: muddat ish kunlari bilan sanaladi', async () => {
+  //  Zavod yakshanba ishlamaydi, ya'ni «har bo'limda bir kun» — bir ISH
+  //  kuni. Formula bazada (`ish_kuni`), sahifadagi nusxasi ham aynan shu
+  //  javobni berishi shart.
+  const kun = async (boshlanish, n) => (await H.id(
+    `SELECT ish_kuni($1::date, $2::int) AS d`, [boshlanish, n])).d;
+  const ymd = (v) => { const d = v instanceof Date ? v : new Date(v);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
+      }-${String(d.getDate()).padStart(2, '0')}`; };
+
+  //  2026-09-19 — SHANBA. Undan keyin yakshanba tushadi va o'tkazib
+  //  yuboriladi: 7 ish kuni keyin dushanba, 28-sentabr.
+  assert.equal(ymd(await kun('2026-09-19', 7)), '2026-09-28');
+  //  Dushanbadan olti ish kuni — keyingi dushanba, orada yakshanba bor.
+  assert.equal(ymd(await kun('2026-09-14', 6)), '2026-09-21');
+  //  Boshlanish yakshanbaga tushsa dushanbadan sanaladi.
+  assert.equal(ymd(await kun('2026-09-20', 0)), '2026-09-21');
+
+  //  Natija HECH QACHON yakshanbaga tushmaydi.
+  const yak = (await H.id(
+    `SELECT COUNT(*)::int AS n FROM generate_series(
+       DATE '2026-09-01', DATE '2026-12-31', '1 day') g(d),
+       generate_series(0, 25) k(n)
+      WHERE EXTRACT(ISODOW FROM ish_kuni(g.d::date, k.n)) = 7`)).n;
+  assert.equal(yak, 0, 'yakshanbaga tushgan sana bor');
+
+  //  Konverning rejasi ham shu qoidadan chiqadi.
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [{
+    product_id: STUL, qty: 1, started_on: '2026-09-19' }] })).body.created[0];
+  const pl = await H.id(`SELECT steps, fg_on FROM v_unit_plan WHERE unit_id = $1`, [u.id]);
+  assert.equal(ymd(pl.fg_on), ymd(await kun('2026-09-19', pl.steps)));
+});
+
 test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
   //  STUL olinadi: sana marshrutdan faqat `plan_auto` belgili tsexda
   //  chiqadi, korpusda esa boshliq qo'yadi (izoh: sql/register.sql).
@@ -3131,12 +3167,15 @@ test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
   const ymd = (v) => { const d = v instanceof Date ? v : new Date(v);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
       }-${String(d.getDate()).padStart(2, '0')}`; };
-  const kun = (n) => ymd(new Date(2026, 8, 1 + n));
+  //  Kunlar ISH KUNI bilan sanaladi — yakshanba o'tkazib yuboriladi
+  //  (izoh: sql/register.sql, `ish_kuni`).
+  const kun = async (n) => ymd((await H.id(
+    `SELECT ish_kuni(DATE '2026-09-01', $1::int) AS d`, [n])).d);
 
   assert.ok(pl.steps > 1, 'marshrutda qadam bor');
   //  Oxirgi bo'limdan KEYINGI kuni omborga tushadi.
-  assert.equal(ymd(pl.fg_on), kun(pl.steps));
-  assert.equal(ymd(r.fg_on), kun(pl.steps));
+  assert.equal(ymd(pl.fg_on), await kun(pl.steps));
+  assert.equal(ymd(r.fg_on), await kun(pl.steps));
   assert.equal(r.fg_src, 'marshrut');
 
   //  Arrada turibdi, ya'ni keyingi tsex — korpusdan keyin keladigani.
@@ -3146,7 +3185,7 @@ test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
     `SELECT MIN(sp.step_no) AS n FROM v_unit_step_plan sp
        JOIN shops sh ON sh.id = sp.shop_id AND sh.name = $2
       WHERE sp.unit_id = $1`, [u.id, pl.next_shop]);
-  assert.equal(ymd(r.next_shop_on), kun(step.n - 1));
+  assert.equal(ymd(r.next_shop_on), await kun(step.n - 1));
 
   //  Qo'lda qo'yilgan reja formuladan USTUN turadi: tsex boshlig'ining
   //  va'dasi hisobdan kuchliroq.

@@ -115,11 +115,38 @@ CREATE INDEX IF NOT EXISTS idx_units_fabric ON production_units(fabric)
 --  hech narsa yozilmaydi.
 DROP VIEW IF EXISTS v_unit_shop_eta CASCADE;
 
+--  ★ YAKSHANBA DAM OLISH KUNI (zavod qarori, 2026-09).
+--
+--  «Har bo'limda bir kun» — bir ISH kuni. Zavod yakshanba ishlamaydi,
+--  shuning uchun sana yakshanbaga tushmaydi va u hisobdan butunlay
+--  chiqib ketadi: haftada oltita ish kuni (dushanba–shanba).
+--
+--  Formula BITTA joyda: uni sahifa ham, jurnal ham, so'rov ro'yxati ham
+--  shu funksiyadan oladi. Ikki nusxada bo'lsa biri ertaga ikkinchisidan
+--  boshqa kun aytardi.
+--
+--      p — hafta ichidagi o'rni (0 = dushanba … 5 = shanba)
+--      t — boshlang'ich o'rin + qo'shiladigan ish kunlari
+--      har oltita ish kuni BIR HAFTA oldinga suradi
+--
+--  Boshlanish kuni yakshanbaga tushsa dushanbadan sanaladi: o'sha kuni
+--  zavodda hech kim ishlamaydi.
+CREATE OR REPLACE FUNCTION ish_kuni(p_start DATE, p_days INT)
+RETURNS DATE LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE d DATE := p_start; p INT; t INT;
+BEGIN
+  IF d IS NULL THEN RETURN NULL; END IF;
+  IF EXTRACT(ISODOW FROM d) = 7 THEN d := d + 1; END IF;
+  p := EXTRACT(ISODOW FROM d)::int - 1;
+  t := p + GREATEST(COALESCE(p_days, 0), 0);
+  RETURN d - p + (t / 6) * 7 + (t % 6);
+END $$;
+
 CREATE OR REPLACE VIEW v_unit_step_plan AS
---  step_no — ROW_NUMBER(), ya'ni bigint; sanaga qo'shish uchun int
---  bo'lishi kerak (`date + bigint` operatori yo'q).
+--  step_no — ROW_NUMBER(), ya'ni bigint; int ga keltiriladi.
+--  Sana yakshanbani chetlab o'tib qo'shiladi (izoh: `ish_kuni`).
 SELECT u.id AS unit_id, r.step_no::int AS step_no, sc.shop_id,
-       (u.started_on + (r.step_no - 1)::int) AS on_date
+       ish_kuni(u.started_on, (r.step_no - 1)::int) AS on_date
   FROM production_units u
   JOIN v_product_route r ON r.product_id = u.product_id
   JOIN sections sc       ON sc.id = r.section_id;
@@ -145,9 +172,12 @@ SELECT unit_id, shop_id, MIN(on_date) AS on_date
 --  konver muddatsiz qolardi.
 CREATE OR REPLACE VIEW v_unit_plan AS
 WITH oxiri AS (
+  --  Oxirgi bo'limdan KEYINGI ish kuni omborga tushadi — ya'ni
+  --  qadamlar soniga teng ish kuni (izoh: `ish_kuni`).
   SELECT sp.unit_id, MAX(sp.step_no) AS steps,
-         (MAX(sp.on_date) + 1)::date AS fg_on
+         ish_kuni(MAX(u.started_on), MAX(sp.step_no)::int) AS fg_on
     FROM v_unit_step_plan sp
+    JOIN production_units u ON u.id = sp.unit_id
    GROUP BY sp.unit_id
 ),
 brk AS (   -- turgan joyidan keyin tsex almashadigan birinchi qadam

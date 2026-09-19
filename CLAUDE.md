@@ -64,11 +64,22 @@ biriktiriladi. Haqiqiy manba: **`sql/routes.sql`** — tartib faqat shu yerda.
 2026-09). Sana konverning boshlangan kunidan va qadam raqamidan chiqadi
 (`v_unit_step_plan`, `v_unit_plan`, `sql/register.sql`):
 
-    N-qadamga kirish   =  started_on + (N − 1)
-    T/M omborga kirish =  started_on + qadamlar soni
+    N-qadamga kirish   =  started_on + (N − 1) ISH KUNI
+    T/M omborga kirish =  started_on + qadamlar soni ISH KUNI
 
 Ya'ni birinchi bo'limda konver boshlangan KUNNING O'ZIDA turadi,
-oxirgi bo'limdan keyingi kuni esa omborga tushadi. Lak va qadoqlash
+oxirgi bo'limdan keyingi ish kuni esa omborga tushadi.
+
+**★ YAKSHANBA HISOBGA OLINMAYDI** (zavod qarori, 2026-09): zavod o'sha
+kuni ishlamaydi, shuning uchun «bir kun» — bir ISH kuni va haftada
+oltitasi bor (dushanba–shanba). Sana hech qachon yakshanbaga tushmaydi;
+boshlanish kuni yakshanbaga to'g'ri kelsa dushanbadan sanaladi.
+
+Formula BITTA joyda — `ish_kuni(sana, kun)` funksiyasi
+(`sql/register.sql`). Sahifadagi nusxa (`sorovlar.html`, `kunQo`) faqat
+javobni darrov ko'rsatish uchun va aynan shu natijani berishi shart:
+ikki nusxa ikki xil kun aytsa, ekrandagi va'da jurnaldagidan farq qilib
+qolardi. Lak va qadoqlash
 sanalari ham shundan — o'sha tsexning marshrutdagi birinchi qadami.
 
 Eski hisob (`v_unit_eta`, `MAX(qty/quvvat) + SUM(1/quvvat)`) olib
