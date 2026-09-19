@@ -295,6 +295,17 @@ sp va stol KOMPLEKT bilan sanaladi. Guruhga biriktiriladi, mahsulotga emas.
 Ombor yig'indisi shu sababdan bitta raqam emas: `by_uom` bo'lib chiqadi —
 dona bilan komplektni qo'shib bo'lmaydi.
 
+**★ BOSHLANG'ICH QOLDIQ — FAQAT `production.manage`** (zavod qarori,
+2026-09). Bu bir martalik ish va u bajarilib bo'lgan: kundalik konver
+kiritadigan xodimga sahifa kerak emas va faqat chalg'itadi. Ochiq
+qolsa oddiy konver adashib `Q` raqami bilan ochilib, jamlanma
+hisobotga «boshlang'ich qoldiq» bo'lib tushib ketardi — va u yerdan
+bo'lim quvvati hisobidan chiqarib tashlanardi.
+
+Tekshiruv **serverda**, `createOne()` da: menyudan sahifani olib
+qo'yish himoya emas. Fayldan yuklash (`POST /api/import/units`) ham
+o'sha huquqda — u ham `is_opening` yo'li.
+
 **Boshlang'ich qoldiqni omborga kiritish.** «Boshlang'ich qoldiq» sahifasida
 **Tseh** ustunidan «T/M ombor» tanlansa, bo'lim katagi o'chadi va «T/M ombor»
 ustunidagi sana REJA emas, omborga kirgan FAKT kun bo'ladi: konver darrov
@@ -1022,7 +1033,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | Rol | Huquq | Ko'radi |
 |---|---|---|
 | `tsex_usta` | `production.entry`, `production.request`, `production.plan` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi va muddat rejasini qo'yadi |
-| `kirituvchi` | + `production.units`, `production.reports` | jurnal, boshlang'ich qoldiq, hisobotlar |
+| `kirituvchi` | + `production.units`, `production.reports` | jurnal (konver kiritadi), hisobotlar — **boshlang'ich qoldiq YO'Q** |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor |

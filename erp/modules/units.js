@@ -588,6 +588,21 @@ router.get('/:id/route', need('production.view', 'production.entry'), wrap(async
 // qo'lda kiritilganidan boshqacha bo'lib qoladi.
 async function createOne(client, req, it) {
   if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
+  //  ★ BOSHLANG'ICH QOLDIQ — FAQAT `production.manage`.
+  //
+  //  Bir martalik ish: tizim ishga tushgan kundagi holat kiritiladi va
+  //  u tugagan. Kundalik konver kiritadigan xodimga bu yo'l ochiq
+  //  qolsa, oddiy konver adashib `Q` raqami bilan ochilib, jamlanma
+  //  hisobotga «boshlang'ich qoldiq» bo'lib tushib ketardi — va u
+  //  yerdan bo'lim quvvati hisobidan chiqarib tashlanardi.
+  //
+  //  Tekshiruv SHU YERDA: sahifani menyudan olib qo'yish himoya emas,
+  //  so'rovni qo'lda ham yuborsa bo'ladi.
+  if (it.is_opening && !req.user.permissions.includes('production.manage')) {
+    const e = new Error('Boshlang\'ich qoldiq \u2014 buni faqat administrator ' +
+      'va ishlab chiqarish boshlig\'i kiritadi');
+    e.status = 403; throw e;
+  }
   // Raqam bo'sh qoldirilsa server o'zi beradi. Boshlang'ich qoldiqda
   // esa Q bilan — raqamni tizim qo'ygani ko'rinib tursin.
   if (!it.conveyor_no || !String(it.conveyor_no).trim()) {
@@ -713,7 +728,9 @@ router.post('/', need(...UNITS), wrap(async (req, res) => {
     await client.query('ROLLBACK');
     if (e.code === '23505')
       return res.status(409).json({ error: 'Bu konveyer raqami allaqachon mavjud' });
-    return res.status(400).json({ error: e.message });
+    //  Huquq yetmagani 400 emas, 403 bo'lib chiqsin: klient «xato
+    //  kiritdim» bilan «ruxsat yo'q» ni ajrata olishi kerak.
+    return res.status(e.status || 400).json({ error: e.message });
   } finally {
     client.release();
   }

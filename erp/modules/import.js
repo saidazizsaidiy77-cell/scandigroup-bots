@@ -22,7 +22,10 @@ const { readSheet } = require('../xlsx');
 const { createOne } = require('./units');
 
 const router = express.Router();
-const UNITS = ['production.units', 'production.manage'];
+//  Fayldan yuklash — BOSHLANG'ICH QOLDIQ yo'li (`is_opening: true`),
+//  ya'ni bir martalik ish. Kundalik konver kiritadigan xodimda u
+//  bo'lmaydi (izoh: `modules/units.js`, `createOne`).
+const UNITS    = ['production.manage'];
 
 // ─────────────────────────────────────────────────────────────── SARLAVHALAR
 // Taqqoslashdan oldin sarlavha soddalashtiriladi: katta-kichik harf,

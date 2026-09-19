@@ -2996,6 +2996,27 @@ test('xodimga rol biriktirilsa huquqi darrov ishlaydi', async () => {
   assert.ok(p2.includes('production.plan'), 'yangi rol keladi');
 });
 
+test('boshlang\'ich qoldiq faqat boshqaruvchida', async () => {
+  const kir = await xodim('Sinov qoldiqchi', 'kirituvchi');
+
+  //  Oddiy konver — kiritadi.
+  assert.equal((await kir('POST', '/api/units/', { items: [{
+    product_id: PENAL, qty: 1, section_id: ARRA }] })).status, 200);
+
+  //  Boshlang'ich qoldiq esa yo'q: bir martalik ish va u tugagan.
+  //  Tekshiruv SERVERDA — menyudan sahifani olib qo'yish himoya emas.
+  const q = await kir('POST', '/api/units/', { items: [{
+    product_id: PENAL, qty: 1, section_id: ARRA, is_opening: true }] });
+  assert.equal(q.status, 403, q.text);
+
+  //  Fayldan yuklash ham o'sha yo'l.
+  assert.equal((await kir('POST', '/api/import/units', {})).status, 403);
+
+  //  Boshqaruvchida ikkalasi ham ishlayveradi.
+  assert.equal((await admin('POST', '/api/units/', { items: [{
+    product_id: PENAL, qty: 1, section_id: ARRA, is_opening: true }] })).status, 200);
+});
+
 /* ============================================================================
  *  PIN — IZ VA URINISHLAR
  *

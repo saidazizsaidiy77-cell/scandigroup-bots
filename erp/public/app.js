@@ -176,7 +176,13 @@ const App = (() => {
     { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
       title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',
       text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",
-      perm: ['production.units', 'production.manage'] },
+      //  BIR MARTALIK ish va u bajarilib bo'lgan — kundalik konver
+      //  kiritadigan xodimga bu sahifa kerak emas va faqat chalg'itadi:
+      //  u yerdan kiritilgan konver `Q` raqamini oladi va jamlanma
+      //  hisobotga «boshlang'ich qoldiq» bo'lib tushadi. Shuning uchun
+      //  huquqi `production.manage` — tarixga tegadigan boshqa ishlar
+      //  bilan bir xil.
+      perm: ['production.manage'] },
     { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
       group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',
