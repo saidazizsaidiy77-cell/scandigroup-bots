@@ -347,6 +347,31 @@ SELECT a.id, a.code, a.name, a.kind, a.sort, a.is_active, a.main_ccy,
 --  pul baribir paydo bo'ladi va uni topshiradi — unga belgi kerak emas.
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_hold_cash BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ INKASSATOR — HAMMA MIJOZDAN PUL OLADI (zavod qarori, 2026-09).
+--
+--  Savdo doirasi mijozni MENEJERGA biriktiradi: «Faqat o'zinikini»
+--  belgisi bor xodimga faqat o'zi yuritadigan mijoz ko'rinadi va
+--  boshqasidan to'lov yozib bo'lmaydi (izoh: sql/units.sql, `scope_own`).
+--  Zavodda esa pulni bitta odam yig'ib yuradi: u mijozning menejeri
+--  emas, INKASSATOR — kimga bormasin, o'sha kuni olgan pulini o'zi
+--  kiritadi.
+--
+--  Doirani butunlay olib tashlash yo'l emas: o'shanda unga boshqa
+--  menejerning BUYURTMASI, narxi va mijoz kartochkasi ham ochilib
+--  ketardi. Shuning uchun belgi FAQAT KASSAGA tegadi — «Mijozdan pul
+--  olindi» oynasidagi ro'yxat va o'sha to'lovning tekshiruvi
+--  (`modules/cash.js`). Savdo bo'limi eskicha qolaveradi.
+--
+--  Yo'nalish chegarasi ham shu belgi bilan ochiladi: eksport mijozi
+--  ham, B2B ham bitta odamning qo'lidan o'tadi va pulni kim olgani
+--  mijozning kanaliga bog'liq emas.
+--
+--  Belgi XODIMDA — `can_hold_cash` bilan bir xil idiom va bir xil
+--  joyda (Xodimlar sahifasi): ism ham, lavozim ham kodga yozilmaydi
+--  (4-qoida).
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS cash_all_customers
+  BOOLEAN NOT NULL DEFAULT false;
+
 --  ★ QO'LIDAGI PULNI NIMAGA SARFLASHI MUMKIN.
 --
 --  Pul «hisob berish sharti bilan» beriladi: xodim sarflab, nimaga

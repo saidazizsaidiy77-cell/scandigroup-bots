@@ -3979,6 +3979,80 @@ test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
   assert.equal((await H.api(base, null)('GET', '/api/navbat')).status, 401);
 });
 
+test('inkassator hamma mijozdan pul oladi, savdosi esa o\'zicha qoladi', async () => {
+  //  ★ Zavodda pulni bitta odam yig'ib yuradi: u mijozning menejeri
+  //  emas. Savdo doirasi («Faqat o'zinikini») esa mijozni MENEJERGA
+  //  biriktiradi va inkassatorga faqat o'zi yuritadigan mijoz
+  //  ko'rinardi — kimga borsa o'shaning pulini yoza olmasdi.
+  //
+  //  Doirani butunlay olib tashlash yo'l emas: o'shanda unga boshqa
+  //  menejerning BUYURTMASI ham ochilib ketardi. Shuning uchun belgi
+  //  FAQAT kassaga tegadi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Sinov inkassator')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(
+    `INSERT INTO worker_roles (worker_id, role_code, scope_own, scope_channel)
+     SELECT id, 'sotuvchi', true, 'B2B' FROM workers WHERE name = 'Sinov inkassator'
+     ON CONFLICT (worker_id, role_code)
+     DO UPDATE SET scope_own = true, scope_channel = 'B2B'`);
+  const inkId = (await H.id(
+    `SELECT id FROM workers WHERE name='Sinov inkassator'`)).id;
+
+  //  Belgisiz: o'z mijozi ham yo'q, ro'yxat bo'sh.
+  await db.query(`UPDATE workers SET cash_all_customers = false WHERE id=$1`, [inkId]);
+  const oddiy = H.api(base, await H.sessionFor('Sinov inkassator'));
+  const r1 = (await oddiy('GET', '/api/cash/refs')).body.customers;
+  assert.equal(r1.length, 0, 'doirasi bor menejerga begona mijoz ko\'rinmaydi');
+
+  //  Boshqa menejerning mijozidan to'lov ham yozilmaydi.
+  const begona = (await H.id(
+    `SELECT id FROM customers WHERE name='Birinchining mijozi'`)).id;
+  const yoq = await oddiy('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: begona, currency: 'USD', amount: 10 });
+  assert.equal(yoq.status, 400, yoq.text);
+
+  //  ★ BELGI QO'YILDI. Sessiya xodim qatoridan o'qiladi, shuning
+  //  uchun qayta kirish shart emas.
+  await db.query(`UPDATE workers SET cash_all_customers = true WHERE id=$1`, [inkId]);
+  const ink = H.api(base, await H.sessionFor('Sinov inkassator'));
+  const r2 = (await ink('GET', '/api/cash/refs')).body.customers;
+  const nomlar = r2.map((c) => c.name);
+  assert.ok(nomlar.includes('Birinchining mijozi'), 'boshqa menejerniki ham turadi');
+  assert.ok(nomlar.includes('Ikkinchining mijozi'));
+  //  Yo'nalish chegarasi ham ochiladi: eksport mijozi ham uning qo'lidan o'tadi.
+  assert.ok(nomlar.includes('Kanalsiz mijoz'), 'kanal chegarasi ham ochiladi');
+
+  //  To'lov ham yoziladi va mijozning qarzi kamayadi.
+  const oldin = Number((await H.id(
+    `SELECT balance FROM v_customer_sales WHERE id=$1`, [begona])).balance);
+  const ok = await ink('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: begona, currency: 'USD', amount: 25 });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT balance FROM v_customer_sales WHERE id=$1`, [begona])).balance), oldin - 25);
+
+  //  ★ SAVDO BO'LIMI ESKICHA: belgi kassaga tegadi, buyurtmaga emas.
+  const roy = (await ink('GET', '/api/units/customers')).body.customers.map((c) => c.name);
+  assert.ok(!roy.includes('Birinchining mijozi'),
+    'mijozlar sahifasida doira saqlanadi');
+
+  //  Belgi Xodimlar sahifasidan qo'yiladi va qaytariladi.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + inkId,
+    { cash_all_customers: false })).status, 200);
+  assert.equal((await H.id(
+    `SELECT cash_all_customers FROM workers WHERE id=$1`, [inkId])).cash_all_customers,
+    false);
+  //  Yuborilmasa TEGILMAYDI: kartochka boshqa maydon uchun saqlansa
+  //  belgi o'chib qolmasin (`can_hold_cash` bilan bir xil qoida).
+  await db.query(`UPDATE workers SET cash_all_customers = true WHERE id=$1`, [inkId]);
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + inkId,
+    { phone: '+998900000000' })).status, 200);
+  assert.equal((await H.id(
+    `SELECT cash_all_customers FROM workers WHERE id=$1`, [inkId])).cash_all_customers,
+    true);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

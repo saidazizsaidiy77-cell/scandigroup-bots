@@ -17,7 +17,8 @@ async function createSession(workerId, surface) {
 
 async function loadWorker(workerId) {
   const w = (await db.query(
-    `SELECT id, name, phone, tg_id FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
+    `SELECT id, name, phone, tg_id, cash_all_customers
+       FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles] = await Promise.all([
     db.query(`SELECT permission_code FROM v_worker_permissions WHERE worker_id = $1`, [workerId]),
@@ -42,6 +43,11 @@ async function loadWorker(workerId) {
     //  Rollardan biri belgilangan bo'lsa yetarli — eng TOR doira
     //  ishlaydi, yo'nalish doirasi bilan bir xil qoida.
     scope_own: roles.rows.some((r) => r.scope_own),
+    //  ★ INKASSATOR: pulni hamma mijozdan u yig'adi, shuning uchun
+    //  «o'z mijozi» va yo'nalish chegarasi FAQAT KASSADA ochiladi
+    //  (izoh: sql/cash.sql). Savdo bo'limi eskicha qolaveradi — aks
+    //  holda unga boshqa menejerning buyurtmasi ham ochilib ketardi.
+    cash_all: w.cash_all_customers === true,
   };
 }
 

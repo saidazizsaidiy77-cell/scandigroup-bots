@@ -31,10 +31,18 @@ const isBoss = (req) => can(req, 'cash.manage');
 
 //  Savdo yo'nalishi chegarasi — savdo moduli bilan bir xil: B2B
 //  menejeri eksport mijozidan to'lov yozib qo'ya olmaydi.
+//  ★ INKASSATORDA IKKALA CHEGARA HAM OCHILADI (izoh: sql/cash.sql):
+//  pulni u hamma mijozdan yig'adi va kimga borishi mijozning
+//  menejeriga ham, kanaliga ham bog'liq emas. Belgi XODIMDA
+//  (`workers.cash_all_customers`) va FAQAT shu modulga tegadi —
+//  savdo bo'limi eskicha qolaveradi.
+const inkassator = (req) => req.user?.cash_all === true;
 const channelsOf = (req) => {
+  if (inkassator(req)) return null;
   const c = req.user?.scope_channels || [];
   return c.length ? c : null;
 };
+const mijozOwn = (req) => (inkassator(req) ? null : ownOf(req));
 
 //  Hujjat raqami: P26-0001 — «pul». Konver `K`, zakaz `Z`, pul `P`.
 //  Raqam bitta joyda beriladi, tranzaksiya qulfi bilan: ikki kassir
@@ -64,10 +72,12 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
                WHERE active ORDER BY sort, name`),
     //  O'z mijozi chegarasi savdo bilan BIR XIL (izoh: erp/auth.js):
     //  menejer boshqa menejerning mijozidan to'lov yozib qo'ymasin.
+    //  INKASSATORDA esa ikkala chegara ham ochiladi — pulni u hamma
+    //  mijozdan yig'adi (`mijozOwn`, `channelsOf`, yuqorida).
     db.query(`SELECT id, name, region FROM customers
                WHERE active AND ($1::text[] IS NULL OR channel = ANY($1))
                  AND ($2::int IS NULL OR manager_id = $2)
-               ORDER BY name`, [chans, ownOf(req)]),
+               ORDER BY name`, [chans, mijozOwn(req)]),
     //  Ta'minotchi ro'yxati HAMMAGA: podotchyot olgan xodim ham
     //  ta'minotchiga to'lov qiladi (ombor mudiri bozorda naqd
     //  to'laydi) va uchinchi bosqichda uni tanlashi kerak. Ilgari
@@ -252,7 +262,7 @@ async function assertSide(client, kind, id, req) {
     }
     //  Tekshiruv SERVERDA: ro'yxatni chetlab, id ni qo'lda yuborsa ham
     //  boshqa menejerning mijoziga to'lov yozilmaydi.
-    const own = ownOf(req);
+    const own = mijozOwn(req);
     if (own) {
       const ok = await client.query(
         `SELECT 1 FROM customers WHERE id = $1 AND manager_id = $2`, [id, own]);

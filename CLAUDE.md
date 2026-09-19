@@ -1220,6 +1220,25 @@ tugmasida.
 Savdo yo'nalishi chegarasi bu yerda ham: B2B menejeri eksport mijozidan
 to'lov yozib qo'ya olmaydi (`channelsOf`).
 
+**★ INKASSATOR — HAMMA MIJOZDAN PUL OLADI** (`workers.cash_all_customers`,
+zavod qarori 2026-09). Savdo doirasi mijozni MENEJERGA biriktiradi:
+«Faqat o'zinikini» belgisi bor xodimga faqat o'zi yuritadigan mijoz
+ko'rinadi. Zavodda esa pulni bitta odam yig'ib yuradi va u mijozning
+menejeri emas — «Mijozdan pul olindi» oynasi unga bo'sh ro'yxat
+chiqarardi.
+
+Doirani butunlay olib tashlash yo'l emas: o'shanda inkassatorga boshqa
+menejerning BUYURTMASI, narxi va mijoz kartochkasi ham ochilib ketardi.
+Shuning uchun belgi FAQAT KASSAGA tegadi — `channelsOf` ham,
+`ownOf` ham shu yerda ochiladi (`inkassator`, `mijozOwn`,
+`modules/cash.js`), savdo bo'limi esa eskicha qoladi. Yo'nalish ham
+ochiladi: pulni kim olgani mijozning kanaliga bog'liq emas.
+
+Tekshiruv **serverda**: ro'yxatni chetlab, mijoz id sini qo'lda
+yuborgan menejer baribir rad etiladi. Belgi XODIMDA va Xodimlar
+sahifasida, «Qo'liga pul beriladi» ning yonida — kodga na ism, na
+lavozim yoziladi (4-qoida).
+
 **Mijoz balansi to'ldi**: `boshlang'ich qarz + chiqib ketgan mahsulot −
 TO'LOVLAR`. Shu sababdan `v_customer_sales` va `v_customer_ledger`
 **`sql/cash.sql` ga ko'chirildi** — ular endi `cash_ops` ni o'qiydi, u
