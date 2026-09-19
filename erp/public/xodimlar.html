@@ -215,6 +215,21 @@ function openForm(id){
                   faqat kassaga topshiriladi — inkassator shunday</span></span>
             </div></div>
 
+          <!--  ★ OMBOR BITTA ROLDA IKKI XIL ODAMGA KERAK BO'LADI.
+                Qoldiq ma'lumot kirituvchiga «ertaga nima so'rayman»
+                degan savol uchun ochilgan, lekin bu HAMMA kirituvchiga
+                kerak emas: biriga ish quroli, ikkinchisiga ortiqcha
+                bo'lim. Rol buni ajrata olmaydi (huquqlar KODDA), shu
+                sababdan belgi xodimda (izoh: sql/warehouse.sql). -->
+          <div><label>Ombor</label>
+            <div class="row" style="gap:10px;align-items:center">
+              <input type="checkbox" id="wWh" style="width:auto"
+                     ${w && w.sees_warehouse === false ? '' : 'checked'}>
+              <span style="flex:1">Ombor bo'limini ko'radi
+                <span class="muted" style="font-size:12px">· belgilanmasa menyuda
+                  «Ombor» umuman chizilmaydi — qoldiq ham, qabul qilish ham</span></span>
+            </div></div>
+
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
               ${meta.roles.map(r => `
@@ -289,6 +304,7 @@ async function save(id){
     can_hold_cash: $('wCash').checked,
     cash_all_customers: $('wInkas').checked,
     can_spend_cash: $('wSpend').checked,
+    sees_warehouse: $('wWh').checked,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
     roles,

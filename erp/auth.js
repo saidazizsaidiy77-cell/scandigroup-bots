@@ -17,7 +17,7 @@ async function createSession(workerId, surface) {
 
 async function loadWorker(workerId) {
   const w = (await db.query(
-    `SELECT id, name, phone, tg_id, cash_all_customers
+    `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles] = await Promise.all([
@@ -31,7 +31,13 @@ async function loadWorker(workerId) {
   ]);
   return {
     ...w,
-    permissions: perms.rows.map((r) => r.permission_code),
+    //  ★ OMBOR BELGISI XODIMDA (izoh: sql/warehouse.sql). Bitta rolda
+    //  ikki xil odam bo'ladi: biriga qoldiq ish quroli, ikkinchisiga
+    //  ortiqcha bo'lim. Belgi olib tashlansa `warehouse.*` huquqlari
+    //  UMUMAN o'qilmaydi — menyudagi bo'lim ham, sahifalar ham, API
+    //  ham bir vaqtda yopiladi va ertaga qo'shilgan sahifa unutilmaydi.
+    permissions: perms.rows.map((r) => r.permission_code)
+      .filter((p) => w.sees_warehouse !== false || !p.startsWith('warehouse.')),
     roles: roles.rows,
     // Usta faqat o'z tsexini ko'rishi uchun: rollardagi eng tor doira
     scope_shop_ids: roles.rows.map((r) => r.scope_shop_id).filter(Boolean),

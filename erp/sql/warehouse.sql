@@ -13,6 +13,32 @@
 --  javob shu yerdan chiqadi.
 -- ============================================================================
 
+-- ═════════════════════════════════ OMBOR KIMGA KO'RINADI — XODIM BO'YICHA
+--
+--  ★ BITTA ROLDA IKKI XIL ODAM BO'LADI (zavod qarori, 2026-09).
+--
+--  Ombor qoldig'i ma'lumot kirituvchiga «ertaga nima so'rayman» degan
+--  savolga javob berish uchun ochilgan edi: stul kiritadigan xodim
+--  javonda nechta stul turganini bilsin. Lekin bu HAMMA kirituvchiga
+--  kerak emas — biriga ish quroli, ikkinchisiga ortiqcha bo'lim.
+--
+--  Rol buni ajrata olmaydi: ikkalasi ham `kirituvchi` va rol huquqlari
+--  KODDA turadi (`sql/core-seed.sql`), ya'ni bitta odam uchun
+--  o'zgartirib bo'lmaydi. Shuning uchun belgi XODIMDA —
+--  `can_hold_cash`, `cash_all_customers` va `can_spend_cash` bilan bir
+--  xil idiom va bir xil joyda (Xodimlar sahifasi). Kodga na ism, na
+--  lavozim yoziladi (4-qoida).
+--
+--  Standarti `true`: hech kimning ekrani o'zidan-o'zi o'zgarmaydi,
+--  belgi OLIB TASHLANADIGAN joylar sanoqli.
+--
+--  Belgi olib tashlansa xodimning `warehouse.*` huquqlari o'qilmaydi
+--  (`erp/auth.js`, `loadWorker`) — ya'ni menyudagi bo'lim ham,
+--  sahifalar ham, API ham BIR VAQTDA yopiladi. Har sahifaga alohida
+--  tekshiruv yozilsa, ertaga qo'shilgan sahifa unutilardi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS sees_warehouse
+  BOOLEAN NOT NULL DEFAULT true;
+
 -- ============================================================================
 --  OMBORLAR RO'YXATI
 --

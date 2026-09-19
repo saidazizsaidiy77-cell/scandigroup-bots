@@ -4213,6 +4213,52 @@ test('topshirish ikki bosqich: xodim jo\'natadi, kassir sanab qabul qiladi', asy
   assert.equal((await u('PATCH', '/api/cash/ops/' + t.body.id)).status, 403);
 });
 
+test('ombor bo\'limi xodim bo\'yicha yopiladi', async () => {
+  //  ★ BITTA ROLDA IKKI XIL ODAM. Ombor qoldig'i ma'lumot
+  //  kirituvchiga «ertaga nima so'rayman» degan savol uchun ochilgan,
+  //  lekin bu HAMMA kirituvchiga kerak emas. Rol buni ajrata olmaydi —
+  //  huquqlar KODDA va ikkalasi ham `kirituvchi`.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Sinov omborsiz')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  SELECT id, 'kirituvchi' FROM workers WHERE name='Sinov omborsiz'
+                  ON CONFLICT DO NOTHING`);
+  const wid = (await H.id(`SELECT id FROM workers WHERE name='Sinov omborsiz'`)).id;
+
+  //  Standarti — KO'RADI: hech kimning ekrani o'zidan-o'zi o'zgarmaydi.
+  const bor = H.api(base, await H.sessionFor('Sinov omborsiz'));
+  assert.ok((await bor('GET', '/api/auth/me')).body.permissions
+    .includes('warehouse.view'));
+  assert.equal((await bor('GET', '/api/warehouse/list')).status, 200);
+
+  //  ★ BELGI OLIB TASHLANDI — bo'lim UMUMAN yopiladi.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + wid,
+    { sees_warehouse: false })).status, 200);
+  const yoq = H.api(base, await H.sessionFor('Sinov omborsiz'));
+  const me = (await yoq('GET', '/api/auth/me')).body;
+  assert.ok(!me.permissions.some((p) => p.startsWith('warehouse.')),
+    'menyudagi bo\'lim ham chizilmaydi');
+  //  Sahifani manzil bilan ochsa ham: chegara serverda.
+  assert.equal((await yoq('GET', '/api/warehouse/list')).status, 403);
+  assert.equal((await yoq('GET', '/api/warehouse/fg/summary')).status, 403);
+
+  //  Qolgan ishi o'zgarmaydi: konver so'rovi joyida.
+  assert.equal((await yoq('GET', '/api/units/requests')).status, 200);
+
+  //  Yuborilmasa TEGILMAYDI (`can_hold_cash` bilan bir xil qoida).
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + wid,
+    { phone: '+998900000002' })).status, 200);
+  assert.equal((await H.id(
+    `SELECT sees_warehouse FROM workers WHERE id=$1`, [wid])).sees_warehouse, false);
+
+  //  Qaytarib berish ham bitta katakcha.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + wid,
+    { sees_warehouse: true })).status, 200);
+  assert.equal((await H.api(base, await H.sessionFor('Sinov omborsiz'))(
+    'GET', '/api/warehouse/list')).status, 200);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

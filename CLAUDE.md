@@ -1483,7 +1483,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | Rol | Huquq | Ko'radi |
 |---|---|---|
 | `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi, muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi |
-| `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»** va **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi. Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
+| `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»**, va belgisi qo'yilgan bo'lsa **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi (`sees_warehouse`, xodim bo'yicha). Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
@@ -1523,6 +1523,24 @@ shart qo'shilmaydi. Xodim o'zi tanlagan turlar ham shu ro'yxat bilan
 KESISHTIRILADI: doiradan tashqaridagini qo'lda yozib ham ochib
 bo'lmaydi. Doirasi yo'q xodimda (ombor mudiri, savdo, rahbariyat)
 hammasi turaveradi.
+
+**★ OMBOR BITTA ROLDA IKKI XIL ODAMGA KERAK BO'LADI**
+(`workers.sees_warehouse`, zavod qarori 2026-09). Qoldiq ma'lumot
+kirituvchiga «ertaga nima so'rayman» degan savol uchun ochilgan edi,
+lekin bu HAMMA kirituvchiga kerak emas: biriga ish quroli,
+ikkinchisiga ortiqcha bo'lim.
+
+Rol buni ajrata olmaydi — ikkalasi ham `kirituvchi` va rol huquqlari
+KODDA turadi (`sql/core-seed.sql`), ya'ni bitta odam uchun
+o'zgartirib bo'lmaydi. Shuning uchun belgi XODIMDA, Xodimlar
+sahifasida: `can_hold_cash` va `cash_all_customers` bilan bir xil
+idiom. Standarti `true` — hech kimning ekrani o'zidan-o'zi
+o'zgarmaydi.
+
+Belgi olib tashlansa xodimning `warehouse.*` huquqlari UMUMAN
+o'qilmaydi (`erp/auth.js`, `loadWorker`) — menyudagi bo'lim ham,
+sahifalar ham, API ham BIR VAQTDA yopiladi. Har sahifaga alohida
+tekshiruv yozilsa, ertaga qo'shilgan sahifa unutilardi.
 
 **★ OMBORLAR RO'YXATI HAM QISQARADI** (zavod qarori, 2026-09): tsex
 doirasi bor xodimga FAQAT T/M ombor ochiladi. Uning savoli bitta —

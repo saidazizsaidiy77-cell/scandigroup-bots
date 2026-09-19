@@ -27,6 +27,8 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
             w.cash_all_customers,
             --  Qo'lidagi pulni harajatga yozadimi (izoh: sql/cash.sql).
             w.can_spend_cash,
+            --  Ombor bo'limi shu xodimga ochiladimi (izoh: sql/warehouse.sql).
+            w.sees_warehouse,
             (w.pin IS NOT NULL OR w.pin_hash IS NOT NULL) AS has_pin,
             --  Qo'lidagi pulni qaysi harajat guruhlariga sarflay oladi.
             --  BO'SH = hammasi (izoh: sql/cash.sql).
@@ -109,7 +111,7 @@ async function saveCashGroups(client, workerId, codes) {
 
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, can_hold_cash, cash_all_customers,
-          can_spend_cash, roles = [] } = req.body;
+          can_spend_cash, sees_warehouse, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   const kod = req.body.pin ? String(req.body.pin) : null;
@@ -122,13 +124,16 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
     await client.query('BEGIN');
     const w = (await client.query(
       `INSERT INTO workers (name, phone, pin, pin_hash, tg_id, can_hold_cash,
-                            cash_all_customers, can_spend_cash)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+                            cash_all_customers, can_spend_cash, sees_warehouse)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
        //  Standarti — YOZADI: qo'lida pul turgan odam uni hisobdan
        //  chiqara olsin (izoh: sql/cash.sql).
-       can_spend_cash !== false])).rows[0];
+       can_spend_cash !== false,
+       //  Standarti — KO'RADI: hech kimning ekrani o'zidan-o'zi
+       //  o'zgarmaydi (izoh: sql/warehouse.sql).
+       sees_warehouse !== false])).rows[0];
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
@@ -154,7 +159,7 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
 router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
   const { name, phone, tg_id, active, can_hold_cash, cash_all_customers,
-          can_spend_cash, roles } = req.body;
+          can_spend_cash, sees_warehouse, roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -179,14 +184,16 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          can_hold_cash = COALESCE($7, can_hold_cash),
          --  Inkassator belgisi ham shunday: yuborilmasa tegilmaydi.
          cash_all_customers = COALESCE($10, cash_all_customers),
-         can_spend_cash = COALESCE($11, can_spend_cash)
+         can_spend_cash = COALESCE($11, can_spend_cash),
+         sees_warehouse = COALESCE($12, sees_warehouse)
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
        typeof can_hold_cash === 'boolean' ? can_hold_cash : null,
        kod !== null, pinCols(kod)[1],
        typeof cash_all_customers === 'boolean' ? cash_all_customers : null,
-       typeof can_spend_cash === 'boolean' ? can_spend_cash : null]);
+       typeof can_spend_cash === 'boolean' ? can_spend_cash : null,
+       typeof sees_warehouse === 'boolean' ? sees_warehouse : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
