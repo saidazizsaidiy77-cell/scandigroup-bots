@@ -248,6 +248,27 @@ CREATE INDEX IF NOT EXISTS idx_cash_ops_pl   ON cash_ops(pl_month);
 
 --  Harajatda modda ham, oy ham bo'lishi shart: ikkalasisiz harajat
 --  hisobotda «boshqa» bo'lib yo'qolib ketardi.
+--  ★ TOPSHIRISH IKKI BOSQICH (zavod qarori, 2026-09): xodim
+--  «topshirdim» deydi, kassir esa pulni KO'RIB, SANAB oladi va shundan
+--  keyin qabul qiladi. Ikkinchi bosqichgacha operatsiya `pending`
+--  bo'lib turadi va u hech qaysi qoldiqqa qo'shilmaydi (`v_cash_flow`
+--  faqat `ok` ni o'qiydi): pul hali xodimning qo'lida, kassada esa
+--  yo'q — ikkala raqam ham to'g'ri.
+--
+--  Tsexdagi topshirish va vitrinadan qaytarish bilan bir xil idiom va
+--  bir xil sabab: hech kimning qo'l ko'tarishisiz pul kassaga kirib
+--  qolmasin. Ilgari bu yozuvni faqat KASSIR yozardi — ya'ni xodim
+--  pulni berib, uni hisobdan chiqarish uchun kassirning ekrani
+--  ochilishini kutib turardi va topshirganini hech qayerda
+--  ko'rsatolmasdi.
+--
+--  Alohida jadval yozilmadi: hujjat baribir o'sha operatsiya, raqami
+--  ham o'sha (P26-0004). Yarim yozuv ikkinchi jadvalda tursa, qabul
+--  qilinganda uni ko'chirib o'tirish kerak bo'lardi.
+ALTER TABLE cash_ops DROP CONSTRAINT IF EXISTS cash_ops_status_check;
+ALTER TABLE cash_ops ADD  CONSTRAINT cash_ops_status_check
+  CHECK (status IN ('ok', 'pending', 'cancelled'));
+
 ALTER TABLE cash_ops DROP CONSTRAINT IF EXISTS cash_ops_expense_needs;
 ALTER TABLE cash_ops ADD  CONSTRAINT cash_ops_expense_needs CHECK (
   to_kind <> 'expense' OR (expense_item_id IS NOT NULL AND pl_month IS NOT NULL));

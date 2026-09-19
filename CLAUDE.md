@@ -964,6 +964,51 @@ qolmasin.
 Xodim qo'liga berilgan pul ham shu balansda: ikkalasi ham bitta narsa —
 xodimning qo'lidagi, korxonaga qarz pul.
 
+**★ TOPSHIRISH IKKI BOSQICH** (`cash_ops.status = 'pending'`, zavod
+qarori 2026-09):
+
+    1. xodim    «Kassirga topshirish»            pending
+    2. kassir   pulni KO'RADI, SANAB oladi       ok
+                va shundan keyin qabul qiladi
+
+Ilgari bu yozuvni faqat KASSIR yozardi: xodim pulni berib, uning
+ekrani ochilishini kutib turardi va topshirganini hech qayerda
+ko'rsatolmasdi. Endi «topshirdim» ni o'zi bosadi — lekin pul SHU
+ZAHOTI kassaga tushmaydi: `pending` yozuv hech qaysi qoldiqqa
+qo'shilmaydi (`v_cash_flow` faqat `ok` ni o'qiydi), ya'ni pul hali
+xodimning qo'lida, kassada esa yo'q va **ikkala raqam ham to'g'ri**.
+Tsexdagi topshirish va vitrinadan qaytarish bilan bir xil idiom va
+bir xil sabab: hech kimning qo'l ko'tarishisiz pul kassaga kirib
+qolmasin.
+
+**Qaysi kassaga ekani so'ralmaydi** — naqd pul ASOSIY kassaga tushadi
+va uni server qo'yadi: xodimga kassalar ro'yxati umuman ochilmaydi.
+
+**Alohida jadval yozilmadi**: hujjat baribir o'sha operatsiya, raqami
+ham o'sha (`P26-0004`). Yarim yozuv ikkinchi jadvalda tursa, qabul
+qilinganda uni ko'chirib o'tirish kerak bo'lardi.
+
+**Sanagani ekrandagidan boshqa chiqsa QABUL QILINMAYDI**: hujjat rad
+etiladi va xodim to'g'ri summa bilan qaytadan yozadi. Raqamni
+kassirning o'zi tuzatishi ikkinchi haqiqat yaratardi — xodim «500
+topshirdim» deb, kassa «450 qabul qildim» deb turardi va farqning
+hujjati hech qayerda bo'lmasdi.
+
+**Adashib yozilganini xodimning O'ZI bekor qiladi** (`PATCH /ops/:id`):
+uni hech kim sanab olmagan, ya'ni bekor qilish hech kimning hisobiga
+tegmaydi. Qabul qilingandan keyin esa bu kassirning ishi — konver
+so'rovi bilan bir xil idiom (`rejected` boshqaniki, `cancelled`
+o'zinikidir).
+
+**Navbat menyuda turadi** (`/api/navbat`, `cash` bo'limi): kassir
+kassa sahifasini ochib ko'rmasa, pul xodimning qo'lida kechgacha
+qolib ketardi. Kassalar ro'yxatining USTIDA ham kartochka bo'lib
+chiqadi — kassalarni ko'zdan kechirishdan oldin ko'rinsin.
+
+Kassirning eski yo'li ham joyida: **«Xodimdan qabul qilish»** —
+dasturga kirmaydigan xodim uchun (ro'yxatda qo'lida puli borlar
+summasi bilan turadi).
+
 **★ HARAJAT QAYSI OYNING FOYDA-ZARARIDA.** To'lov bugun ketadi, harajat
 esa boshqa oyniki bo'lishi mumkin: sentabrda to'langan avgust ijarasi
 AVGUST foydasini kamaytiradi. Shuning uchun to'lov sanasi (`op_date`) va
@@ -1264,10 +1309,8 @@ ikki yo'l ham shu qoidadan o'tadi. Ekranda tugma umuman chizilmaydi
 va sababi yozilib turadi — tugmani topolmagan odam uni kassirdan
 so'rab yurardi.
 
-**Kassaga topshirish esa ochiq qoladi va uni KASSIR yozadi**: pulni
-u ko'radi, sanab oladi va keyin qabul qiladi («Xodimdan qabul
-qilish»). Ro'yxatda qo'lida puli bor xodimlar summasi bilan turadi —
-kassir sanaganini ekrandagi raqam bilan solishtiradi.
+**Kassaga topshirish esa ochiq qoladi** — pastda, «Topshirish ikki
+bosqich» bo'limida.
 
 **Mijoz balansi to'ldi**: `boshlang'ich qarz + chiqib ketgan mahsulot −
 TO'LOVLAR`. Shu sababdan `v_customer_sales` va `v_customer_ledger`
@@ -1385,6 +1428,7 @@ Navbatlar (`erp/modules/nav.js`, `GET /api/navbat`):
 | `/omborlar.html` | chiqarishni kutayotgan buyurtma (`to_ship`) | o'sha |
 | `/omborlar.html` | vitrinadan qaytarish hujjati | T/M da `confirmed`, vitrinada `new` |
 | `/buyurtmalar.html` | bronning hammasi omborga kelgan, lekin yuborilmagan buyurtma | `sales.manage` |
+| `/kassalar.html` | topshirilgan, lekin qabul qilinmagan pul | `cash.manage` |
 
 **★ NAVBAT — QILINADIGAN ISH, «YANGI YOZUV» EMAS.** Ro'yxatga raqam
 qo'yish oson, lekin har kuni turadigan raqamga ko'z o'rganib qoladi va

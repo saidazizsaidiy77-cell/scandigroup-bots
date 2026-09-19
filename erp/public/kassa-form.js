@@ -245,6 +245,13 @@ const FORMS = {
   //  Pul qo'lidan chiqadi va harajatga aylanadi — podotchyot shu bilan
   //  yopiladi. Ro'yxatda faqat unga ochilgan guruhlar turadi.
   spend: { t: 'Harajat yozish', who: 'Nimaga', two: true },
+  //  ★ KASSIRGA TOPSHIRISH. Tomon so'ralmaydi: naqd pul asosiy
+  //  kassaga tushadi va uni SERVER qo'yadi — xodimga kassalar
+  //  ro'yxati umuman ochilmaydi (izoh: modules/cash.js).
+  //
+  //  Bosilgani «pul kassada» degani EMAS: yozuv kassir sanab
+  //  olgunicha kutib turadi va qoldiqqa qo'shilmaydi.
+  hand: { t: 'Kassirga topshirish', who: 'Qayerga', fixed: 'Asosiy kassa' },
 };
 
 function openForm(kind) {
@@ -281,7 +288,9 @@ function openForm(kind) {
             <input id="fDate" type="date" value="${bugun}"><div class="hint"></div></div>
 
           <div class="wide"><label>${esc(F.who)}</label>
-            ${F.two
+            ${F.fixed
+              ? `<input value="${esc(F.fixed)}" disabled>`
+              : F.two
               ? `<select id="fSide" onchange="outSecond()">
                    <option value="">— tanlang —</option>
                    ${outGroups().map(([v, t]) =>
@@ -383,6 +392,21 @@ async function saveOp() {
   //  Ta'minotchi so'ralgan bo'lsa TOMON o'shaniki: pul uning qarzidan
   //  ayriladi. Harajat moddasi yo'qolmaydi — u yonida saqlanadi va
   //  foyda-zararda o'z qatorida turadi (izoh: modules/cash.js).
+  //  ★ TOPSHIRISHDA TOMON SO'RALMAYDI: pul o'z qo'lidan asosiy
+  //  kassaga ketadi va ikkalasini ham server qo'yadi.
+  if (form === 'hand') {
+    try {
+      const r = await App.api('/api/cash/ops', { method: 'POST', body: JSON.stringify({
+        op_date: $('fDate').value || null, currency: $('fCur').value,
+        amount: $('fAmt').value, rate: $('fRate').value || null,
+        note: $('fNote').value, to_kind: 'account' }) });
+      toast(`${r.doc_no} · kassir qabul qilishini kutmoqda`);
+      closeForm();
+      reload();
+    } catch (e) { toast(e.message, true); }
+    return;
+  }
+
   const supOchiq = $('fSupBox') && !$('fSupBox').hidden;
   const modda = $('fItem') && $('fItemBox') && !$('fItemBox').hidden
     ? String($('fItem').value || '') : '';

@@ -194,6 +194,20 @@ const NAVBATLAR = [
     return [{ page: '/buyurtmalar.html', mod: 'sales', n,
               izoh: `${n} ta buyurtma tayyor — omborga yuborilmagan` }];
   },
+
+  //  8. TOPSHIRILGAN, LEKIN QABUL QILINMAGAN PUL — kassirning navbati.
+  //  Xodim «topshirdim» ni bosdi va pul uning qo'lida kassirni kutib
+  //  turibdi: kassir sanab olmaguncha u hech qaysi qoldiqda yo'q
+  //  (izoh: sql/cash.sql). Shuning uchun bu navbat menyuda tursin —
+  //  kassir kassa sahifasini ochib ko'rmasa, pul xodimning qo'lida
+  //  kechgacha qolib ketardi.
+  async (req) => {
+    if (!bor(req, 'cash.manage')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM cash_ops WHERE status = 'pending'`);
+    return [{ page: '/kassalar.html', mod: 'cash', n,
+              izoh: `${n} ta topshirilgan pul qabul qilishni kutmoqda` }];
+  },
 ];
 
 //  So'rov ATAYLAB yengil: sahifa uni har daqiqada qayta o'qiydi

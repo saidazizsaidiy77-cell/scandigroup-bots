@@ -151,6 +151,13 @@ function drawHead() {
   //  ★ Inkassatorda tugma YO'Q: uning qo'lidagi pul mijozdan
   //  yig'ilgan va uning bitta yo'li bor — kassaga topshiriladi
   //  (izoh: sql/cash.sql, `can_spend_cash`).
+  //  ★ KASSIRGA TOPSHIRISH — qo'lida pul turgan HAR KIMDA. Ilgari bu
+  //  yozuvni faqat kassir yozardi: xodim pulni berib, uning ekrani
+  //  ochilishini kutib turardi va topshirganini hech qayerda
+  //  ko'rsatolmasdi. Endi «topshirdim» ni o'zi bosadi, pul esa kassir
+  //  sanab olgandan keyin kassaga tushadi (izoh: sql/cash.sql).
+  if (isMe() && Number(here.total_usd || 0) !== 0)
+    btn.push(['hand', 'Kassirga topshirish']);
   if (isMe() && refs.my && (refs.my.hold || refs.my.puli) && refs.my.sarflaydi)
     btn.push(['spend', 'Harajat yozish']);
   //  ★ KASSIR XODIMNING QO'LIDAGI PULDAN HAM HARAJAT YOZADI.
@@ -243,10 +250,11 @@ function drawOps() {
     <div class="card">
     ${ops.length ? `<div style="overflow-x:auto"><table>
       <thead><tr><th>№</th><th>Sana</th><th>Kim</th><th class="num">Summa</th>
-        <th class="num">$</th><th>Izoh</th>${boss ? '<th></th>' : ''}</tr></thead>
+        <th class="num">$</th><th>Izoh</th><th></th></tr></thead>
       <tbody>${ops.map(o => `<tr${o.status === 'cancelled' ? ' style="opacity:.5"' : ''}>
         <td><b>${esc(o.doc_no)}</b>${o.status === 'cancelled'
-          ? ' <span class="tag warn">bekor</span>' : ''}</td>
+          ? ' <span class="tag warn">bekor</span>' : o.status === 'pending'
+          ? ' <span class="tag warn">kutmoqda</span>' : ''}</td>
         <td class="muted">${d8(o.op_date)}</td>
         <td>${kirimmi(o) ? '' : '<span class="muted">→ </span>'}${esc(other(o) || '')}${
           o.expense_group ? `<div class="muted" style="font-size:11.5px">${
@@ -261,10 +269,27 @@ function drawOps() {
           ? ` <span class="tag">${esc(o.order_no)}</span>` : ''}</td>
         ${boss ? `<td class="num">${o.status === 'ok'
           ? `<button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
-          : ''}</td>` : ''}
+          : o.status === 'pending'
+          ? `<button class="primary" onclick="acceptOp(${o.id})">Qabul qilish</button>
+             <button class="ic" title="Rad etish" onclick="cancelOp(${o.id})">×</button>`
+          : ''}</td>` : `<td class="num">${o.status === 'pending'
+          ? `<button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
+          : ''}</td>`}
       </tr>`).join('')}</tbody></table></div>`
       : `<p class="muted">${tab === 'in' ? 'Kirim' : tab === 'out' ? 'Chiqim' : 'Harakat'} yo'q.</p>`}
     </div>`;
+}
+
+//  ★ KASSIR SANAB OLADI, KEYIN QABUL QILADI. Shu bosishgacha pul
+//  xodimning qo'lida turadi va kassa qoldig'iga qo'shilmaydi —
+//  ikkala raqam ham to'g'ri. Sanagani ekrandagidan boshqa chiqsa
+//  qabul qilinmaydi: hujjat rad etiladi va xodim to'g'ri summa bilan
+//  qaytadan yozadi (izoh: modules/cash.js).
+async function acceptOp(id) {
+  if (!confirm('Pul sanab olindimi? Qabul qilinsa kassa qoldig\'iga qo\'shiladi.')) return;
+  try { await App.api(`/api/cash/ops/${id}/accept`, { method: 'POST' });
+        toast('Qabul qilindi'); reload(); }
+  catch (e) { toast(e.message, true); }
 }
 
 async function cancelOp(id) {

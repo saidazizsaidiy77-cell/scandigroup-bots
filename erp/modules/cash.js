@@ -292,14 +292,33 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
   //  kamayishi kerak. Modda ikkalasida ham yoziladi, ya'ni harajat
   //  foyda-zarardan yo'qolmaydi.
   const sarf = !boss && (b.to_kind === 'expense' || b.to_kind === 'supplier');
-  const from_kind = boss ? b.from_kind : (sarf ? 'worker' : 'customer');
-  const to_kind   = boss ? b.to_kind   : (sarf ? b.to_kind : 'worker');
+  //  ★ UCHINCHI YO'L: QO'LIDAGI PULNI KASSAGA TOPSHIRISH.
+  //
+  //  Ilgari bu yozuvni faqat KASSIR yozardi va xodim pulni berib,
+  //  uning ekrani ochilishini kutib turardi: topshirganini hech
+  //  qayerda ko'rsatolmasdi. Endi «topshirdim» ni o'zi bosadi, lekin
+  //  pul SHU ZAHOTI kassaga tushmaydi — operatsiya `pending` bo'lib
+  //  turadi va kassir KO'RIB, SANAB olgandan keyin qabul qiladi
+  //  (izoh: sql/cash.sql).
+  //
+  //  Qaysi kassaga ekanini SERVER hal qiladi — asosiy kassa: naqd pul
+  //  o'sha yerga tushadi va xodimga kassalar ro'yxati ochilmaydi.
+  const topshir = !boss && b.to_kind === 'account';
+  const asosiy = topshir ? (await db.query(
+    `SELECT id FROM cash_accounts WHERE code = 'MAIN'`)).rows[0] : null;
+  const from_kind = boss ? b.from_kind : ((sarf || topshir) ? 'worker' : 'customer');
+  const to_kind   = boss ? b.to_kind
+                         : (sarf ? b.to_kind : (topshir ? 'account' : 'worker'));
   const from_id   = boss ? (Number(b.from_id) || null)
-                         : (sarf ? req.user.id : (Number(b.from_id) || null));
+                         : ((sarf || topshir) ? req.user.id
+                                              : (Number(b.from_id) || null));
   const to_id     = boss ? (b.to_id == null ? null : Number(b.to_id))
                          : (sarf ? (b.to_kind === 'supplier'
                                     ? Number(b.to_id) || null : null)
-                                 : req.user.id);
+                         : (topshir ? (asosiy ? asosiy.id : null)
+                                    : req.user.id));
+  //  Ikkinchi bosqichni kutayotgan yozuv: qoldiqqa qo'shilmaydi.
+  const status = topshir ? 'pending' : 'ok';
 
   const client = await db.connect();
   try {
@@ -431,13 +450,13 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     const { rows } = await client.query(
       `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind, to_id,
                              currency, amount, rate, pl_month, expense_item_id,
-                             order_id, note, created_by)
+                             order_id, note, created_by, status)
        VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6,
-               $7, $8, $9, $10::date, $11, $12, $13, $14)
-       RETURNING id, doc_no, amount_usd`,
+               $7, $8, $9, $10::date, $11, $12, $13, $14, $15)
+       RETURNING id, doc_no, amount_usd, status`,
       [doc_no, b.op_date || null, from_kind, from_id, to_kind, to_id,
        currency, amount, rate, pl_month, item_id,
-       b.order_id || null, (b.note || '').trim() || null, req.user.id]);
+       b.order_id || null, (b.note || '').trim() || null, req.user.id, status]);
 
     await audit(req, { module: 'cash', action: 'create', entity: 'cash_op',
                        entity_id: rows[0].id,
@@ -456,15 +475,67 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
 //  Operatsiya O'CHMAYDI — bekor qilinadi va tarixda qoladi. Qoldiqdan
 //  chiqib ketadi, lekin «kim, qachon, nechani yozgan edi» ko'rinib
 //  turadi: pulda o'chirilgan qator eng yomon narsa.
-router.patch('/ops/:id', need(...MANAGE), wrap(async (req, res) => {
+router.patch('/ops/:id', need(...ANY), wrap(async (req, res) => {
+  //  Kassir HAR QANDAY yozuvni bekor qiladi. Kassirsiz xodim esa faqat
+  //  O'ZI yozgan va HALI QABUL QILINMAGAN topshirishni: uni hech kim
+  //  sanab olmagan, ya'ni bekor qilish hech kimning hisobiga tegmaydi.
+  //  Qabul qilingandan keyin esa bu kassirning ishi — konver so'rovi
+  //  bilan bir xil idiom.
+  if (!isBoss(req)) {
+    //  Kassirsiz xodimga FAQAT o'zining kutib turgan topshirishi:
+    //  qolgan hamma narsa unga yopiq va javob ham shunday bo'lishi
+    //  kerak — «topilmadi» degan javob «huquqim yo'q» degani emas.
+    const o = (await db.query(
+      `SELECT status, created_by FROM cash_ops WHERE id = $1`,
+      [req.params.id])).rows[0];
+    if (!o || o.status !== 'pending' || o.created_by !== req.user.id)
+      return res.status(403).json({ error: 'Ruxsat yo\'q' });
+  }
   const { rows } = await db.query(
     `UPDATE cash_ops SET status = 'cancelled'
-      WHERE id = $1 AND status = 'ok' RETURNING doc_no`, [req.params.id]);
+      WHERE id = $1 AND status IN ('ok', 'pending') RETURNING doc_no`,
+    [req.params.id]);
   if (!rows[0]) return res.status(400).json({ error: 'Operatsiya topilmadi yoki allaqachon bekor' });
   await audit(req, { module: 'cash', action: 'cancel', entity: 'cash_op',
                      entity_id: Number(req.params.id),
                      payload: { doc_no: rows[0].doc_no } });
   res.json({ ok: true });
+}));
+
+// ──────────────────────────────────────────── TOPSHIRILGAN PULNI QABUL
+//
+//  ★ KASSIR PULNI KO'RADI, SANAB OLADI, KEYIN QABUL QILADI (zavod
+//  qarori, 2026-09). Shu bosishgacha pul xodimning qo'lida turadi va
+//  kassa qoldig'iga qo'shilmaydi — ikkala raqam ham to'g'ri.
+//
+//  Sanagani ekrandagi summadan boshqa chiqsa QABUL QILINMAYDI: hujjat
+//  rad etiladi (`PATCH /ops/:id`) va xodim to'g'ri summa bilan qaytadan
+//  yozadi. Raqamni kassirning o'zi tuzatishi ikkinchi haqiqat yaratardi:
+//  xodim 500 topshirdim deb, kassa 450 qabul qildim deb turardi va
+//  farqning hujjati hech qayerda bo'lmasdi.
+router.post('/ops/:id/accept', need(...MANAGE), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `UPDATE cash_ops SET status = 'ok'
+      WHERE id = $1 AND status = 'pending'
+      RETURNING doc_no, amount_usd`, [req.params.id]);
+  if (!rows[0])
+    return res.status(400).json({ error: 'Topshirish topilmadi yoki allaqachon qabul qilingan' });
+  await audit(req, { module: 'cash', action: 'accept', entity: 'cash_op',
+                     entity_id: Number(req.params.id),
+                     payload: { doc_no: rows[0].doc_no } });
+  res.json(rows[0]);
+}));
+
+//  Qabul qilinmagan topshirishlar — kassirning navbati. Menejerga
+//  O'ZINIKI: u ham topshirgani turganini ko'rib tursin.
+router.get('/pending', need(...ANY), wrap(async (req, res) => {
+  const boss = isBoss(req);
+  const { rows } = await db.query(
+    `SELECT * FROM v_cash_ops
+      WHERE status = 'pending'
+        AND ($1::boolean OR (from_kind = 'worker' AND from_id = $2))
+      ORDER BY op_date, id`, [boss, req.user.id]);
+  res.json({ rows, boss });
 }));
 
 // ──────────────────────────────────────────────── BOSHLANG'ICH QOLDIQ

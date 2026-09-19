@@ -4126,6 +4126,82 @@ test('inkassatorning qo\'lidagi pul faqat kassaga topshiriladi', async () => {
     `SELECT can_spend_cash FROM workers WHERE id=$1`, [wid])).can_spend_cash, false);
 });
 
+test('topshirish ikki bosqich: xodim jo\'natadi, kassir sanab qabul qiladi', async () => {
+  //  ★ Ilgari bu yozuvni faqat KASSIR yozardi: xodim pulni berib,
+  //  uning ekrani ochilishini kutib turardi va topshirganini hech
+  //  qayerda ko'rsatolmasdi. Endi «topshirdim» ni o'zi bosadi, lekin
+  //  pul SHU ZAHOTI kassaga tushmaydi — kassir KO'RIB, SANAB olgandan
+  //  keyin qabul qiladi (tsexdagi topshirish bilan bir xil idiom).
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Sinov topshiruvchi')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  SELECT id, 'sotuvchi' FROM workers WHERE name='Sinov topshiruvchi'
+                  ON CONFLICT DO NOTHING`);
+  const wid = (await H.id(
+    `SELECT id FROM workers WHERE name='Sinov topshiruvchi'`)).id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const u = H.api(base, await H.sessionFor('Sinov topshiruvchi'));
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+
+  const qolda = async () => Number((await H.id(
+    `SELECT COALESCE(total_usd, 0) AS total_usd FROM v_worker_cash WHERE id=$1`,
+    [wid]) || {}).total_usd || 0);
+  const kassada = async () => Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd);
+
+  //  Mijozdan 300 $ oldi — pul uning qo'lida.
+  assert.equal((await u('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: mijoz, currency: 'USD', amount: 300 })).status, 200);
+  assert.equal(await qolda(), 300);
+  const kassaOldin = await kassada();
+
+  //  ★ TOPSHIRDIM. Qaysi kassaga ekanini server qo'yadi — asosiy kassa.
+  const t = await u('POST', '/api/cash/ops', {
+    to_kind: 'account', currency: 'USD', amount: 300 });
+  assert.equal(t.status, 200, t.text);
+  assert.equal(t.body.status, 'pending');
+  assert.match(t.body.doc_no, /^P\d{2}-\d{4}$/);
+
+  //  Pul HALI qo'lida: kassir sanab olmadi.
+  assert.equal(await qolda(), 300, 'sanalmagan pul qo\'lda turadi');
+  assert.equal(await kassada(), kassaOldin, 'kassaga hali tushmadi');
+
+  //  Kassir navbatni ko'radi, xodim esa o'zinikini.
+  const nav = (await kassir('GET', '/api/cash/pending')).body.rows;
+  assert.ok(nav.some((o) => o.id === t.body.id), 'kassirning navbatida turadi');
+  assert.equal((await u('GET', '/api/cash/pending')).body.rows.length, 1);
+  //  Menyudagi belgi ham shundan: kassir kassani ochib ko'rmasa ham
+  //  pul kutayotganini biladi.
+  const nb = (await kassir('GET', '/api/navbat')).body.navbat;
+  assert.equal(nb.filter((q) => q.mod === 'cash').reduce((a, q) => a + q.n, 0),
+    nav.length);
+
+  //  ★ SANAB OLDI — qabul qildi. Endi pul kassada.
+  const ok = await kassir('POST', `/api/cash/ops/${t.body.id}/accept`);
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(await qolda(), 0);
+  assert.equal(await kassada(), kassaOldin + 300);
+
+  //  Ikkinchi marta qabul qilib bo'lmaydi.
+  assert.equal((await kassir('POST',
+    `/api/cash/ops/${t.body.id}/accept`)).status, 400);
+
+  //  ★ ADASHIB YOZILGANINI XODIMNING O'ZI BEKOR QILADI — uni hech kim
+  //  sanab olmagan, ya'ni hech kimning hisobiga tegmaydi.
+  assert.equal((await u('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: mijoz, currency: 'USD', amount: 50 })).status, 200);
+  const t2 = await u('POST', '/api/cash/ops',
+    { to_kind: 'account', currency: 'USD', amount: 50 });
+  assert.equal(t2.status, 200, t2.text);
+  assert.equal((await u('PATCH', '/api/cash/ops/' + t2.body.id)).status, 200);
+  assert.equal(await qolda(), 50, 'bekor qilingach pul qo\'lida qoldi');
+
+  //  Qabul qilingan yozuvga esa tegmaydi: u endi kassirning ishi.
+  assert.equal((await u('PATCH', '/api/cash/ops/' + t.body.id)).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

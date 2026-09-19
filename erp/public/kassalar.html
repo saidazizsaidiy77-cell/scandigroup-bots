@@ -136,7 +136,32 @@ function draw(d) {
       .filter(Boolean).join(' \u00b7 ');
   };
 
-  $('body').innerHTML = setka(
+  //  ★ QABUL QILINMAGAN TOPSHIRISH — ENG TEPADA. Xodim «topshirdim»
+  //  ni bosdi va pul uning qo'lida kassirni kutib turibdi: sanab
+  //  olinmaguncha u hech qaysi qoldiqda yo'q (izoh: sql/cash.sql).
+  //  Shuning uchun ro'yxatning ustida turadi — kassir kassalarni
+  //  ko'zdan kechirmasdan oldin buni ko'rsin.
+  const kutmoqda = (kutish || []).length ? `
+    <div class="card" style="margin-bottom:18px">
+      <h2 style="margin:0 0 10px">Qabul qilinmagan topshirish</h2>
+      <table><tbody>${kutish.map(o => `<tr>
+        <td><b>${esc(o.doc_no)}</b> <span class="muted">${d8(o.op_date)}</span></td>
+        <td>${esc(o.from_name || '')}</td>
+        <td class="num">${o.currency === 'UZS'
+          ? `${uzs(o.amount)} <span class="muted" style="font-size:11px">so'm</span>`
+          : `${usd(o.amount)} <span class="muted" style="font-size:11px">$</span>`}</td>
+        <td class="num"><b>${usd(o.amount_usd)} $</b></td>
+        <td class="num">${d.boss
+          ? `<button class="primary" onclick="qabul(${o.id})">Qabul qilish</button>
+             <button class="ic" title="Rad etish" onclick="rad(${o.id})">×</button>`
+          : '<span class="muted">kassir qabul qilishini kutmoqda</span>'}</td>
+      </tr>`).join('')}</tbody></table>
+      ${d.boss ? `<p class="muted" style="font-size:12.5px;margin:10px 0 0">
+        Pulni sanab olgandan keyin qabul qiling — shundan keyin u kassa
+        qoldig'iga qo'shiladi.</p>` : ''}
+    </div>` : '';
+
+  $('body').innerHTML = kutmoqda + setka(
       d.rows.map(a => card(a.href, a.name,
         a.last_on ? `oxirgi harakat ${d8(a.last_on)}` : 'harakat yo\'q',
         a, a.kind === 'bank' ? 'hisob raqami' : 'ok')).join('')
@@ -165,14 +190,33 @@ function draw(d) {
       </table></div>` : '');
 }
 
-App.start(async () => {
-  const d = await App.api('/api/cash/list');
+async function qabul(id) {
+  if (!confirm('Pul sanab olindimi? Qabul qilinsa kassa qoldig\'iga qo\'shiladi.')) return;
+  try { await App.api(`/api/cash/ops/${id}/accept`, { method: 'POST' }); boot(); }
+  catch (e) { alert(e.message); }
+}
+async function rad(id) {
+  if (!confirm('Topshirish rad etilsinmi? Pul xodimning qo\'lida qoladi.')) return;
+  try { await App.api('/api/cash/ops/' + id, { method: 'PATCH' }); boot(); }
+  catch (e) { alert(e.message); }
+}
+
+let kutish = [];
+
+async function boot() {
+  const [d, p] = await Promise.all([
+    App.api('/api/cash/list'),
+    App.api('/api/cash/pending').catch(() => ({ rows: [] })),
+  ]);
+  kutish = p.rows || [];
   //  Menejerda kassa yo'q — uning yagona «joyi» o'z qo'lidagi pul.
   //  Bitta qatorli ro'yxat ortiqcha bosish bo'lardi (omborlar bilan
   //  bir xil qoida).
   if (!d.rows.length) { location.replace(d.me.href); return; }
   draw(d);
-}, 'cash.view', 'cash.entry', 'cash.manage');
+}
+
+App.start(boot, 'cash.view', 'cash.entry', 'cash.manage');
 </script>
 </body>
 </html>
