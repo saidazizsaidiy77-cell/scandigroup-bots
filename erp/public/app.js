@@ -169,9 +169,9 @@ const App = (() => {
     //  Konver so'rovi: tsex boshlig'i yozadi, direktor tasdiqlaydi
     //  (izoh: sql/units.sql). Ikkala huquq ham shu sahifani ochadi —
     //  biri yozish, ikkinchisi tasdiqlash uchun.
-    { href: '/sorovlar.html', mod: 'production', nav: "Konver so'rovlari",
-      title: "Konver so'rovlari", lead: 'Tsex boshlig\'i → direktor',
-      text: "Ishlab chiqarishga nima kirishini tsex boshlig'i so'raydi, konverni direktor ochadi",
+    { href: '/sorovlar.html', mod: 'production', nav: "Konver qo'shish",
+      title: "Konver qo'shish", lead: 'Kiritildi → tasdiqlandi',
+      text: "Ishlab chiqarishga nima kirishi kiritiladi, konver esa rahbariyat tasdiqlagandan keyin ochiladi",
       perm: ['production.request', 'production.approve'] },
     { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
       title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',

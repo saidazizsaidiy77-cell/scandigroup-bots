@@ -10,7 +10,10 @@ INSERT INTO permissions (code, module, name) VALUES
   -- Ishlab chiqarish (ishlayapti)
   ('production.view',   'production', 'Ishlab chiqarishni ko''rish'),
   ('production.entry',  'production', 'Bo''limdan dona o''tkazish, brak, to''xtash'),
-  ('production.units',  'production', 'Konver: yaratish, zakaz/mijoz/narx qo''yish'),
+  --  Konverni OCHISH endi bu huquqda emas: kiritilgani tasdiqdan
+  --  o'tadi (izoh: `modules/units.js`, `POST /`). Bu huquq jurnalni
+  --  TO'LDIRISH: zakaz, mijoz, narx, rang, mato.
+  ('production.units',  'production', 'Konver jurnali: zakaz/mijoz/narx/rang'),
   ('production.manage', 'production', 'Marshrut, reja, bo''lim quvvati, spravochnik'),
   -- Jamlanma hisobotlar: zavod ko'rinishi va boshqaruv paneli. Jurnaldan
   -- alohida, chunki jurnalni sotuvchi ham ko'radi (o'z buyurtmasi qayerda
@@ -96,11 +99,12 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('ishlab_boshl', 'production.reports'), ('ishlab_boshl', 'warehouse.view'),
   ('ishlab_boshl', 'warehouse.material'),
 
-  -- Ma'lumot kirituvchining ishi BITTA: konver kiritish va jurnalni
-  -- to'ldirish. Boshlang'ich qoldiq (`production.manage`, izoh:
-  -- `modules/units.js`) ham, hisobotlar (pastdagi DELETE) ham unda yo'q.
-  ('kirituvchi',   'production.view'), ('kirituvchi', 'production.entry'),
-  ('kirituvchi',   'production.units'),
+  -- Ma'lumot kirituvchining ishi BITTA: ishlab chiqarishga kiradigan
+  -- konverni yozib berish. Kiritgani TASDIQDAN o'tadi (izoh:
+  -- sql/units.sql) — tasdiqlash direktor, ishlab chiqarish boshlig'i va
+  -- administratorda. Jurnal, boshlang'ich qoldiq va hisobotlar unda
+  -- YO'Q (pastdagi DELETE'lar).
+  ('kirituvchi',   'production.entry'), ('kirituvchi', 'production.request'),
 
   -- Tsex ustasida FAQAT o'tkazish huquqi. production.view jurnal, zavod
   -- ko'rinishi va panelni ochadi — ustaga bularning hammasi ortiqcha
@@ -193,6 +197,23 @@ DELETE FROM role_permissions
 -- qolib ketardi.
 DELETE FROM role_permissions
  WHERE role_code = 'kirituvchi' AND permission_code = 'production.reports';
+
+-- Jurnal ham olib tashlandi (zavod qarori, 2026-09). Kiritadigan
+-- xodimning ishi bitta va u «Konver qo'shish» sahifasida bajariladi;
+-- jurnal esa butun zavodning konverlari, narxi va mijozi bilan turadi.
+--
+-- `production.units` ham shu bilan birga ketadi: u jurnalni TO'LDIRISH
+-- huquqi edi (zakaz, mijoz, narx, rang) va jurnalsiz ortida hech qanday
+-- ekran qolmaydi. Ochilmaydigan huquq rol jadvalida yolg'on bo'lib
+-- turardi.
+DELETE FROM role_permissions
+ WHERE role_code = 'kirituvchi'
+   AND permission_code IN ('production.view', 'production.units');
+
+-- Huquq nomi ham shunday: ON CONFLICT DO NOTHING eski bazada matnni
+-- yangilamaydi, shuning uchun alohida yoziladi.
+UPDATE permissions SET name = 'Konver jurnali: zakaz/mijoz/narx/rang'
+ WHERE code = 'production.units';
 
 -- Rol nomi va ko'rinishi ham kodda. ON CONFLICT DO NOTHING eski bazada
 -- nomni yangilamaydi, shuning uchun alohida yoziladi.

@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Konver so'rovlari · ZELTA</title>
+<title>Konver qo'shish · ZELTA</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#f3f2ef">
@@ -26,7 +26,7 @@
 <body>
 
 <div class="top">
-  <div class="brand"><span class="dot"></span><h1>Konver so'rovlari</h1></div>
+  <div class="brand"><span class="dot"></span><h1>Konver qo'shish</h1></div>
   <div class="row"><span class="row" id="erpUser"></span></div>
 </div>
 
@@ -34,9 +34,11 @@
       Tasdiqlovchida (direktor) u ham ko'rinadi — u ham so'rov yoza
       oladigan bo'lsa; huquqi bo'lmasa kartochka umuman chizilmaydi. -->
 <div class="card" id="newCard" hidden>
-  <h2 style="margin:0 0 4px">Yangi so'rov</h2>
+  <h2 style="margin:0 0 4px">+ Konver qo'shish</h2>
   <p class="muted" style="margin:0 0 14px">
-    Ishlab chiqarishga nima kirishini siz yozasiz, konverni direktor ochadi.</p>
+    Ishlab chiqarishga nima kirishini siz yozasiz. Konver rahbariyat
+    tasdiqlagandan keyin ochiladi — direktor, ishlab chiqarish boshlig'i
+    yoki administrator.</p>
   <div class="form">
     <div class="wide"><label>Mahsulot</label>
       <select id="fProduct" onchange="eta()"></select></div>
@@ -55,7 +57,7 @@
   <datalist id="fabrics"></datalist>
   <div class="eta" id="etaLine"></div>
   <div class="row" style="margin-top:14px">
-    <button class="primary" onclick="send()">So'rov yuborish</button>
+    <button class="primary" onclick="send()">+ Konver qo'shish</button>
   </div>
 </div>
 

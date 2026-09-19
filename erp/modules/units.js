@@ -356,7 +356,11 @@ async function nextConveyorNo(client = db, letter = 'K') {
 // o'zi yig'iladi va keyingi kiritishda tanlash uchun taklif qilinadi.
 // Shunday qilib zavod o'z ranglarini ishlab ketaveradi, ro'yxatni oldindan
 // tuzib chiqish kerak bo'lmaydi.
-router.get('/suggest', need('production.view'), wrap(async (_req, res) => {
+//  Rang va mato ro'yxati «Konver qo'shish» sahifasiga ham kerak, uning
+//  egasida esa jurnal yo'q — shuning uchun so'rov huquqi ham qabul
+//  qilinadi. Bu spravochnik: unda na narx bor, na mijoz.
+router.get('/suggest', need('production.view', 'production.request'),
+  wrap(async (_req, res) => {
   const { rows } = await db.query(
     `SELECT 'color' AS field, color AS value, COUNT(*) AS n
        FROM production_units WHERE color IS NOT NULL GROUP BY color
@@ -704,7 +708,19 @@ async function createOne(client, req, it) {
   return u;
 }
 
-router.post('/', need(...UNITS), wrap(async (req, res) => {
+//  ★ KONVERNI TO'G'RIDAN-TO'G'RI OCHISH — FAQAT `production.manage`
+//  (zavod qarori, 2026-09).
+//
+//  Ma'lumot kirituvchi konverni o'zi ochmaydi: SO'ROV yozadi va uni
+//  direktor, ishlab chiqarish boshlig'i yoki administrator tasdiqlaydi
+//  (izoh: `sql/units.sql`, `unit_requests`). Tasdiqsiz konver
+//  ochilmaydi — xom ashyo sarfi, ishbay oylik va ombor qoldig'i o'sha
+//  raqamga bog'lanadi.
+//
+//  `production.units` ning o'zi qolaveradi: u endi jurnalni TO'LDIRISH
+//  huquqi — zakaz, mijoz, narx, rang va mato. Kiritilgan konverni
+//  tuzatish kiritgan odamning ishi bo'lib qoladi.
+router.post('/', need('production.manage'), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   if (!items.length) return res.status(400).json({ error: 'Qator yo\'q' });
 

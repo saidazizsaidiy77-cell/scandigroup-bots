@@ -248,19 +248,26 @@ Telegram xabari **hozircha yozilmadi** (zavod qarori): ekrandagi belgi
 yetarli. Navbat jadvali (`notifications`) va `erp/notify.js` bazada
 tayyor turibdi — kerak bo'lganda yuboruvchi ulanadi, sahifaga tegilmaydi.
 
-**★ KONVER SO'ROVI — tsex boshlig'i yozadi, direktor tasdiqlaydi**
-(`unit_requests`, `/sorovlar.html`, `sql/units.sql`). Zavod qarori
-(2026-09): ishlab chiqarishga nima kirishini KORPUS va STUL tsexlarining
-boshliqlari o'zlari biladi — kun boshida nima yig'ilishini ular
-rejalashtiradi. Lekin konverning ochilishi pulga tegadi: xom ashyo
-sarflanadi, ishbay oylik shu raqamga yoziladi va ombor qoldig'i
-o'zgaradi. Shuning uchun so'rovni boshliq yozadi, konverni esa
-**direktor** (yoki admin) ochadi.
+**★ KONVER TASDIQDAN O'TADI** (`unit_requests`, `/sorovlar.html`,
+`sql/units.sql`). Zavod qarori (2026-09): konverni **hech kim o'zi
+ochmaydi**. Kim kiritsa ham — ma'lumot kirituvchi bo'ladimi, tsex
+boshlig'i bo'ladimi — yozgani navbatga tushadi va **rahbariyat
+tasdiqlagandan keyin** konverga aylanadi. Sabab: konverning ochilishi
+pulga tegadi — xom ashyo sarflanadi, ishbay oylik shu raqamga yoziladi
+va ombor qoldig'i o'zgaradi.
 
-Huquqi ikkita: `production.request` (tsex_usta, ishlab_boshl) va
-`production.approve` (direktor, ishlab_boshl, admin). `production.units`
-dan alohida — u konverni TO'G'RIDAN-TO'G'RI ochadi, bu esa navbatga
-qo'yadi.
+  **Yozadi** — `production.request`: ma'lumot kirituvchi va tsex
+  boshlig'i.
+  **Tasdiqlaydi** — `production.approve`: direktor, ishlab chiqarish
+  boshlig'i, administrator.
+
+Konverni TO'G'RIDAN-TO'G'RI ochish (`POST /api/units/`) endi
+`production.manage` da — ya'ni tasdiqlaydigan odamning o'zida.
+Jurnaldagi «+ Yangi konver» tugmasi ham o'sha huquqda; qolganlarda u
+umuman chizilmaydi.
+
+`production.units` endi konver OCHMAYDI: u jurnalni TO'LDIRISH huquqi —
+zakaz, mijoz, narx, rang, mato.
 
 **Alohida jadval, `status='draft'` EMAS.** Konver jadvali butun tizimning
 o'qi: jurnal, ombor qoldig'i, WIP, bron, balans va o'nlab view shundan
@@ -274,9 +281,10 @@ harakat yozuvi ham, jamlanma hisobot ham bir xil yo'ldan o'tadi.
 o'zgartirilmaydi: tasdiqlovchi boshqacha xohlasa rad etadi va sababini
 yozadi, aks holda boshliq nima so'raganini keyin solishtirib bo'lmasdi.
 
-Chegara so'rashda ham bor: boshliq FAQAT o'z tsexining mahsulotiga
-so'rov yozadi (mahsulot qaysi tsexniki — `owner_shop_id`, bo'lmasa
-marshrutning birinchi qadami). Bo'lim so'ralmaydi: konver
+Chegara so'rashda ham bor: tsexi biriktirilgan xodim FAQAT o'z
+tsexining mahsulotiga so'rov yozadi (mahsulot qaysi tsexniki —
+`owner_shop_id`, bo'lmasa marshrutning birinchi qadami). Doirasi
+bo'lmagan xodim (ma'lumot kirituvchi) hamma mahsulotga yozadi. Bo'lim so'ralmaydi: konver
 «boshlanmagan» bo'lib ochiladi va boshliq uni o'z ekranidan bir bosishda
 ishga tushiradi.
 
@@ -1033,7 +1041,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | Rol | Huquq | Ko'radi |
 |---|---|---|
 | `tsex_usta` | `production.entry`, `production.request`, `production.plan` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi va muddat rejasini qo'yadi |
-| `kirituvchi` | + `production.units` | faqat jurnal: konver kiritadi va to'ldiradi. **Boshlang'ich qoldiq ham, hisobotlar ham YO'Q** |
+| `kirituvchi` | `production.entry`, `production.request` | **faqat «Konver qo'shish»**: ishlab chiqarishga nima kirishini yozadi, konverni rahbariyat ochadi. Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor |

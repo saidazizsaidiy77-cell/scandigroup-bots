@@ -194,16 +194,29 @@ const xodim = async (nom, rol) => {
 test('tarixga tegadigan maydonlar faqat boshqaruvchiga ochiq', async () => {
   const u = await newUnit();
   sotuvchi = await xodim('Sinov sotuvchi', 'sotuvchi');
-  // Ma'lumot kirituvchi: jurnalni to'ldiradi, lekin tarixga tegmaydi.
-  const kirituvchi = await xodim('Sinov kirituvchi', 'kirituvchi');
+
+  //  `production.units` — jurnalni TO'LDIRISH huquqi: zakaz, mijoz,
+  //  narx, rang. Hozir uni `production.manage` siz oladigan rol yo'q
+  //  (ma'lumot kirituvchida jurnal ochilmaydi), shuning uchun chegara
+  //  sinov uchun atay yaratilgan rolda tekshiriladi — huquqning O'ZI
+  //  joyida turibdi va ertaga yangi rolga berilishi mumkin.
+  const { db } = require('../db');
+  await db.query(
+    `INSERT INTO roles (code, name) VALUES ('sinov_jurnal', 'Sinov jurnalchi')
+     ON CONFLICT DO NOTHING`);
+  await db.query(
+    `INSERT INTO role_permissions (role_code, permission_code)
+     VALUES ('sinov_jurnal','production.view'), ('sinov_jurnal','production.units')
+     ON CONFLICT DO NOTHING`);
+  const jurnalchi = await xodim('Sinov jurnalchi', 'sinov_jurnal');
 
   for (const body of [{ conveyor_no: 'X-1' }, { qty: 5 }, { lak_on: '2026-01-01' },
                       { section_id: ROVER }]) {
-    const r = await kirituvchi('PATCH', '/api/units/' + u.id, body);
+    const r = await jurnalchi('PATCH', '/api/units/' + u.id, body);
     assert.equal(r.status, 403, JSON.stringify(body) + ' → ' + r.text);
   }
   // Narx, zakaz va mijoz esa uning ishi
-  assert.equal((await kirituvchi('PATCH', '/api/units/' + u.id,
+  assert.equal((await jurnalchi('PATCH', '/api/units/' + u.id,
     { unit_price: 100 })).status, 200);
 });
 
@@ -872,9 +885,9 @@ test('xato kiritilgan konver jurnaldan omborga o\'tkaziladi', async () => {
     assert.equal((await admin('POST', `/api/units/${ish.id}/to-warehouse`,
       { warehouse_code: kod })).status, 400, kod);
 
-  // Bu TUZATISH — kirituvchida ham, ustada ham yo'q
-  const kirituvchi = H.api(base, await H.sessionFor('Sinov kirituvchi'));
-  assert.equal((await kirituvchi('POST', `/api/units/${ish.id}/to-warehouse`,
+  // Bu TUZATISH — jurnalni to'ldiradiganda ham, ustada ham yo'q
+  const jurnalchi = H.api(base, await H.sessionFor('Sinov jurnalchi'));
+  assert.equal((await jurnalchi('POST', `/api/units/${ish.id}/to-warehouse`,
     { warehouse_code: 'TM' })).status, 403);
   assert.equal((await korpus('POST', `/api/units/${ish.id}/to-warehouse`,
     { warehouse_code: 'TM' })).status, 403);
@@ -2976,15 +2989,16 @@ test('xodimga rol biriktirilsa huquqi darrov ishlaydi', async () => {
   const perms = (await H.id(
     `SELECT array_agg(permission_code ORDER BY permission_code) AS p
        FROM v_worker_permissions WHERE worker_id = $1`, [w.body.id])).p;
-  assert.ok(perms.includes('production.units'),
-    'kirituvchi konver yaratadi: ' + perms);
-  assert.ok(perms.includes('production.view'), 'jurnal ochiladi');
+  assert.ok(perms.includes('production.request'),
+    'kirituvchi konver so\'rovini yozadi: ' + perms);
+  assert.ok(!perms.includes('production.view'), 'jurnal ochilmaydi');
 
-  //  Yaratilgan xodim konverni HAQIQATAN ocha oladi.
+  //  Konverni O'ZI ochmaydi — so'rov yozadi va u tasdiqdan o'tadi.
   const kir = H.api(base, await H.sessionFor('Sinov kiritувchi HTTP'));
-  const u = await kir('POST', '/api/units/', {
-    items: [{ product_id: PENAL, qty: 1, section_id: ARRA }] });
-  assert.equal(u.status, 200, u.text);
+  assert.equal((await kir('POST', '/api/units/', {
+    items: [{ product_id: PENAL, qty: 1, section_id: ARRA }] })).status, 403);
+  const q = await kir('POST', '/api/units/requests', { product_id: PENAL, qty: 2 });
+  assert.equal(q.status, 200, q.text);
 
   //  Rolni ALMASHTIRISH ham ishlaydi va eskisi qoladi emas.
   assert.equal((await admin('PATCH', '/api/admin/workers/' + w.body.id,
@@ -2996,14 +3010,55 @@ test('xodimga rol biriktirilsa huquqi darrov ishlaydi', async () => {
   assert.ok(p2.includes('production.plan'), 'yangi rol keladi');
 });
 
+/* ============================================================================
+ *  ★ KONVER TASDIQDAN O'TADI
+ *
+ *  Kiritgan odam konverni ochmaydi: rahbariyat tasdiqlaydi. Singanda
+ *  tasdiqsiz konver paydo bo'ladi — xom ashyo, ishbay oylik va ombor
+ *  qoldig'i o'sha raqamga bog'lanadi.
+ * ========================================================================== */
+test('kiritgan ochmaydi, rahbariyat tasdiqlaydi', async () => {
+  const kir  = await xodim('Sinov kiritувchi 2', 'kirituvchi');
+  const rahbar = await xodim('Sinov direktor', 'direktor');
+
+  //  Kiritadigan xodimda konver ochish tugmasi yo'q.
+  assert.equal((await kir('POST', '/api/units/', { items: [{
+    product_id: PENAL, qty: 1, section_id: ARRA }] })).status, 403);
+
+  //  So'rov esa uniki.
+  const q = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 4, fabric: 'Velur', started_on: '2026-09-10' });
+  assert.equal(q.status, 200, q.text);
+  const id = q.body.created[0];
+
+  //  Tasdiqlash uniki emas.
+  assert.equal((await kir('POST', `/api/units/requests/${id}/approve`)).status, 403);
+
+  //  Direktor tasdiqlaydi va konver SHUNDA ochiladi.
+  const ok = await rahbar('POST', `/api/units/requests/${id}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+  const u = await H.id(`SELECT qty, fabric FROM production_units WHERE id = $1`,
+    [ok.body.unit_id]);
+  assert.equal(u.qty, 4);
+  assert.equal(u.fabric, 'Velur');
+
+  //  Jurnal unga umuman ochilmaydi: butun zavodning konverlari, narxi
+  //  va mijozi u yerda turadi.
+  assert.equal((await kir('GET', '/api/units/')).status, 403);
+  assert.equal((await kir('PATCH', '/api/units/' + ok.body.unit_id,
+    { unit_price: 120 })).status, 403);
+
+  //  «Konver qo'shish» sahifasi esa to'liq ishlaydi — rang va mato
+  //  ro'yxati ham unga ochiq.
+  assert.equal((await kir('GET', '/api/units/suggest')).status, 200);
+  assert.equal((await kir('GET', '/api/ref')).status, 200);
+  assert.equal((await kir('GET', '/api/units/requests')).status, 200);
+});
+
 test('boshlang\'ich qoldiq faqat boshqaruvchida', async () => {
   const kir = await xodim('Sinov qoldiqchi', 'kirituvchi');
 
-  //  Oddiy konver — kiritadi.
-  assert.equal((await kir('POST', '/api/units/', { items: [{
-    product_id: PENAL, qty: 1, section_id: ARRA }] })).status, 200);
-
-  //  Boshlang'ich qoldiq esa yo'q: bir martalik ish va u tugagan.
+  //  Boshlang'ich qoldiq yo'q: bir martalik ish va u tugagan.
   //  Tekshiruv SERVERDA — menyudan sahifani olib qo'yish himoya emas.
   const q = await kir('POST', '/api/units/', { items: [{
     product_id: PENAL, qty: 1, section_id: ARRA, is_opening: true }] });
@@ -3015,8 +3070,6 @@ test('boshlang\'ich qoldiq faqat boshqaruvchida', async () => {
   //  Hisobotlar ham uniki emas: zavod ko'rinishi va panel rahbariyatniki.
   for (const yol of ['/api/factory', '/api/dashboard', '/api/wip'])
     assert.equal((await kir('GET', yol)).status, 403, yol);
-  //  Jurnal esa ochiq — uning ishi o'sha yerda.
-  assert.equal((await kir('GET', '/api/units/')).status, 200);
 
   //  Boshqaruvchida ikkalasi ham ishlayveradi.
   assert.equal((await admin('POST', '/api/units/', { items: [{

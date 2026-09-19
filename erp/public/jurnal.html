@@ -161,8 +161,10 @@ async function boot(){
   document.getElementById('dlFabric').innerHTML =
     sg.fabrics.map(v => `<option value="${esc(v)}">`).join('');
   ref = r; customers = c.customers;
-  // Konver yaratish huquqi yo'q xodimga tugma ko'rsatilmaydi
-  if (!App.can('production.units', 'production.manage')) $('btnNew').remove();
+  //  Konverni TO'G'RIDAN-TO'G'RI ochish faqat boshqaruvchida: ma'lumot
+  //  kirituvchi so'rov yozadi va u tasdiqdan o'tadi (izoh:
+  //  `modules/units.js`, `POST /`). Tugma o'shalarda ko'rinmaydi.
+  if (!App.can('production.manage')) $('btnNew').remove();
   // "Hammasini tanlash" katakchasi ham: tanlashdan keyin bosiladigan
   // yagona tugma — o'tkazish, u esa savdoda yo'q.
   if (!App.can('production.entry')) $('chAll').remove();
