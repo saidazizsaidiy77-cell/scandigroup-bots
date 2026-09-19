@@ -10,6 +10,7 @@
 const express = require('express');
 const { db, wrap, audit, today } = require('../db');
 const { need, ownOf } = require('../auth');
+const notify = require('../notify');
 const { resolveShift } = require('./shift');
 
 const router = express.Router();
@@ -541,6 +542,26 @@ router.get('/requests/next-no', need(...REQUEST), wrap(async (req, res) => {
   });
 }));
 
+//  ★ NAVBATDA NECHTA SO'ROV TURIBDI — MENYUDAGI BELGI UCHUN.
+//
+//  Tasdiqlovchi kun bo'yi so'rovlar sahifasida o'tirmaydi: u jurnalda,
+//  hisobotda yoki umuman saytdan tashqarida bo'ladi. Ilgari navbatni
+//  BILISH uchun o'sha sahifani ochib ko'rishdan boshqa yo'l yo'q edi va
+//  ertalab yozilgan so'rov kechgacha turib qolardi.
+//
+//  So'rov ATAYLAB yengil: faqat bitta son qaytadi va sahifa uni har
+//  daqiqada qayta o'qiydi (izoh: `public/app.js`, `sorovTick`).
+//  Tasdiqlamaydigan xodimga nol qaytadi — belgi unga ko'rsatilmaydi:
+//  navbat uning ishi emas va har kuni turgan raqamga ko'z o'rganib
+//  qolardi.
+router.get('/requests/pending', need(...REQUEST), wrap(async (req, res) => {
+  if (!req.user.permissions.includes('production.approve'))
+    return res.json({ n: 0 });
+  const { rows } = await db.query(
+    `SELECT COUNT(*)::int AS n FROM unit_requests WHERE status = 'pending'`);
+  res.json({ n: rows[0].n });
+}));
+
 router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
   const scope = scopeOf(req);
   //  Tasdiqlovchida doira bo'lmaydi, boshliqda esa bo'ladi. Chegara
@@ -674,12 +695,31 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
         [it.product_id, qty, trim(it.color), trim(it.fabric),
          it.started_on || null, it.section_id || null, it.note || null,
          shopId, req.user.id, no, it.is_stock === true, due])).rows[0];
-      created.push(q.id);
+      created.push({ id: q.id, no, qty });
     }
     await audit(req, { module: 'production', action: 'request', entity: 'unit_requests',
                        entity_id: created.length, payload: { count: created.length } }, client);
+
+    //  ★ TASDIQLOVCHIGA XABAR. Navbat ekranda belgi bo'lib ham turadi
+    //  (`/requests/pending`), lekin belgi faqat sayt ochiq bo'lganda
+    //  ko'rinadi — direktor esa kun bo'yi saytda o'tirmaydi va so'rov
+    //  u kirib ko'rmaguncha yotib qolardi.
+    //
+    //  Xabar NAVBATGA qo'yiladi, Telegramga shu yerdan yuborilmaydi:
+    //  API javobi Telegramning javobini kutmasligi kerak — bot javob
+    //  bermasa so'rov yozish ham to'xtab qolardi (izoh: erp/notify.js).
+    //  Yuboruvchi `erp/server.js` da, tokeni bo'lmasa navbat shunchaki
+    //  to'lib turaveradi va hech narsa buzilmaydi.
+    await notify.queue({
+      permission_code: 'production.approve',
+      module: 'production',
+      title: `${created.length} ta konver tasdiq kutmoqda`,
+      body: created.map((c) => `${c.no} · ${c.qty} ta`).join('\n')
+            + `\n\nKim so'radi: ${req.user.name}`,
+    }, client);
+
     await client.query('COMMIT');
-    res.json({ created });
+    res.json({ created: created.map((c) => c.id) });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });

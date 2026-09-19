@@ -3223,6 +3223,42 @@ test('so\'rov ro\'yxatida marshrut uzunligi SON bo\'lib keladi', async () => {
   assert.equal(d.getFullYear(), 2026, 'omborga tushish kuni o\'sha yilda qoladi');
 });
 
+test('navbatdagi so\'rov tasdiqlovchiga XABAR bo\'lib tushadi', async () => {
+  //  ★ Tasdiqlovchi kun bo'yi saytda o'tirmaydi: navbatni BILISH uchun
+  //  so'rovlar sahifasini ochib ko'rishdan boshqa yo'l yo'q edi va
+  //  ertalab yozilgan so'rov kechgacha turib qolardi.
+  //
+  //  Ikki yo'l: menyudagi belgi uchun SON va Telegram uchun NAVBAT.
+  const kir = await xodim('Sinov xabarchi', 'kirituvchi');
+
+  const oldin = Number((await admin('GET', '/api/units/requests/pending')).body.n);
+  //  Kirituvchida tasdiqlash huquqi yo'q — unga navbat ko'rsatilmaydi:
+  //  har kuni turgan raqamga ko'z o'rganib qolardi.
+  assert.equal((await kir('GET', '/api/units/requests/pending')).body.n, 0);
+
+  const q = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 3, conveyor_no: 'K-9701', started_on: '2026-09-19' });
+  assert.equal(q.status, 200, q.text);
+
+  assert.equal(Number((await admin('GET', '/api/units/requests/pending')).body.n),
+    oldin + 1, 'tasdiqlovchida navbat soni oshdi');
+
+  //  Xabar navbatga tushdi va TASDIQLASH huquqiga yo'llangan — aynan
+  //  kimga yuborilishini `tg_id` hal qiladi (izoh: erp/notify.js).
+  const x = await H.id(
+    `SELECT permission_code, title, body FROM notifications
+      ORDER BY id DESC LIMIT 1`);
+  assert.equal(x.permission_code, 'production.approve');
+  assert.match(x.title, /tasdiq kutmoqda/);
+  assert.match(x.body, /K-9701/, 'xabarda konver raqami turadi');
+  assert.match(x.body, /Sinov xabarchi/, 'kim so\'raganini ham aytadi');
+
+  //  Tasdiqlangach navbatdan chiqadi.
+  assert.equal((await admin('POST',
+    `/api/units/requests/${q.body.created[0]}/approve`)).status, 200);
+  assert.equal(Number((await admin('GET', '/api/units/requests/pending')).body.n), oldin);
+});
+
 test('so\'rov ro\'yxati sana AVTOMATMI deb aytadi', async () => {
   //  ★ FORMULA HAMMA TSEXDA ISHLAMAYDI (`shops.plan_auto`). Stulda
   //  T/M ombor sanasi marshrutdan o'zi chiqadi, korpusda esa katak

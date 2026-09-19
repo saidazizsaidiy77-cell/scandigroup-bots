@@ -77,6 +77,13 @@ tr:last-child td{border-bottom:none}
    ko'z uni ro'yxatni o'qimasdan ham topadi. Nuqta rang bilan birga —
    tsexdagi ekran yorug'da turadi va faqat rangga ishonib bo'lmaydi. */
 .tag.yangi{background:rgba(168,130,28,.16);color:var(--accent-ink);font-weight:600}
+/*  Menyudagi navbat belgisi: tasdiq kutayotgan so'rovlar soni. Oltin —
+    «yangi buyurtma» nuqtasi bilan bir xil til: ko'z uni javob deb
+    o'qiydi, ogohlantirish deb emas. Yumaloq va kichkina: havolaning
+    yonida turadi, uni surib yubormaydi. */
+.nav a .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;
+  border-radius:9px;background:var(--accent);color:#fff;
+  font-size:11px;line-height:18px;text-align:center;font-weight:700;vertical-align:1px}
 .new-bron{color:var(--accent-ink);font-weight:600}
 .new-bron::before{content:'\25CF';font-size:9px;vertical-align:2px;margin-right:5px}
 button{font:inherit;color:var(--text);background:var(--surface-2);

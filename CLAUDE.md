@@ -327,9 +327,9 @@ Belgi ishga tushgan kungacha qo'yilgan bronlar yangi hisoblanmaydi
 har tsexda o'nlab belgi chiqib, haqiqiy yangi buyurtma o'sha to'da
 orasida ko'rinmay ketardi.
 
-Telegram xabari **hozircha yozilmadi** (zavod qarori): ekrandagi belgi
-yetarli. Navbat jadvali (`notifications`) va `erp/notify.js` bazada
-tayyor turibdi — kerak bo'lganda yuboruvchi ulanadi, sahifaga tegilmaydi.
+Telegram xabari BRON uchun yozilmadi (zavod qarori): boshliq kun bo'yi
+bo'limlar ro'yxatida turadi va ekrandagi belgi yetarli. Konver
+SO'ROVIGA esa yozildi — pastda: tasdiqlovchi u ekranda o'tirmaydi.
 
 **★ KONVER TASDIQDAN O'TADI** (`unit_requests`, `/sorovlar.html`,
 `sql/units.sql`). Zavod qarori (2026-09): konverni **hech kim o'zi
@@ -410,6 +410,42 @@ ro'yxatidan tsex tanlanadi. Kodga ism ham, tsex ham yozilmaydi
 (4-qoida). Bo'lim so'ralmaydi: konver
 «boshlanmagan» bo'lib ochiladi va boshliq uni o'z ekranidan bir bosishda
 ishga tushiradi.
+
+**★ NAVBAT TASDIQLOVCHINI O'ZI TOPADI** (zavod qarori, 2026-09).
+Tasdiqlovchi kun bo'yi so'rovlar sahifasida o'tirmaydi: u jurnalda,
+hisobotda yoki umuman saytdan tashqarida bo'ladi. Ilgari navbatni
+BILISH uchun o'sha sahifani ochib ko'rishdan boshqa yo'l yo'q edi va
+ertalab yozilgan so'rov kechgacha turib qolardi. Ikki yo'l bilan
+aytiladi va ikkalasi bir-biriga bog'liq emas:
+
+  1. **Menyudagi belgi** — `GET /api/units/requests/pending` bitta son
+     qaytaradi, `public/app.js` (`sorovTick`) uni har daqiqada qayta
+     o'qiydi. Belgi IKKI joyda: bo'lim nomida va sahifa havolasida —
+     bo'lim yopiq bo'lsa ostki qator umuman chizilmaydi. Sahifa
+     sarlavhasiga ham yoziladi (`(3) ZELTA`): boshqa tabda turgan odam
+     yorliqning O'ZIDAN ko'radi. Bitta zanjir va faqat oyna ochiq
+     turganda — buyurtmalardagi `planTick` bilan bir xil qoida.
+
+     Tasdiqlamaydigan xodimga NOL qaytadi: navbat uning ishi emas va
+     har kuni turgan raqamga ko'z o'rganib qolardi.
+
+  2. **Telegram** — belgi faqat sayt ochiq bo'lganda ko'rinadi,
+     direktorning cho'ntagida esa telefon turadi. So'rov yozilganda
+     xabar `notifications` NAVBATIGA qo'yiladi (`production.approve`
+     huquqiga yo'llanadi), yuborilishi esa alohida: API javobi
+     Telegramning javobini kutmaydi — bot javob bermasa so'rov yozish
+     ham to'xtab qolardi.
+
+     Yuboruvchi `erp/server.js` da (`xabarJadvali`), daqiqada bir marta,
+     zaxira jadvali bilan bir xil idiom — alohida bot jarayoni
+     ko'tarilmadi. **`ERP_TG_TOKEN` yo'q bo'lsa JIM turadi** va hech
+     narsani buzmaydi: xabarlar navbatda yig'ilaveradi. Kimga borishini
+     xodimning `tg_id` si hal qiladi (Xodimlar sahifasida yoziladi —
+     kodga na ism, na raqam: 4-qoida).
+
+`notify.queue()` ga tranzaksiya ichidan `client` UZATILADI (3-qoida):
+hovuzdan yangi ulanish o'sha tranzaksiyani ko'rmasdi va so'rov
+qaytarilsa bo'lmagan konver haqida xabar ketardi.
 
 Rad etish ham, so'rovchining o'zi bekor qilishi ham bitta yo'ldan
 (`/reject`), lekin holati boshqa: `rejected` — direktorniki,

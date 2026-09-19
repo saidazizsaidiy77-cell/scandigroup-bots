@@ -1,11 +1,16 @@
 const { db } = require('./db');
 
-// Xabar navbatga qo'yiladi, yuborish alohida jarayonda (bot) bo'ladi —
+// Xabar navbatga qo'yiladi, yuborish alohida jarayonda bo'ladi —
 // shuning uchun API javobi Telegram javobini kutmaydi.
 //   queue({ permission_code: 'production.view', title: '...', body: '...' })
 //   queue({ worker_id: 12, ... })
-async function queue({ worker_id, permission_code, module, title, body }) {
-  await db.query(
+//
+// ★ TRANZAKSIYA ICHIDAN CHAQIRILSA `client` UZATILADI (3-qoida, izoh:
+// erp/db.js): hovuzdan yangi ulanish so'ralsa u o'sha tranzaksiyani
+// KO'RMAYDI — xabar navbatga tushib, keyin tranzaksiya qaytarilsa
+// bo'lmagan so'rov haqida xabar yuborilardi.
+async function queue({ worker_id, permission_code, module, title, body }, client) {
+  await (client || db).query(
     `INSERT INTO notifications (worker_id, permission_code, module, title, body)
      VALUES ($1,$2,$3,$4,$5)`,
     [worker_id || null, permission_code || null, module, title, body || null]);

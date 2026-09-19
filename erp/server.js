@@ -126,6 +126,47 @@ function zaxiraJadvali() {
   }, 5 * 60 * 1000);
 }
 
+//  ★ XABAR YUBORUVCHI (`notifications` navbati, izoh: erp/notify.js).
+//
+//  Tasdiqlovchi kun bo'yi saytda o'tirmaydi: ekrandagi belgi faqat sayt
+//  ochiq bo'lganda ko'rinadi va ertalab yozilgan so'rov kechgacha turib
+//  qolardi. Telegram esa uning cho'ntagida.
+//
+//  Alohida bot jarayoni ko'tarilmadi — zaxira jadvali bilan bir xil
+//  sabab: navbat daqiqada bir marta qaraladi va uni ikkinchi nazorat
+//  qilinadigan joyga aylantirish ortiqcha.
+//
+//  Tokensiz JIM turadi va hech narsani buzmaydi: xabarlar navbatda
+//  yig'ilaveradi, token qo'yilgan kuni hammasi ketadi. Xodimning
+//  `tg_id` si yo'q bo'lsa unga yuborilmaydi — u Xodimlar sahifasida
+//  yoziladi (kodga ism ham, raqam ham yozilmaydi: 4-qoida).
+function xabarJadvali() {
+  const token = String(process.env.ERP_TG_TOKEN || '').trim();
+  if (!token) return;
+  const notify = require('./notify');
+  console.log('Telegram xabarlari: yoqilgan');
+
+  const send = async (chatId, text) => {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+    });
+    if (!r.ok) throw new Error(`Telegram ${r.status}: ${await r.text()}`);
+  };
+
+  let band = false;
+  setInterval(async () => {
+    //  Oldingi o'tish tugamagan bo'lsa o'tkazib yuboriladi: sekin
+    //  javobda ikkita zanjir bir xil xabarni ikki marta yuborardi.
+    if (band) return;
+    band = true;
+    try { await notify.sendPending(send); }
+    catch (e) { console.error('[xabar] XATO:', e.message); }
+    finally { band = false; }
+  }, 60 * 1000);
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Serverga qo'yishda migratsiyani qo'lda ishga tushirish noqulay — ERP_AUTO_MIGRATE=1
@@ -144,4 +185,5 @@ const PORT = process.env.PORT || 3000;
   }
   app.listen(PORT, () => console.log(`ZELTA ERP → http://localhost:${PORT}`));
   zaxiraJadvali();
+  xabarJadvali();
 })();

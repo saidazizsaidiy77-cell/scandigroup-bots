@@ -430,6 +430,7 @@ const App = (() => {
       ? `<nav class="nav sub">${links}${plan}</nav>` : '';
 
     top.insertAdjacentHTML('afterend', `<nav class="nav mods">${mods}</nav>${subRow}`);
+    sorovTick();
 
     // Sarlavha bosh sahifaga olib borsin — odam avval shuni bosadi
     const brand = top.querySelector('.brand');
@@ -438,6 +439,49 @@ const App = (() => {
       brand.onclick = () => { location.href = '/'; };
     }
   }
+
+  //  ★ NAVBATDAGI SO'ROVLAR MENYUDA TURADI.
+  //
+  //  Tasdiqlovchi kun bo'yi so'rovlar sahifasida o'tirmaydi: u jurnalda,
+  //  hisobotda yoki boshqa bo'limda bo'ladi. Ilgari navbatni BILISH
+  //  uchun o'sha sahifani ochib ko'rishdan boshqa yo'l yo'q edi va
+  //  ertalab yozilgan so'rov kechgacha turib qolardi.
+  //
+  //  Shuning uchun belgi MENYUDA: qaysi sahifada tursa ham ko'radi.
+  //  Ikkita joyda — bo'lim nomida va sahifa havolasida: bo'lim yopiq
+  //  bo'lsa ostki qator umuman chizilmaydi.
+  //
+  //  Sahifa sarlavhasiga ham yoziladi: brauzerning boshqa tabida
+  //  turgan odam yorliqning O'ZIDAN ko'radi, sahifani ochmasdan.
+  //
+  //  BITTA zanjir bilan va faqat oyna ochiq turganda — buyurtmalar
+  //  sahifasidagi `planTick` bilan bir xil qoida: brauzer tabni
+  //  uxlatganda so'rov ham to'xtaydi.
+  let sorovTimer = null;
+  const BAZA_TITLE = document.title;
+
+  async function sorovTick() {
+    clearTimeout(sorovTimer);
+    if (!me || !can('production.approve')) return;
+    let n = 0;
+    try { n = Number((await api('/api/units/requests/pending')).n) || 0; }
+    catch { /* tarmoq uzildi — belgi eskicha qoladi, xato ko'rsatilmaydi */ }
+
+    document.title = n ? `(${n}) ${BAZA_TITLE}` : BAZA_TITLE;
+    for (const a of document.querySelectorAll('.nav a')) {
+      a.querySelector('.badge')?.remove();
+      const bu = a.getAttribute('href') || '';
+      const sahifa = bu.startsWith('/sorovlar.html');
+      const bolim  = bu.includes('m=production') || bu.startsWith('/jurnal.html');
+      if (n && (sahifa || bolim))
+        a.insertAdjacentHTML('beforeend',
+          ` <span class="badge" title="${n} ta so'rov tasdiq kutmoqda">${n}</span>`);
+    }
+    if (document.visibilityState !== 'hidden') sorovTimer = setTimeout(sorovTick, 60000);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') sorovTick();
+  });
 
   // Sahifa shu bilan boshlanadi:
   //   App.start(me => { ... }, 'production.view')
