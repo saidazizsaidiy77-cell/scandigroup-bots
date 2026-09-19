@@ -548,13 +548,31 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       //  Band raqam SHU YERDA tutiladi, tasdiqlashda emas: aks holda
       //  so'rov navbatda turib, direktor bosganda yiqilardi va sababi
       //  unga ko'rinmasdi.
+      //
+      //  ★ XABAR KIM USHLAB TURGANINI AYTADI. «Raqam band» ning o'zi
+      //  yetarli emas edi: raqamni bo'shatish ikki xil ish — navbatdagi
+      //  so'rovni yozgan odam O'ZI bekor qiladi, ochilgan konverga esa
+      //  jurnal kerak. Xabar qaysi biri ekanini aytmasa, xodim har
+      //  safar so'rab yurishi kerak bo'lardi.
       const band = (await client.query(
-        `SELECT 1 FROM production_units
-          WHERE conveyor_no = $1 AND status <> 'cancelled'
+        `SELECT 'unit' AS qayerda, u.conveyor_no,
+                p.name AS mahsulot, NULL::text AS kim
+           FROM production_units u
+           JOIN products p ON p.id = u.product_id
+          WHERE u.conveyor_no = $1 AND u.status <> 'cancelled'
           UNION ALL
-         SELECT 1 FROM unit_requests
-          WHERE conveyor_no = $1 AND status = 'pending'`, [no])).rowCount;
-      if (band) throw new Error(`«${no}» raqami band`);
+         SELECT 'request', q.conveyor_no, p.name, w.name
+           FROM unit_requests q
+           JOIN products p  ON p.id = q.product_id
+           LEFT JOIN workers w ON w.id = q.created_by
+          WHERE q.conveyor_no = $1 AND q.status = 'pending'
+          LIMIT 1`, [no])).rows[0];
+      if (band) throw new Error(band.qayerda === 'request'
+        ? `«${no}» raqami navbatdagi so'rovda band `
+          + `(${band.mahsulot}${band.kim ? ', ' + band.kim : ''}) — `
+          + `o'sha so'rov bekor qilinsa bo'shaydi`
+        : `«${no}» raqami ochilgan konverda band (${band.mahsulot}) — `
+          + `jurnaldan tuzatiladi`);
 
       const shopId = await shopOfProduct(client, it.product_id);
       if (scope && (!shopId || !scope.includes(shopId)))

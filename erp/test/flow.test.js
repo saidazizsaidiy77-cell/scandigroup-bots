@@ -2958,7 +2958,11 @@ test('so\'rovda konver raqami majburiy va band raqam qabul qilinmaydi', async ()
   const band = await kir('POST', '/api/units/requests',
     { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' });
   assert.equal(band.status, 400, band.text);
-  assert.match(band.body.error, /band/);
+  //  Xabar KIM ushlab turganini aytadi: navbatdagi so'rovni yozgan odam
+  //  o'zi bekor qiladi, ochilgan konver esa jurnaldan tuzatiladi —
+  //  «band» so'zining o'zi bu ikki yo'ldan qaysi biri ekanini aytmasdi.
+  assert.match(band.body.error, /navbatdagi so'rovda band/, band.body.error);
+  assert.match(band.body.error, /Sinov raqamchi/, band.body.error);
 
   //  Zahira belgisi ham so'rovdan konverga ko'chadi.
   const ok = await admin('POST', `/api/units/requests/${a.body.created[0]}/approve`);
@@ -2968,9 +2972,12 @@ test('so\'rovda konver raqami majburiy va band raqam qabul qilinmaydi', async ()
   assert.equal(u.conveyor_no, 'S-8001');
   assert.equal(u.is_stock, true);
 
-  //  Endi konver mavjud — o'sha raqam bilan yangi so'rov ham bo'lmaydi.
-  assert.equal((await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' })).status, 400);
+  //  Endi konver mavjud — o'sha raqam bilan yangi so'rov ham bo'lmaydi,
+  //  lekin xabar endi boshqacha: bo'shatish jurnaldan bo'ladi.
+  const ochiq = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' });
+  assert.equal(ochiq.status, 400, ochiq.text);
+  assert.match(ochiq.body.error, /ochilgan konverda band/, ochiq.body.error);
 });
 
 test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () => {
