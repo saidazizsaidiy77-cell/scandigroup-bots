@@ -444,6 +444,12 @@ CREATE TABLE IF NOT EXISTS unit_requests (
   note        TEXT,
   --  Qaysi tsex so'radi: ro'yxat va chegara shu ustundan yuradi.
   shop_id     INT  REFERENCES shops(id),
+  --  ★ KONVER RAQAMI SO'ROVDA YOZILADI (zavod qarori, 2026-09).
+  --  Zavod raqamni o'z daftarida yuritadi va uni mahsulotning O'ZIGA
+  --  yozib qo'yadi — tizim bergan raqam bilan qog'ozdagi raqam boshqa
+  --  bo'lsa, tsexda turgan konverni jurnaldan topib bo'lmasdi.
+  --  Tasdiqlaganda AYNAN shu raqam bilan ochiladi.
+  conveyor_no TEXT,
   status      TEXT NOT NULL DEFAULT 'pending'
               CHECK (status IN ('pending','approved','rejected','cancelled')),
   created_by  INT  REFERENCES workers(id),
@@ -453,13 +459,28 @@ CREATE TABLE IF NOT EXISTS unit_requests (
   --  Rad etilgan bo'lsa sababi: boshliq nega bo'lmaganini bilishi kerak,
   --  aks holda o'sha so'rovni ertaga yana yozardi.
   decide_note TEXT,
+  --  ★ ZAHIRAMI. Buyurtmasiz, oldindan ishlanadigan mahsulot
+  --  (`production_units.is_stock`): u kutish bo'limida buyurtma kutadi
+  --  va unga muddat bashorat qilinmaydi. Kiritayotgan odam buni
+  --  BOSHIDAN biladi — tasdiqlangandan keyin jurnaldan qidirib
+  --  belgilash ortiqcha ish bo'lardi.
+  is_stock    BOOLEAN NOT NULL DEFAULT false,
   --  Tasdiqlangach ochilgan konver: so'rovdan konverga yo'l qoladi.
   unit_id     INT  REFERENCES production_units(id)
 );
 
+--  Jadval allaqachon yaratilgan bazada ustun CREATE ichidan kelmaydi.
+ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS conveyor_no TEXT;
+ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS is_stock BOOLEAN NOT NULL DEFAULT false;
+
 --  Kutayotganlar ro'yxati kun bo'yi ochiq turadi — indeks o'shanga.
 CREATE INDEX IF NOT EXISTS idx_unit_req_pending ON unit_requests(shop_id, created_at)
   WHERE status = 'pending';
+
+--  Bitta raqam ikki marta navbatga tushmasin: ikkinchisi tasdiqlanganda
+--  konver raqami band bo'lib chiqardi va direktor sababini bilmasdi.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unit_req_no ON unit_requests(conveyor_no)
+  WHERE status = 'pending' AND conveyor_no IS NOT NULL;
 
 CREATE OR REPLACE VIEW v_unit_requests AS
 SELECT q.id, q.qty, q.color, q.fabric, q.started_on, q.note,
@@ -470,10 +491,13 @@ SELECT q.id, q.qty, q.color, q.fabric, q.started_on, q.note,
        q.section_id, sc.name AS section,
        q.created_by, w.name AS created_by_name,
        q.decided_by, d.name AS decided_by_name,
-       q.unit_id, u.conveyor_no,
+       --  So'ralgan raqam. Ustun qo'shilgunga qadar yozilgan so'rovlarda
+       --  u bo'sh — o'shalarda tasdiqlanganda tizim bergan raqam turadi.
+       q.unit_id, COALESCE(q.conveyor_no, u.conveyor_no) AS conveyor_no,
        --  So'rov yozilayotganda muddat ko'rinib tursin: marshrut uzunligi
        --  (har bo'limda bir kun — izoh: sql/register.sql).
-       (SELECT COUNT(*) FROM v_product_route r WHERE r.product_id = q.product_id) AS steps
+       (SELECT COUNT(*) FROM v_product_route r WHERE r.product_id = q.product_id) AS steps,
+       q.is_stock
 FROM unit_requests q
 JOIN products p        ON p.id = q.product_id
 JOIN product_groups g  ON g.id = p.group_id

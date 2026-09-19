@@ -39,6 +39,17 @@ saytdan boshqariladi.
 
 **Konver** (`production_units`) — kuzatuvning asosiy birligi: bitta
 mahsulot, o'z raqami bilan (`K26-0041`). Zavod uni shunday ataydi.
+
+**★ RAQAMNING KO'RINISHI TSEXDA** (`shops.no_prefix`, `shops.no_width`,
+zavod qarori 2026-09):
+
+    S26-104    S — stul, 26 — 2026 yil, 104 — ketma-ketligi
+    K26-0041   korpusniki: harfi ham, raqam uzunligi ham boshqa
+
+Zavod raqamni o'z daftarida yuritadi va mahsulotning O'ZIGA yozib
+qo'yadi, shuning uchun tizim taklif qiladigan raqam qog'ozdagisiga
+o'xshashi shart. Harf ham, uzunlik ham bazada — yangi tsex qo'shilganda
+kodga tegilmaydi.
 Boshlang'ich qoldiqda raqami noma'lum mahsulot bo'ladi — raqam katagi
 bo'sh qoldiriladi va tizim `Q26-0007` beradi: **Q** bosh harfi raqamni
 zavod emas, tizim qo'yganini aytadi.
@@ -274,6 +285,24 @@ o'qi: jurnal, ombor qoldig'i, WIP, bron, balans va o'nlab view shundan
 o'qiydi. Yarim haqiqiy qator o'sha yerda tursa, uni har bir so'rovda
 chetlab o'tish kerak bo'lardi va bitta esdan chiqqan joy tasdiqlanmagan
 mahsulotni qoldiqqa qo'shib yuborardi.
+
+**★ KONVER RAQAMI SO'ROVDA YOZILADI va MAJBURIY.** Zavod raqamni o'z
+daftarida yuritadi va mahsulotning o'ziga yozib qo'yadi: tizim bergan
+raqam bilan qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
+topib bo'lmasdi. Sahifa mahsulot tanlangan zahoti **keyingi raqamni
+taklif qiladi** (`GET /api/units/requests/next-no`) — ketma-ketlikni
+yodda saqlab o'tirish shart emas, lekin katak tahrirlanadi: qog'ozdagi
+raqam boshqa bo'lsa o'sha yoziladi. Taklif navbatdagi so'rovlarni ham
+hisobga oladi, ya'ni ikki odam bir vaqtda kiritsa bir xil raqam
+chiqmaydi.
+
+**Band raqam so'rov yozilayotganda tutiladi**, tasdiqlashda emas: aks
+holda so'rov navbatda turib, direktor bosganda yiqilardi va sababi unga
+ko'rinmasdi.
+
+**Zahira belgisi ham so'rovda** (`is_stock`): buyurtmasiz, oldindan
+ishlanayotgani kiritayotgan odamga boshidan ma'lum — tasdiqlangandan
+keyin jurnaldan qidirib belgilash ortiqcha ish bo'lardi.
 
 Tasdiqlangach konver ODATDAGI `createOne()` bilan ochiladi: raqami ham,
 harakat yozuvi ham, jamlanma hisobot ham bir xil yo'ldan o'tadi.

@@ -61,6 +61,18 @@ UPDATE shops SET milestone = 'pack' WHERE code = 'QADOQ' AND milestone IS NULL;
 --  o'tsa bitta katakcha belgilanadi, kodga tegilmaydi.
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS plan_auto BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ KONVER RAQAMINING KO'RINISHI — TSEXDA (zavod qarori, 2026-09).
+--
+--      S26-104   S — stul, 26 — 2026 yil, 104 — ketma-ketligi
+--      K26-0041  korpusniki: harfi va raqam uzunligi boshqa
+--
+--  Zavod raqamni o'z daftarida yuritadi va mahsulotning O'ZIGA yozib
+--  qo'yadi, shuning uchun tizim taklif qiladigan raqam qog'ozdagisiga
+--  o'xshashi shart. Harf ham, uzunlik ham BAZADA: yangi tsex
+--  qo'shilganda kodga tegilmaydi.
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS no_prefix TEXT NOT NULL DEFAULT 'K';
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS no_width  INT  NOT NULL DEFAULT 4;
+
 --  Bir martalik: saytdan o'zgartirilgani keyingi deployda qaytib
 --  qolmasin (izoh: CLAUDE.md, «Bir martalik ma'lumot ko'chirishlar»).
 DO $$
@@ -68,6 +80,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'muddat-avtomat') THEN
     UPDATE shops SET plan_auto = true WHERE code = 'STUL';
     INSERT INTO migration_flags (key) VALUES ('muddat-avtomat');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'raqam-korinishi') THEN
+    UPDATE shops SET no_prefix = 'S', no_width = 3 WHERE code = 'STUL';
+    INSERT INTO migration_flags (key) VALUES ('raqam-korinishi');
   END IF;
 END $$;
 

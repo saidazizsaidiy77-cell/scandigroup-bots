@@ -41,7 +41,13 @@
     yoki administrator.</p>
   <div class="form">
     <div class="wide"><label>Mahsulot</label>
-      <select id="fProduct" onchange="eta()"></select></div>
+      <select id="fProduct" onchange="eta(); taklif()"></select></div>
+    <!--  Konver raqami MAJBURIY: zavod uni o'z daftarida yuritadi va
+          mahsulotning o'ziga yozib qo'yadi. Tizim bergan raqam bilan
+          qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
+          topib bo'lmasdi. -->
+    <div><label>Konver raqami</label>
+      <input id="fNo" placeholder="S26-104" autocomplete="off"></div>
     <div><label>Soni</label>
       <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
     <div><label>Boshlanish sanasi</label>
@@ -52,6 +58,13 @@
       <input id="fFabric" list="fabrics" placeholder="ixtiyoriy"></div>
     <div class="wide"><label>Izoh</label>
       <input id="fNote" placeholder="ixtiyoriy"></div>
+    <!--  Zahira — buyurtmasiz, oldindan ishlanadigan mahsulot. Kutish
+          bo'limida buyurtma kutadi va unga muddat bashorat qilinmaydi;
+          rangi ham keyin, mijoz aytganda tanlanadi. -->
+    <div class="wide"><label class="row" style="gap:10px;align-items:center;
+      text-transform:none;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="fStock" style="width:auto">
+      <span>Zahira uchun — buyurtmasiz, oldindan ishlanadi</span></label></div>
   </div>
   <datalist id="colors"></datalist>
   <datalist id="fabrics"></datalist>
@@ -75,7 +88,7 @@
       </select></div>
   </div>
   <div style="overflow-x:auto"><table>
-    <thead><tr><th>Mahsulot</th><th class="num">Soni</th><th>Rang · mato</th>
+    <thead><tr><th>Konver №</th><th>Mahsulot</th><th class="num">Soni</th><th>Rang · mato</th>
       <th>Boshlanish</th><th>T/M omborga</th><th>Tsex</th><th>Kim so'radi</th>
       <th>Holat</th><th></th></tr></thead>
     <tbody id="tRows"></tbody>
@@ -105,6 +118,24 @@ function eta() {
   d.setDate(d.getDate() + p.steps);
   $('etaLine').innerHTML = `Marshrutda <b>${p.steps}</b> ta bo'lim, `
     + `har birida bir kun — T/M omborga <b>${d8(d.toISOString())}</b> kuni tushadi.`;
+}
+
+//  ★ KEYINGI RAQAMNI TAKLIF QILADI. Zavod raqamni o'z daftarida
+//  yuritadi (stulda `S26-104`: S — stul, 26 — yil, 104 — ketma-ketligi),
+//  lekin qayerda to'xtaganini yodda saqlab o'tirish shart emas.
+//
+//  Bu TAKLIF: katak tahrirlanadi va qog'ozdagi raqam boshqa bo'lsa
+//  o'sha yoziladi. Shuning uchun xodim allaqachon biror narsa yozgan
+//  bo'lsa ustidan yozilmaydi.
+async function taklif(majburan) {
+  const pid = $('fProduct').value;
+  if (!pid) return;
+  if (!majburan && $('fNo').value.trim()) return;
+  try {
+    const r = await App.api('/api/units/requests/next-no?product_id='
+      + encodeURIComponent(pid));
+    $('fNo').value = r.conveyor_no;
+  } catch { /* taklif bermadi — xodim o'zi yozadi */ }
 }
 
 async function load() {
@@ -158,6 +189,8 @@ function draw() {
       act.push(`<button onclick="reject(${r.id}, ${data.can_approve})">${
         data.can_approve ? 'Rad etish' : 'Bekor qilish'}</button>`);
     return `<tr>
+      <td><b>${esc(r.conveyor_no || '—')}</b>${r.is_stock
+        ? '<div><span class="tag">zahira</span></div>' : ''}</td>
       <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
         <div class="muted" style="font-size:12px">${esc(r.product_type)}</div></td>
       <td class="num">${r.qty}${r.uom ? ' <span class="muted">' + esc(r.uom) + '</span>' : ''}</td>
@@ -168,30 +201,38 @@ function draw() {
       <td class="muted">${esc(r.created_by_name || '')}
         <div style="font-size:12px">${d8(r.created_at)}</div></td>
       <td><span class="tag ${st[0]}">${st[1]}</span>
-        ${r.conveyor_no ? `<div class="muted" style="font-size:12px">${esc(r.conveyor_no)}</div>` : ''}
         ${r.decide_note ? `<div class="muted" style="font-size:12px">${esc(r.decide_note)}</div>` : ''}</td>
       <td class="act">${act.join(' ')}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="9" class="muted">So\'rov yo\'q</td></tr>';
+  }).join('') : '<tr><td colspan="10" class="muted">So\'rov yo\'q</td></tr>';
 }
 
 async function send() {
   const it = {
-    product_id: Number($('fProduct').value) || null,
+    product_id:  Number($('fProduct').value) || null,
+    conveyor_no: $('fNo').value.trim(),
+    is_stock:    $('fStock').checked,
     qty:        Number($('fQty').value) || 0,
     color:      $('fColor').value.trim() || null,
     fabric:     $('fFabric').value.trim() || null,
     started_on: $('fStart').value || null,
     note:       $('fNote').value.trim() || null,
   };
-  if (!it.product_id) return alert('Mahsulot tanlanmagan');
-  if (it.qty <= 0)    return alert('Soni kiritilmagan');
+  if (!it.product_id)  return alert('Mahsulot tanlanmagan');
+  if (!it.conveyor_no) { $('fNo').focus(); return alert('Konver raqami kiritilmagan'); }
+  if (it.qty <= 0)     return alert('Soni kiritilmagan');
   try {
     await App.api('/api/units/requests', { method: 'POST', body: JSON.stringify(it) });
     //  Mahsulot va sana JOYIDA qoladi: boshliq ketma-ket bir necha qator
     //  yozadi va har safar qaytadan tanlab o'tirmasin.
-    $('fQty').value = 1; $('fColor').value = ''; $('fFabric').value = '';
-    $('fNote').value = '';
+    //  Raqam ham tozalanadi: har konverning O'Z raqami bor va eskisi
+    //  qolib ketsa ikkinchi qator o'sha raqam bilan ketardi.
+    $('fNo').value = ''; $('fQty').value = 1;
+    $('fColor').value = ''; $('fFabric').value = '';
+    $('fNote').value = ''; $('fStock').checked = false;
+    //  Keyingi raqam darrov taklif qilinadi: qator ketma-ket
+    //  kiritilganda har safar qo'lda terib o'tirmasin.
+    await taklif(true);
     $('fStatus').value = 'pending';
     await load();
   } catch (e) { alert(e.message); }

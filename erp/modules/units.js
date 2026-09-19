@@ -344,12 +344,36 @@ router.get('/orders', need('production.view'), wrap(async (_req, res) => {
 //  lekin BOSHQA BOSH HARF bilan: `Q26-0007`. Shunda uni ko'rgan odam
 //  darrov biladi — bu raqam mahsulotning ustida yozilmagan, uni tizim
 //  qo'ygan. Keyin haqiqiy raqam topilsa, jurnaldan tuzatiladi.
-async function nextConveyorNo(client = db, letter = 'K') {
+//  Harf va raqam uzunligi TSEXDA turadi (izoh: `sql/register.sql`):
+//  stulda `S26-104`, korpusda `K26-0041`. Navbatda turgan so'rovlar ham
+//  qaraladi — ikki odam bir vaqtda kiritsa bir xil raqam taklif
+//  qilinmasin.
+async function nextConveyorNo(client = db, letter = 'K', width = 4) {
   const prefix = `${letter}${String(new Date().getFullYear()).slice(-2)}-`;
   const { rows } = await client.query(
-    `SELECT COALESCE(MAX(SUBSTRING(conveyor_no FROM '\\d+$')::int), 0) + 1 AS n
-       FROM production_units WHERE conveyor_no LIKE $1`, [`${prefix}%`]);
-  return prefix + String(rows[0].n).padStart(4, '0');
+    `SELECT COALESCE(MAX(n), 0) + 1 AS n FROM (
+       SELECT SUBSTRING(conveyor_no FROM '\\d+$')::int AS n
+         FROM production_units WHERE conveyor_no LIKE $1
+       UNION ALL
+       SELECT SUBSTRING(conveyor_no FROM '\\d+$')::int
+         FROM unit_requests
+        WHERE conveyor_no LIKE $1 AND status = 'pending') x`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(width, '0');
+}
+
+//  Mahsulot qaysi tsexniki — raqamning harfi ham shundan chiqadi.
+async function noStyleOf(client, productId) {
+  const r = (await client.query(
+    `SELECT COALESCE(sh.no_prefix, 'K') AS letter, COALESCE(sh.no_width, 4) AS width
+       FROM products p
+       JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN LATERAL (
+         SELECT sc.shop_id FROM v_product_route r
+           JOIN sections sc ON sc.id = r.section_id
+          WHERE r.product_id = p.id ORDER BY r.step_no LIMIT 1) birinchi ON true
+       LEFT JOIN shops sh ON sh.id = COALESCE(g.owner_shop_id, birinchi.shop_id)
+      WHERE p.id = $1`, [productId])).rows[0];
+  return { letter: r?.letter || 'K', width: Number(r?.width) || 4 };
 }
 
 // Rang va mato uchun oldindan spravochnik tuzilmaydi — kiritilganlari
@@ -419,6 +443,19 @@ async function shopOfProduct(client, productId) {
   return r ? r.shop_id : null;
 }
 
+//  ★ KEYINGI RAQAMNI TAKLIF QILISH.
+//
+//  Zavod raqamni o'z daftarida yuritadi, lekin ketma-ketlikni yodda
+//  saqlab o'tirish shart emas: sahifa mahsulot tanlangan zahoti
+//  keyingisini taklif qiladi. Bu TAKLIF — katak tahrirlanadi va
+//  qog'ozdagi raqam boshqa bo'lsa o'sha yoziladi.
+router.get('/requests/next-no', need(...REQUEST), wrap(async (req, res) => {
+  const pid = Number(req.query.product_id) || null;
+  if (!pid) return res.status(400).json({ error: 'Mahsulot tanlanmagan' });
+  const { letter, width } = await noStyleOf(db, pid);
+  res.json({ conveyor_no: await nextConveyorNo(db, letter, width) });
+}));
+
 router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
   const scope = scopeOf(req);
   //  Tasdiqlovchida doira bo'lmaydi, boshliqda esa bo'ladi. Chegara
@@ -448,6 +485,24 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       const qty = Number(it.qty) || 0;
       if (qty <= 0) throw new Error('Soni kiritilmagan');
 
+      //  ★ KONVER RAQAMI MAJBURIY. Zavod raqamni o'z daftarida yuritadi
+      //  va mahsulotning O'ZIGA yozib qo'yadi: tizim bergan raqam bilan
+      //  qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
+      //  topib bo'lmasdi.
+      const no = String(it.conveyor_no || '').trim();
+      if (!no) throw new Error('Konver raqami kiritilmagan');
+
+      //  Band raqam SHU YERDA tutiladi, tasdiqlashda emas: aks holda
+      //  so'rov navbatda turib, direktor bosganda yiqilardi va sababi
+      //  unga ko'rinmasdi.
+      const band = (await client.query(
+        `SELECT 1 FROM production_units
+          WHERE conveyor_no = $1 AND status <> 'cancelled'
+          UNION ALL
+         SELECT 1 FROM unit_requests
+          WHERE conveyor_no = $1 AND status = 'pending'`, [no])).rowCount;
+      if (band) throw new Error(`«${no}» raqami band`);
+
       const shopId = await shopOfProduct(client, it.product_id);
       if (scope && (!shopId || !scope.includes(shopId)))
         throw new Error('Bu mahsulot boshqa tsexniki');
@@ -466,11 +521,11 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       const q = (await client.query(
         `INSERT INTO unit_requests
            (product_id, qty, color, fabric, started_on, section_id, note,
-            shop_id, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+            shop_id, created_by, conveyor_no, is_stock)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
         [it.product_id, qty, trim(it.color), trim(it.fabric),
          it.started_on || null, it.section_id || null, it.note || null,
-         shopId, req.user.id])).rows[0];
+         shopId, req.user.id, no, it.is_stock === true])).rows[0];
       created.push(q.id);
     }
     await audit(req, { module: 'production', action: 'request', entity: 'unit_requests',
@@ -508,6 +563,12 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
       product_id: q.product_id, qty: q.qty, color: q.color, fabric: q.fabric,
       started_on: q.started_on, section_id: q.section_id,
       entered_section_on: q.started_on, note: q.note,
+      //  So'ralgan raqam bilan ochiladi. Bo'sh bo'lsa (ustun
+      //  qo'shilgunga qadar yozilgan so'rov) tizim o'zi beradi.
+      conveyor_no: q.conveyor_no,
+      //  Zahira belgisi ham so'rovdan keladi: buyurtmasiz ishlanayotgani
+      //  kiritayotgan odamga boshidan ma'lum.
+      is_stock: q.is_stock,
     });
 
     await client.query(
