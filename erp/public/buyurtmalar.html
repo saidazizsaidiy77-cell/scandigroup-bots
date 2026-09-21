@@ -148,6 +148,14 @@ async function boot(){
     App.api('/api/sales/stock')]);
   customers = c.customers; managers = c.managers; products = p.rows;
   dests = d.rows; stock = st.rows;
+  //  Zavodda umuman yo'q mahsulot ham ro'yxatga tushadi (izoh: SRC).
+  //  Qatori SUN'IY: rangi ham, matosi ham yo'q — ular mijoz aytganda
+  //  ma'lum bo'ladi va rang ro'yxati bosh() orqali o'zi ochiladi.
+  const bor = new Set(stock.map((r) => r.product_id));
+  for (const x of products)
+    if (!bor.has(x.id))
+      stock.push({ product_id: x.id, product: x.name, product_type: x.product_type,
+                   color: null, fabric: null, free: 0, src: 'yoq' });
   //  Ro'yxatda faqat savdo xodimlari: filtr «kim yozdi» degan savolga
   //  javob beradi, zavodning hamma xodimi esa unga javob emas.
   if (!App.me()?.scope_own) {
@@ -535,8 +543,19 @@ function drawAddr() {
 //
 //  Vitrina yo'q: do'kondagi mahsulot ko'rgazmada turadi, sotuv T/M
 //  ombordan ketadi.
+//  ★ TO'RTINCHI GURUH: ZAVODDA YO'Q (zavod qarori, 2026-09).
+//
+//  Ro'yxat faqat MAVJUD konverlardan tuzilardi va zavodda umuman yo'q
+//  mahsulotni qatorga yozib bo'lmasdi — menejer buyurtmani tashlab
+//  yuborardi. Holbuki stol va stulga endi ishlab chiqarishga so'rov
+//  yoziladi, lekin uning tugmasi QATOR ichida turadi: qator yozilmasa
+//  tugmaga ham yetib bo'lmasdi.
+//
+//  Endi hamma mahsulot ro'yxatda, eng oxirgi guruhda. Nomi rostini
+//  aytadi: bu «bor» emas, «so'rov yoziladi» — menejer buni tanlashdan
+//  OLDIN ko'radi.
 const SRC = [['fg', 'T/M omborda'], ['stock', 'Zahirada'],
-             ['production', 'Ishlab chiqarishda']];
+             ['production', 'Ishlab chiqarishda'], ['yoq', "Zavodda yo'q"]];
 
 //  ★ RANGI YO'Q KONVER HAR QANDAY RANGGA YARAYDI (zavod qarori).
 //
@@ -574,7 +593,8 @@ const rangTanlanadi = (it) => it.product_id
 //  aks holda rangsiz satrlar bilan solishtirilib, to'la ombor ustida
 //  «omborda yo'q» deb yozilardi.
 const SRC_HINT = { fg: 'T/M omborda bor', stock: 'zahirada',
-                   production: 'ishlab chiqarishda' };
+                   production: 'ishlab chiqarishda',
+                   yoq: "zavodda yo'q — ishlab chiqarishga so'rov yoziladi" };
 function srcHint(it) {
   if (!it.product_id) return '';
   const rows = rowsFor(it, it.color ? 3 : 2);
@@ -582,6 +602,9 @@ function srcHint(it) {
     .map((s) => {
       //  «Bor» bilan «bo'yab beramiz» bir xil javob emas: manbada
       //  faqat rangsiz konver bo'lsa menejer buni bilishi kerak.
+      //  «Zavodda yo'q» da rang haqida gap yuritilmaydi: u yerda
+      //  mahsulotning o'zi yo'q, rangi esa so'rov yozilganda tanlanadi.
+      if (s === 'yoq') return SRC_HINT[s];
       const g = rows.filter(r => r.src === s);
       return g.every(bosh) ? SRC_HINT[s] + ' \u2014 rangi tanlanadi' : SRC_HINT[s];
     });
