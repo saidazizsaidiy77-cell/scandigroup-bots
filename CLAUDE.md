@@ -212,6 +212,33 @@ jo'natuvchi «jo'natdim» (`production_units.handover_*`) → qabul qiluvchi
 o'tkazadi. Jo'natilmagan konverni qabul qilib bo'lmaydi. Jo'natish —
 harakat EMAS, mahsulot joyidan qimirlamaydi.
 
+**★ BOSQICHDAN SAKRAB BO'LMAYDI** (zavod qarori, 2026-09;
+`handoverOne`). Topshirish — MARSHRUTNING chegarasida bo'ladigan ish:
+konver yo keyingi TSEXGA o'tadi, yo chiqish bo'limidan T/M omborga.
+Ilgari server faqat DOIRANI qarardi va o'rtadagi bo'limda turgan
+konverni ham «jo'natilgan» deb belgilash mumkin edi — doirasi keng
+xodim (yoki doirasi umuman qo'yilmagan) o'zidan oldingi bosqichning
+ustidan sakrab, mahsulotni to'g'ridan-to'g'ri omborga yozib yuborardi.
+Ombor mudiri ro'yxatda kelmagan mahsulotni ko'rardi va oradagi tsex o'z
+ishini qilmaganini hech narsa aytmasdi.
+
+Ikkita shart, va ikkalasi ham EKRANDAGI tugma bilan bir xil hisobdan
+chiqadi (`/board`, `leaves`): oldinda BOSHQA tsexning qadami bo'lsa —
+o'sha tsexga topshiriladi; qadam qolmagan bo'lsa — chiqish bo'limidan
+omborga. Qolgan hammasi sakrash: konver hali o'z tsexining ichida
+yuribdi. Chegara DOIRADAN emas, MARSHRUTDAN chiqadi — administratorga
+ham tegishli.
+
+**★ NECHTASI JO'NATILAYOTGANI SO'RALADI** (zavod qarori, 2026-09).
+Tsex o'n talikning to'rttasini tayyorlab, qolganini ertaga beradi —
+qadoqlash T/M omborga topshirganda ham shunday. Ilgari jo'natish
+HAMMASINI belgilardi: qabul qiluvchi ro'yxatda o'n ta ko'rib, qo'lida
+to'rttasini sanardi va farqni hech narsa tushuntirmasdi.
+
+Konver bo'linadi: jo'natilgani YANGI bo'lak bo'ladi (raqami o'sha),
+qolgani esa eski qatorda, o'z bo'limida va belgisiz turaveradi. Ekranda
+o'tkazish bilan BITTA oyna — savol boshqa («nechtasi jo'natiladi»).
+
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
 vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,
 `sql/warehouse.sql` da. `kind='fg'` — qoldiq konver hisobida;
@@ -337,6 +364,15 @@ o'tkazadi. Javobgar o'zgarmagani uchun topshirish ham so'ralmaydi.
 Bo'sh bo'lsa (penal, kamod, sp, stol) — eskicha: turgan joyining tsexi
 boshqaradi. Doira, topshirish va ekran — hammasi shu ustunga tayanadi
 (`v_unit_register.owner_shop_id`).
+
+**★ RO'YXAT FAQAT KETMA-KETLIK BO'YICHA** (zavod qarori, 2026-09).
+Tsex ekranida konverlar MUDDAT bo'yicha turardi: kechikkani tepaga
+chiqardi. Zavodda esa konver navbat bilan yuradi — kechikkanini oldinga
+surish ORQADAGISINI kechiktirardi va bitta konverni qutqarish uchun
+o'ntasi navbatdan chiqib ketardi; ustiga ro'yxat har kuni qayta
+tuzilib, usta kechagi tartibni topa olmasdi. Endi tartib RAQAM bo'yicha,
+qog'oz daftardagidek. Kechikish yo'qolmadi — qator yonida qizil belgi
+bo'lib turadi, faqat navbatni buzmaydi.
 
 **Tsex boshlig'i konverni kim kutayotganini ko'radi** — bo'limlar
 ekranining O'ZIDA, alohida oyna emas. Konver yonida ikkita raqam turadi:
@@ -1793,6 +1829,29 @@ garchi undan omborda hech narsa qolmagan bo'lsa ham.
 Eng ostida **JAMI** qatori, o'lchov birligi bo'yicha ajratilgan: dona
 bilan komplektni qo'shib bo'lmaydi. Alohida kartochka qilinmadi — ko'z
 jadvaldan chiqib, qaysi raqam qaysi ustunniki ekanini qidirib qolardi.
+
+**★ OMBOR MUDIRI BIR QISMINI QABUL QILADI** (zavod qarori, 2026-09).
+Qadoqlash «10 ta jo'natdim» deydi, mudir esa javonga 2 tasini qo'yadi:
+qolgani hali kelmagan yoki sanoqda chiqmagan. Ilgari tugma faqat
+HAMMASINI olardi va mudir ikki yomon yo'ldan birini tanlardi — yo
+o'ntasini ham qabul qilib, kelmagan mahsulotni qoldiqqa yozib qo'yardi,
+yo umuman bosmay, kelganini ham hisobsiz qoldirardi.
+
+Konver bo'linadi: qabul qilingani yangi bo'lak bo'ladi, qolgani esa
+eski qatorda «jo'natilgan» bo'lib ro'yxatda turaveradi — ikkala raqam
+ham to'g'ri. **Bron ESKI qatorda qoladi**: teskarisi qilinsa 2 talik
+qatorda 4 ta bron turib qolardi, ya'ni konverda bo'shdan ko'p band dona
+bo'lardi va savdo hisobi buzilardi.
+
+**★ TSEXGA QAYTARISH** (`POST /api/units/stock/return`). Qadoqlash
+«jo'natdim» deb bosgan, lekin mahsulot omborga kelmagan: adashib
+bosilgan yoki tsex uni qaytarib olgan. Qator ombor ro'yxatida osilib
+qolardi — mudir uni qabul ham (mahsulot yo'q), olib tashlay ham
+olmasdi, menyudagi navbat raqami esa hech qachon nolga tushmasdi. Yo'l
+jo'natishni BEKOR QILADI (`handoverOne` undo bilan) — tsex
+boshlig'ining tugmasi bilan aynan bir xil yozuv. Mahsulot joyidan
+qimirlamaydi, faqat belgi o'chadi va konver tsex ekraniga qaytadi.
+Qabul QILINGAN konver bu yo'l bilan qaytarilmaydi — u boshqa ish.
 
 **Qabul qilish ro'yxatida ham «N buyurtmada» turadi** — jurnaldagi bilan
 bir xil raqam, `v_unit_bron` dan. Qabul qiluvchining ishi navbat tuzish:

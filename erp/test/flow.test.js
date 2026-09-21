@@ -89,7 +89,8 @@ test('jo\'natilmagan konverni keyingi tsex qabul qila olmaydi', async () => {
   const wrong = await lak('POST', '/api/units/handover', { items: [u.id] });
   assert.equal(wrong.status, 400);
 
-  assert.equal((await korpus('POST', '/api/units/handover', { items: [u.id] })).status, 200);
+  const ho = await korpus('POST', '/api/units/handover', { items: [u.id] });
+  assert.equal(ho.status, 200, ho.text);
 
   const board = await lak('GET', '/api/units/board');
   assert.ok(board.body.inbox.some((x) => x.id === u.id), 'jo\'natilgach inbox\'da');
@@ -240,6 +241,64 @@ test('omborda qisman qabul va tsexga qaytarish', async () => {
     { items: [{ unit_id: u.id }] })).status, 200);
   assert.equal((await H.id(`SELECT status FROM production_units WHERE id=$1`, [u.id])).status,
     'fg');
+});
+
+//  ★ BOSQICHDAN SAKRAB BO'LMAYDI. Topshirish — marshrutning
+//  CHEGARASIDA bo'ladigan ish: konver yo keyingi tsexga o'tadi, yo
+//  chiqish bo'limidan T/M omborga. Ilgari server faqat doirani
+//  qarardi va doirasi keng xodim o'rtadagi bo'limdan ham
+//  «jo'natilgan» deb belgilay olardi — oradagi tsexning ustidan
+//  sakrab, mahsulotni to'g'ridan-to'g'ri omborga yozib yuborardi.
+test('o\'z tsexi ichidagi konver jo\'natilmaydi — bosqich sakralmaydi', async () => {
+  const ARRA2 = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+  const u = await newUnit({ section_id: ARRA2 });
+
+  //  Arra — korpusning ichidagi bo'lim: oldinda o'sha tsexning
+  //  qadamlari turibdi, ya'ni topshiradigan narsa yo'q.
+  const erta = await korpus('POST', '/api/units/handover', { items: [u.id] });
+  assert.equal(erta.status, 400, erta.text);
+  assert.match(erta.body.error, /hali/);
+
+  //  Administratorda doira yo'q, lekin qoida unga ham tegishli —
+  //  chegara DOIRADAN emas, MARSHRUTDAN chiqadi.
+  assert.equal((await admin('POST', '/api/units/handover', { items: [u.id] })).status, 400);
+
+  //  Chiqish bo'limiga yetmagan konverni omborga ham jo'natib bo'lmaydi:
+  //  qadoqlashgacha yo'l bor.
+  const j = await H.id(`SELECT current_section_id FROM production_units WHERE id=$1`, [u.id]);
+  assert.equal(j.current_section_id, ARRA2, 'konver joyida qoldi');
+});
+
+//  ★ NECHTASI JO'NATILAYOTGANI SO'RALADI: tsex o'n talikning
+//  to'rttasini tayyorlab, qolganini ertaga beradi.
+test('konverning bir qismi jo\'natiladi', async () => {
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Oq', section_id: SHKUR }] })).body.created[0];
+
+  const kop = await korpus('POST', '/api/units/handover',
+    { items: [{ unit_id: u.id, qty: 11 }] });
+  assert.equal(kop.status, 400, kop.text);
+
+  const ok = await korpus('POST', '/api/units/handover',
+    { items: [{ unit_id: u.id, qty: 4 }] });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.done[0].qty, 4);
+
+  //  Jo'natilgani — yangi bo'lak, raqami o'sha; qolgani esa eski
+  //  qatorda, o'z bo'limida va belgisiz turaveradi.
+  const ketdi = await H.id(
+    `SELECT qty, handover_on IS NOT NULL AS jo FROM production_units WHERE id=$1`,
+    [ok.body.done[0].unit_id]);
+  assert.deepEqual([ketdi.qty, ketdi.jo], [4, true]);
+  const qoldi = await H.id(
+    `SELECT qty, handover_on IS NOT NULL AS jo FROM production_units WHERE id=$1`, [u.id]);
+  assert.deepEqual([qoldi.qty, qoldi.jo], [6, false]);
+  assert.equal(ketdi.qty + qoldi.qty, 10, 'dona yo\'qolmadi');
+
+  //  Qabul qiluvchi tsex ro'yxatida faqat JO'NATILGAN bo'lak turadi.
+  const inbox = (await lak('GET', '/api/units/board')).body.inbox;
+  assert.ok(inbox.some((x) => x.id === ok.body.done[0].unit_id));
+  assert.ok(!inbox.some((x) => x.id === u.id), 'qolgani jo\'natilmagan');
 });
 
 test('tsex ustasiga faqat o\'z tsexi ochiq', async () => {

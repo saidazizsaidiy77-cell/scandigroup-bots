@@ -2059,19 +2059,40 @@ router.post('/undo', need('production.entry'), wrap(async (req, res) => {
 //
 //  Ikkinchi bosqichni (qabul qilish) keyingi tsex bajaradi — o'tkazish
 //  tugmasi bilan, va u faqat shu belgi turgan konverka ishlaydi.
-async function handoverOne(client, req, unitId, undo) {
+//  Har element: { unit_id, qty? } — soni ko'rsatilmasa konver
+//  butunligicha jo'natiladi (`/move` va `/stock/accept` bilan bir xil
+//  idiom).
+async function handoverOne(client, req, it, undo) {
+  const unitId = typeof it === 'object' && it ? it.unit_id : it;
   // Jo'natuvchi — javobgar tsex, konver turgan bo'limning tsexi emas
   // (izoh: sql/catalog-groups.sql, owner_shop_id).
   const u = (await client.query(
-    `SELECT u.id, u.conveyor_no, u.status,
+    `SELECT u.id, u.conveyor_no, u.status, u.qty,
             COALESCE(g.owner_shop_id, sc.shop_id) AS shop_id,
-            COALESCE(osh.name, sh.name)           AS shop
+            COALESCE(osh.name, sh.name)           AS shop,
+            sc.name AS section, COALESCE(sc.is_exit, false) AS is_exit,
+            --  Marshrutdagi KEYINGI qadam: uning javobgar tsexi
+            --  (guruhniki, bo'lmasa bo'limning tsexi). Ekrandagi
+            --  «jo'natish» tugmasi ham aynan shu hisobdan chiqadi
+            --  (/board) — ikkalasi bitta qoidadan o'qishi shart.
+            nx.shop_id AS next_shop_id, nx.name AS next_section
        FROM production_units u
        JOIN products pr       ON pr.id = u.product_id
        JOIN product_groups g  ON g.id  = pr.group_id
        LEFT JOIN sections sc  ON sc.id = u.current_section_id
        LEFT JOIN shops sh     ON sh.id = sc.shop_id
        LEFT JOIN shops osh    ON osh.id = g.owner_shop_id
+       LEFT JOIN LATERAL (
+         SELECT pr2.step_no FROM v_product_route pr2
+          WHERE pr2.product_id = u.product_id
+            AND pr2.section_id = u.current_section_id LIMIT 1) cur ON true
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(g.owner_shop_id, s2.shop_id) AS shop_id, s2.name
+           FROM v_product_route pr3
+           JOIN sections s2 ON s2.id = pr3.section_id
+          WHERE pr3.product_id = u.product_id
+            AND cur.step_no IS NOT NULL AND pr3.step_no > cur.step_no
+          ORDER BY pr3.step_no LIMIT 1) nx ON true
       WHERE u.id = $1 FOR UPDATE OF u`, [unitId])).rows[0];
   if (!u) throw new Error('Konver topilmadi');
   if (u.status === 'cancelled') throw new Error(`${u.conveyor_no}: bekor qilingan`);
@@ -2080,6 +2101,36 @@ async function handoverOne(client, req, unitId, undo) {
   const scope = scopeOf(req);
   if (scope && !scope.includes(u.shop_id))
     throw new Error(`${u.conveyor_no}: «${u.shop}» sizning doirangizda emas`);
+
+  //  ── ★ BOSQICHDAN SAKRAB BO'LMAYDI (zavod qarori, 2026-09) ───────
+  //
+  //  Topshirish — MARSHRUTNING chegarasida bo'ladigan ish: konver yo
+  //  keyingi TSEXGA o'tadi, yo chiqish bo'limidan T/M omborga. Ilgari
+  //  server faqat DOIRANI qarardi va o'rtadagi bo'limda turgan konverni
+  //  ham «jo'natilgan» deb belgilash mumkin edi — doirasi keng xodim
+  //  (yoki doirasi umuman qo'yilmagan) o'zidan oldingi bosqichning
+  //  ustidan sakrab, mahsulotni to'g'ridan-to'g'ri omborga yozib
+  //  yuborardi. Ombor mudiri esa ro'yxatda kelmagan mahsulotni ko'rardi
+  //  va oradagi tsex o'z ishini qilmaganini hech narsa aytmasdi.
+  //
+  //  Endi ikkita shart, va ikkalasi ham EKRANDAGI tugma bilan bir xil
+  //  hisobdan chiqadi (/board, leaves):
+  //
+  //    · oldinda BOSHQA tsexning qadami bor  → o'sha tsexga topshiriladi;
+  //    · oldinda qadam qolmagan              → chiqish bo'limidan omborga.
+  //
+  //  Qolgan hamma holat — sakrash: konver hali o'z tsexining ichida
+  //  yuribdi va uni avval keyingi BO'LIMGA o'tkazish kerak.
+  if (!undo) {
+    if (u.next_shop_id && u.next_shop_id === u.shop_id)
+      throw new Error(
+        `${u.conveyor_no}: hali «${u.shop}» ichida — avval `
+        + `«${u.next_section}» bo'limiga o'tkazing`);
+    if (!u.next_shop_id && !u.is_exit)
+      throw new Error(
+        `${u.conveyor_no}: «${u.section || 'bo\'limsiz'}» chiqish bo'limi emas — `
+        + `T/M omborga faqat qadoqlashdan topshiriladi`);
+  }
 
   if (undo) {
     await client.query(
@@ -2090,14 +2141,38 @@ async function handoverOne(client, req, unitId, undo) {
     return { unit_id: unitId, conveyor_no: u.conveyor_no, sent: false };
   }
 
+  //  ── ★ NECHTASI JO'NATILAYOTGANI SO'RALADI (zavod qarori, 2026-09)
+  //
+  //  Tsex o'n talik konverning to'rttasini tayyorlab, qolganini ertaga
+  //  beradi — qadoqlash T/M omborga topshirganda ham shunday. Ilgari
+  //  jo'natish HAMMASINI belgilardi: qabul qiluvchi ro'yxatda o'n ta
+  //  ko'rib, qo'lida to'rttasini sanardi va farqni hech narsa
+  //  tushuntirmasdi.
+  //
+  //  Konver bo'linadi: jo'natilgani YANGI bo'lak bo'ladi (raqami o'sha),
+  //  qolgani esa eski qatorda, o'z bo'limida va belgisiz turaveradi.
+  //  Bron ESKI qatorda qoladi — ombordagi qisman qabul bilan bir xil
+  //  sabab: aks holda jo'natilgan bo'lakda bo'shdan ko'p band dona
+  //  bo'lib qolardi.
+  const n = it && typeof it === 'object' && it.qty != null && it.qty !== ''
+    ? Number(it.qty) : u.qty;
+  if (!Number.isInteger(n) || n <= 0)
+    throw new Error(`${u.conveyor_no}: soni noto'g'ri`);
+  if (n > u.qty)
+    throw new Error(`${u.conveyor_no}: bu yerda ${u.qty} ta, ${n} ta jo'natilmoqda`);
+  const id = n < u.qty ? await clonePart(client, req, u, n, { keepPlace: true })
+                       : unitId;
+
   await client.query(
     `UPDATE production_units
         SET handover_on = CURRENT_DATE, handover_at = NOW(),
             handover_by = $2, handover_shop_id = $3
-      WHERE id = $1`, [unitId, req.user.id, u.shop_id]);
-  return { unit_id: unitId, conveyor_no: u.conveyor_no, sent: true };
+      WHERE id = $1`, [id, req.user.id, u.shop_id]);
+  return { unit_id: id, conveyor_no: u.conveyor_no, sent: true, qty: n };
 }
 
+//  Har element: { unit_id, qty? } yoki oddiy id — soni ko'rsatilmasa
+//  konver butunligicha jo'natiladi (izoh: `handoverOne`).
 router.post('/handover', need('production.entry'), wrap(async (req, res) => {
   const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
   if (!ids.length) throw new Error('Konver tanlanmagan');

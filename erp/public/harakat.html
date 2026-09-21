@@ -395,7 +395,9 @@ async function apply(ids, qty, planOn) {
           })) }) });
     if (send.length)
       await App.api('/api/units/handover', {
-        method: 'POST', body: JSON.stringify({ items: send }) });
+        method: 'POST', body: JSON.stringify({
+          items: send.map(id => ({
+            unit_id: id, ...(qty == null ? {} : { qty }) })) }) });
     toast(ids.length === 1
       ? (send.length ? "Jo'natildi" : "O'tkazildi")
       : `${ids.length} ta konver yuborildi`);
@@ -405,7 +407,12 @@ async function apply(ids, qty, planOn) {
 }
 
 const move  = id => askQty(id);
-const send1 = id => apply([id]);
+//  ★ JO'NATISHDA HAM SON SO'RALADI (zavod qarori, 2026-09): tsex o'n
+//  talikning to'rttasini tayyorlab, qolganini ertaga beradi —
+//  qadoqlash T/M omborga topshirganda ham shunday. Ilgari jo'natish
+//  HAMMASINI belgilardi va qabul qiluvchi ro'yxatda o'n ta ko'rib,
+//  qo'lida to'rttasini sanardi. Oyna o'sha — savol boshqa.
+const send1 = id => askQty(id);
 
 //  Qabul qilishdan oldingi bitta savol: keyingi tsexga qachon
 //  topshiriladi. Qaysi ustunga yozilishini SERVER hal qiladi — ekranda
@@ -456,6 +463,14 @@ function unitById(id) {
   return null;
 }
 
+//  Oynaning sarlavhasida QAYERGA ketayotgani turadi: jo'natishda bu
+//  keyingi TSEX yoki T/M ombor, o'tkazishda esa keyingi BO'LIM.
+function qayerga(u) {
+  if (kindOf(u.id) !== 'send') return u.next_section || 'keyingi bosqich';
+  return u.next_shop_id && u.next_shop_id !== shopId
+    ? (u.next_shop_name || 'keyingi tsex') : 'T/M ombor';
+}
+
 function askQty(id) {
   const u = unitById(id);
   if (!u || u.qty <= 1) return apply([id]);
@@ -466,8 +481,8 @@ function askQty(id) {
         <h2 style="margin-bottom:4px">${esc(u.conveyor_no)}</h2>
         <p class="muted" style="font-size:13px;margin-bottom:16px">${esc(u.product)} ·
           ${rangMato(u)} ·
-          bu yerda <b>${max} ta</b> → ${esc(u.next_section || 'keyingi bosqich')}</p>
-        <label>Nechtasi o'tadi?</label>
+          bu yerda <b>${max} ta</b> → ${esc(qayerga(u))}</p>
+        <label>Nechtasi ${kindOf(id) === 'send' ? "jo'natiladi" : "o'tadi"}?</label>
         <div class="row" style="gap:8px;margin-bottom:14px">
           <button onclick="stepQty(-1)" style="width:52px;font-size:20px">−</button>
           <input id="qtyVal" type="number" inputmode="numeric" min="1" max="${max}"
@@ -480,7 +495,8 @@ function askQty(id) {
             style="flex:1">${Math.floor(max / 2)} ta</button>` : ''}
           <button onclick="setQty(${max})" style="flex:1">Hammasi</button>
         </div>
-        <button class="primary" style="width:100%" onclick="okQty(${id},${max})">O'tkazish</button>
+        <button class="primary" style="width:100%" onclick="okQty(${id},${max})">${
+          kindOf(id) === 'send' ? "Jo'natish" : "O'tkazish"}</button>
         <button style="width:100%;margin-top:8px" onclick="closeQty()">Bekor qilish</button>
       </div>
     </div>`);
