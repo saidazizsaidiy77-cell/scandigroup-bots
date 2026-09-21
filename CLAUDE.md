@@ -1592,6 +1592,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
+| `savdo_boshliq` | `sotuvchi` bilan AYNAN bir xil | savdo bo'lim boshlig'i: farqi faqat **doirasida** — yo'nalish ham, «Faqat o'zinikini» ham bo'sh qoladi, ya'ni butun savdoni ko'radi |
 | `admin` | barchasi | hammasi |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
@@ -1730,9 +1731,19 @@ Raqamning o'zi yolg'on emas — tushuntirilmagani yolg'on bo'lardi.
 raqamini ham ichiga olardi. Kartochkalar chizilmaydi, sahifa ishlayveradi.
 
 Bo'sh qoldirilsa — butun savdo: **savdo bo'lim boshlig'i**, bosh ofis,
-rahbariyat va administrator. Boshliqqa alohida rol yozilmadi: u ham
-`sotuvchi`, farqi faqat doirasida — zavodda lavozim o'zgarsa bitta
-katakcha belgilanadi, kodga tegilmaydi.
+rahbariyat va administrator.
+
+**★ BOSHLIQ — ALOHIDA LAVOZIM** (`savdo_boshliq`, zavod qarori
+2026-09). Ilgari u ham `sotuvchi` edi va farqi faqat doirasida
+qolardi — huquqi baribir bir xil, lekin ekranda va hujjatda uning
+yonida **«Sotuv menejeri»** deb turardi. Zavodda bu ikki xil odam va
+menejerni boshliq deb o'qish chalkashlik berardi.
+
+Huquqlari `sotuvchi` dan **KO'CHIRILADI** (`sql/core-seed.sql`, eng
+oxirida): ikkinchi ro'yxat yozilmadi — menejerga qo'shilgan huquq
+boshliqqa ham o'zi tushadi. Qo'shilgani o'zi tushadi, OLIB TASHLANGANI
+esa qolaveradi: kerak bo'lsa o'sha qator alohida o'chiriladi. Farqi
+faqat doirasida qolaveradi va u **bo'sh** bo'ladi.
 
 Uning birinchi savoli «kim nima yozdi», shuning uchun buyurtmalar
 ro'yxatida **menejer filtri** turadi (`/api/sales/orders?manager_id=`).

@@ -1557,6 +1557,41 @@ test('zakaz raqami boshlanish raqamidan past tushmaydi', async () => {
 //  ★ SAVDO ISHLAB CHIQARISHGA SO'ROV YOZADI — faqat stol va stulga.
 //  Konver BU YERDA ochilmaydi: so'rov rahbariyat navbatiga tushadi va
 //  tasdiqlangach o'sha qatorga O'ZI biriktiriladi.
+//  ★ SAVDO BO'LIM BOSHLIG'I — ALOHIDA LAVOZIM, huquqi menejerniki
+//  bilan BIR XIL. Ikkinchi ro'yxat yozilmadi: menejerga qo'shilgan
+//  huquq boshliqqa ham o'zi tushadi. Farqi faqat doirasida.
+test('savdo bo\'lim boshlig\'i roli menejer bilan bir xil huquqda', async () => {
+  const bor = await H.id(
+    `SELECT name, sort FROM roles WHERE code = 'savdo_boshliq'`);
+  assert.ok(bor, 'rol yaratildi');
+  assert.match(bor.name, /boshlig/);
+
+  //  Ro'yxatda menejerning USTIDA turadi — lavozim bo'yicha o'qiladi.
+  const men = await H.id(`SELECT sort FROM roles WHERE code = 'sotuvchi'`);
+  assert.ok(bor.sort < men.sort, `${bor.sort} < ${men.sort}`);
+
+  //  Huquqlari AYNAN bir xil: biri ikkinchisidan ortiq ham, kam ham emas.
+  const farq = await H.id(
+    `SELECT COUNT(*)::int AS n FROM (
+         SELECT permission_code FROM role_permissions WHERE role_code = 'sotuvchi'
+         EXCEPT
+         SELECT permission_code FROM role_permissions WHERE role_code = 'savdo_boshliq'
+       UNION ALL
+         SELECT permission_code FROM role_permissions WHERE role_code = 'savdo_boshliq'
+         EXCEPT
+         SELECT permission_code FROM role_permissions WHERE role_code = 'sotuvchi') x`);
+  assert.equal(farq.n, 0, 'huquqlar bir xil');
+
+  //  Va u haqiqatan ishlaydi: buyurtmalar ham, mijozlar ham ochiladi.
+  const boshliq = await xodim('Sinov savdo rahbari', 'savdo_boshliq');
+  assert.equal((await boshliq('GET', '/api/sales/orders')).status, 200);
+  assert.equal((await boshliq('GET', '/api/units/customers')).status, 200);
+  //  Ishlab chiqarish jurnali ochiq, konver yaratish esa yo'q.
+  assert.equal((await boshliq('GET', '/api/units/')).status, 200);
+  assert.equal((await boshliq('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1 }] })).status, 403);
+});
+
 test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
   const STUL = (await H.id(

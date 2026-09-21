@@ -69,11 +69,34 @@ INSERT INTO roles (code, name, surface, sort) VALUES
   ('operator',     'Bo''lim operatori',       'miniapp', 6),
   ('omborchi',     'Ombor mudiri',            'web',     7),
   ('taminotchi',   'Ta''minotchi',            'web',     8),
-  ('sotuvchi',     'Sotuv menejeri',          'web',     9),
-  ('kassir',       'Kassir',                  'web',    10),
-  ('buxgalter',    'Buxgalter',               'web',    11),
-  ('hr',           'HR / kadrlar',            'web',    12)
+  --  ★ SAVDO BO'LIM BOSHLIG'I — ALOHIDA LAVOZIM (zavod qarori, 2026-09).
+  --
+  --  Ilgari u ham «Sotuv menejeri» deb yozilardi va farqi faqat
+  --  DOIRASIDA edi: yo'nalish tanlanmagan, «Faqat o'zinikini»
+  --  belgilanmagan. Huquqi baribir bir xil, lekin ekranda va hujjatda
+  --  uning yonida noto'g'ri lavozim turardi — zavodda bu ikki xil odam
+  --  va menejerni boshliq deb o'qish chalkashlik berardi.
+  --
+  --  Huquqlari `sotuvchi` dan KO'CHIRILADI (pastda), ya'ni ikkinchi
+  --  ro'yxat yozilmadi: menejerga qo'shilgan huquq boshliqqa ham o'zi
+  --  tushadi. Farqi faqat doirasida qolaveradi — boshliqda u bo'sh
+  --  bo'ladi va u butun savdoni ko'radi.
+  ('savdo_boshliq','Savdo bo''lim boshlig''i', 'web',     9),
+  ('sotuvchi',     'Sotuv menejeri',          'web',    10),
+  ('kassir',       'Kassir',                  'web',    11),
+  ('buxgalter',    'Buxgalter',               'web',    12),
+  ('hr',           'HR / kadrlar',            'web',    13)
 ON CONFLICT (code) DO NOTHING;
+
+--  Eski bazada tartib eskicha qolgan (`ON CONFLICT DO NOTHING` uni
+--  tegmaydi): boshliq menejerning USTIDA tursin — ro'yxat lavozim
+--  bo'yicha o'qiladi. Rol tartibi saytdan tahrirlanmaydi, shuning uchun
+--  `migration_flags` kerak emas: qoida kodda va har migratsiyada
+--  o'rnatiladi.
+UPDATE roles SET sort = 10 WHERE code = 'sotuvchi'  AND sort <> 10;
+UPDATE roles SET sort = 11 WHERE code = 'kassir'    AND sort <> 11;
+UPDATE roles SET sort = 12 WHERE code = 'buxgalter' AND sort <> 12;
+UPDATE roles SET sort = 13 WHERE code = 'hr'        AND sort <> 13;
 
 -- Admin — hamma huquq
 INSERT INTO role_permissions (role_code, permission_code)
@@ -241,3 +264,19 @@ UPDATE permissions SET name = 'Konver jurnali: zakaz/mijoz/narx/rang'
 -- nomni yangilamaydi, shuning uchun alohida yoziladi.
 UPDATE roles SET name = 'Ombor mudiri', surface = 'web'
  WHERE code = 'omborchi';
+
+--  ★ SAVDO BO'LIM BOSHLIG'INING HUQUQLARI — MENEJERNIKIDAN KO'CHIRILADI.
+--
+--  Ikkinchi ro'yxat yozilmadi: boshliq menejer ko'radigan hamma narsani
+--  ko'radi va farqi faqat DOIRASIDA (yo'nalish va «Faqat o'zinikini»
+--  bo'sh). Ikki ro'yxat bo'lsa menejerga qo'shilgan huquq boshliqda
+--  unutilardi va bitta ekran unga ochilmay qolardi.
+--
+--  Eng oxirida turadi: yuqorida `sotuvchi` ning huquqlari to'liq
+--  yozilgan bo'lishi kerak. Qo'shilgani o'zi tushadi, OLIB TASHLANGANI
+--  esa qolaveradi — kerak bo'lsa o'sha qator alohida o'chiriladi
+--  (`DELETE FROM role_permissions`, yuqoridagi `kirituvchi` kabi).
+INSERT INTO role_permissions (role_code, permission_code)
+SELECT 'savdo_boshliq', permission_code
+  FROM role_permissions WHERE role_code = 'sotuvchi'
+ON CONFLICT DO NOTHING;

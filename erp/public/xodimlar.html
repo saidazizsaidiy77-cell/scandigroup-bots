@@ -63,7 +63,10 @@ const $ = id => document.getElementById(id);
 
 // Bu rollar mijozlar bilan ishlaydi — ularga tsex emas, SAVDO YO'NALISHI
 // biriktiriladi: biri B2B bilan, boshqasi eksport bilan ishlaydi.
-const SALES_ROLES = new Set(['sotuvchi']);
+//  Savdo doirasi (yo'nalish, vitrina, «Faqat o'zinikini») shu
+//  rollarda so'raladi. Boshliq ham savdo xodimi: farqi faqat
+//  doirasida — unda u bo'sh qoladi va u butun savdoni ko'radi.
+const SALES_ROLES = new Set(['sotuvchi', 'savdo_boshliq']);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SURFACE = { web:'Sayt', miniapp:'Telegram ilova', bot:'Bot xabari' };
