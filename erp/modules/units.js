@@ -602,9 +602,24 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
             --  T/M omborga tushish kuni SERVERDA: korpusda bosqichlar
             --  zanjiri, stulda marshrut qadamlari — sahifa qaysi biri
             --  ekanini bilishi shart emas.
-            COALESCE(z.fg_on, ish_kuni(q.started_on, q.steps)) AS fg_on
+            COALESCE(z.fg_on, ish_kuni(q.started_on, q.steps)) AS fg_on,
+            --  ★ QAYSI BUYURTMA UCHUN. Savdo yozgan so'rovda mijoz
+            --  allaqachon kutib turadi va tasdiqlovchining birinchi
+            --  savoli shu bo'ladi: «bu kimga?» Ilgari javob faqat
+            --  izohda, matn bo'lib turardi.
+            --
+            --  Ustun VIEWGA qo'shilmadi: order_item_id ni sales.sql
+            --  qo'shadi va u migratsiyada units.sql dan KEYIN yuradi —
+            --  toza bazada view o'sha ustunni topa olmasdi va sayt
+            --  ko'tarilmasdi (plan_auto bilan bir xil sabab).
+            zak.order_no
        FROM v_unit_requests q
        LEFT JOIN shops sh ON sh.id = q.shop_id
+       LEFT JOIN LATERAL (
+         SELECT o.order_no FROM unit_requests uq
+           JOIN order_items oi ON oi.id = uq.order_item_id
+           JOIN orders o       ON o.id  = oi.order_id
+          WHERE uq.id = q.id) zak ON true
        LEFT JOIN LATERAL muddat_zanjir(q.shop_id, q.product_id, q.started_on) z ON true
       WHERE ($1::text IS NULL OR q.status = $1)
         AND ($2::int[] IS NULL OR q.shop_id = ANY($2))

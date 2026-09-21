@@ -226,8 +226,15 @@ function draw() {
       act.push(`<button onclick="reject(${r.id}, ${data.can_approve})">${
         data.can_approve ? 'Rad etish' : 'Bekor qilish'}</button>`);
     return `<tr>
-      <td><b>${esc(r.conveyor_no || '—')}</b>${r.is_stock
-        ? '<div><span class="tag">zahira</span></div>' : ''}</td>
+      <!--  ★ ZAKAZ RAQAMI konver raqamining OSTIDA — ombor tarixidagi
+            bilan bir xil idiom. Savdo yozgan so'rovda mijoz allaqachon
+            kutib turadi va tasdiqlovchining birinchi savoli shu:
+            «bu kimga?» Ilgari javob faqat izohda, matn bo'lib
+            turardi. Alohida ustun qilinmadi: ro'yxatda to'qqizta ustun
+            bor va o'ninchisi telefonga sig'masdi. -->
+      <td><b>${esc(r.conveyor_no || '—')}</b>${r.order_no
+        ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}</div>` : ''}${
+        r.is_stock ? '<div><span class="tag">zahira</span></div>' : ''}</td>
       <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
         <div class="muted" style="font-size:12px">${esc(r.product_type)}</div></td>
       <td class="num">${r.qty}${r.uom ? ' <span class="muted">' + esc(r.uom) + '</span>' : ''}</td>

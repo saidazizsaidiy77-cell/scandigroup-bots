@@ -1768,6 +1768,12 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   assert.equal(q.status, 'pending');
   assert.equal(q.order_item_id, stulQ.id, 'so\'rov qatorga bog\'langan');
 
+  //  ★ Tasdiqlovchi QAYSI BUYURTMA uchun ekanini ro'yxatning o'zida
+  //  ko'radi: mijoz allaqachon kutib turadi va uning birinchi savoli shu.
+  const sorov = (await admin('GET', '/api/units/requests?status=pending'))
+    .body.rows.find((x) => x.id === q.id);
+  assert.equal(sorov.order_no, z.order_no, 'zakaz raqami ro\'yxatda');
+
   //  Tasdiqlangach konver «boshlanmagan» bo'lib ochiladi va o'sha
   //  qatorga O'ZI biriktiriladi — menejer qaytib kelib qidirmaydi.
   const ok = await admin('POST', `/api/units/requests/${q.id}/approve`);
