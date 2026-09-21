@@ -179,12 +179,20 @@ const NAVBATLAR = [
               izoh: `${n} ta buyurtma chiqarishni kutmoqda` }];
   },
 
-  //  6. VITRINADAN QAYTARISH — hujjat IKKI odamning navbatida turadi
+  //  6. OMBORLAR ARO HARAKAT — hujjat IKKI odamning navbatida turadi
   //  va ikkalasiga boshqa bosqichi ko'rinadi (izoh: warehouse.js):
-  //    · vitrinadagi xodim  — `new`, o'z nuqtasiniki, o'zi yozmagani;
-  //    · T/M ombor mudiri   — `confirmed`, do'kondan chiqqani.
+  //    · chiqayotgan ombor  — `new`, hali jo'natilmagani;
+  //    · qabul qiluvchi     — `confirmed`, yo'ldagisi.
+  //
+  //  ★ YO'NALISH IKKITA. Ilgari raqam FAQAT vitrinadan qaytarishni
+  //  sanardi: `confirmed` ning hammasi T/M mudiriga yozilardi va
+  //  vitrinaga ketayotgan hujjat ham o'sha raqamga tushardi — mudir
+  //  o'zi jo'natgan mahsulotni o'zi kutayotgandek ko'rinardi, vitrina
+  //  sotuvchisida esa kelayotgani umuman sanalmasdi. Endi shart
+  //  sahifadagi tugmaning O'ZIDAN chiqadi (`canConfirm`/`canAccept`,
+  //  public/omborlar-aro.html).
   async (req) => {
-    const tm  = bor(req, 'warehouse.manage');
+    const tm  = bor(req, 'warehouse.manage', 'warehouse.move', 'production.manage');
     const vit = whOf(req);
     //  Na qabul qiladi, na vitrinasi bor — hujjat uning navbatida
     //  hech qachon turmaydi, demak raqam ham chizilmaydi. Nol
@@ -192,16 +200,31 @@ const NAVBATLAR = [
     //  yonmaydigan belgi turib qolardi.
     if (!tm && !vit) return [];
     const n = await son(
-      `SELECT COUNT(*)::int AS n FROM wh_returns
-        WHERE (status = 'confirmed' AND $1)
-           OR (status = 'new' AND $2::int[] IS NOT NULL
-               AND from_warehouse_id = ANY($2)
-               --  Yozgan odam O'ZI tasdiqlay olmaydi (ikki odam
-               --  qoidasi) — uning navbatida ham turmaydi.
-               AND created_by IS DISTINCT FROM $3)`,
+      `SELECT COUNT(*)::int AS n
+         FROM wh_returns r
+         JOIN warehouses fw ON fw.id = r.from_warehouse_id
+         LEFT JOIN warehouses tw ON tw.id = r.to_warehouse_id
+        WHERE (r.status = 'confirmed'
+                 AND ($2::int[] IS NULL OR r.to_warehouse_id = ANY($2))
+                 --  T/M ga qabul qilish MUDIRNIKI: savdo u yerda
+                 --  faqat o'qiydi.
+                 AND (tw.code <> 'TM' OR $1))
+           OR (r.status = 'new'
+                 --  T/M dan chiqayotganini mudir O'ZI jo'natadi: javonni
+                 --  o'zi sanaydi va mashinaga o'zi ortadi. Vitrinadan
+                 --  chiqayotganini esa O'SHA NUQTAGA biriktirilgan xodim
+                 --  tasdiqlaydi va yozgan odam bo'lmaydi (ikki odam
+                 --  qoidasi) — doirasi yo'q boshliqqa u navbat emas.
+                 AND (CASE WHEN fw.code = 'TM'
+                             THEN $1 AND ($2::int[] IS NULL
+                                          OR r.from_warehouse_id = ANY($2))
+                             ELSE $2::int[] IS NOT NULL
+                                  AND r.from_warehouse_id = ANY($2)
+                                  AND r.created_by IS DISTINCT FROM $3
+                      END))`,
       [tm, vit, req.user.id]);
-    return [{ page: '/omborlar.html', mod: 'warehouse', n,
-              izoh: `${n} ta qaytarish hujjati sizni kutmoqda` }];
+    return [{ page: '/omborlar-aro.html', mod: 'warehouse', n,
+              izoh: `${n} ta omborlar aro hujjat sizni kutmoqda` }];
   },
 
   //  7. OMBORGA YUBORISHNI KUTAYOTGAN BUYURTMA — menejerning navbati.

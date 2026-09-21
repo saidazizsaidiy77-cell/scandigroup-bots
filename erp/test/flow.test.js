@@ -1757,7 +1757,7 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
       `SELECT prefix, first_no FROM doc_no_start WHERE prefix IN ('C26-','S26-','K26-')
         ORDER BY prefix LIMIT 1`);
     assert.ok(bosh, 'boshlanish raqamlari yozilgan');
-    for (const [no, min] of [[s1, 469], [c1, 232], [k1, 110]])
+    for (const [no, min] of [[s1, 468], [c1, 231], [k1, 107]])
       assert.ok(Number(no.split('-')[1]) >= min, `${no} ≥ ${min}`);
   }
 });
@@ -4461,9 +4461,15 @@ test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
   //  turadi, shuning uchun raqam ikkala ro'yxatning yig'indisi.
   const inbox = (await admin('GET', '/api/units/stock/inbox')).body.length;
   const ship  = (await admin('GET', '/api/sales/shipping')).body.rows.length;
-  const qayt  = (await admin('GET', '/api/warehouse/fg/returns')).body.rows
-    .filter((r) => r.status === 'confirmed').length;
-  assert.equal(sonOf(nav, '/omborlar.html'), inbox + ship + qayt);
+  assert.equal(sonOf(nav, '/omborlar.html'), inbox + ship);
+
+  //  Omborlar aro harakat — o'z sahifasida. Administratorda vitrina
+  //  doirasi yo'q, ya'ni uning navbati T/M ga kelayotgan hujjatlar:
+  //  sahifadagi «Qabul qilish» tugmasi ham AYNAN shu shartdan chiqadi
+  //  (`canAccept`, public/omborlar-aro.html).
+  const qayt = (await admin('GET', '/api/warehouse/fg/returns')).body.rows
+    .filter((r) => r.status === 'confirmed' && r.to_code === 'TM').length;
+  assert.equal(sonOf(nav, '/omborlar-aro.html'), qayt);
 
   //  Savdo: bronning hammasi omborga yetib kelgan, lekin hali
   //  yuborilmagan buyurtma. Yetib kelmaganida tugma baribir
@@ -4480,6 +4486,8 @@ test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
   assert.equal(sonOf(kn, '/sorovlar.html'), 0);
   assert.ok(!kn.some((q) => q.page === '/omborlar.html'),
     'ombor navbati kirituvchiga chizilmaydi');
+  assert.ok(!kn.some((q) => q.page === '/omborlar-aro.html'),
+    'omborlar aro navbati kirituvchiga chizilmaydi');
 
   //  Kirmagan odamga umuman javob berilmaydi.
   assert.equal((await H.api(base, null)('GET', '/api/navbat')).status, 401);

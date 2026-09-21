@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Omborlar aro harakat · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body class="wide">
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Omborlar aro harakat</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div id="body"><p class="muted">Yuklanmoqda…</p></div>
+<div id="modalRoot"></div>
+
+<script>
+//  OMBORLAR ARO HARAKAT — bitta sahifa, bitta hujjat turi.
+//
+//  ★ HUJJAT IKKI YO'NALISHDA HAM BIR XIL (zavod qarori, 2026-09).
+//  Ilgari u ombor sahifasining «Qaytarish» tabida turardi va T/M
+//  ombor mudiri vitrinaga mahsulot jo'natish tugmasini o'sha yerdan
+//  izlab topa olmasdi: tab «qaytarish» deb atalardi, u esa JO'NATMOQCHI
+//  edi. Endi hujjat o'z sahifasiga chiqdi va menyuda «Omborlar» ning
+//  yonida turadi — ombor bo'limiga kirgan odam uni birinchi qatorda
+//  ko'radi.
+//
+//  Uch bosqich, yo'nalishidan qat'i nazar (izoh: modules/warehouse.js):
+//
+//    1. chiqayotgan ombor   hujjatni shakllantiradi      new
+//    2. o'sha ombor xodimi  «jo'natdim» — mashina ketdi  confirmed
+//    3. qabul qiluvchi      kelganda qabul qiladi        accepted
+//
+//  Mahsulot FAQAT uchinchi bosqichda ko'chadi: yo'ldagi mahsulot
+//  ikkala qoldiqda ham to'g'ri turadi — chiqqanida hali bor, kelganida
+//  hali yo'q.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+
+let rows = [], houses = [], faqatNavbat = true;
+
+function toast(msg, bad) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), bad ? 5000 : 2600);
+}
+
+const HOLAT = {
+  new:       ['warn', "jo'natilmagan"],
+  confirmed: ['warn', "yo'lda"],
+  accepted:  ['ok',   'qabul qilindi'],
+  rejected:  ['bad',  'rad etildi'],
+  cancelled: ['',     'bekor qilindi'],
+};
+
+//  Doira CHEGARA, tugma esa uning ko'rinishi: server baribir o'sha
+//  shartni qayta tekshiradi (izoh: `/confirm`, `/accept`).
+const koz    = () => App.me()?.scope_warehouse_ids || [];
+const meniki = (whId) => !koz().length || koz().includes(whId);
+const qabulTM = () => App.can('warehouse.manage', 'warehouse.move', 'production.manage');
+
+//  Hujjatni CHIQAYOTGAN ombor yozadi. T/M da bu ombor mudiri; vitrinadan
+//  qaytarishda esa vitrinasi biriktirilmagan savdo xodimi — ikki odam
+//  qoidasi (izoh: sql/warehouse.sql).
+const canMove = () => qabulTM();
+const canRet  = () => App.can('sales.manage') && !koz().length;
+const canNew  = () => canMove() || canRet();
+
+//  Jo'natish: T/M dan chiqayotganini MUDIR o'zi jo'natadi (javonni o'zi
+//  sanaydi, mashinaga o'zi ortadi). Vitrinadan chiqayotganini esa
+//  O'SHA NUQTAGA biriktirilgan xodim tasdiqlaydi va u hujjatni yozgan
+//  odam bo'lmaydi — ikki odam qoidasi (izoh: sql/warehouse.sql).
+const canConfirm = (r) => r.status === 'new' && (r.from_code === 'TM'
+  ? canMove() && meniki(r.from_warehouse_id)
+  : koz().includes(r.from_warehouse_id) && r.created_by !== App.me()?.id);
+//  Qabul qilish: manzil ombor meniki bo'lsin; T/M ga qabul qilish esa
+//  MUDIRNIKI — savdo u yerda faqat o'qiydi.
+const canAccept = (r) => r.status === 'confirmed' && meniki(r.to_warehouse_id)
+  && (r.to_code !== 'TM' || qabulTM());
+
+//  Navbatda turganlar — MENDAN nima kutilmoqda. Menyudagi raqam ham
+//  shu shartdan chiqadi (`modules/nav.js`): ikkinchi marta yozilgan
+//  shart bir kun ro'yxatdan ajralib ketardi.
+const kutmoqda = () => rows.filter((r) => canConfirm(r) || canAccept(r));
+
+async function load() {
+  const [h, d] = await Promise.all([
+    App.api('/api/warehouse/list'),
+    App.api('/api/warehouse/fg/returns'),
+  ]);
+  houses = h.rows.filter((w) => w.kind === 'fg' && w.is_active);
+  rows = d.rows;
+  draw();
+}
+
+function draw() {
+  const list = faqatNavbat ? kutmoqda() : rows;
+  const n = kutmoqda().length;
+  $('body').innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div class="row" style="gap:8px">
+          ${canNew() ? `<button class="primary" onclick="yangi()"
+            >+ Harakat hujjati</button>` : ''}
+        </div>
+        <div class="row" style="gap:8px">
+          <button ${faqatNavbat ? 'class="primary"' : ''} onclick="filtr(true)"
+            >Meni kutmoqda${n ? ` <b>${n}</b>` : ''}</button>
+          <button ${faqatNavbat ? '' : 'class="primary"'} onclick="filtr(false)"
+            >Hammasi</button>
+        </div>
+      </div>
+    </div>
+    ${list.length ? `<div class="card" style="margin-top:16px">
+      <div style="overflow-x:auto"><table>
+      <thead><tr><th>Hujjat</th><th>Qayerdan</th><th>Qayerga</th><th>Mahsulot</th>
+        <th class="num">Soni</th><th>Holat</th><th>Kim</th><th></th></tr></thead>
+      <tbody>${list.map(qator).join('')}</tbody></table></div></div>`
+    : `<div class="card" style="margin-top:16px"><p class="muted">${
+        faqatNavbat ? 'Sizni kutayotgan hujjat yo\'q.' : 'Hujjat yo\'q.'}</p></div>`}`;
+}
+
+function filtr(v) { faqatNavbat = v; draw(); }
+
+//  ★ HUJJATDA NIMA BORLIGI RO'YXATDA TURADI: tasdiqlaydigan odam
+//  javondagi mahsulotni AYNAN shu ro'yxat bilan solishtiradi. Turi ham
+//  yoziladi — zavodda bitta nom ikki guruhda uchraydi.
+function tarkib(r) {
+  const it = r.items || [];
+  if (!it.length) return `<span class="muted">${r.lines} qator</span>`;
+  const bitta = (x) => `${esc(x.product || '')}${x.product_type
+      ? ` <span class="muted">${esc(x.product_type)}</span>` : ''}${x.color
+      ? ` <span class="muted">· ${esc(x.color)}</span>` : ''} × ${x.qty}`;
+  return it.slice(0, 2).map((x) => `<div>${bitta(x)}</div>`).join('')
+    + (it.length > 2 ? `<div class="muted">+${it.length - 2} ta</div>` : '');
+}
+
+function qator(r) {
+  const [cls, holat] = HOLAT[r.status] || ['', r.status];
+  //  «tasdiq kutmoqda» degan yozuv QAYSI ombor ekanini aytmasdi:
+  //  ro'yxatda uchta do'kon aralash turadi.
+  const matn = r.status === 'new' ? `${esc(r.from_warehouse)} jo'natishini kutmoqda`
+    : r.status === 'confirmed' ? `${esc(r.to_warehouse || '')} qabul qilishini kutmoqda`
+    : holat;
+  const amal = canConfirm(r)
+    ? `<button class="primary" onclick="amal(${r.id},'confirm')">Jo'natdim</button>
+       <button onclick="rad(${r.id})">Bekor qilish</button>`
+    : canAccept(r)
+    ? `<button class="primary" onclick="amal(${r.id},'accept')">Qabul qilish</button>`
+    : r.status === 'new' && r.created_by === App.me()?.id
+    ? `<button onclick="rad(${r.id})">Bekor qilish</button>` : '';
+  //  Kim ustuni oxirgi harakatni aytadi: hujjat qayerda turganini
+  //  bilish uchun uni ochib ko'rish shart emas.
+  const kim = r.status === 'accepted'
+    ? `${esc(r.accepted_by_name || '')} · ${d8(r.accepted_on)}`
+    : r.status === 'confirmed'
+    ? `${esc(r.confirmed_by_name || '')} · ${d8(r.confirmed_on)}`
+    : r.decide_note ? `${esc(r.decided_by_name || '')}` : esc(r.created_by_name || '');
+  return `<tr>
+    <td><b>${esc(r.doc_no || '')}</b></td>
+    <td>${esc(r.from_warehouse)}</td>
+    <td>${esc(r.to_warehouse || '—')}</td>
+    <td>${tarkib(r)}</td><td class="num">${r.qty}</td>
+    <td><span class="tag ${cls}">${matn}</span>${r.decide_note
+      ? `<div class="muted" style="font-size:12px">${esc(r.decide_note)}</div>` : ''}</td>
+    <td class="muted" style="font-size:12px">${kim}</td>
+    <td class="num">${amal}</td></tr>`;
+}
+
+async function amal(id, nima) {
+  try {
+    await App.api(`/api/warehouse/fg/returns/${id}/${nima}`, { method: 'POST' });
+    toast(nima === 'accept' ? 'Qabul qilindi' : 'Jo\'natildi');
+    await load();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function rad(id) {
+  //  Sabab MAJBURIY: nega bo'lmaganini bilmasa, boshliq ertaga o'sha
+  //  hujjatni yana yozardi (konver so'rovi bilan bir xil qoida).
+  const sabab = prompt('Sababi?');
+  if (sabab == null) return;
+  try {
+    await App.api(`/api/warehouse/fg/returns/${id}/reject`,
+      { method: 'POST', body: JSON.stringify({ note: sabab }) });
+    toast('Yopildi');
+    await load();
+  } catch (e) { toast(e.message, true); }
+}
+
+const yop = () => { $('modalRoot').innerHTML = ''; };
+
+//  ★ HUJJAT JAVONDAGI QOLDIQDAN YOZILADI. Konver raqamini qo'lda terish
+//  yo'q: chiqayotgan omborda nima turgan bo'lsa o'sha ro'yxatda turadi
+//  va yoniga nechtasi ketayotgani yoziladi. Bo'sh qator hujjatga
+//  tushmaydi.
+function yangi() {
+  //  Chiqayotgan ombor — doirasidagilaridan. Savdo xodimi vitrinadan
+  //  T/M ga qaytaradi, mudir esa T/M dan vitrinaga jo'natadi: ikkala
+  //  yo'l ham BITTA oynadan o'tadi, farqi faqat ro'yxatlarda.
+  const manba = houses.filter((w) => canMove() || w.code !== 'TM');
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:760px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Omborlar aro harakat</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
+             margin-bottom:12px">
+          <div><label>Sana</label>
+            <input id="mvOn" type="date" value="${isoDay(new Date())}"></div>
+          <div style="flex:1;min-width:180px"><label>Qaysi ombordan</label>
+            <select id="mvFrom" onchange="qoldiq()">
+              <option value="">— tanlang —</option>
+              ${manba.map((w) => `<option value="${w.id}" data-code="${esc(w.code)}"
+                >${esc(w.name)}</option>`).join('')}
+            </select></div>
+          <div style="flex:1;min-width:180px"><label>Qaysi omborga</label>
+            <select id="mvTo" ${canMove() ? '' : 'disabled'}>
+              <option value="">— tanlang —</option>
+              ${houses.map((w) => `<option value="${w.id}" data-code="${esc(w.code)}"
+                >${esc(w.name)}</option>`).join('')}
+            </select></div>
+        </div>
+        <p class="muted" style="margin-bottom:12px">Hujjat yozilgandan keyin
+          mahsulot hali chiqayotgan omborda turadi: u qabul qilinganda
+          ko'chadi, ya'ni yo'ldagi mahsulot ikkala qoldiqda ham to'g'ri
+          ko'rinadi.</p>
+        <div id="mvRows"><p class="muted">Avval chiqayotgan omborni tanlang.</p></div>
+        <div style="margin-top:12px"><label>Izoh</label>
+          <input id="mvNote" placeholder="ixtiyoriy"></div>
+        <button class="primary" style="margin-top:14px" onclick="saqla()"
+          >Hujjatni yozish</button>
+      </div></div>`;
+  //  Savdo xodimida yo'nalish bitta — vitrinadan T/M ga: manzilni
+  //  so'rash ortiqcha savol bo'lardi va uni server baribir o'zi qo'yadi.
+  if (!canMove()) {
+    const tm = houses.find((w) => w.code === 'TM');
+    if (tm) $('mvTo').value = tm.id;
+  }
+}
+
+async function qoldiq() {
+  const s = $('mvFrom');
+  const code = s.selectedOptions[0]?.dataset.code;
+  if (!code) return ($('mvRows').innerHTML = '<p class="muted">Avval chiqayotgan omborni tanlang.</p>');
+  $('mvRows').innerHTML = '<p class="muted">Yuklanmoqda…</p>';
+  let bor = [];
+  try {
+    bor = (await App.api('/api/warehouse/fg/returns/candidates?w='
+      + encodeURIComponent(code))).rows;
+  } catch (e) { return ($('mvRows').innerHTML =
+    `<p class="muted">${esc(e.message)}</p>`); }
+  const list = bor.filter((x) => Number(x.qty) > 0);
+  $('mvRows').innerHTML = list.length
+    ? `<div style="overflow-x:auto;max-height:44vh"><table>
+        <thead><tr><th>Konver</th><th>Mahsulot</th><th class="num">Bor</th>
+          <th class="num">Ketadi</th></tr></thead>
+        <tbody>${list.map((x) => `<tr>
+          <td><b>${esc(x.conveyor_no)}</b></td>
+          <td>${esc(x.product)}
+            <div class="muted" style="font-size:12px">${
+              [x.product_type, x.color, x.fabric].filter(Boolean).map(esc).join(' · ')
+            }</div></td>
+          <td class="num">${x.qty}</td>
+          <td class="num"><input type="number" min="0" max="${x.qty}" value="0"
+            data-unit="${x.id}" class="mvq"
+            style="width:80px;text-align:right"></td></tr>`).join('')}</tbody>
+      </table></div>`
+    : `<p class="muted">Bu omborda ko'chiriladigan bo'sh mahsulot yo'q.</p>`;
+}
+
+async function saqla() {
+  const to = Number($('mvTo').value) || null;
+  if (!to) return toast('Qaysi omborga ekani tanlanmadi', true);
+  if (Number($('mvFrom').value) === to)
+    return toast('Chiqayotgan va qabul qiluvchi ombor bir xil', true);
+  const items = [...document.querySelectorAll('.mvq')]
+    .map((i) => ({ unit_id: Number(i.dataset.unit), qty: Number(i.value) || 0 }))
+    .filter((x) => x.qty > 0);
+  if (!items.length) return toast('Birorta ham qator tanlanmadi', true);
+  const note = $('mvNote').value.trim() || null;
+  //  Ikki yo'l, bitta oyna: omborga YOZADIGAN odam har qanday
+  //  yo'nalishda hujjat ochadi, savdo esa faqat vitrinadan T/M ga
+  //  qaytaradi (ikki odam qoidasi o'sha yo'lda). Tekshiruv serverda.
+  const [url, body] = canMove()
+    ? ['/api/warehouse/fg/moves', { to_warehouse_id: to, items, note }]
+    : ['/api/warehouse/fg/returns', { items, note }];
+  try {
+    const r = await App.api(url, { method: 'POST', body: JSON.stringify(body) });
+    toast(`${r.doc_no} yozildi`);
+    yop();
+    await load();
+  } catch (e) { toast(e.message, true); }
+}
+
+App.start(load, 'warehouse.view', 'warehouse.move', 'warehouse.manage', 'sales.manage');
+</script>
+</body>
+</html>

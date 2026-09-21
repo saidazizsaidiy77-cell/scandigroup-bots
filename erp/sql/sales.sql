@@ -400,18 +400,28 @@ INSERT INTO doc_no_start (prefix, first_no) VALUES ('Z26-', 757)
 --  yozilgan, tizimga kirmagan konverlar bor. Raqam ikki joyda turib
 --  ajralib ketsa, tsexdagi mahsulotni jurnaldan topib bo'lmasdi.
 --
---  Zavod aytgan oxirgi raqamlar: C 231, S 468, K 109 — shuning uchun
---  hisob KEYINGISIDAN boshlanadi. Bu raqamlar allaqachon
---  mahsulotning ustiga yozilgan: ularni qaytadan berish ikkita
---  boshqa mahsulotni bitta raqam bilan qoldirardi.
+--  Zavod aytgan raqamlar — C 231, S 468, K 107 — KEYINGISI, ya'ni
+--  hali berilmagani: hisob aynan shulardan boshlanadi. Ilgari ular
+--  «oxirgi berilgani» deb o'qilib, hisob bittaga oldinga surilgan edi
+--  va har harfda bitta raqam bo'sh qolardi — daftar bilan tizim
+--  o'sha teshik ustida ajralib ketardi.
 --
 --  Yil almashganda prefiks ham almashadi (`C27-`) va qator topilmagach
 --  hisob eskicha 1 dan boshlanadi — 2027 uchun hech narsa yozilmaydi.
 INSERT INTO doc_no_start (prefix, first_no) VALUES
-  ('C26-', 232),   -- stol
-  ('S26-', 469),   -- stul
-  ('K26-', 110)    -- sp, penal, kamod
+  ('C26-', 231),   -- stol
+  ('S26-', 468),   -- stul
+  ('K26-', 107)    -- sp, penal, kamod
   ON CONFLICT (prefix) DO NOTHING;
+
+--  Birinchi qo'yilganda raqamlar bittaga yuqori yozilgan edi (232 /
+--  469 / 110). `ON CONFLICT DO NOTHING` ni ishga tushgan baza o'zi
+--  tuzatmaydi — shuning uchun AYNAN o'sha qiymat bo'lsa to'g'rilanadi.
+--  Shartsiz UPDATE yozilmaydi: zavod ertaga saytdan boshqa raqam
+--  qo'ysa, keyingi deploy uni eskisiga qaytarib qo'yardi.
+UPDATE doc_no_start SET first_no = 231 WHERE prefix = 'C26-' AND first_no = 232;
+UPDATE doc_no_start SET first_no = 468 WHERE prefix = 'S26-' AND first_no = 469;
+UPDATE doc_no_start SET first_no = 107 WHERE prefix = 'K26-' AND first_no = 110;
 
 -- ═══════════════════════════════ SAVDO ISHLAB CHIQARISHGA SO'ROV YOZADI
 --

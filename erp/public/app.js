@@ -340,6 +340,15 @@ const App = (() => {
       title: 'Omborlar', lead: 'Zavod omborlari',
       text: "Har ombor alohida: tayyor mahsulot, xom ashyo \u00b7 qoldig'i yonida turadi",
       perm: ['warehouse.view', 'production.view'] },
+    //  ★ OMBORLAR ARO HARAKAT — «Omborlar» ning YONIDA. Ilgari u ombor
+    //  sahifasining «Qaytarish» tabida turardi: T/M ombor mudiri
+    //  vitrinaga mahsulot jo'natmoqchi bo'lib, tugmani «qaytarish»
+    //  degan tab ichidan izlardi va topa olmasdi. Hujjat ikki
+    //  yo'nalishda ham bitta, shuning uchun sahifasi ham bitta.
+    { href: '/omborlar-aro.html', mod: 'warehouse', nav: 'Omborlar aro harakat',
+      title: 'Omborlar aro harakat', lead: "Ombordan omborga jo'natish",
+      text: "Hujjat uch bosqich: shakllantirish \u00b7 jo'natish \u00b7 qabul qilish \u00b7 mahsulot faqat qabul qilinganda ko'chadi",
+      perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage', 'sales.manage'] },
     // Menyuda ko'rinmaydi: omborga faqat omborlar ro'yxati orqali
     // kiriladi. Ikki yo'l bo'lsa, ertaga omborlar ko'payganda biri
     // ikkinchisidan orqada qolardi — menyuda bitta ombor, ro'yxatda
@@ -359,7 +368,6 @@ const App = (() => {
       perm: ['sales.view', 'sales.manage', 'warehouse.move', 'warehouse.manage'] },
     { mod: 'warehouse', nav: 'Omborga kirim',           perm: ['warehouse.move'] },
     { mod: 'warehouse', nav: 'Hisobdan chiqarish',      perm: ['warehouse.manage'] },
-    { mod: 'warehouse', nav: 'Omborlar aro harakatlar', perm: ['warehouse.move'] },
 
     // Hisobotlar
     { mod: 'reports', nav: 'Moliyaviy hisobotlar', perm: ['cash.view', 'production.manage'] },
