@@ -468,12 +468,16 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
 //  Shundan keyin u oddiy T/M qoldig'i: hohlagan savdo xodimi unga
 //  buyurtma yozadi, chunki savdo faqat T/M dan oladi (`CANDIDATE_WHERE`).
 const RET = ['sales.manage', 'warehouse.manage', 'production.manage'];
+//  Huquq bormi — `need()` yo'lni ochadi, bu esa yo'l ICHIDAGI
+//  shartlar uchun: bitta hujjatni ikki xil odam ikki xil
+//  bosqichda oladi.
+const bor = (req, ...p) => p.some((x) => req.user.permissions.includes(x));
 
 //  Hujjat raqami: V26-0001. Konver `K`, zakaz `Z`, pul `P`, qaytarish `V`.
 //  Raqam SAQLASHDA beriladi va tranzaksiya qulfi bilan: ikki odam bir
 //  vaqtda yozsa ham takrorlanmaydi (kassa orderi bilan bir xil qoida).
-async function nextRetNo(client) {
-  const prefix = `V${String(new Date().getFullYear()).slice(-2)}-`;
+async function nextRetNo(client, letter = 'V') {
+  const prefix = `${letter}${String(new Date().getFullYear()).slice(-2)}-`;
   const { rows } = await client.query(
     `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
        FROM wh_returns WHERE doc_no LIKE $1`, [`${prefix}%`]);
@@ -494,8 +498,13 @@ const retVisible = (req) => {
 
 router.get('/fg/returns', need(...RET, 'warehouse.view'), wrap(async (req, res) => {
   const { rows } = await db.query(
+    //  Hujjat IKKI TOMONLI: vitrina sotuvchisi o'zidan CHIQQANINI ham,
+    //  o'ziga KELAYOTGANINI ham ko'rishi kerak — aks holda T/M dan
+    //  jo'natilgan mahsulotni qabul qiladigan odam uni ro'yxatda
+    //  topa olmasdi.
     `SELECT * FROM v_wh_returns
-      WHERE ($1::int[] IS NULL OR from_warehouse_id = ANY($1))
+      WHERE ($1::int[] IS NULL OR from_warehouse_id = ANY($1)
+             OR to_warehouse_id = ANY($1))
         AND ($2::text IS NULL OR status = $2)
       ORDER BY (status IN ('new','confirmed')) DESC, id DESC
       LIMIT 200`, [retVisible(req), req.query.status || null]);
@@ -512,9 +521,10 @@ router.get('/fg/returns', need(...RET, 'warehouse.view'), wrap(async (req, res) 
 //  chalg'itardi.
 router.get('/fg/returns/candidates', need(...RET, 'warehouse.view'),
   wrap(async (req, res) => {
+    //  Hujjat ikki tomonli: T/M dan ham yoziladi (vitrinaga
+    //  ko'chirish), shuning uchun bu yerda ombor cheklanmaydi —
+    //  yo'nalishni hujjatning O'ZI hal qiladi.
     const wh = await whOf(req, req.query.w);
-    if (wh.code === 'TM')
-      return res.status(400).json({ error: 'T/M ombordan qaytarilmaydi' });
     const { rows } = await db.query(
       `SELECT id, conveyor_no, product, product_type, uom, color, fabric, qty
          FROM v_fg_units
@@ -594,8 +604,10 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
     }
 
     const doc = (await client.query(
-      `INSERT INTO wh_returns (doc_no, from_warehouse_id, note, created_by)
-       VALUES ($1,$2,$3,$4) RETURNING id, doc_no`,
+      `INSERT INTO wh_returns (doc_no, from_warehouse_id, to_warehouse_id,
+                               note, created_by)
+       VALUES ($1,$2,(SELECT id FROM warehouses WHERE code = 'TM'),$3,$4)
+       RETURNING id, doc_no`,
       [await nextRetNo(client), whId, req.body.note || null, req.user.id])).rows[0];
     for (const x of saved)
       await client.query(
@@ -605,6 +617,100 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
     await audit(req, { module: 'warehouse', action: 'return-new', entity: 'wh_returns',
                        entity_id: doc.id,
                        payload: { doc_no: doc.doc_no, lines: saved.length } }, client);
+    await client.query('COMMIT');
+    res.json({ id: doc.id, doc_no: doc.doc_no });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  ── ★ OMBORLAR ARO HARAKAT HUJJATI ────────────────────────
+//
+//  Zavod qarori (2026-09). Vitrinaga mahsulot BIR BOSISHDA ko'chirilardi
+//  (`fg/transfer`): T/M da kamayib, vitrinada ko'payardi. Mahsulot esa
+//  mashinada yuradi va yo'lda turgan holati bo'ladi — vitrinadagi
+//  sotuvchi uni qo'liga olmasdan turib qoldiqqa kirib ketardi va
+//  «kelmadi» degan bahsning hujjati hech qayerda bo'lmasdi.
+//
+//  Endi u QAYTARISH bilan bir xil yo'ldan yuradi, faqat teskari
+//  yo'nalishda — ikkinchi mexanizm yozilmadi:
+//
+//    1. T/M ombor mudiri   hujjatni shakllantiradi        new
+//    2. o'sha mudir        «jo'natdim» — mashina ketdi   confirmed
+//    3. vitrinaga mas'ul   qabul qiladi                   accepted
+//       savdo xodimi
+//
+//  Mahsulot FAQAT uchinchi bosqichda ko'chadi, ya'ni yo'ldagi mahsulot
+//  ikkala qoldiqda ham to'g'ri turadi: T/M da hali bor, vitrinada hali
+//  yo'q. Ikki odam qoidasi bu yerda YO'Q: mudir javonni o'zi sanaydi
+//  va mashinaga o'zi ortadi (izoh: `/confirm`).
+router.post('/fg/moves', need('warehouse.move', 'warehouse.manage',
+  'production.manage'), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: 'Qator yo\'q' });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const manzil = (await client.query(
+      `SELECT id, name, code, kind, is_active FROM warehouses WHERE id = $1`,
+      [req.body.to_warehouse_id])).rows[0];
+    if (!manzil) throw new Error('Qaysi omborga ekani tanlanmagan');
+    if (!manzil.is_active) throw new Error(`«${manzil.name}» hali ochilmagan`);
+    if (manzil.kind !== 'fg')
+      throw new Error(`«${manzil.name}» tayyor mahsulot ombori emas`);
+
+    let whId = null;
+    const saved = [];
+    for (const it of items) {
+      const u = (await client.query(
+        `SELECT u.id, u.conveyor_no, u.qty, u.status,
+                COALESCE(u.warehouse_id, tm.id) AS at_wh,
+                COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                           WHERE r.unit_id = u.id), 0)::int AS reserved
+           FROM production_units u
+           LEFT JOIN warehouses tm ON tm.code = 'TM'
+          WHERE u.id = $1 FOR UPDATE OF u`, [it.unit_id])).rows[0];
+      if (!u) throw new Error('Konver topilmadi');
+      if (u.status !== 'fg') throw new Error(`${u.conveyor_no}: omborda emas`);
+      //  Buyurtmaga olingan konver ko'chmaydi: mijozga va'da qilingan
+      //  mahsulot vitrinaga ketib qolardi (vitrina savdoga chiqmaydi).
+      if (u.reserved)
+        throw new Error(`${u.conveyor_no}: ${u.reserved} tasi buyurtmada — avval ajrating`);
+      if (u.at_wh === manzil.id)
+        throw new Error(`${u.conveyor_no}: allaqachon «${manzil.name}» da`);
+      //  BITTA hujjat — BITTA yo'nalish: uni bitta mashina olib boradi
+      //  va bitta odam qabul qiladi (qaytarish bilan bir xil sabab).
+      if (whId && whId !== u.at_wh)
+        throw new Error('Bitta hujjatda faqat BITTA omborning mahsuloti bo\'ladi');
+      whId = u.at_wh;
+
+      const n = it.qty == null || it.qty === '' ? u.qty : Number(it.qty);
+      if (!Number.isInteger(n) || n <= 0 || n > u.qty)
+        throw new Error(`${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
+      saved.push({ unit_id: u.id, conveyor_no: u.conveyor_no, qty: n });
+    }
+
+    const koz = req.user.scope_warehouse_ids || [];
+    if (koz.length && !koz.includes(whId))
+      throw new Error('Bu ombor sizga biriktirilmagan');
+
+    const doc = (await client.query(
+      `INSERT INTO wh_returns (doc_no, from_warehouse_id, to_warehouse_id,
+                               note, created_by)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id, doc_no`,
+      [await nextRetNo(client, 'H'), whId, manzil.id,
+       req.body.note || null, req.user.id])).rows[0];
+    for (const x of saved)
+      await client.query(
+        `INSERT INTO wh_return_items (return_id, unit_id, conveyor_no, qty)
+         VALUES ($1,$2,$3,$4)`, [doc.id, x.unit_id, x.conveyor_no, x.qty]);
+
+    await audit(req, { module: 'warehouse', action: 'move-new', entity: 'wh_returns',
+                       entity_id: doc.id,
+                       payload: { doc_no: doc.doc_no, to: manzil.name,
+                                  lines: saved.length } }, client);
     await client.query('COMMIT');
     res.json({ id: doc.id, doc_no: doc.doc_no });
   } catch (e) {
@@ -629,8 +735,21 @@ router.post('/fg/returns/:id/confirm', need(...RET, 'warehouse.view'),
         throw new Error('Hujjat allaqachon tasdiqlangan yoki yopilgan');
       const ids = req.user.scope_warehouse_ids || [];
       if (ids.length && !ids.includes(r.from_warehouse_id))
-        throw new Error('Bu vitrina sizga biriktirilmagan');
-      if (r.created_by === req.user.id)
+        throw new Error('Bu ombor sizga biriktirilmagan');
+
+      //  ★ IKKI ODAM QOIDASI FAQAT VITRINADAN CHIQAYOTGANDA.
+      //
+      //  Sabab qoidaning o'zida: vitrina sotuvchisi o'z qoldig'ini
+      //  o'zi yozib, o'zi berib yuborardi — shuning uchun hujjatni
+      //  boshqa odam yozadi, u esa faqat tasdiqlaydi.
+      //
+      //  T/M ombordan ko'chirishda ikkinchi odam YO'Q: mudir javonni
+      //  o'zi sanaydi, hujjatni o'zi yozadi va mashinaga o'zi ortadi.
+      //  Qoida bu yerda ishni to'xtatardi, hech narsani himoya qilmay.
+      const manba = (await client.query(
+        `SELECT code FROM warehouses WHERE id = $1`,
+        [r.from_warehouse_id])).rows[0];
+      if (manba?.code !== 'TM' && r.created_by === req.user.id)
         throw new Error('O\'zingiz yozgan hujjatni o\'zingiz tasdiqlay olmaysiz');
 
       await client.query(
@@ -652,7 +771,7 @@ router.post('/fg/returns/:id/confirm', need(...RET, 'warehouse.view'),
 //  `warehouse_id` T/M bo'ladi va harakat `warehouse_moves` ga yoziladi,
 //  ya'ni ombor tarixida vitrinada chiqim, T/M da kirim bo'lib chiqadi.
 //  Konverning bir qismi qaytayotgan bo'lsa shu yerda bo'linadi.
-router.post('/fg/returns/:id/accept', need('warehouse.manage', 'production.manage'),
+router.post('/fg/returns/:id/accept', need(...RET),
   wrap(async (req, res) => {
     const client = await db.connect();
     try {
@@ -662,10 +781,24 @@ router.post('/fg/returns/:id/accept', need('warehouse.manage', 'production.manag
       if (!r) throw new Error('Hujjat topilmadi');
       if (r.status === 'accepted') throw new Error('Allaqachon qabul qilingan');
       if (r.status !== 'confirmed')
-        throw new Error('Vitrina hali tasdiqlamagan — mahsulot yo\'lda emas');
+        throw new Error('Hali jo\'natilmagan — mahsulot yo\'lda emas');
 
+      //  ★ QABUL QILADIGAN ODAM — MANZIL OMBORNI KO'RADIGANI.
+      //  Lavozim yozilmaydi (4-qoida): vitrinadan qaytarishda bu T/M
+      //  ombor mudiri, T/M dan ko'chirishda esa o'sha vitrinaga mas'ul
+      //  savdo xodimi bo'lib chiqadi — qoida bitta.
       const tm = (await client.query(
-        `SELECT id, name FROM warehouses WHERE code = 'TM'`)).rows[0];
+        `SELECT id, name, code FROM warehouses WHERE id = $1`,
+        [r.to_warehouse_id])).rows[0];
+      if (!tm) throw new Error('Hujjatda manzil ombor yo\'q');
+      const koz = req.user.scope_warehouse_ids || [];
+      if (koz.length && !koz.includes(tm.id))
+        throw new Error(`«${tm.name}» sizga biriktirilmagan`);
+      //  T/M omborga qabul qilish MUDIRNIKI: savdo u yerda faqat
+      //  o'qiydi (CLAUDE.md, «Savdo jurnalni o'zgartira olmaydi»).
+      if (tm.code === 'TM'
+          && !bor(req, 'warehouse.manage', 'warehouse.move', 'production.manage'))
+        throw new Error('T/M omborga qabul qilishni ombor mudiri bajaradi');
       const items = (await client.query(
         `SELECT * FROM wh_return_items WHERE return_id = $1 ORDER BY id`,
         [r.id])).rows;
@@ -680,9 +813,9 @@ router.post('/fg/returns/:id/accept', need('warehouse.manage', 'production.manag
         if (u.status !== 'fg')
           throw new Error(`${it.conveyor_no}: omborda emas`);
         if (u.at_wh !== r.from_warehouse_id)
-          throw new Error(`${it.conveyor_no}: vitrinadan allaqachon ko'chirilgan`);
+          throw new Error(`${it.conveyor_no}: allaqachon ko'chirilgan`);
         if (it.qty > u.qty)
-          throw new Error(`${it.conveyor_no}: vitrinada ${u.qty} ta qolgan`);
+          throw new Error(`${it.conveyor_no}: ${u.qty} ta qolgan`);
 
         const id = it.qty < u.qty
           ? await clonePart(client, req, u, it.qty, { keepPlace: true })
@@ -694,7 +827,7 @@ router.post('/fg/returns/:id/accept', need('warehouse.manage', 'production.manag
                                         to_warehouse_id, qty, moved_on, note, worker_id)
            VALUES ($1,$2,$3,$4,$5, COALESCE($6::date, CURRENT_DATE), $7,$8)`,
           [id, it.conveyor_no, r.from_warehouse_id, tm.id, it.qty,
-           req.body.on || null, `Qaytarish ${r.doc_no}`, req.user.id]);
+           req.body.on || null, `Hujjat ${r.doc_no}`, req.user.id]);
       }
 
       await client.query(

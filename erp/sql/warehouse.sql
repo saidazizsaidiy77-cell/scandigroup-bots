@@ -431,6 +431,28 @@ CREATE TABLE IF NOT EXISTS wh_returns (
 CREATE INDEX IF NOT EXISTS idx_wh_ret_status ON wh_returns(status);
 CREATE INDEX IF NOT EXISTS idx_wh_ret_from   ON wh_returns(from_warehouse_id);
 
+--  ★ HUJJAT IKKI TOMONLI BO'LDI (zavod qarori, 2026-09).
+--
+--  Ilgari u faqat QAYTARISH edi: vitrinadan T/M omborga, ya'ni
+--  manzili har doim bitta va uni yozib o'tirish shart emasdi. Endi
+--  teskarisi ham hujjat bilan yuradi — T/M ombordan VITRINAGA:
+--  mahsulot mashinada ketadi va yo'lda turgan holati bo'ladi.
+--
+--  Mexanizm AYNAN o'sha va ikkinchi jadval yozilmadi: uch bosqich
+--  (yozildi → jo'natildi → qabul qilindi), bitta hujjat raqami, bitta
+--  ro'yxat. Farqi faqat yo'nalishida, va kim nima qilishi ham shundan
+--  chiqadi: JO'NATADIGAN — manba omborni ko'radigan odam, QABUL
+--  QILADIGAN — manzil omborni ko'radigani. Lavozim yozilmaydi
+--  (4-qoida): vitrinadan qaytarishda jo'natuvchi sotuvchi, T/M dan
+--  ko'chirishda esa ombor mudiri bo'lib chiqadi.
+--
+--  Eski qatorlarda manzil T/M: hujjat o'sha paytda faqat shunday
+--  bo'lardi.
+ALTER TABLE wh_returns ADD COLUMN IF NOT EXISTS to_warehouse_id INT
+  REFERENCES warehouses(id);
+UPDATE wh_returns SET to_warehouse_id = (SELECT id FROM warehouses WHERE code = 'TM')
+ WHERE to_warehouse_id IS NULL;
+
 --  Konveyer raqami NUSXA bo'lib yoziladi: konver keyin boshqa bo'lakka
 --  qo'shilib ketsa ham hujjatda qaysi raqam qaytgani qolishi kerak
 --  (`warehouse_moves` bilan bir xil sabab).
@@ -449,6 +471,7 @@ DROP VIEW IF EXISTS v_wh_returns;
 CREATE VIEW v_wh_returns AS
 SELECT r.id, r.doc_no, r.status, r.note,
        r.from_warehouse_id, w.name AS from_warehouse, w.code AS from_code,
+       r.to_warehouse_id, tw.name AS to_warehouse, tw.code AS to_code,
        r.created_at, r.created_by,  cw.name AS created_by_name,
        r.confirmed_on, r.confirmed_by, fw.name AS confirmed_by_name,
        r.accepted_on,  r.accepted_by,  aw.name AS accepted_by_name,
@@ -465,6 +488,7 @@ SELECT r.id, r.doc_no, r.status, r.note,
        COALESCE(i.items, '[]'::json) AS items
   FROM wh_returns r
   JOIN warehouses w   ON w.id = r.from_warehouse_id
+  LEFT JOIN warehouses tw ON tw.id = r.to_warehouse_id
   LEFT JOIN workers cw ON cw.id = r.created_by
   LEFT JOIN workers fw ON fw.id = r.confirmed_by
   LEFT JOIN workers aw ON aw.id = r.accepted_by

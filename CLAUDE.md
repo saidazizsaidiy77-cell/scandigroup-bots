@@ -286,6 +286,35 @@ do'kondan chiqqan mahsulot T/M da allaqachon turgandek ko'rinardi va
 mudir uni sanay olmasdi. Ustiga unda HUJJAT yo'q: kim qaytargani, kim
 bergani va kim olgani hech qayerda yozilmasdi.
 
+**★ TESKARI YO'NALISH HAM HUJJAT BILAN** (zavod qarori, 2026-09;
+`POST /api/warehouse/fg/moves`, T/M omborning «Qaytarish» tabidagi
+**«+ Omborlar aro harakat»**). Vitrinaga mahsulot bir bosishda
+ko'chirilardi (`fg/transfer`): T/M da kamayib, vitrinada ko'payardi.
+Mahsulot esa mashinada yuradi — vitrinadagi sotuvchi uni qo'liga
+olmasdan turib qoldiqqa kirib ketardi va «kelmadi» degan bahsning
+hujjati hech qayerda bo'lmasdi.
+
+Endi u qaytarish bilan BIR XIL yo'ldan yuradi, faqat teskari
+yo'nalishda — ikkinchi mexanizm yozilmadi, hujjat IKKI TOMONLI bo'ldi
+(`wh_returns.to_warehouse_id`):
+
+    1. T/M ombor mudiri   hujjatni shakllantiradi       new
+    2. o'sha mudir        «jo'natdim» — mashina ketdi   confirmed
+    3. vitrinaga mas'ul   qabul qiladi                  accepted
+       savdo xodimi
+
+Hujjat raqami **`H26-0001`** (qaytarish `V`). Oynada sana, qaysi
+omborga va konverlar ro'yxati — javondagi mahsulot, qo'lda raqam
+terilmaydi.
+
+**Kim nima qilishi DOIRADAN chiqadi, lavozimdan emas**: jo'natadigan —
+MANBA omborni ko'radigan odam, qabul qiladigan — MANZIL omborni
+ko'radigani. Shuning uchun bitta qoida ikkala yo'nalishga ham to'g'ri
+keladi. **Ikki odam qoidasi esa faqat vitrinadan chiqayotganda**: T/M
+da ikkinchi odam yo'q — mudir javonni o'zi sanaydi, hujjatni o'zi
+yozadi va mashinaga o'zi ortadi; qoida u yerda ishni to'xtatardi,
+hech narsani himoya qilmay.
+
 **★ IKKI ODAM QOIDASI — DOIRADAN CHIQADI, LAVOZIMDAN EMAS.** Hujjatni
 **vitrinasi biriktirilmagan** savdo xodimi yozadi (boshliq, bosh ofis),
 va yozgan odam uni **O'ZI tasdiqlay olmaydi** (`created_by <>

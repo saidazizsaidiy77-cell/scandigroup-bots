@@ -3103,7 +3103,7 @@ test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
   //  T/M ham hali qabul qila olmaydi: mahsulot yo'lga chiqmagan.
   const erta = await admin('POST', `/api/warehouse/fg/returns/${d.body.id}/accept`);
   assert.equal(erta.status, 400, erta.text);
-  assert.match(erta.body.error, /tasdiqlamagan/);
+  assert.match(erta.body.error, /jo'natilmagan/);
 
   //  Vitrina tasdiqlaydi — mahsulot do'kondan chiqdi, LEKIN hali
   //  vitrinaning qoldig'ida: T/M ga yetib kelgani yo'q.
@@ -3154,12 +3154,13 @@ test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
     `/api/warehouse/fg/returns/${d.body.id}/accept`)).status, 400);
 
   //  Hujjat yozish ro'yxati: shu vitrinada turgani, bron qo'yilgani
-  //  chiqmaydi. T/M dan esa qaytarilmaydi — u yerga qaytariladi.
+  //  chiqmaydi. T/M dan ham o'qiladi — hujjat IKKI TOMONLI bo'ldi va
+  //  o'sha ro'yxatdan omborlar aro harakat yoziladi.
   const nomzod = (await boshliq('GET',
     '/api/warehouse/fg/returns/candidates?w=' + vitr.code)).body.rows;
   assert.ok(Array.isArray(nomzod));
   assert.equal((await boshliq('GET',
-    '/api/warehouse/fg/returns/candidates?w=TM')).status, 400);
+    '/api/warehouse/fg/returns/candidates?w=TM')).status, 200);
 
   //  ★ ENDI U ODDIY T/M QOLDIG'I: hohlagan savdo xodimi buyurtma yozadi.
   //  Vitrinada turganda savdoga umuman chiqmasdi.
@@ -3167,6 +3168,75 @@ test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
   assert.ok(st.some((r) => r.src === 'fg' && r.product_id === PENAL),
     'qaytgan mahsulot savdo ro\'yxatida turadi');
 });
+//  ★ OMBORLAR ARO HARAKAT — qaytarishning TESKARI yo'nalishi, aynan
+//  o'sha mexanizm bilan: T/M ombor mudiri hujjat yozadi va jo'natadi,
+//  vitrinaga mas'ul savdo xodimi qabul qiladi. Mahsulot FAQAT
+//  uchinchi bosqichda ko'chadi — yo'ldagi mahsulot ikkala qoldiqda
+//  ham to'g'ri turadi.
+test('T/M dan vitrinaga hujjat bilan ko\'chiriladi', async () => {
+  const { db } = require('../db');
+  const vitr = await H.id(
+    `SELECT id, code, name FROM warehouses WHERE kind='fg' AND code <> 'TM'
+      AND is_active ORDER BY sort LIMIT 1`);
+  const tm = (await H.id(`SELECT id FROM warehouses WHERE code='TM'`)).id;
+  const mudir = admin;
+
+  //  T/M omborga 6 talik konver kiritamiz.
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 6, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+
+  //  Vitrinaga mas'ul savdo xodimi.
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov vitrina 2'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name='Sinov vitrina 2')`);
+  const v = (await H.id(`SELECT id FROM workers WHERE name='Sinov vitrina 2'`)).id;
+  await db.query(
+    `INSERT INTO worker_roles (worker_id, role_code, scope_warehouse_id)
+     VALUES ($1,'sotuvchi',$2)
+     ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_warehouse_id = $2`,
+    [v, vitr.id]);
+  const sotuvchi2 = H.api(base, await H.sessionFor('Sinov vitrina 2'));
+
+  //  Hujjat: 6 tadan 4 tasi ketadi.
+  const d = await mudir('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 4 }] });
+  assert.equal(d.status, 200, d.text);
+  assert.match(d.body.doc_no, /^H\d{2}-\d{4}$/, d.body.doc_no);
+
+  //  Hujjat yozilgani bilan mahsulot QIMIRLAMAYDI.
+  assert.equal((await H.id(
+    `SELECT COALESCE(warehouse_id, $2) AS w FROM production_units WHERE id=$1`,
+    [u.id, tm])).w, tm, 'hali T/M da');
+
+  //  Jo'natilmaguncha qabul qilinmaydi.
+  assert.equal((await sotuvchi2('POST',
+    `/api/warehouse/fg/returns/${d.body.id}/accept`)).status, 400);
+
+  //  Mudir jo'natadi — o'zi yozgan bo'lsa ham: T/M da ikkinchi odam yo'q.
+  const jo = await mudir('POST', `/api/warehouse/fg/returns/${d.body.id}/confirm`);
+  assert.equal(jo.status, 200, jo.text);
+
+  //  Vitrinaga mas'ul xodim qabul qiladi va mahsulot SHUNDA ko'chadi.
+  const q = await sotuvchi2('POST', `/api/warehouse/fg/returns/${d.body.id}/accept`);
+  assert.equal(q.status, 200, q.text);
+  const bor = await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no = $1 AND warehouse_id = $2 AND status='fg'`,
+    [u.conveyor_no, vitr.id]);
+  assert.equal(bor.n, 4, 'vitrinada 4 ta');
+  const qoldi = await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no = $1 AND COALESCE(warehouse_id,$2) = $2 AND status='fg'`,
+    [u.conveyor_no, tm]);
+  assert.equal(qoldi.n, 2, 'T/M da 2 ta qoldi');
+
+  //  Ombor tarixida ikki qator: T/M da chiqim, vitrinada kirim.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM warehouse_moves
+      WHERE conveyor_no = $1 AND from_warehouse_id = $2 AND to_warehouse_id = $3`,
+    [u.conveyor_no, tm, vitr.id])).n, 1);
+});
+
 
 test('qo\'ldan qo\'lga pul o\'tmaydi \u2014 kassa orqali yuradi', async () => {
   //  ★ «Harajat yozish» oynasida xodimga pul berish TURMAYDI: bu oyna
