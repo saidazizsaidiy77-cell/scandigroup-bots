@@ -1747,6 +1747,19 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
   assert.equal(s1[0], 'S');
   assert.equal(c1[0], 'C');
   assert.equal(k1[0], 'K');
+
+  //  ★ Hisob ZAVOD DAFTARIDAGI joydan boshlanadi (`doc_no_start`):
+  //  qog'ozga yozilgan, tizimga kirmagan konverlar bor edi va raqam
+  //  ikki joyda ajralib ketardi.
+  const yil = String(new Date().getFullYear()).slice(-2);
+  if (yil === '26') {
+    const bosh = await H.id(
+      `SELECT prefix, first_no FROM doc_no_start WHERE prefix IN ('C26-','S26-','K26-')
+        ORDER BY prefix LIMIT 1`);
+    assert.ok(bosh, 'boshlanish raqamlari yozilgan');
+    for (const [no, min] of [[s1, 469], [c1, 232], [k1, 110]])
+      assert.ok(Number(no.split('-')[1]) >= min, `${no} ≥ ${min}`);
+  }
 });
 
 test('savdo stulga so\'rov yozadi, penalga emas', async () => {

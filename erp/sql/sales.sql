@@ -395,6 +395,24 @@ CREATE TABLE IF NOT EXISTS doc_no_start (
 INSERT INTO doc_no_start (prefix, first_no) VALUES ('Z26-', 757)
   ON CONFLICT (prefix) DO NOTHING;
 
+--  ★ KONVER RAQAMLARI ham shu yerdan: zavod daftarida har HARF o'z
+--  hisobini yuritadi va u tizimnikidan oldinda turgan edi — qog'ozga
+--  yozilgan, tizimga kirmagan konverlar bor. Raqam ikki joyda turib
+--  ajralib ketsa, tsexdagi mahsulotni jurnaldan topib bo'lmasdi.
+--
+--  Zavod aytgan oxirgi raqamlar: C 231, S 468, K 109 — shuning uchun
+--  hisob KEYINGISIDAN boshlanadi. Bu raqamlar allaqachon
+--  mahsulotning ustiga yozilgan: ularni qaytadan berish ikkita
+--  boshqa mahsulotni bitta raqam bilan qoldirardi.
+--
+--  Yil almashganda prefiks ham almashadi (`C27-`) va qator topilmagach
+--  hisob eskicha 1 dan boshlanadi — 2027 uchun hech narsa yozilmaydi.
+INSERT INTO doc_no_start (prefix, first_no) VALUES
+  ('C26-', 232),   -- stol
+  ('S26-', 469),   -- stul
+  ('K26-', 110)    -- sp, penal, kamod
+  ON CONFLICT (prefix) DO NOTHING;
+
 -- ═══════════════════════════════ SAVDO ISHLAB CHIQARISHGA SO'ROV YOZADI
 --
 --  ★ ZAVOD QARORI (2026-09): buyurtma uchun konver OCHILMAYDI degan
