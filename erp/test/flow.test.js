@@ -174,6 +174,74 @@ test('T/M ombor: jo\'natdim → qabul qildim → jurnaldan chiqadi', async () =>
   assert.equal((await H.id(`SELECT qty q FROM fg_stock WHERE product_id=$1`, [PENAL])).q, before);
 });
 
+//  ★ OMBOR MUDIRI: BIR QISMINI QABUL QILADI va JO'NATISHNI QAYTARADI.
+//  Qadoqlash «10 ta jo'natdim» deydi, javonga esa 2 tasi qo'yiladi;
+//  ba'zan esa mahsulot umuman kelmaydi va qator ro'yxatda osilib
+//  qolardi — mudir uni qabul ham, olib tashlay ham olmasdi.
+test('omborda qisman qabul va tsexga qaytarish', async () => {
+  const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Oq', section_id: QADOYNA }] })).body.created[0];
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  //  Ombor huquqi bilan: administrator ham — alohida «omborchi»
+  //  yaratilmaydi, chunki yuk xatidagi «ombor mudiri» o'sha roldagi
+  //  YAGONA faol xodimdan olinadi va ikkinchisi uni bo'shatib qo'yardi.
+  const mudir = admin;
+
+  //  Jo'natilmagan konverni qaytarib bo'lmaydi.
+  assert.equal((await mudir('POST', '/api/units/stock/return',
+    { items: [u.id] })).status, 400);
+
+  assert.equal((await qad('POST', '/api/units/handover', { items: [u.id] })).status, 200);
+  assert.ok((await mudir('GET', '/api/units/stock/inbox')).body.some((x) => x.id === u.id));
+
+  //  Qaytarilgach ro'yxatdan chiqadi, mahsulot esa JOYIDAN QIMIRLAMAYDI.
+  assert.equal((await mudir('POST', '/api/units/stock/return',
+    { items: [u.id] })).status, 200);
+  const q = await H.id(
+    `SELECT handover_on, status, current_section_id FROM production_units WHERE id=$1`,
+    [u.id]);
+  assert.equal(q.handover_on, null, "jo'natilgan belgisi o'chdi");
+  assert.equal(q.status, 'production');
+  assert.ok(q.current_section_id, "bo'limi saqlandi");
+  assert.equal((await mudir('GET', '/api/units/stock/inbox'))
+    .body.filter((x) => x.id === u.id).length, 0);
+
+  //  Qisman qabul: 10 tadan 4 tasi javonga qo'yiladi.
+  assert.equal((await qad('POST', '/api/units/handover', { items: [u.id] })).status, 200);
+  const before = (await H.id(
+    `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q;
+  const kop = await mudir('POST', '/api/units/stock/accept',
+    { items: [{ unit_id: u.id, qty: 11 }] });
+  assert.equal(kop.status, 400, kop.text);
+
+  const ok = await mudir('POST', '/api/units/stock/accept',
+    { items: [{ unit_id: u.id, qty: 4 }] });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.done[0].qty, 4);
+
+  //  Qabul qilingani — YANGI bo'lak, raqami o'sha; qolgani eski
+  //  qatorda va «jo'natilgan» bo'lib ro'yxatda turaveradi.
+  const olingan = await H.id(
+    `SELECT qty, status FROM production_units WHERE id=$1`, [ok.body.done[0].unit_id]);
+  assert.deepEqual([olingan.qty, olingan.status], [4, 'fg']);
+  const qolgan = await H.id(
+    `SELECT qty, status, handover_on IS NOT NULL AS jo FROM production_units WHERE id=$1`,
+    [u.id]);
+  assert.deepEqual([qolgan.qty, qolgan.status, qolgan.jo], [6, 'production', true]);
+  assert.equal((await mudir('GET', '/api/units/stock/inbox'))
+    .body.find((x) => x.id === u.id).qty, 6, "qolgani ro'yxatda");
+  assert.equal((await H.id(`SELECT qty q FROM fg_stock WHERE product_id=$1`, [PENAL])).q,
+    before + 4);
+
+  //  Qolganini ham qabul qilsa konver to'liq omborga o'tadi.
+  assert.equal((await mudir('POST', '/api/units/stock/accept',
+    { items: [{ unit_id: u.id }] })).status, 200);
+  assert.equal((await H.id(`SELECT status FROM production_units WHERE id=$1`, [u.id])).status,
+    'fg');
+});
+
 test('tsex ustasiga faqat o\'z tsexi ochiq', async () => {
   // Ustada jurnalni ko'rish huquqi yo'q — uning ekrani bitta: bo'limlar
   // aro harakat. Jurnal ochilib qolsa, ortiqcha ma'lumot chalkashtiradi.

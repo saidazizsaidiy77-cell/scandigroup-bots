@@ -2129,7 +2129,10 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
 //
 //  Sabab tsexlar orasidagi bilan bir xil: topshirishda ikki tomon bo'lsa,
 //  «berdim / olmadim» degan bahs o'rniga ikkita sana turadi.
-async function acceptStock(client, req, unitId, undo) {
+//  Har element: { unit_id, qty? } — soni ko'rsatilmasa konver
+//  butunligicha qabul qilinadi (`/move` bilan bir xil idiom).
+async function acceptStock(client, req, it, undo) {
+  const unitId = typeof it === 'object' && it ? it.unit_id : it;
   const u = (await client.query(
     `SELECT u.*, sc.is_exit
        FROM production_units u
@@ -2154,6 +2157,31 @@ async function acceptStock(client, req, unitId, undo) {
   if (!u.handover_on)
     throw new Error(`${u.conveyor_no}: hali jo'natilmagan — qadoqlash tsexi «jo'natdim» deyishi kerak`);
 
+  //  ★ BIR QISMI HAM QABUL QILINADI (zavod qarori, 2026-09).
+  //
+  //  Qadoqlash «10 ta jo'natdim» deydi, mudir esa javonga 2 tasini
+  //  qo'yadi: qolgani hali kelmagan yoki sanoqda chiqmagan. Ilgari
+  //  tugma faqat HAMMASINI olardi va mudir ikki yomon yo'ldan birini
+  //  tanlardi — yo o'nta ham qabul qilib, qoldiqqa kelmagan mahsulotni
+  //  yozib qo'yardi, yo umuman bosmay, kelganini ham hisobsiz qoldirardi.
+  //
+  //  Konver BO'LINADI: qabul qilingani YANGI bo'lak bo'ladi (`clonePart`,
+  //  raqami o'sha), qolgani esa eski qatorda, «jo'natilgan» belgisi
+  //  bilan turaveradi va ro'yxatdan tushmaydi.
+  //
+  //  Bron ESKI qatorda qoladi — mijozga va'da qilingan dona bilan birga.
+  //  Teskarisi qilinsa qabul qilingan 2 talik qatorda 4 ta bron turib
+  //  qolardi, ya'ni konverda bo'shdan ko'p band dona bo'lardi va savdo
+  //  hisobi buzilardi. Hammasi yetib kelganda o'sha eski qator broni
+  //  bilan birga omborga tushadi.
+  const n = it && it.qty != null && it.qty !== '' ? Number(it.qty) : u.qty;
+  if (!Number.isInteger(n) || n <= 0)
+    throw new Error(`${u.conveyor_no}: soni noto'g'ri`);
+  if (n > u.qty)
+    throw new Error(`${u.conveyor_no}: jo'natilgani ${u.qty} ta, ${n} ta qabul qilinmoqda`);
+  const id = n < u.qty ? await clonePart(client, req, u, n, { keepPlace: true })
+                       : unitId;
+
   //  Ishlab chiqarishdan kelgan mahsulot HAR DOIM T/M omborga tushadi:
   //  vitrinaga u shu yerdan ko'chiriladi (`warehouse/fg/transfer`). Tsex
   //  vitrinaga to'g'ridan-to'g'ri topshirmaydi — aks holda ombor mudiri
@@ -2166,9 +2194,9 @@ async function acceptStock(client, req, unitId, undo) {
             fg_by = $2,
             warehouse_id = COALESCE(warehouse_id,
                                     (SELECT id FROM warehouses WHERE code = 'TM'))
-      WHERE id = $1`, [unitId, req.user.id]);
+      WHERE id = $1`, [id, req.user.id]);
   await refreshStock(client, u.product_id);
-  return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: true };
+  return { unit_id: id, conveyor_no: u.conveyor_no, accepted: true, qty: n };
 }
 
 // Omborga jo'natilgan, lekin hali qabul qilinmagan konverlar
@@ -2357,6 +2385,8 @@ router.get('/stock/moves', need('warehouse.move', 'warehouse.manage',
   });
 }));
 
+//  Har element: { unit_id, qty? } yoki oddiy id — soni ko'rsatilmasa
+//  konver butunligicha qabul qilinadi (izoh: `acceptStock`).
 router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(async (req, res) => {
   const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
   if (!ids.length) throw new Error('Konver tanlanmagan');
@@ -2368,6 +2398,54 @@ router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(a
     for (const id of ids) done.push(await acceptStock(client, req, id, undo));
     await audit(req, { module: 'warehouse', action: undo ? 'fg-undo' : 'fg-accept',
                        entity: 'unit', entity_id: done.length,
+                       payload: { units: done.map((x) => x.conveyor_no) } }, client);
+    await client.query('COMMIT');
+    res.json({ done });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  ── ★ OMBOR MUDIRI JO'NATISHNI QAYTARADI ─────────────────────
+//
+//  Zavod qarori (2026-09). Qadoqlash «jo'natdim» deb bosadi, lekin
+//  mahsulot omborga kelmaydi: adashib bosilgan, yoki boshqa konver
+//  jo'natilgan, yoki tsex uni qaytarib olgan. Ilgari qator ombor
+//  ro'yxatida osilib qolardi — mudir uni qabul qila olmasdi (mahsulot
+//  yo'q) va olib ham tashlay olmasdi. Menyudagi navbat raqami esa
+//  hech qachon nolga tushmasdi va ko'z unga o'rganib qolardi.
+//
+//  Yo'l bitta va u JO'NATISHNI BEKOR QILADI (`handoverOne` undo bilan)
+//  — tsex boshlig'ining «jo'natishni qaytarib olish» tugmasi bilan
+//  AYNAN bir xil yozuv. Mahsulot joyidan qimirlamaydi: u qadoqlashda
+//  turgan edi va o'sha yerda qoladi, faqat «jo'natilgan» belgisi
+//  o'chadi va konver tsex ekraniga qaytadi.
+//
+//  Qabul QILINGAN konverni bu yo'l bilan qaytarib bo'lmaydi: u
+//  allaqachon qoldiqda va uning qaytishi boshqa ish (ombor
+//  qoldig'idagi «qaytarish»).
+router.post('/stock/return', need('warehouse.move', 'production.manage'),
+  wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
+  if (!ids.length) throw new Error('Konver tanlanmagan');
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const done = [];
+    for (const id of ids) {
+      const u = (await client.query(
+        `SELECT conveyor_no, status, handover_on FROM production_units
+          WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      if (!u) throw new Error('Konver topilmadi');
+      if (u.status === 'fg')
+        throw new Error(`${u.conveyor_no}: allaqachon qabul qilingan`);
+      if (!u.handover_on)
+        throw new Error(`${u.conveyor_no}: jo'natilmagan`);
+      done.push(await handoverOne(client, req, id, true));
+    }
+    await audit(req, { module: 'warehouse', action: 'fg-return', entity: 'unit',
+                       entity_id: done.length,
                        payload: { units: done.map((x) => x.conveyor_no) } }, client);
     await client.query('COMMIT');
     res.json({ done });
@@ -2541,7 +2619,19 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
                  AND pu.handover_shop_id = r.owner_shop_id))
       -- Eng shoshilinchi yuqorida. Muddatsizlari oxirida: ular kutmayapti,
       -- ular haqida hali ma'lumot yo'q.
-      ORDER BY d.due_on NULLS LAST, r.conveyor_no`, [shopId, req.user.id])).rows;
+      --  ★ FAQAT KETMA-KETLIK BO'YICHA (zavod qarori, 2026-09).
+      --
+      --  Ilgari ro'yxat MUDDAT bo'yicha turardi: kechikkani tepaga
+      --  chiqardi. Zavodda esa konver navbat bilan yuradi — kechikkani
+      --  ham o'z o'rnida qoladi va uni oldinga surish ORQADAGISINI
+      --  kechiktirardi: bitta konverni qutqarish uchun o'ntasi
+      --  navbatdan chiqib ketardi. Ustiga ro'yxat har kuni qayta
+      --  tuzilardi va usta kechagi tartibni topa olmasdi.
+      --
+      --  Endi tartib RAQAM bo'yicha: qog'oz daftardagi bilan bir xil.
+      --  Kechikish yo'qolmaydi — u qatorning yonida qizil belgi bo'lib
+      --  turadi, faqat navbatni buzmaydi.
+      ORDER BY r.conveyor_no, pu.part`, [shopId, req.user.id])).rows;
 
   // Ekrandagi bo'limlar: o'z tsexining bo'limlari, USTIGA shu tsex
   // boshqaradigan mahsulot marshrutidagi begona bo'limlar. Stul tsexi

@@ -226,9 +226,18 @@ function draw() {
               <div class="muted" style="font-size:12px">${
                 r.handover_on ? d8(r.handover_on) + " jo'natilgan" : ''}${
                 r.sent_by ? ' \u00b7 ' + esc(r.sent_by) : ''}</div></td>
-            <td class="c-act">${canAccept
-              ? `<button class="primary" onclick="accept([${r.id}])">Qabul qildim</button>`
-              : ''}</td>
+            <!--  ★ UCHTA AMAL. «Qabul qildim» — hammasi; «qismi» —
+                  javonga nechtasi qo'yilgani (qolgani ro'yxatda
+                  qolaveradi); «↩» — tsexga qaytarish: mahsulot
+                  kelmagan bo'lsa qator ombor ro'yxatida osilib
+                  qolmasin. Ikkinchi ikkitasi kichik: ular kunda bir
+                  marta kerak bo'ladigan tuzatish, asosiy amal emas. -->
+            <td class="c-act">${canAccept ? `
+              <button class="primary" onclick="accept([{unit_id:${r.id}}])">Qabul qildim</button>
+              ${r.qty > 1 ? `<button class="ic" title="Bir qismini qabul qilish"
+                onclick="askQty(${r.id})">qismi</button>` : ''}
+              <button class="ic" title="Tsexga qaytarish — mahsulot kelmagan"
+                onclick="qaytar(${r.id})">&#8629;</button>` : ''}</td>
           </tr>`).join('')}</tbody>
       </table>
     </div>`;
@@ -236,18 +245,75 @@ function draw() {
 
 function pick(id, on) { on ? picked.add(id) : picked.delete(id); draw(); }
 
-async function accept(ids) {
+async function accept(items) {
   try {
     await App.api('/api/units/stock/accept', {
-      method: 'POST', body: JSON.stringify({ items: ids }) });
-    toast(ids.length === 1 ? 'Qabul qilindi' : `${ids.length} ta mahsulot qabul qilindi`);
+      method: 'POST', body: JSON.stringify({ items }) });
+    toast(items.length === 1 ? 'Qabul qilindi'
+      : `${items.length} ta mahsulot qabul qilindi`);
     picked.clear();
     await load();
   } catch (e) { toast(e.message, true); }
 }
 
+//  ★ BIR QISMINI QABUL QILISH. Qadoqlash «10 ta jo'natdim» deydi,
+//  javonga esa 2 tasi qo'yiladi. Konver bo'linadi: qabul qilingani
+//  qoldiqqa tushadi, qolgani shu ro'yxatda «jo'natilgan» bo'lib
+//  turaveradi — ya'ni ikkala raqam ham to'g'ri bo'ladi.
+function askQty(id) {
+  const r = rows.find(x => x.id === id);
+  if (!r) return;
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="qtyBox" onclick="if(event.target===this)closeQty()">
+      <div class="modal" style="max-width:360px">
+        <h2 style="margin-bottom:4px">${esc(r.conveyor_no)}</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">${esc(r.product)} ·
+          jo'natilgani <b>${r.qty} ta</b></p>
+        <label>Nechtasi javonga qo'yildi?</label>
+        <input id="qtyVal" type="number" inputmode="numeric" min="1" max="${r.qty}"
+               value="${r.qty > 1 ? r.qty - 1 : 1}"
+               style="text-align:center;font-size:22px">
+        <p class="muted" style="font-size:12px;margin-top:8px">Qolgani ro'yxatda
+          qoladi — kelganda qabul qilinadi.</p>
+        <button class="primary" style="width:100%;margin-top:14px"
+          onclick="okQty(${id}, ${r.qty})">Qabul qildim</button>
+        <button style="width:100%;margin-top:8px" onclick="closeQty()">Bekor qilish</button>
+      </div>
+    </div>`);
+  setTimeout(() => $('qtyVal')?.select(), 50);
+}
+
+const closeQty = () => $('qtyBox')?.remove();
+
+function okQty(id, max) {
+  const n = Number($('qtyVal').value);
+  if (!Number.isInteger(n) || n < 1 || n > max)
+    return toast(`1 dan ${max} gacha son kiriting`, true);
+  closeQty();
+  accept([{ unit_id: id, qty: n }]);
+}
+
+//  ★ TSEXGA QAYTARISH. Qadoqlash «jo'natdim» deb bosgan, lekin
+//  mahsulot omborga kelmagan: adashib bosilgan yoki tsex uni qaytarib
+//  olgan. Ilgari qator ombor ro'yxatida osilib qolardi — mudir uni
+//  qabul qila olmasdi (mahsulot yo'q) va olib ham tashlay olmasdi.
+//  Mahsulot joyidan qimirlamaydi: faqat «jo'natilgan» belgisi o'chadi
+//  va konver tsex ekraniga qaytadi.
+async function qaytar(id) {
+  const r = rows.find(x => x.id === id);
+  if (!confirm(`${r ? r.conveyor_no : 'Konver'} tsexga qaytarilsinmi?\n`
+    + `Mahsulot joyidan qimirlamaydi — «jo'natilgan» belgisi o'chadi.`)) return;
+  try {
+    await App.api('/api/units/stock/return',
+      { method: 'POST', body: JSON.stringify({ items: [id] }) });
+    toast('Tsexga qaytarildi');
+    picked.delete(id);
+    await load();
+  } catch (e) { toast(e.message, true); }
+}
+
 function bulk() {
-  const sel = rows.filter(r => picked.has(r.id)).map(r => r.id);
+  const sel = rows.filter(r => picked.has(r.id)).map(r => ({ unit_id: r.id }));
   if (!sel.length) { rows.forEach(r => picked.add(r.id)); return draw(); }
   accept(sel);
 }
