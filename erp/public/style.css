@@ -193,6 +193,9 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
      to'rtta raqam (qoldiq, kirdi, chiqdi, bronda), vitrinada esa narx
      va summa: shuning uchun ikki xil panjara. */
   .stock.tm   tbody tr{grid-template-areas:"name qty" "color in" "fabric out" "type bron"}
+  /*  Savdoda uchta ustun yo'q (kirdi, chiqdi, bronda) — qolgani
+      to'rt qator emas, ikki qatorga sig'adi. */
+  .stock.savdo tbody tr{grid-template-areas:"name qty" "color type" "fabric fabric"}
   .stock.shop tbody tr{grid-template-areas:"name qty" "color in" "fabric out"
                                            "price amount" "type type"}
   .stock tbody tr:last-child{border-bottom:0}

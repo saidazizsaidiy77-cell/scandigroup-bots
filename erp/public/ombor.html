@@ -59,6 +59,26 @@ const WH = new URLSearchParams(location.search).get('w') || '';
 const wq = (p) => { if (WH) p.set('w', WH); return p; };
 let whName = '';
 let canMove = false, canFixQty = false, targets = [];
+//  ★ SAVDOGA FAQAT QOLDIQ (zavod qarori, 2026-09).
+//
+//  Ombor mudirining savoli AYLANMA: bugun nima keldi, nima chiqdi,
+//  nechtasi bronda va javonda nechta qoldi. Savdo xodimining savoli
+//  esa BITTA: mijozga hozir nechtasini va'da qila olaman. Javob ham
+//  bitta raqam — bronni ayirgandagi qoldiq: bronda turgani boshqa
+//  mijozniki va uni ikkinchi marta sotib bo'lmaydi.
+//
+//  Ilgari savdo to'rtta ustunni ko'rardi va ularning ichidan o'zining
+//  javobini qidirib o'tirardi — ustiga «Qoldiq» ustuni JISMONAN
+//  turganini ko'rsatardi, ya'ni bronda turganini ham. Menejer o'sha
+//  raqamni bo'sh deb o'qib, allaqachon va'da qilingan mahsulotni
+//  ikkinchi marta va'da qilardi.
+//
+//  Chegara HUQUQDAN chiqadi, lavozimdan emas (4-qoida): omborga
+//  YOZADIGAN odamda (mudir, ishlab chiqarish) aylanma qolaveradi.
+//  Bu KO'RINISH, himoya emas — server baribir o'sha raqamlarni
+//  beradi va Excelga chiqarish ham to'la bo'ladi.
+let savdoKoz = false;
+const faqatQoldiq = () => savdoKoz && isTM();
 //  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
 //  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
 //
@@ -303,19 +323,22 @@ function drawStock() {
               Bronda va qoldiq esa hozirgi holat va oraliqqa bog'liq
               emas — «kelajakdagi oraliq» tanlansa ombor bo'shab
               qolmaydi, faqat aylanma nolga tushadi. -->
+        ${faqatQoldiq() ? '' : `
         <div><label>Harakat sanasi, dan</label>
           <input id="sFrom" type="date" value="${d.from || ''}" onchange="loadStock()"></div>
         <div><label>gacha</label>
           <input id="sTo" type="date" value="${d.to || ''}" onchange="loadStock()"></div>
-        <button onclick="period2(30)">30 kun</button>
+        <button onclick="period2(30)">30 kun</button>`}
         <button onclick="clearStock()">Tozalash</button>
         <button onclick="exportStock()">Excelga yuklash</button>
         ${App.can('production.units', 'production.manage')
           ? `<button onclick="location.href='/qoldiq.html'">Fayldan kiritish</button>` : ''}
       </div>
 
-      <p class="muted" style="font-size:12px;margin-top:10px">Kirdi va chiqdi —
-        tanlangan oraliq bo'yicha &middot; Bronda va qoldiq — hozirgi holat</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">${faqatQoldiq()
+        ? "Qoldiq — buyurtmaga olinganini ayirgandagi, ya'ni sotish mumkin bo'lgani"
+        : 'Kirdi va chiqdi — tanlangan oraliq bo\'yicha &middot; '
+          + 'Bronda va qoldiq — hozirgi holat'}</p>
       ${typeChips(d) ? `<div style="margin-top:14px">
         <label>Turi</label>
         <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
@@ -324,16 +347,21 @@ function drawStock() {
     <div class="grid g3" style="margin-top:16px">
       <div class="card"><h2>Omborda</h2>
         <div class="kpi">${d.total.units}<small> konver</small></div></div>
+      <!--  «Jami» — bronda turgani bilan BIRGA: bu inventarizatsiya
+            raqami, ya'ni ombor mudirining savoli. Savdoga u yolg'on
+            umid berardi (bronda turgani boshqa mijozniki), shuning
+            uchun unga chizilmaydi. -->
+      ${faqatQoldiq() ? '' : `
       <div class="card"><h2>Jami</h2>
         <div class="kpi">${d.total.by_uom && d.total.by_uom.length
           ? d.total.by_uom.map(x => `${x.qty}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
           : d.total.qty}</div>
         <p class="muted" style="margin-top:6px;font-size:12px">bronda turgani bilan
-          birga \u2014 inventarizatsiyada shu raqam sanaladi</p></div>
+          birga \u2014 inventarizatsiyada shu raqam sanaladi</p></div>`}
       <!--  T/M omborda pul emas, DONA muhim: mudir mahsulotni sanaydi va
             buyurtmaga qanchasi olinganini ko'radi. Vitrinada esa narx va
             summa qoladi \u2014 u yerda sotuv nuqtasi hisobi yuritiladi. -->
-      ${isTM() ? `<div class="card"><h2>Bo'sh</h2>
+      ${isTM() ? `<div class="card"><h2>${faqatQoldiq() ? 'Qoldiq' : "Bo'sh"}</h2>
         <div class="kpi">${d.total.by_uom && d.total.by_uom.length
           ? d.total.by_uom.map(x => `${x.free}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
           : (d.total.free ?? 0)}</div>
@@ -358,12 +386,13 @@ function drawStock() {
             KIRDI/CHIQDI tanlangan oraliqniki, BRONDA/QOLDIQ esa hozirgi
             holat. «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
             filtri bilan aralashtirib bo'lmaydi. -->
-      <table class="stock ${isTM() ? 'tm' : 'shop'}">
+      <table class="stock ${faqatQoldiq() ? 'savdo' : isTM() ? 'tm' : 'shop'}">
         <thead><tr>
           <th class="s-name">Mahsulot</th><th class="s-type">Turi</th>
           <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
-          <th class="s-in">Kirdi</th><th class="s-out">Chiqdi</th>
-          ${isTM() ? `<th class="s-bron">Bronda</th>` : ''}
+          ${faqatQoldiq() ? '' : `<th class="s-in">Kirdi</th>
+          <th class="s-out">Chiqdi</th>
+          ${isTM() ? `<th class="s-bron">Bronda</th>` : ''}`}
           <th class="s-free">Qoldiq</th>
           ${isTM() ? '' : `<th class="s-price">Narx, $</th>
                            <th class="s-amount">Summa, $</th>`}
@@ -397,17 +426,20 @@ function price(r) {
 //  bitta raqamga qo'shib bo'lmaydi — «22» degan yig'indi nimani
 //  anglatishi noma'lum bo'lib qolardi (CLAUDE.md).
 function jamiRows(d) {
-  const u = (d.total.by_uom || []).filter(x => x.qty || x.kirdi || x.chiqdi);
+  //  Savdoda qator FAQAT bo'sh qoldig'i borida turadi: hammasi
+  //  bronda bo'lgan mahsulot unga sotiladigan narsa emas.
+  const u = (d.total.by_uom || []).filter(x => faqatQoldiq()
+    ? x.free : (x.qty || x.kirdi || x.chiqdi));
   if (!u.length) return '';
   const son = (v) => v ? `<b>${v}</b>` : '<span class="muted">\u2014</span>';
   return u.map((x, i) => `<tr>
     <td class="s-name">${i === 0 ? 'JAMI' : ''}</td>
     <td class="s-type muted">${esc(x.uom)}</td>
     <td class="s-color"></td><td class="s-fabric"></td>
-    <td class="s-in">${son(x.kirdi)}</td>
+    ${faqatQoldiq() ? '' : `<td class="s-in">${son(x.kirdi)}</td>
     <td class="s-out">${son(x.chiqdi)}</td>
-    ${isTM() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}
-    <td class="s-free"><b>${x.qty}</b> <span class="muted"
+    ${isTM() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}`}
+    <td class="s-free"><b>${faqatQoldiq() ? x.free : x.qty}</b> <span class="muted"
       style="font-size:11px">${esc(x.uom)}</span></td>
     ${isTM() ? '' : `<td class="s-price"></td>
       <td class="s-amount">${i === 0 && Number(d.total.amount)
@@ -425,17 +457,23 @@ function drawStockRow(r) {
       <td class="s-type muted">${esc(r.product_type || '')}</td>
       <td class="s-color muted">${esc(r.color || '\u2014')}</td>
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
+      ${faqatQoldiq() ? '' : `
       <td class="s-in">${r.kirdi ? `<b>${r.kirdi}</b>`
-        : '<span class="muted">\u2014</span>'}</td>
+        : '<span class="muted">&mdash;</span>'}</td>
       <td class="s-out">${r.chiqdi ? `<b>${r.chiqdi}</b>`
-        : '<span class="muted">\u2014</span>'}</td>
+        : '<span class="muted">&mdash;</span>'}</td>
       ${isTM()
       //  Bronda turgan mahsulot OMBORDA: u hali chiqib ketmagan,
       //  shuning uchun qoldiqdan ayrilmaydi — sotib bo'lmasligi
       //  alohida ustunda turadi.
       ? `<td class="s-bron">${r.bron
-            ? `<b>${r.bron}</b>` : '<span class="muted">\u2014</span>'}</td>` : ''}
-      <td class="s-free"><b>${r.qty}</b> <span class="muted"
+            ? `<b>${r.bron}</b>` : '<span class="muted">&mdash;</span>'}</td>` : ''}`}
+      <!--  ★ SAVDODA QOLDIQ — BRONNI AYIRGANDAGISI. Mudir javondagi
+            DONANI sanaydi, ya'ni unga jismoniy soni kerak; savdo esa
+            mijozga va'da qiladi va bronda turgani boshqa mijozniki.
+            Bitta ustun, ikki xil savol — shuning uchun qiymati ham
+            ikki xil. -->
+      <td class="s-free"><b>${faqatQoldiq() ? r.free : r.qty}</b> <span class="muted"
         style="font-size:11px">${esc(r.uom || '')}</span></td>
       ${isTM() ? ''
       //  Vitrinada narx va summa: u yerda nuqta hisobi yuritiladi.
@@ -446,7 +484,8 @@ function drawStockRow(r) {
          <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
             : '<span class="muted">\u2014</span>'}</td>`}
     </tr>
-    ${!open ? '' : `<tr class="more"><td colspan="${isTM() ? 8 : 9}"
+    ${!open ? '' : `<tr class="more"><td colspan="${
+      faqatQoldiq() ? 5 : isTM() ? 8 : 9}"
       style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? `<span class="muted">\u2014</span>`
@@ -1094,6 +1133,10 @@ App.start(async () => {
   }
   canLedger = App.can('warehouse.move', 'warehouse.manage',
                       'production.manage', 'production.reports');
+  //  Savdo — omborni faqat O'QIYDIGAN odam: unga aylanma emas, qoldiq
+  //  kerak (izoh: `faqatQoldiq`).
+  savdoKoz = App.can('sales.view', 'sales.manage')
+    && !App.can('warehouse.move', 'warehouse.manage', 'production.manage');
   // Telefonda mudir eshik oldida turadi — birinchi ekran qabul qilish
   if (isPhone && canAccept && isTM()) tab = 'inbox';
   // Qabul qilish ro'yxati tabda raqam bo'lib turishi uchun oldindan
