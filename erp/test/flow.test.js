@@ -3166,9 +3166,9 @@ test('vitrinadan qaytarish: boshliq yozadi, vitrina tasdiqlaydi, T/M oladi',
   assert.equal((await admin('POST',
     `/api/warehouse/fg/returns/${d.body.id}/accept`)).status, 400);
 
-  //  Hujjat yozish ro'yxati: shu vitrinada turgani, bron qo'yilgani
-  //  chiqmaydi. T/M dan ham o'qiladi — hujjat IKKI TOMONLI bo'ldi va
-  //  o'sha ro'yxatdan omborlar aro harakat yoziladi.
+  //  Hujjat yozish ro'yxati: shu vitrinada turgani. T/M dan ham
+  //  o'qiladi — hujjat IKKI TOMONLI bo'ldi va o'sha ro'yxatdan
+  //  omborlar aro harakat yoziladi.
   const nomzod = (await boshliq('GET',
     '/api/warehouse/fg/returns/candidates?w=' + vitr.code)).body.rows;
   assert.ok(Array.isArray(nomzod));
@@ -3248,6 +3248,68 @@ test('T/M dan vitrinaga hujjat bilan ko\'chiriladi', async () => {
     `SELECT COUNT(*)::int AS n FROM warehouse_moves
       WHERE conveyor_no = $1 AND from_warehouse_id = $2 AND to_warehouse_id = $3`,
     [u.conveyor_no, tm, vitr.id])).n, 1);
+});
+
+test('bronda turgan konverning BO\'SH donasi ko\'chadi', async () => {
+  //  ★ Ilgari ro'yxat sharti `reserved_qty = 0` edi: o'n talikning
+  //  BITTASI mijozga va'da qilingan bo'lsa, qolgan to'qqiztasi ham
+  //  ro'yxatdan tushib qolardi — mudir javondagi mahsulotni vitrinaga
+  //  chiqara olmasdi va sababini ekrandan topa olmasdi.
+  //
+  //  Konver qabul qilinganda BO'LINADI va bron ESKI qatorda qoladi,
+  //  ya'ni ko'chadigan bo'lak bronsiz bo'ladi.
+  const { db } = require('../db');
+  const tm = (await H.id(`SELECT id FROM warehouses WHERE code='TM'`)).id;
+  const vitr = await H.id(
+    `SELECT id, code FROM warehouses WHERE kind='fg' AND code <> 'TM'
+        AND is_active ORDER BY sort, id LIMIT 1`);
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Bosh-rang', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+
+  //  Buyurtma yozib, 4 tasini bron qilamiz.
+  const mijoz = (await H.id(`SELECT id FROM customers ORDER BY id LIMIT 1`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, color: 'Bosh-rang', qty: 4 }] })).body;
+  assert.ok(z.id, JSON.stringify(z));
+  const qator = (await admin('GET', `/api/sales/orders/${z.id}`)).body.items[0];
+  const bron = await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 4 });
+  assert.equal(bron.status, 200, bron.text);
+
+  //  Ro'yxatda TURADI — bo'sh donasi bilan.
+  const n = (await admin('GET', '/api/warehouse/fg/returns/candidates?w=TM'))
+    .body.rows.find((x) => x.id === u.id);
+  assert.ok(n, 'bronda turgan konver ro\'yxatdan tushib qolmaydi');
+  assert.equal(n.reserved_qty, 4);
+  assert.equal(n.free_qty, 6);
+
+  //  Bo'shdan ko'pi ketmaydi: mijozning donasi vitrinaga chiqib ketardi.
+  const kop = await admin('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 7 }] });
+  assert.equal(kop.status, 400, kop.text);
+  assert.match(kop.body.error, /buyurtmada/);
+
+  //  Bo'shi esa ketaveradi va bron T/M dagi qatorda qoladi.
+  const d = await admin('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 6 }] });
+  assert.equal(d.status, 200, d.text);
+  assert.equal((await admin('POST',
+    `/api/warehouse/fg/returns/${d.body.id}/confirm`)).status, 200);
+  assert.equal((await admin('POST',
+    `/api/warehouse/fg/returns/${d.body.id}/accept`)).status, 200);
+
+  assert.equal((await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no = $1 AND warehouse_id = $2 AND status='fg'`,
+    [u.conveyor_no, vitr.id])).n, 6, 'vitrinada 6 ta');
+  //  Bron o'z qatorida, T/M da — mijozga va'da qilingani javonda qoldi.
+  assert.equal((await H.id(
+    `SELECT COALESCE(SUM(r.qty),0)::int AS n FROM unit_reservations r
+       JOIN production_units p ON p.id = r.unit_id
+      WHERE p.conveyor_no = $1 AND COALESCE(p.warehouse_id,$2) = $2`,
+    [u.conveyor_no, tm])).n, 4, 'bron T/M da qoldi');
+  await db.query(`SELECT 1`);
 });
 
 

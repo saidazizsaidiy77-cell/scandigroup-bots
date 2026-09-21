@@ -516,9 +516,18 @@ router.get('/fg/returns', need(...RET, 'warehouse.view'), wrap(async (req, res) 
 //  chaqiriladi), bu yerda esa javonda nima turgan bo'lsa hammasi
 //  kerak: boshliq konver raqamini qo'lda terib o'tirmasin.
 //
-//  Bron qo'yilgani chiqmaydi: u mijozniki bo'lib turibdi va hujjatga
-//  tushsa server baribir rad etardi — ro'yxatda turgani faqat
-//  chalg'itardi.
+//  ★ BRON QO'YILGANI HAM CHIQADI, LEKIN FAQAT BO'SH DONASI BILAN
+//  (zavod qarori, 2026-09). Ilgari shart `reserved_qty = 0` edi:
+//  o'n talikning BITTASI mijozga va'da qilingan bo'lsa, qolgan
+//  to'qqiztasi ham ro'yxatdan tushib qolardi — javonda turgan
+//  mahsulotni vitrinaga chiqarib bo'lmasdi va mudir sababini
+//  ekrandan topa olmasdi.
+//
+//  Konver qabul qilinganda BO'LINADI va bron ESKI qatorda qoladi
+//  (`clonePart`), ya'ni ko'chadigan bo'lak bronsiz bo'ladi: bo'shi
+//  vitrinaga chiqadi, mijozniki T/M da javonda turaveradi. Shuning
+//  uchun chegara — `qty - bronda`, xuddi qoldiq jadvalidagi «Bo'sh»
+//  ustuni kabi.
 router.get('/fg/returns/candidates', need(...RET, 'warehouse.view'),
   wrap(async (req, res) => {
     //  Hujjat ikki tomonli: T/M dan ham yoziladi (vitrinaga
@@ -526,9 +535,11 @@ router.get('/fg/returns/candidates', need(...RET, 'warehouse.view'),
     //  yo'nalishni hujjatning O'ZI hal qiladi.
     const wh = await whOf(req, req.query.w);
     const { rows } = await db.query(
-      `SELECT id, conveyor_no, product, product_type, uom, color, fabric, qty
+      `SELECT id, conveyor_no, product, product_type, uom, color, fabric,
+              qty, COALESCE(reserved_qty, 0)::int AS reserved_qty,
+              (qty - COALESCE(reserved_qty, 0))::int AS free_qty
          FROM v_fg_units
-        WHERE warehouse_id = $1 AND COALESCE(reserved_qty, 0) = 0
+        WHERE warehouse_id = $1 AND qty > COALESCE(reserved_qty, 0)
         ORDER BY product, conveyor_no
         LIMIT 500`, [wh.id]);
     res.json({ rows, warehouse: wh });
@@ -584,11 +595,6 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
       if (u.code === 'TM')
         throw new Error(`${u.conveyor_no}: allaqachon T/M omborda`);
       if (u.kind !== 'fg') throw new Error(`${u.conveyor_no}: vitrinada emas`);
-      //  Bron qo'yilgan dona qaytmaydi: u mijozniki bo'lib turibdi.
-      //  Vitrina savdoga chiqmaydi, ya'ni bu deyarli bo'lmaydi — lekin
-      //  eski bron qolgan bo'lsa jimgina ko'chib ketmasin.
-      if (u.reserved)
-        throw new Error(`${u.conveyor_no}: ${u.reserved} tasi buyurtmada`);
 
       //  BITTA hujjat — BITTA vitrina: uni bitta odam tasdiqlaydi va
       //  bitta mashina olib keladi. Ikki do'kondan yig'ilgan hujjatni
@@ -597,9 +603,15 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
         throw new Error('Bitta hujjatda faqat BITTA vitrinaning mahsuloti bo\'ladi');
       whId = u.at_wh;
 
-      const n = it.qty == null || it.qty === '' ? u.qty : Number(it.qty);
-      if (!Number.isInteger(n) || n <= 0 || n > u.qty)
-        throw new Error(`${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
+      //  Bron qo'yilgan dona qaytmaydi: u mijozniki bo'lib turibdi —
+      //  lekin BO'SHI qaytaveradi. Konver qabul qilishda bo'linadi va
+      //  bron eski qatorda qoladi (izoh: `candidates`).
+      const bosh = u.qty - u.reserved;
+      const n = it.qty == null || it.qty === '' ? bosh : Number(it.qty);
+      if (!Number.isInteger(n) || n <= 0 || n > bosh)
+        throw new Error(u.reserved
+          ? `${u.conveyor_no}: ${u.reserved} tasi buyurtmada, bo'shi ${bosh} ta`
+          : `${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
       saved.push({ unit_id: u.id, conveyor_no: u.conveyor_no, qty: n });
     }
 
@@ -674,10 +686,6 @@ router.post('/fg/moves', need('warehouse.move', 'warehouse.manage',
           WHERE u.id = $1 FOR UPDATE OF u`, [it.unit_id])).rows[0];
       if (!u) throw new Error('Konver topilmadi');
       if (u.status !== 'fg') throw new Error(`${u.conveyor_no}: omborda emas`);
-      //  Buyurtmaga olingan konver ko'chmaydi: mijozga va'da qilingan
-      //  mahsulot vitrinaga ketib qolardi (vitrina savdoga chiqmaydi).
-      if (u.reserved)
-        throw new Error(`${u.conveyor_no}: ${u.reserved} tasi buyurtmada — avval ajrating`);
       if (u.at_wh === manzil.id)
         throw new Error(`${u.conveyor_no}: allaqachon «${manzil.name}» da`);
       //  BITTA hujjat — BITTA yo'nalish: uni bitta mashina olib boradi
@@ -686,9 +694,16 @@ router.post('/fg/moves', need('warehouse.move', 'warehouse.manage',
         throw new Error('Bitta hujjatda faqat BITTA omborning mahsuloti bo\'ladi');
       whId = u.at_wh;
 
-      const n = it.qty == null || it.qty === '' ? u.qty : Number(it.qty);
-      if (!Number.isInteger(n) || n <= 0 || n > u.qty)
-        throw new Error(`${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
+      //  Buyurtmaga olingan DONA ko'chmaydi: mijozga va'da qilingan
+      //  mahsulot vitrinaga ketib qolardi (vitrina savdoga chiqmaydi).
+      //  Konverning O'ZI esa ko'chaveradi — bo'sh donasi bilan
+      //  (izoh: `candidates`).
+      const bosh = u.qty - u.reserved;
+      const n = it.qty == null || it.qty === '' ? bosh : Number(it.qty);
+      if (!Number.isInteger(n) || n <= 0 || n > bosh)
+        throw new Error(u.reserved
+          ? `${u.conveyor_no}: ${u.reserved} tasi buyurtmada, bo'shi ${bosh} ta`
+          : `${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
       saved.push({ unit_id: u.id, conveyor_no: u.conveyor_no, qty: n });
     }
 
@@ -805,7 +820,9 @@ router.post('/fg/returns/:id/accept', need(...RET),
 
       for (const it of items) {
         const u = (await client.query(
-          `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh
+          `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh,
+                  COALESCE((SELECT SUM(x.qty) FROM unit_reservations x
+                             WHERE x.unit_id = u.id), 0)::int AS reserved
              FROM production_units u
              LEFT JOIN warehouses tm ON tm.code = 'TM'
             WHERE u.id = $1 FOR UPDATE OF u`, [it.unit_id])).rows[0];
@@ -814,8 +831,14 @@ router.post('/fg/returns/:id/accept', need(...RET),
           throw new Error(`${it.conveyor_no}: omborda emas`);
         if (u.at_wh !== r.from_warehouse_id)
           throw new Error(`${it.conveyor_no}: allaqachon ko'chirilgan`);
-        if (it.qty > u.qty)
-          throw new Error(`${it.conveyor_no}: ${u.qty} ta qolgan`);
+        //  Bron hujjat yozilgandan KEYIN ham qo'yilishi mumkin: o'shanda
+        //  ko'chadigan dona mijozning donasini yeb qo'yardi. Qolgani
+        //  eski qatorda turadi, ya'ni bron ham shu yerda qoladi.
+        if (it.qty > u.qty - u.reserved)
+          throw new Error(u.reserved
+            ? `${it.conveyor_no}: ${u.reserved} tasi buyurtmada, bo'shi ${
+                u.qty - u.reserved} ta`
+            : `${it.conveyor_no}: ${u.qty} ta qolgan`);
 
         const id = it.qty < u.qty
           ? await clonePart(client, req, u, it.qty, { keepPlace: true })

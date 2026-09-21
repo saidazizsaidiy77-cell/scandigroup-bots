@@ -262,21 +262,30 @@ async function qoldiq() {
       + encodeURIComponent(code))).rows;
   } catch (e) { return ($('mvRows').innerHTML =
     `<p class="muted">${esc(e.message)}</p>`); }
-  const list = bor.filter((x) => Number(x.qty) > 0);
+  //  ★ USTUN «BOR» EMAS, «BO'SH»: javonda o'n ta tursa-yu to'rttasi
+  //  mijozga va'da qilingan bo'lsa, ko'chadigani olti ta. Ilgari
+  //  bunday konver ro'yxatga UMUMAN chiqmasdi va mudir sababini
+  //  ekrandan topa olmasdi — endi qatori turadi, yonida nechtasi
+  //  buyurtmada ekani yozilib (izoh: modules/warehouse.js).
+  const list = bor.filter((x) => Number(x.free_qty ?? x.qty) > 0);
   $('mvRows').innerHTML = list.length
     ? `<div style="overflow-x:auto;max-height:44vh"><table>
-        <thead><tr><th>Konver</th><th>Mahsulot</th><th class="num">Bor</th>
+        <thead><tr><th>Konver</th><th>Mahsulot</th><th class="num">Bo'sh</th>
           <th class="num">Ketadi</th></tr></thead>
-        <tbody>${list.map((x) => `<tr>
+        <tbody>${list.map((x) => {
+          const bosh = Number(x.free_qty ?? x.qty);
+          return `<tr>
           <td><b>${esc(x.conveyor_no)}</b></td>
           <td>${esc(x.product)}
             <div class="muted" style="font-size:12px">${
               [x.product_type, x.color, x.fabric].filter(Boolean).map(esc).join(' · ')
             }</div></td>
-          <td class="num">${x.qty}</td>
-          <td class="num"><input type="number" min="0" max="${x.qty}" value="0"
+          <td class="num">${bosh}${x.reserved_qty
+            ? `<div class="muted" style="font-size:12px">${
+                x.reserved_qty} ta buyurtmada</div>` : ''}</td>
+          <td class="num"><input type="number" min="0" max="${bosh}" value="0"
             data-unit="${x.id}" class="mvq"
-            style="width:80px;text-align:right"></td></tr>`).join('')}</tbody>
+            style="width:80px;text-align:right"></td></tr>`; }).join('')}</tbody>
       </table></div>`
     : `<p class="muted">Bu omborda ko'chiriladigan bo'sh mahsulot yo'q.</p>`;
 }
