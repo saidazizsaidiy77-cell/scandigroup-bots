@@ -13,6 +13,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./helper');
 
+//  Kelajakdagi sana HISOBLANADI, yozib qo'yilmaydi. Ishlab chiqarishdagi
+//  konverning omborga tushish sanasi BUGUNDAN sanaladi (marshrut zanjiri),
+//  buyurtmaning chiqish sanasi esa undan keyin turishi kerak — aks holda
+//  bron qabul qilinmaydi (`assertMuddat`). Qotib qolgan «2026-10-05»
+//  kalendar oldinga siljigach o'tmishga aylanib, savdoga aloqasi yo'q
+//  testlarni ham yiqitardi.
+const kun = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+
 let base, server, admin, korpus, lak, sotuvchi, tokenAdmin;
 let PENAL, ARRA, ROVER, SHKUR, AST1, QADQAD;
 
@@ -1451,6 +1459,75 @@ test('ishlab chiqarishdagi konverga ham bron qo\'yiladi', async () => {
   assert.match(xato.body.error, /bekor qilingan/);
 });
 
+//  ★ KONVER BUYURTMA SANASIDAN KEYIN KELSA — BRON QABUL QILINMAYDI.
+//  Qoida IKKI joyda tekshiriladi va test ham ikkalasini oladi: bron
+//  qo'yilganda va chiqish sanasi ORQAGA surilganda. Ikkinchisisiz qoida
+//  bitta bosishda chetlab o'tilardi.
+test('chiqish sanasidan keyin keladigan konver bron qilinmaydi', async () => {
+  const ish = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 5, color: 'Venge', section_id: ARRA },
+  ] })).body.created[0];
+
+  //  Sana marshrutdan chiqadi (korpus zanjiri: lak +6, qadoqlash +6,
+  //  ombor +1) — testda ham aynan o'sha qiymat olinadi, nusxasi emas.
+  const sana = await H.id(
+    `SELECT TO_CHAR(fg_on - 1, 'YYYY-MM-DD') AS erta,
+            TO_CHAR(fg_on + 5, 'YYYY-MM-DD') AS kech
+       FROM v_unit_register WHERE id = $1`, [ish.id]);
+  assert.ok(sana.erta, 'ishlab chiqarishdagi konverda omborga tushish sanasi bor');
+
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    due_on: sana.erta,
+    items: [{ product_id: PENAL, qty: 2, color: 'Venge' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+
+  //  Ro'yxatdan OLIB TASHLANMAYDI — belgilanadi: chiqish sanasini surish
+  //  ham yo'l va u menejerning qaroriga qoladi.
+  const nomzod = (await admin('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${qator.id}`)).body.rows;
+  assert.equal(nomzod.find((x) => x.id === ish.id)?.late, true);
+
+  const xato = await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: ish.id, qty: 2 });
+  assert.equal(xato.status, 400);
+  assert.match(xato.body.error, new RegExp(ish.conveyor_no));
+  assert.match(xato.body.error, /keyinroq keladi/);
+
+  //  Sana surilsa — o'sha konver olinadi.
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { due_on: sana.kech })).status, 200);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: ish.id, qty: 2 })).status, 200);
+
+  //  Va bron qo'yilgach sanani ORQAGA surib bo'lmaydi: aks holda qoida
+  //  uzoq sana bilan bron qilib, keyin sanani qaytarish bilan chetlab
+  //  o'tilardi.
+  const orqaga = await admin('PATCH', '/api/sales/orders/' + z.id,
+    { due_on: sana.erta });
+  assert.equal(orqaga.status, 400);
+  assert.match(orqaga.body.error, /keyinroq keladi/);
+  assert.equal((await H.id(`SELECT TO_CHAR(due_on,'YYYY-MM-DD') AS d
+                              FROM orders WHERE id=$1`, [z.id])).d, sana.kech,
+    'rad etilgan sana yozilmaydi');
+
+  //  T/M omborda turgan konverga qoida TEGMAYDI: u allaqachon javonda,
+  //  kutiladigan sanasi yo'q.
+  const tayyor = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Venge', is_opening: true,
+      fg_on: sana.kech },
+  ] })).body.created[0];
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { due_on: sana.kech })).status, 200);
+  const q2 = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    due_on: sana.erta,
+    items: [{ product_id: PENAL, qty: 2, color: 'Venge' }] })).body;
+  const q2r = (await admin('GET', '/api/sales/orders/' + q2.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${q2.id}/assign`,
+    { item_id: q2r.id, unit_id: tayyor.id, qty: 2 })).status, 200,
+    'ombordagi konver har qanday sanada olinadi');
+});
+
 test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
 
@@ -1867,7 +1944,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
 
   const z = (await admin('POST', '/api/sales/orders', {
     customer_id: mijoz, ship_to: 'UY', address: 'Toshkent, Navoiy 5',
-    receiver_phone: '+998901110022', due_on: '2026-10-05',
+    receiver_phone: '+998901110022', due_on: kun(90),
     items: [{ product_id: PENAL, qty: 6, color: 'Sut', unit_price: 250 }] })).body;
   const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
   for (const [u, n] of [[tayyor, 4], [yolda, 2]])
@@ -2127,7 +2204,7 @@ test('bo\'limlar ekranida konverning buyurtma soni ko\'rinadi', async () => {
   const u = (await admin('POST', '/api/units/', { items: [
     { product_id: PENAL, qty: 5, color: 'Tsex', section_id: ARRA }] })).body.created[0];
   const z = (await admin('POST', '/api/sales/orders', {
-    customer_id: mijoz, ship_to: 'ZAVOD', due_on: '2026-10-15',
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90),
     items: [{ product_id: PENAL, qty: 3, color: 'Tsex', unit_price: 100 }] })).body;
   const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,

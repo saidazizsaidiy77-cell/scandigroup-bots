@@ -488,6 +488,19 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
       if (busy) throw new Error(`Avval ${busy} ta konverni qaytaring`);
     }
 
+    //  ★ CHIQISH SANASI ORQAGA SURILSA HAM SHU QOIDA. Konver bron
+    //  qilinganda sana boshqa bo'lgan bo'lishi mumkin: uzoq sana bilan
+    //  bron qilib, keyin sanani oldinga surib qo'yish qoidani bitta
+    //  bosishda chetlab o'tardi. Shuning uchun bu yerda BUTUN
+    //  buyurtmaning konverlari qaraladi (izoh: `assertMuddat`).
+    if (due_on) {
+      const ids = (await client.query(
+        `SELECT r.unit_id FROM unit_reservations r
+           JOIN order_items i ON i.id = r.order_item_id
+          WHERE i.order_id = $1`, [req.params.id])).rows.map((r) => r.unit_id);
+      await assertMuddat(client, due_on, ids);
+    }
+
     await client.query(
       `UPDATE orders SET customer_id = COALESCE($2, customer_id),
               manager_id = COALESCE($3, manager_id),
@@ -565,6 +578,60 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
 //  nuqtada sotiladi — uni buyurtmaga olib ketish do'konni bo'shatardi.
 //  Shuning uchun tayyor mahsulotdan faqat T/M ombor chiqadi, vitrina
 //  qoldig'i esa ombor sahifasida ko'rinaveradi.
+//  ── ★ KONVER BUYURTMA SANASIDAN KEYIN KELSA — OLINMAYDI ──────────
+//
+//  Zavod qarori (2026-09). Buyurtmada «chiqib ketish sanasi» turadi —
+//  mijozga aytilgan kun. Ishlab chiqarishdagi konver esa o'z sanasi
+//  bilan keladi (`v_unit_register.fg_on`: fakt → tsex boshlig'i qo'ygan
+//  reja → marshrut). Ikkalasi qarama-qarshi bo'lishi mumkin: mahsulot
+//  5-oktabrda omborga tushadi, buyurtma esa 30-sentabrda chiqishi
+//  kerak.
+//
+//  Ilgari bunday bron JIMGINA qabul qilinardi va buyurtma «Kutmoqda»
+//  bo'lib turaverardi: menejer mijozga sana aytib qo'ygan, ombor mudiri
+//  esa o'sha kuni chiqara olmasdi — chunki mahsulot hali tsexda. Xato
+//  chiqish kuni bilinardi, ya'ni tuzatishga kech edi.
+//
+//  Endi bron QABUL QILINMAYDI va sababi menejerning o'ziga yoziladi:
+//  qaysi konver, qachon keladi va buyurtma qachon chiqadi. Ikki yo'li
+//  bor va ikkalasi ham menejerniki — chiqish sanasini keyinga surish
+//  yoki omborda turgan boshqa konverni olish; tizim o'zi hech qaysisini
+//  tanlamaydi.
+//
+//  Tekshiruv IKKI joyda va BITTA funksiyada: bron qo'yilganda va
+//  buyurtmaning chiqish sanasi o'zgartirilganda. Ikkinchisisiz qoida
+//  bir bosishda chetlab o'tilardi — avval uzoq sana bilan bron qilib,
+//  keyin sanani oldinga surib qo'yish yetardi.
+//
+//  Tegmaydigan uchta hol:
+//    · T/M omborda turgan konver (`status = 'fg'`) — u allaqachon
+//      javonda, kutiladigan sanasi yo'q;
+//    · zahira — unga muddat bashorat qilinmaydi (`fg_on` bo'sh);
+//    · chiqish sanasi yozilmagan buyurtma — mijozga va'da qilingan kun
+//      yo'q, demak buzilgan va'da ham yo'q.
+async function assertMuddat(client, dueOn, unitIds) {
+  if (!dueOn || !unitIds.length) return;
+  const { rows } = await client.query(
+    `SELECT u.conveyor_no, TO_CHAR(r.fg_on, 'DD.MM.YY') AS keladi
+       FROM production_units u
+       JOIN v_unit_register r ON r.id = u.id
+      WHERE u.id = ANY($1::int[])
+        AND u.status = 'production'
+        AND r.fg_on IS NOT NULL
+        AND r.fg_on > $2::date
+      ORDER BY r.fg_on DESC, u.conveyor_no`, [unitIds, dueOn]);
+  if (!rows.length) return;
+  const chiqadi = (await client.query(
+    `SELECT TO_CHAR($1::date, 'DD.MM.YY') AS d`, [dueOn])).rows[0].d;
+  //  Uchtadan ko'pi yozilmaydi: xabar toast bo'lib chiqadi va o'ntasi
+  //  ekranga sig'masdi — qolganini menejer bittasini tuzatgach ko'radi.
+  const nom = rows.slice(0, 3).map((r) => `${r.conveyor_no} (${r.keladi})`).join(', ');
+  throw new Error(
+    `Buyurtma ${chiqadi} da chiqadi, bu konver esa keyinroq keladi: `
+    + `${nom}${rows.length > 3 ? ` va yana ${rows.length - 3} ta` : ''}. `
+    + `Chiqish sanasini keyinga suring yoki T/M omborda turgan konverni oling.`);
+}
+
 const CANDIDATE_WHERE = `
   u.status IN ('fg', 'production')
   --  Bo'sh donasi qolgani YOKI shu qatorga allaqachon bron qilingani.
@@ -577,7 +644,7 @@ const CANDIDATE_WHERE = `
 router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const it = (await db.query(
-    `SELECT i.id, i.product_id, i.qty, i.color, i.fabric
+    `SELECT i.id, i.product_id, i.qty, i.color, i.fabric, o.due_on
        FROM order_items i
        JOIN orders o    ON o.id = i.order_id
        JOIN customers c ON c.id = o.customer_id
@@ -606,7 +673,15 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
             (LOWER(COALESCE(u.color, '')) = LOWER(COALESCE($2, ''))
              OR $2 IS NULL) AS color_ok,
             (LOWER(COALESCE(u.fabric, '')) = LOWER(COALESCE($3, ''))
-             OR $3 IS NULL) AS fabric_ok
+             OR $3 IS NULL) AS fabric_ok,
+            --  KECH KELADI: ishlab chiqarishdagi konver buyurtma chiqib
+            --  ketadigan kundan keyin omborga tushadi. Server bunday
+            --  bronni qabul qilmaydi (izoh: assertMuddat) — bu yerda
+            --  esa menejer uni bosishdan OLDIN ko'radi. Ro'yxatdan olib
+            --  tashlanmadi: chiqish sanasini surish ham yo'l, va u
+            --  menejerning qaroriga qoladi.
+            (u.status = 'production' AND r.fg_on IS NOT NULL
+             AND $5::date IS NOT NULL AND r.fg_on > $5::date) AS late
        FROM production_units u
        LEFT JOIN sections s ON s.id = u.current_section_id
        LEFT JOIN shops sh   ON sh.id = s.shop_id
@@ -628,7 +703,8 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
                (u.status = 'fg') DESC, r.fg_on ASC NULLS LAST,
                color_ok DESC, fabric_ok DESC, u.conveyor_no, u.part
       LIMIT 200`,
-    [it.product_id, it.color || null, it.fabric || null, it.id]);
+    [it.product_id, it.color || null, it.fabric || null, it.id,
+     it.due_on || null]);
   res.json({ item: it, rows });
 }));
 
@@ -680,6 +756,10 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
       if (!ok) throw new Error(
         `${u.conveyor_no}: vitrinadagi mahsulot buyurtmaga olinmaydi`);
     }
+
+    //  Ishlab chiqarishdagi konver buyurtma chiqadigan kundan keyin
+    //  kelsa — bron qabul qilinmaydi (izoh: `assertMuddat`).
+    await assertMuddat(client, o.due_on, [u.id]);
 
     //  Shu qatorning shu konverdagi eski broni ustiga qo'shiladi.
     const bor = (await client.query(

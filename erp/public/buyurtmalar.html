@@ -832,8 +832,18 @@ async function openPick(itemId){
           <tbody>${pick.rows.length ? pick.rows.map(u => `<tr>
             <td><strong>${esc(u.conveyor_no)}</strong></td>
             <td>${where(u)}</td>
+            <!--  ★ KECH KELADIGAN KONVER QIZIL BO'LIB TURADI. Server
+                  bunday bronni qabul qilmaydi (modules/sales.js,
+                  assertMuddat), lekin menejer buni BOSISHDAN oldin
+                  ko'rishi kerak — aks holda u ro'yxat bo'ylab yurib,
+                  har birida bitta xabarni o'qib chiqardi. Ro'yxatdan
+                  olib tashlanmadi: chiqish sanasini keyinga surish ham
+                  yo'l va u menejerning qaroriga qoladi. -->
             <td>${u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
-              : u.eta ? `${d8(u.eta)}${u.eta_src && u.eta_src !== 'fakt'
+              : u.eta ? `<span class="${u.late ? 'tag bad' : ''}">${d8(u.eta)}</span>${
+                  u.late ? `<div class="muted" style="font-size:11px">chiqish
+                    sanasidan keyin</div>`
+                  : u.eta_src && u.eta_src !== 'fakt'
                   ? `<div class="muted" style="font-size:11px">${esc(u.eta_src)}</div>` : ''}`
               : '<span class="muted">—</span>'}</td>
             <td class="${u.color_ok ? '' : 'muted'}">${u.color ? esc(u.color) : '—'}</td>
