@@ -14,9 +14,12 @@
 //  B2B menejeri eksport buyurtmasini ko'rmaydi ham, ocha ham olmaydi.
 // ============================================================================
 const express = require('express');
-const { db, wrap, audit } = require('../db');
+const { db, wrap, audit, today } = require('../db');
 const { need, ownOf } = require('../auth');
-const { clonePart, refreshStock } = require('./units');
+const notify = require('../notify');
+//  `stampUnit` va `requestOne` UNITS modulida turadi: konverga
+//  tegadigan qoida o'sha modulniki va ikki nusxada bo'lmasligi kerak.
+const { clonePart, refreshStock, stampUnit, requestOne } = require('./units');
 
 const router = express.Router();
 const READ  = ['sales.view', 'sales.manage'];
@@ -653,8 +656,15 @@ const CANDIDATE_WHERE = `
 router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const it = (await db.query(
-    `SELECT i.id, i.product_id, i.qty, i.color, i.fabric, o.due_on
+    `SELECT i.id, i.product_id, i.qty, i.color, i.fabric, o.due_on,
+            --  Mahsulotga savdo so'rov yoza oladimi (stol va stul —
+            --  izoh: /orders/:id/request-unit). Belgi GURUHDA:
+            --  sahifa tugmani shunga qarab chizadi, tekshiruv esa
+            --  baribir serverda.
+            COALESCE(g.sales_can_request, false) AS can_request
        FROM order_items i
+       JOIN products p       ON p.id = i.product_id
+       JOIN product_groups g ON g.id = p.group_id
        JOIN orders o    ON o.id = i.order_id
        JOIN customers c ON c.id = o.customer_id
       WHERE i.id = $1 AND i.order_id = $2
@@ -804,27 +814,97 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
-//  Konverdagi zakaz raqami va mijoz bronlardan qaytadan yoziladi.
-//
-//  Bitta bron bo'lsa ikkalasi ham to'ladi — jurnalda tsex boshlig'i
-//  «bu Alisherniki» deb ko'radi va navbatni shunga qarab tuzadi. Bir
-//  nechta bo'lsa bo'sh qoladi: bittasini tanlab yozish qolganini
-//  yashirardi, ro'yxatning o'zi esa qatorni ochganda chiqadi.
-async function stampUnit(client, unitId) {
-  await client.query(
-    `UPDATE production_units u SET
-       order_no    = b.order_no,
-       customer_id = b.customer_id
-     FROM (SELECT CASE WHEN COUNT(DISTINCT v.order_id) = 1
-                       THEN MIN(v.order_no) END AS order_no,
-                  CASE WHEN COUNT(DISTINCT v.order_id) = 1
-                       THEN MIN(v.customer_id) END AS customer_id
-             FROM v_unit_bron v WHERE v.unit_id = $1) b
-     WHERE u.id = $1`, [unitId]);
-}
 
 //  Bronni olib tashlash. Konver bo'linmagani uchun yaxlitlash ham
 //  kerak emas: bitta qator o'chadi, konverning o'zi joyida qoladi.
+//  ── ★ ISHLAB CHIQARISHGA SO'ROV ────────────────────────────
+//
+//  Zavod qarori (2026-09). «Buyurtma uchun yangi konver ochilmaydi»
+//  degan qoida STOL va STUL uchun yumshatildi: menejer mijozdan
+//  «12 ta Zero stul» so'rovini oladi, T/M omborda ham, ishlab
+//  chiqarishda ham u yo'q va ilgari javob bitta edi — rad etish.
+//
+//  Konver BU YERDA OCHILMAYDI: so'rov odatdagi navbatga tushadi va
+//  rahbariyat tasdiqlaydi (`production.approve`). Konverning ochilishi
+//  pulga tegadi — xom ashyo sarflanadi, ishbay oylik shu raqamga
+//  yoziladi — va bu qoida savdo uchun ham o'zgarmaydi. Tasdiqlangach
+//  konver «boshlanmagan» bo'lib ochiladi va o'sha qatorga O'ZI
+//  biriktiriladi (izoh: `/requests/:id/approve`).
+//
+//  SP, PENAL va KAMODga tegishli emas: belgi GURUHDA
+//  (`product_groups.sales_can_request`), kodda emas — ertaga zavod
+//  «endi kamod ham» desa bitta katakcha belgilanadi.
+router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
+
+    const o = (await client.query(
+      `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+        WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
+    if (!o) throw new Error('Buyurtma topilmadi');
+    const chans = channelsOf(req);
+    if (chans && !chans.includes(o.channel))
+      throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
+    assertOwn(req, o);
+    if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
+    if (o.status === 'shipped')   throw new Error("Buyurtma jo'natilgan");
+    if (o.status === 'to_ship')   throw new Error('Buyurtma omborda — avval qaytarib oling');
+
+    const it = (await client.query(
+      `SELECT i.*, p.name AS product, g.name AS product_type,
+              COALESCE(g.sales_can_request, false) AS mumkin,
+              i.qty - COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                                 WHERE r.order_item_id = i.id), 0) AS qoldi
+         FROM order_items i
+         JOIN products p        ON p.id = i.product_id
+         JOIN product_groups g  ON g.id = p.group_id
+        WHERE i.id = $1 AND i.order_id = $2`,
+      [req.body.item_id, req.params.id])).rows[0];
+    if (!it) throw new Error('Qator topilmadi');
+    if (!it.mumkin) throw new Error(
+      `${it.product_type}ga so'rov yozilmaydi — ishlab chiqarishga faqat `
+      + `stol va stul beriladi`);
+
+    //  Soni: berilmasa qatorning YOPILMAGANI. Ko'pini so'rash ham
+    //  mumkin emas — ortiqcha konver buyurtmada ushlanib qolardi.
+    const qoldi = Number(it.qoldi) || 0;
+    const qty = req.body.qty == null || req.body.qty === '' ? qoldi : Number(req.body.qty);
+    if (!Number.isInteger(qty) || qty <= 0) throw new Error("Soni noto'g'ri");
+    if (qty > qoldi) throw new Error(
+      qoldi > 0 ? `Qatorda ${qoldi} ta yopilmagan, ${qty} ta so'ralmoqda`
+                : 'Qator to\'liq yopilgan — so\'rov kerak emas');
+
+    //  Rang va mato QATORDAN ko'chadi: mijoz aynan shuni so'ragan.
+    //  So'rovni yozadigan yagona joy — `requestOne` (modules/units.js):
+    //  raqam, rang tekshiruvi va muddat qoidasi u yerda turadi.
+    const q = await requestOne(client, req, {
+      product_id: it.product_id, qty, color: it.color, fabric: it.fabric,
+      started_on: today(),
+      note: `Buyurtma ${o.order_no}`,
+    }, null, it.id);
+
+    await notify.queue({
+      permission_code: 'production.approve',
+      module: 'production',
+      title: '1 ta konver tasdiq kutmoqda — buyurtmadan',
+      body: `${q.no} · ${qty} ta · ${it.product}`
+            + `\nBuyurtma: ${o.order_no}`
+            + `\n\nKim so'radi: ${req.user.name}`,
+    }, client);
+    await audit(req, { module: 'sales', action: 'request-unit', entity: 'order',
+                       entity_id: o.id,
+                       payload: { order_no: o.order_no, conveyor_no: q.no, qty } },
+                client);
+    await client.query('COMMIT');
+    res.json({ request_id: q.id, conveyor_no: q.no, qty });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
   const client = await db.connect();
   try {

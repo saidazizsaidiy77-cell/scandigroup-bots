@@ -373,3 +373,44 @@ CREATE TABLE IF NOT EXISTS doc_no_start (
 
 INSERT INTO doc_no_start (prefix, first_no) VALUES ('Z26-', 757)
   ON CONFLICT (prefix) DO NOTHING;
+
+-- ═══════════════════════════════ SAVDO ISHLAB CHIQARISHGA SO'ROV YOZADI
+--
+--  ★ ZAVOD QARORI (2026-09): buyurtma uchun konver OCHILMAYDI degan
+--  qoida STOL va STUL uchun yumshatildi.
+--
+--  Menejer mijozdan «12 ta Zero stul» so'rovini oladi; T/M omborda ham,
+--  ishlab chiqarishda ham u yo'q. Ilgari javob bitta edi — rad etish:
+--  savdo ishlab chiqarishga ish qo'sha olmasdi va buyurtma yo'qolardi.
+--  Endi menejer SO'ROV yozadi, u odatdagi navbatga tushadi va direktor
+--  (yoki ishlab chiqarish boshlig'i, administrator) tasdiqlaydi.
+--
+--  Konver «boshlanmagan» bo'lib ochiladi — tsex boshlig'i uni o'z
+--  ekranidan bir bosishda yo'lga chiqaradi, ya'ni ishlab chiqarish o'z
+--  tartibini yo'qotmaydi.
+--
+--  SP, PENAL va KAMOD ga bu tegishli EMAS (zavod qarori): ularning
+--  yo'li uzun va rejasi oldindan tuziladi, savdo esa o'rtasiga qator
+--  qo'shib yuborardi. Ro'yxat BAZADA: ertaga zavod «endi kamod ham»
+--  desa bitta katakcha belgilanadi, kodga tegilmaydi (4-qoida).
+ALTER TABLE product_groups
+  ADD COLUMN IF NOT EXISTS sales_can_request BOOLEAN NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'savdo-sorov') THEN
+    UPDATE product_groups SET sales_can_request = true WHERE code IN ('STL', 'STU');
+    INSERT INTO migration_flags (key) VALUES ('savdo-sorov');
+  END IF;
+END $$;
+
+--  So'rov qaysi buyurtma qatori uchun yozilgani. Tasdiqlangach konver
+--  o'sha qatorga O'ZI biriktiriladi: aks holda menejer har kuni
+--  so'rovlar ro'yxatini ochib, tasdiqlanganini kutib o'tirardi va
+--  tasdiqlangan konverni qo'lda qidirib topardi.
+--
+--  `ON DELETE SET NULL`: qator o'chirilsa so'rov qolaveradi — u
+--  allaqachon ishlab chiqarishga tushgan bo'lishi mumkin va uni
+--  jimgina yo'qotib bo'lmaydi.
+ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS order_item_id INT
+  REFERENCES order_items(id) ON DELETE SET NULL;

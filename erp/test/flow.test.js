@@ -1554,6 +1554,79 @@ test('zakaz raqami boshlanish raqamidan past tushmaydi', async () => {
   assert.equal(Number(z2.order_no.slice(4)), Number(z.order_no.slice(4)) + 1);
 });
 
+//  ★ SAVDO ISHLAB CHIQARISHGA SO'ROV YOZADI — faqat stol va stulga.
+//  Konver BU YERDA ochilmaydi: so'rov rahbariyat navbatiga tushadi va
+//  tasdiqlangach o'sha qatorga O'ZI biriktiriladi.
+test('savdo stulga so\'rov yozadi, penalga emas', async () => {
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz, items: [
+    { product_id: STUL,  qty: 5 },
+    { product_id: PENAL, qty: 2 },
+  ] })).body;
+  const qatorlar = (await admin('GET', '/api/sales/orders/' + z.id)).body.items;
+  const stulQ  = qatorlar.find((x) => x.product_id === STUL);
+  const penalQ = qatorlar.find((x) => x.product_id === PENAL);
+
+  //  Belgi GURUHDA: nomzodlar javobida ham keladi — sahifa tugmani
+  //  shunga qarab chizadi.
+  const nomz = (await admin('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${stulQ.id}`)).body;
+  assert.equal(nomz.item.can_request, true);
+  const nomz2 = (await admin('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${penalQ.id}`)).body;
+  assert.equal(nomz2.item.can_request, false);
+
+  //  Penalga so'rov yozilmaydi — tekshiruv SERVERDA.
+  const yoq = await admin('POST', `/api/sales/orders/${z.id}/request-unit`,
+    { item_id: penalQ.id, qty: 1 });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /faqat/);
+
+  //  Qatorda yopilmaganidan ko'p so'ralmaydi.
+  const kop = await admin('POST', `/api/sales/orders/${z.id}/request-unit`,
+    { item_id: stulQ.id, qty: 9 });
+  assert.equal(kop.status, 400, kop.text);
+
+  const so = await admin('POST', `/api/sales/orders/${z.id}/request-unit`,
+    { item_id: stulQ.id, qty: 5 });
+  assert.equal(so.status, 200, so.text);
+  assert.match(so.body.conveyor_no, /^S\d\d-\d{3,}$/, so.body.conveyor_no);
+
+  //  Konver HALI ochilmadi — so'rov navbatda turibdi.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM production_units WHERE conveyor_no = $1`,
+    [so.body.conveyor_no])).n, 0, 'tasdiqlanmaguncha konver yo\'q');
+  const q = await H.id(
+    `SELECT id, status, order_item_id FROM unit_requests WHERE conveyor_no = $1`,
+    [so.body.conveyor_no]);
+  assert.equal(q.status, 'pending');
+  assert.equal(q.order_item_id, stulQ.id, 'so\'rov qatorga bog\'langan');
+
+  //  Tasdiqlangach konver «boshlanmagan» bo'lib ochiladi va o'sha
+  //  qatorga O'ZI biriktiriladi — menejer qaytib kelib qidirmaydi.
+  const ok = await admin('POST', `/api/units/requests/${q.id}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+  const u = await H.id(
+    `SELECT current_section_id, status, qty FROM production_units WHERE id = $1`,
+    [ok.body.unit_id]);
+  assert.equal(u.current_section_id, null, 'boshlanmagan — bo\'limi yo\'q');
+  assert.equal(u.status, 'production');
+  assert.equal((await admin('GET', `/api/units/${ok.body.unit_id}/bron`)).body.reserved, 5);
+
+  const qayta = (await admin('GET', '/api/sales/orders/' + z.id)).body.items
+    .find((x) => x.id === stulQ.id);
+  assert.equal(Number(qayta.assigned_qty), 5, 'qator yopildi');
+
+  //  Yopilgan qatorga ikkinchi so'rov yozilmaydi.
+  const yana = await admin('POST', `/api/sales/orders/${z.id}/request-unit`,
+    { item_id: stulQ.id });
+  assert.equal(yana.status, 400, yana.text);
+});
+
 test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
 

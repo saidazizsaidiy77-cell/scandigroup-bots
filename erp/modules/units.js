@@ -614,6 +614,130 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
   res.json({ rows, can_approve: req.user.permissions.includes('production.approve') });
 }));
 
+//  ★ SO'ROV YOZILADIGAN YAGONA JOY.
+//
+//  Uni IKKI yo'l ishlatadi: tsex boshlig'ining «Konver qo'shish»
+//  sahifasi va savdoning buyurtma ekranidagi «Ishlab chiqarishga
+//  so'rov» tugmasi. Ikkiga bo'linsa raqam berish, rang tekshiruvi va
+//  muddat qoidasi bir kun bir-biridan ajralib ketardi — bitta yo'lda
+//  tuzatilgani ikkinchisida eskiligicha qolardi.
+//
+//  `scope` — tsex doirasi (savdoda yo'q), `orderItemId` esa
+//  buyurtmaning qatori: tasdiqlangach konver o'sha qatorga O'ZI
+//  biriktiriladi (izoh: `/requests/:id/approve`).
+async function requestOne(client, req, it, scope = null, orderItemId = null) {
+    if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
+    const qty = Number(it.qty) || 0;
+    if (qty <= 0) throw new Error('Soni kiritilmagan');
+
+    //  ★ RAQAMNI TIZIM QO'YADI, XODIM EMAS (zavod qarori, 2026-09).
+    //
+    //  Ilgari raqam so'rovda QO'LDA yozilardi va majburiy edi: zavod
+    //  uni o'z daftarida yuritardi, tizim esa faqat taklif qilardi.
+    //  Ikki daftar ikki xil hisob yuritardi — kimdir taklifni
+    //  qabul qilmay o'zinikini yozsa, ketma-ketlikda teshik qolardi
+    //  yoki bir xil raqam ikki mahsulotda turardi. Endi hisob BITTA
+    //  joyda: kelgan qiymat e'tiborga olinmaydi.
+    //
+    //  Harfi mahsulotdan chiqadi (`noStyleOf`): stol C, stul S,
+    //  sp/penal/kamod K — qaysi tsexniki ekani guruh va marshrutdan
+    //  o'qiladi, kodga yozilmaydi.
+    const { letter, width } = await noStyleOf(client, it.product_id);
+    const no = await nextConveyorNo(client, letter, width);
+
+    //  Band raqam SHU YERDA tutiladi, tasdiqlashda emas: aks holda
+    //  so'rov navbatda turib, direktor bosganda yiqilardi va sababi
+    //  unga ko'rinmasdi. Raqamni endi tizim qo'yadi, ya'ni bu
+    //  tekshiruv kundalik ishda ishlamaydi — lekin eski bazada
+    //  qo'lda yozilgan raqam turgan bo'lishi mumkin va o'shanda
+    //  ketma-ketlik ustiga tushib qolardi.
+    //
+    //  ★ XABAR KIM USHLAB TURGANINI AYTADI. «Raqam band» ning o'zi
+    //  yetarli emas edi: raqamni bo'shatish ikki xil ish — navbatdagi
+    //  so'rovni yozgan odam O'ZI bekor qiladi, ochilgan konverga esa
+    //  jurnal kerak. Xabar qaysi biri ekanini aytmasa, xodim har
+    //  safar so'rab yurishi kerak bo'lardi.
+    const band = (await client.query(
+      `SELECT 'unit' AS qayerda, u.conveyor_no,
+              p.name AS mahsulot, NULL::text AS kim
+         FROM production_units u
+         JOIN products p ON p.id = u.product_id
+        WHERE u.conveyor_no = $1 AND u.status <> 'cancelled'
+        UNION ALL
+       SELECT 'request', q.conveyor_no, p.name, w.name
+         FROM unit_requests q
+         JOIN products p  ON p.id = q.product_id
+         LEFT JOIN workers w ON w.id = q.created_by
+        WHERE q.conveyor_no = $1 AND q.status = 'pending'
+        LIMIT 1`, [no])).rows[0];
+    if (band) throw new Error(band.qayerda === 'request'
+      ? `«${no}» raqami navbatdagi so'rovda band `
+        + `(${band.mahsulot}${band.kim ? ', ' + band.kim : ''}) — `
+        + `o'sha so'rov bekor qilinsa bo'shaydi`
+      : `«${no}» raqami ochilgan konverda band (${band.mahsulot}) — `
+        + `jurnaldan tuzatiladi`);
+
+    const shopId = await shopOfProduct(client, it.product_id);
+    if (scope && (!shopId || !scope.includes(shopId)))
+      throw new Error('Bu mahsulot boshqa tsexniki');
+
+    //  ★ RANG VA MATO FAQAT BORIDAN (zavod qarori, 2026-09).
+    //
+    //  Kiritayotgan xodim yangi rang yoki mato O'YLAB TOPMAYDI: bitta
+    //  «Venge» va bitta «venge » (oxirida bo'shliq bilan) ombor
+    //  qoldig'ini ikkiga bo'lib yuborardi va savdo ro'yxatida bir xil
+    //  rang ikki marta turardi. Yangi rang — zavodning qarori, terish
+    //  xatosi emas: u jurnal orqali (`production.units`) kiritiladi.
+    //
+    //  Solishtirish katta-kichik harfga qaramaydi: ro'yxatdan
+    //  tanlangani baribir aynan mos tushadi, bu tekshiruv esa qo'lda
+    //  yuborilgan so'rov uchun.
+    for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
+      const v = trim(it[maydon]);
+      if (!v) continue;
+      const bor = (await client.query(
+        `SELECT 1 FROM production_units
+          WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
+      if (!bor) throw new Error(
+        `${nom} «${v}» ro'yxatda yo'q \u2014 boridan tanlang`);
+    }
+
+    //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
+    //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
+    //  `shops.plan_auto`). Korpusda yo'l uzun va u kunni boshliqdan
+    //  boshqa hech kim ayta olmaydi; stulda esa formula o'zi
+    //  hisoblaydi va sana so'ralmaydi.
+    const tsex = (await client.query(
+      `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
+      [shopId])).rows[0];
+    const keyingi = await keyingiTsex(client, it.product_id, null, null, shopId);
+    const due = String(it.next_on || '').trim() || null;
+    if (!tsex?.auto && !due)
+      throw new Error(`${keyingi?.name || 'T/M ombor'}ga topshirish sanasi kiritilmagan`);
+
+    //  Bo'lim berilsa marshrutda borligi tekshiriladi — `createOne()`
+    //  dagi bilan bir xil qoida. Tasdiqlash paytida emas, SHU YERDA:
+    //  xato bo'lim bilan yozilgan so'rov direktorning ro'yxatiga
+    //  chiqib, o'sha yerda yiqilardi.
+    if (it.section_id) {
+      const ok = (await client.query(
+        `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
+        [it.product_id, it.section_id])).rowCount;
+      if (!ok) throw new Error('Tanlangan bo\'lim bu mahsulot marshrutida yo\'q');
+    }
+
+    const q = (await client.query(
+      `INSERT INTO unit_requests
+         (product_id, qty, color, fabric, started_on, section_id, note,
+          shop_id, created_by, conveyor_no, is_stock, next_on, order_item_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [it.product_id, qty, trim(it.color), trim(it.fabric),
+       it.started_on || null, it.section_id || null, it.note || null,
+       shopId, req.user.id, no, it.is_stock === true, due,
+       orderItemId])).rows[0];
+  return { id: q.id, no, qty };
+}
+
 router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   if (!items.length) return res.status(400).json({ error: 'Qator yo\'q' });
@@ -627,117 +751,7 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
     //  raqam chiqib qolardi. Qulf tasdiqlashdagi bilan bir xil nomda.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
     const created = [];
-    for (const it of items) {
-      if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
-      const qty = Number(it.qty) || 0;
-      if (qty <= 0) throw new Error('Soni kiritilmagan');
-
-      //  ★ RAQAMNI TIZIM QO'YADI, XODIM EMAS (zavod qarori, 2026-09).
-      //
-      //  Ilgari raqam so'rovda QO'LDA yozilardi va majburiy edi: zavod
-      //  uni o'z daftarida yuritardi, tizim esa faqat taklif qilardi.
-      //  Ikki daftar ikki xil hisob yuritardi — kimdir taklifni
-      //  qabul qilmay o'zinikini yozsa, ketma-ketlikda teshik qolardi
-      //  yoki bir xil raqam ikki mahsulotda turardi. Endi hisob BITTA
-      //  joyda: kelgan qiymat e'tiborga olinmaydi.
-      //
-      //  Harfi mahsulotdan chiqadi (`noStyleOf`): stol C, stul S,
-      //  sp/penal/kamod K — qaysi tsexniki ekani guruh va marshrutdan
-      //  o'qiladi, kodga yozilmaydi.
-      const { letter, width } = await noStyleOf(client, it.product_id);
-      const no = await nextConveyorNo(client, letter, width);
-
-      //  Band raqam SHU YERDA tutiladi, tasdiqlashda emas: aks holda
-      //  so'rov navbatda turib, direktor bosganda yiqilardi va sababi
-      //  unga ko'rinmasdi. Raqamni endi tizim qo'yadi, ya'ni bu
-      //  tekshiruv kundalik ishda ishlamaydi — lekin eski bazada
-      //  qo'lda yozilgan raqam turgan bo'lishi mumkin va o'shanda
-      //  ketma-ketlik ustiga tushib qolardi.
-      //
-      //  ★ XABAR KIM USHLAB TURGANINI AYTADI. «Raqam band» ning o'zi
-      //  yetarli emas edi: raqamni bo'shatish ikki xil ish — navbatdagi
-      //  so'rovni yozgan odam O'ZI bekor qiladi, ochilgan konverga esa
-      //  jurnal kerak. Xabar qaysi biri ekanini aytmasa, xodim har
-      //  safar so'rab yurishi kerak bo'lardi.
-      const band = (await client.query(
-        `SELECT 'unit' AS qayerda, u.conveyor_no,
-                p.name AS mahsulot, NULL::text AS kim
-           FROM production_units u
-           JOIN products p ON p.id = u.product_id
-          WHERE u.conveyor_no = $1 AND u.status <> 'cancelled'
-          UNION ALL
-         SELECT 'request', q.conveyor_no, p.name, w.name
-           FROM unit_requests q
-           JOIN products p  ON p.id = q.product_id
-           LEFT JOIN workers w ON w.id = q.created_by
-          WHERE q.conveyor_no = $1 AND q.status = 'pending'
-          LIMIT 1`, [no])).rows[0];
-      if (band) throw new Error(band.qayerda === 'request'
-        ? `«${no}» raqami navbatdagi so'rovda band `
-          + `(${band.mahsulot}${band.kim ? ', ' + band.kim : ''}) — `
-          + `o'sha so'rov bekor qilinsa bo'shaydi`
-        : `«${no}» raqami ochilgan konverda band (${band.mahsulot}) — `
-          + `jurnaldan tuzatiladi`);
-
-      const shopId = await shopOfProduct(client, it.product_id);
-      if (scope && (!shopId || !scope.includes(shopId)))
-        throw new Error('Bu mahsulot boshqa tsexniki');
-
-      //  ★ RANG VA MATO FAQAT BORIDAN (zavod qarori, 2026-09).
-      //
-      //  Kiritayotgan xodim yangi rang yoki mato O'YLAB TOPMAYDI: bitta
-      //  «Venge» va bitta «venge » (oxirida bo'shliq bilan) ombor
-      //  qoldig'ini ikkiga bo'lib yuborardi va savdo ro'yxatida bir xil
-      //  rang ikki marta turardi. Yangi rang — zavodning qarori, terish
-      //  xatosi emas: u jurnal orqali (`production.units`) kiritiladi.
-      //
-      //  Solishtirish katta-kichik harfga qaramaydi: ro'yxatdan
-      //  tanlangani baribir aynan mos tushadi, bu tekshiruv esa qo'lda
-      //  yuborilgan so'rov uchun.
-      for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
-        const v = trim(it[maydon]);
-        if (!v) continue;
-        const bor = (await client.query(
-          `SELECT 1 FROM production_units
-            WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
-        if (!bor) throw new Error(
-          `${nom} «${v}» ro'yxatda yo'q \u2014 boridan tanlang`);
-      }
-
-      //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
-      //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
-      //  `shops.plan_auto`). Korpusda yo'l uzun va u kunni boshliqdan
-      //  boshqa hech kim ayta olmaydi; stulda esa formula o'zi
-      //  hisoblaydi va sana so'ralmaydi.
-      const tsex = (await client.query(
-        `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
-        [shopId])).rows[0];
-      const keyingi = await keyingiTsex(client, it.product_id, null, null, shopId);
-      const due = String(it.next_on || '').trim() || null;
-      if (!tsex?.auto && !due)
-        throw new Error(`${keyingi?.name || 'T/M ombor'}ga topshirish sanasi kiritilmagan`);
-
-      //  Bo'lim berilsa marshrutda borligi tekshiriladi — `createOne()`
-      //  dagi bilan bir xil qoida. Tasdiqlash paytida emas, SHU YERDA:
-      //  xato bo'lim bilan yozilgan so'rov direktorning ro'yxatiga
-      //  chiqib, o'sha yerda yiqilardi.
-      if (it.section_id) {
-        const ok = (await client.query(
-          `SELECT 1 FROM v_product_route WHERE product_id = $1 AND section_id = $2`,
-          [it.product_id, it.section_id])).rowCount;
-        if (!ok) throw new Error('Tanlangan bo\'lim bu mahsulot marshrutida yo\'q');
-      }
-
-      const q = (await client.query(
-        `INSERT INTO unit_requests
-           (product_id, qty, color, fabric, started_on, section_id, note,
-            shop_id, created_by, conveyor_no, is_stock, next_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-        [it.product_id, qty, trim(it.color), trim(it.fabric),
-         it.started_on || null, it.section_id || null, it.note || null,
-         shopId, req.user.id, no, it.is_stock === true, due])).rows[0];
-      created.push({ id: q.id, no, qty });
-    }
+    for (const it of items) created.push(await requestOne(client, req, it, scope));
     await audit(req, { module: 'production', action: 'request', entity: 'unit_requests',
                        entity_id: created.length, payload: { count: created.length } }, client);
 
@@ -809,6 +823,42 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
         `UPDATE production_units SET ${
           set.map((c, i) => `${c[0]} = $${i + 2}::date`).join(', ')} WHERE id = $1`,
         [u.id, ...set.map((c) => c[1])]);
+    }
+
+    //  ★ SAVDODAN KELGAN SO'ROV BO'LSA — KONVER O'SHA QATORGA O'ZI
+    //  BIRIKTIRILADI (`order_item_id`, izoh: `sql/sales.sql`).
+    //
+    //  Tugmani menejer buyurtma ekranidan bosgan va uning savoli bitta:
+    //  mijozga shu mahsulot chiqadimi. Bron qo'lda qoldirilsa u har
+    //  kuni so'rovlar ro'yxatini ochib, tasdiqlanganini kutib o'tirardi
+    //  — keyin esa tasdiqlangan konverni jurnaldan qidirib topardi.
+    //
+    //  Soni QATOR YOPILMAGANI bilan cheklanadi: so'rov yozilgandan
+    //  keyin o'sha qatorga boshqa konver biriktirilgan bo'lishi mumkin
+    //  va o'shanda buyurtma keragidan ko'p mahsulotni ushlab turardi.
+    //
+    //  Chiqish sanasi TEKSHIRILMAYDI (`assertMuddat`): konver aynan shu
+    //  buyurtma uchun so'ralgan va menejer buni bilib so'ragan — bu
+    //  yerda rad etish tasdiqlashning O'ZINI yiqitardi.
+    if (q.order_item_id) {
+      const kerak = (await client.query(
+        `SELECT i.qty - COALESCE(SUM(r.qty), 0) AS qoldi
+           FROM order_items i
+           LEFT JOIN unit_reservations r ON r.order_item_id = i.id
+          WHERE i.id = $1 GROUP BY i.qty`, [q.order_item_id])).rows[0];
+      const n = Math.min(q.qty, Number(kerak?.qoldi) || 0);
+      if (n > 0) {
+        await client.query(
+          `INSERT INTO unit_reservations (unit_id, order_item_id, qty, created_by)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (unit_id, order_item_id) DO UPDATE SET qty = $3`,
+          [u.id, q.order_item_id, n, req.user.id]);
+        await stampUnit(client, u.id);
+        await client.query(
+          `UPDATE orders SET status = 'reserved'
+            WHERE id = (SELECT order_id FROM order_items WHERE id = $1)
+              AND status = 'new'`, [q.order_item_id]);
+      }
     }
 
     await client.query(
@@ -2659,4 +2709,30 @@ module.exports.refreshStock = refreshStock;
 module.exports.clonePart = clonePart;
 //  Tsex doirasi ombor sahifasida ham kerak: stul kiritadigan xodimga
 //  T/M omborda faqat stullar ko'rinadi (izoh: modules/warehouse.js).
+//  Konverdagi zakaz raqami va mijoz bronlardan qaytadan yoziladi.
+//
+//  Bitta bron bo'lsa ikkalasi ham to'ladi — jurnalda tsex boshlig'i
+//  «bu Alisherniki» deb ko'radi va navbatni shunga qarab tuzadi. Bir
+//  nechta bo'lsa bo'sh qoladi: bittasini tanlab yozish qolganini
+//  yashirardi, ro'yxatning o'zi esa qatorni ochganda chiqadi.
+async function stampUnit(client, unitId) {
+  await client.query(
+    `UPDATE production_units u SET
+       order_no    = b.order_no,
+       customer_id = b.customer_id
+     FROM (SELECT CASE WHEN COUNT(DISTINCT v.order_id) = 1
+                       THEN MIN(v.order_no) END AS order_no,
+                  CASE WHEN COUNT(DISTINCT v.order_id) = 1
+                       THEN MIN(v.customer_id) END AS customer_id
+             FROM v_unit_bron v WHERE v.unit_id = $1) b
+     WHERE u.id = $1`, [unitId]);
+}
+
 module.exports.scopeOf = scopeOf;
+//  Konver so'rovi savdodan ham yoziladi (modules/sales.js): buyurtmaga
+//  mahsulot topilmasa menejer ishlab chiqarishga so'rov yuboradi.
+//  Qoida bitta joyda tursin — raqam, rang va muddat tekshiruvi bilan.
+module.exports.requestOne = requestOne;
+//  Konverdagi mijoz va zakaz raqami bronlardan qaytadan yoziladi.
+//  Savdo ham, tasdiqlash ham shu yerdan chaqiradi.
+module.exports.stampUnit = stampUnit;

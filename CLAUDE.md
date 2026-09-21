@@ -406,19 +406,35 @@ o'qiydi. Yarim haqiqiy qator o'sha yerda tursa, uni har bir so'rovda
 chetlab o'tish kerak bo'lardi va bitta esdan chiqqan joy tasdiqlanmagan
 mahsulotni qoldiqqa qo'shib yuborardi.
 
-**★ KONVER RAQAMI SO'ROVDA YOZILADI va MAJBURIY.** Zavod raqamni o'z
-daftarida yuritadi va mahsulotning o'ziga yozib qo'yadi: tizim bergan
-raqam bilan qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
-topib bo'lmasdi. Sahifa mahsulot tanlangan zahoti **keyingi raqamni
-taklif qiladi** (`GET /api/units/requests/next-no`) — ketma-ketlikni
-yodda saqlab o'tirish shart emas, lekin katak tahrirlanadi: qog'ozdagi
-raqam boshqa bo'lsa o'sha yoziladi. Taklif navbatdagi so'rovlarni ham
-hisobga oladi, ya'ni ikki odam bir vaqtda kiritsa bir xil raqam
-chiqmaydi.
+**★ KONVER RAQAMINI TIZIM QO'YADI, XODIM EMAS** (zavod qarori,
+2026-09). Ilgari katak so'rovda qo'lda to'ldirilardi va MAJBURIY edi:
+zavod raqamni o'z daftarida yuritardi, tizim esa faqat taklif qilardi.
+Ikki daftar ikki xil hisob yuritardi — taklifni qabul qilmay o'zinikini
+yozgan odam ketma-ketlikda teshik qoldirardi yoki bir xil raqam ikki
+mahsulotga tushardi. Endi hisob BITTA joyda va kelgan qiymat e'tiborga
+olinmaydi (`requestOne`, `modules/units.js`).
 
-**Band raqam so'rov yozilayotganda tutiladi**, tasdiqlashda emas: aks
-holda so'rov navbatda turib, direktor bosganda yiqilardi va sababi unga
-ko'rinmasdi.
+Katak QOLDI, lekin faqat ko'rsatkich bo'lib: xodim mahsulotni tanlagan
+zahoti qaysi raqam berilishini ko'radi
+(`GET /api/units/requests/next-no`) va o'shani mahsulotning ustiga
+yozadi. Raqam so'rov yozilayotganda tutiladi, tasdiqlashda emas —
+navbatdagi so'rovlar ham hisobga olinadi va ikki odam bir vaqtda
+kiritsa bir xil raqam chiqmaydi (tranzaksiyada `pg_advisory_xact_lock`).
+
+**★ HARF GURUHDA HAM BO'LADI** (`product_groups.no_prefix`,
+`no_width`):
+
+    C26-227   stol
+    K26-103   sp, penal, kamod
+    S26-462   stul
+
+Stol korpus tsexida yuradi, lekin zavod uni «C» bilan yuritadi —
+tsexning harfi unga to'g'ri kelmaydi. Muddat kunlari bilan BIR XIL ikki
+qavat: TSEXda umumiy qoida (`shops.no_prefix`), GURUHda esa undan
+chetga chiqish; guruhniki ustun, bo'sh bo'lsa tsexniki olinadi va yangi
+guruh jim qolmaydi. `createOne()` ham shu yo'ldan o'tadi: ilgari u har
+doim «K» berardi va jurnaldan ochilgan stul `K26-...` bo'lib ketardi,
+so'rov orqali ochilgani esa `S26-...`.
 
 **★ RANG VA MATO FAQAT BORIDAN** (zavod qarori, 2026-09). So'rov
 oynasida ikkalasi ham RO'YXAT, qo'lda yozilmaydi: bitta «Venge» va
@@ -629,6 +645,18 @@ bilan: bitta buyurtmada bir nechta mahsulot bo'ladi. Raqamni tizim beradi
 (`Z26-0001`). Zavod uni IKKI manbadan bajaradi (zavod qarori): T/M omborda
 tayyor turgan konverdan yoki buyurtma kutayotgan **zahiradan**. Buyurtma
 uchun yangi konver OCHILMAYDI — ishlab chiqarish o'z rejasi bilan yuradi.
+**Stol va stulda bu qoida yumshatildi** (zavod qarori, 2026-09): pastda,
+«Savdo ishlab chiqarishga so'rov yozadi».
+
+**★ ZAKAZ RAQAMI ZAVOD DAFTARIDAGI JOYDAN DAVOM ETADI** (`doc_no_start`,
+`sql/sales.sql`). Tizim raqamni o'z hisobidan yuritardi, zavodning
+qog'oz daftarida esa hisob boshqa joyda turibdi: 2026 yilda
+757-buyurtma yozilgan. Ikki raqam ajralib ketsa nakladnoydagi raqam
+daftardagisiga to'g'ri kelmasdi. Endi har prefiks uchun boshlanish
+raqami bazada turadi va hisob undan past tushmaydi:
+`GREATEST(eng katta + 1, first_no)`. Raqam KODDA emas, BAZADA. 2027
+uchun alohida qator yozish shart emas: yil almashganda prefiks ham
+almashadi (`Z27-`) va qator topilmagach hisob 1 dan boshlanadi.
 
 Sarlavhada: mijoz (balansi bilan), menejer, **buyurtma sanasi**,
 **chiqib ketish sanasi**, **qayerga** (`order_destinations`: zavodga
@@ -771,6 +799,40 @@ buzilgan va'da ham yo'q).
 Nomzodlar ro'yxatidan OLIB TASHLANMAYDI, sanasi qizil bo'lib turadi
 («chiqish sanasidan keyin»): menejer buni bosishdan oldin ko'radi,
 lekin sanani surish ham yo'l va u menejerning qaroriga qoladi.
+
+**★ SAVDO ISHLAB CHIQARISHGA SO'ROV YOZADI — FAQAT STOL VA STULGA**
+(zavod qarori, 2026-09; `POST /api/sales/orders/:id/request-unit`,
+`product_groups.sales_can_request`).
+
+Menejer mijozdan «12 ta Zero stul» so'rovini oladi; T/M omborda ham,
+zahirada ham, ishlab chiqarishda ham u yo'q. Ilgari javob bitta edi —
+rad etish: savdo ishlab chiqarishga ish qo'sha olmasdi va buyurtma
+yo'qolardi. Endi konver oynasining ostida **«So'rov yuborish»** turadi.
+
+**Konver BU YERDA OCHILMAYDI.** So'rov odatdagi navbatga tushadi va
+rahbariyat tasdiqlaydi (`production.approve`), Telegram xabari ham
+o'sha yo'ldan ketadi: konverning ochilishi pulga tegadi — xom ashyo
+sarflanadi, ishbay oylik shu raqamga yoziladi — va bu qoida savdo
+uchun ham o'zgarmaydi. So'rovni yozadigan joy BITTA (`requestOne`,
+`modules/units.js`): raqam, rang tekshiruvi va muddat qoidasi ikki
+nusxada bo'lsa bir kun bir-biridan ajralib ketardi.
+
+Tasdiqlangach konver **«boshlanmagan»** bo'lib ochiladi — tsex
+boshlig'i uni o'z ekranidan bir bosishda yo'lga chiqaradi, ya'ni
+ishlab chiqarish o'z tartibini yo'qotmaydi — va **o'sha qatorga O'ZI
+biriktiriladi** (`unit_requests.order_item_id`). Bron qo'lda
+qoldirilsa menejer har kuni so'rovlar ro'yxatini ochib, tasdiqlanganini
+kutib o'tirardi va keyin konverni jurnaldan qidirib topardi. Soni qator
+YOPILMAGANI bilan cheklanadi: so'rovdan keyin o'sha qatorga boshqa
+konver biriktirilgan bo'lishi mumkin. Chiqish sanasi bu bronda
+tekshirilmaydi (`assertMuddat`) — konver aynan shu buyurtma uchun
+so'ralgan va rad etish tasdiqlashning O'ZINI yiqitardi.
+
+**SP, PENAL va KAMODga tegishli emas**: ularning yo'li uzun va rejasi
+oldindan tuziladi, savdo esa o'rtasiga qator qo'shib yuborardi. Ro'yxat
+BAZADA — ertaga zavod «endi kamod ham» desa bitta katakcha belgilanadi
+(4-qoida). Tugma ularda umuman chizilmaydi, tekshiruv esa **serverda**:
+qator id sini qo'lda yuborsa ham qabul qilinmaydi.
 
 **Ekranda «bron» so'zi yo'q.** Bron — ICHKI mexanizm (konverni qatorga
 biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
@@ -1742,6 +1804,23 @@ o'rnida uch raqam turadi:
 Yuqorida ham shu: «Jami» kartochkasi (bronda turgani bilan birga) va
 «Bo'sh» kartochkasi. Ikkalasi ham o'lchov birligi bilan — dona bilan
 komplektni qo'shib bo'lmaydi.
+
+**★ SAVDO FAQAT QOLDIQNI KO'RADI** (zavod qarori, 2026-09). Ombor
+mudirining savoli AYLANMA — bugun nima keldi, nima chiqdi, nechtasi
+bronda va javonda nechta turibdi. Savdo xodimining savoli esa bitta:
+mijozga hozir nechtasini va'da qila olaman. Javob ham bitta raqam —
+bronni ayirgandagi qoldiq.
+
+Ilgari savdo to'rtta ustunni ko'rardi va o'z javobini ularning ichidan
+qidirardi; ustiga «Qoldiq» ustuni JISMONAN turganini ko'rsatardi, ya'ni
+bronda turganini ham — menejer o'sha raqamni bo'sh deb o'qib, boshqa
+mijozga va'da qilingan mahsulotni ikkinchi marta va'da qilardi. Endi
+kirdi/chiqdi/bronda ustunlari va harakat sanasi filtri unga
+chizilmaydi, «Jami» kartochkasi ham (u inventarizatsiya raqami).
+
+Chegara HUQUQDAN chiqadi, lavozimdan emas (4-qoida): omborga YOZADIGAN
+odamda aylanma qolaveradi. Bu KO'RINISH, himoya emas — server baribir
+o'sha raqamlarni beradi.
 
 **Vitrinada esa narx va summa qoladi**: u yerda nuqta hisobi yuritiladi
 va bron bo'lmaydi (vitrina savdoga chiqmaydi), ya'ni ikkita nol ustun
