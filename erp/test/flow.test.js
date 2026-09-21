@@ -1719,6 +1719,36 @@ test('savdo bo\'lim boshlig\'i roli menejer bilan bir xil huquqda', async () => 
     { product_id: PENAL, qty: 1 }] })).status, 403);
 });
 
+//  ★ HAR HARFNING O'Z HISOBI: stol C, stul S, korpus K — zavod
+//  bitta raqamni ko'rib nechta stol, nechta stul va nechta korpus
+//  chiqqanini biladi. Umumiy hisob bo'lsa raqam shu ma'nosini
+//  yo'qotardi.
+test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
+  const kir = await xodim('Sinov raqam2', 'kirituvchi');
+  const STUL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const STOL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STL' AND p.active ORDER BY p.id LIMIT 1`)).id;
+
+  const no = async (pid) => (await kir('GET',
+    '/api/units/requests/next-no?product_id=' + pid)).body.conveyor_no;
+  const [s1, c1, k1] = [await no(STUL), await no(STOL), await no(PENAL)];
+
+  //  Stulga konver ochilsa STOL va KORPUS hisobi QIMIRLAMAYDI.
+  assert.equal((await kir('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1 })).status, 200);
+  assert.notEqual(await no(STUL), s1, 'stul hisobi oshdi');
+  assert.equal(await no(STOL), c1, 'stol hisobi joyida');
+  assert.equal(await no(PENAL), k1, 'korpus hisobi joyida');
+
+  //  Harflari ham har xil.
+  assert.equal(s1[0], 'S');
+  assert.equal(c1[0], 'C');
+  assert.equal(k1[0], 'K');
+});
+
 test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
   const STUL = (await H.id(
@@ -1788,6 +1818,38 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   const qayta = (await admin('GET', '/api/sales/orders/' + z.id)).body.items
     .find((x) => x.id === stulQ.id);
   assert.equal(Number(qayta.assigned_qty), 5, 'qator yopildi');
+
+  //  ★ CHERNOVIK: konver hali YO'LGA CHIQMAGAN, ya'ni T/M omborga
+  //  tushish kunini tizim hisoblay olmaydi va mijozga aytiladigan
+  //  chiqish sanasi noma'lum. Savdo buni ro'yxatning o'zida ko'radi.
+  const ro = (await admin('GET', '/api/sales/orders?q=' + z.order_no)).body.rows[0];
+  assert.equal(Number(ro.not_started_qty), 5, 'chernovik: boshlanmagan konver');
+  assert.ok((await admin('GET', '/api/sales/orders?status=draft'))
+    .body.rows.some((x) => x.id === z.id), 'chernovik filtri');
+
+  //  ★ TSEX BOSHLIG'IGA XABAR: stul — stul tsexiga. Kimga borishi
+  //  DOIRADAN chiqadi, kodga tsex yozilmaydi.
+  const STULTSEX2 = (await H.id(`SELECT id FROM shops WHERE code = 'STUL'`)).id;
+  const xab = await H.id(
+    `SELECT n.title, n.worker_id FROM notifications n
+       JOIN worker_roles wr ON wr.worker_id = n.worker_id
+      WHERE wr.scope_shop_id = $1 AND n.title LIKE '%boshlanmagan%'
+      ORDER BY n.id DESC LIMIT 1`, [STULTSEX2]);
+  assert.ok(xab, 'stul tsexi boshlig\'iga xabar ketdi');
+
+  //  ★ MENYUDAGI BELGI ro'yxat bilan bir xil raqamni beradi.
+  const stulchi = H.api(base, await H.sessionFor('Stul ustasi'));
+  const bosh = (await stulchi('GET', '/api/units/board')).body.unstarted || [];
+  const nav = (await stulchi('GET', '/api/navbat')).body.navbat
+    .find((x) => /boshlanmagan/.test(x.izoh));
+  assert.equal(nav?.n, bosh.length, 'belgi ro\'yxat uzunligi bilan bir xil');
+  assert.ok(bosh.some((x) => x.id === ok.body.unit_id), 'konver ro\'yxatda');
+
+  //  Tsex boshlab qo'ysa buyurtma chernovikdan chiqadi.
+  assert.equal((await stulchi('POST', '/api/units/move',
+    { items: [{ unit_id: ok.body.unit_id }] })).status, 200);
+  const ro2 = (await admin('GET', '/api/sales/orders?q=' + z.order_no)).body.rows[0];
+  assert.equal(Number(ro2.not_started_qty), 0, 'boshlangach chernovik tugadi');
 
   //  Yopilgan qatorga ikkinchi so'rov yozilmaydi.
   const yana = await admin('POST', `/api/sales/orders/${z.id}/request-unit`,

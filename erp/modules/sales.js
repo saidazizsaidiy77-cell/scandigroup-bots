@@ -243,6 +243,9 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 router.get('/orders', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const kutmoqda = req.query.status === 'waiting';
+  //  ★ CHERNOVIK ham saqlanadigan holat EMAS (izoh: sql/sales.sql):
+  //  biriktirilgan konverning bir qismi hali yo'lga chiqmagan.
+  const chernovik = req.query.status === 'draft';
   const { rows } = await db.query(
     `SELECT * FROM v_sales_orders
       WHERE ($1::text[] IS NULL OR channel = ANY($1))
@@ -250,6 +253,8 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND (NOT $6::boolean
              OR (status IN ('reserved', 'to_ship')
                  AND assigned_qty > in_warehouse_qty))
+        AND (NOT $8::boolean
+             OR (not_started_qty > 0 AND status NOT IN ('shipped', 'cancelled')))
         AND ($3::int  IS NULL OR customer_id = $3)
         AND ($4::int  IS NULL OR manager_id = $4)
         AND ($5::text IS NULL OR order_no ILIKE '%' || $5 || '%'
@@ -258,9 +263,10 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($7::int IS NULL OR manager_id = $7)
       ORDER BY ordered_on DESC, id DESC
       LIMIT 500`,
-    [chans, kutmoqda ? null : (req.query.status || null),
+    [chans, kutmoqda || chernovik ? null : (req.query.status || null),
      req.query.customer_id || null,
-     req.query.manager_id || null, req.query.q || null, kutmoqda, ownOf(req)]);
+     req.query.manager_id || null, req.query.q || null, kutmoqda, ownOf(req),
+     chernovik]);
 
   //  ★ HAR BUYURTMA QAYERDA — ro'yxatning o'zida.
   //

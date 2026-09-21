@@ -395,13 +395,26 @@ router.get('/orders', need('production.view'), wrap(async (_req, res) => {
 async function nextConveyorNo(client = db, letter = 'K', width = 4) {
   const prefix = `${letter}${String(new Date().getFullYear()).slice(-2)}-`;
   const { rows } = await client.query(
-    `SELECT COALESCE(MAX(n), 0) + 1 AS n FROM (
+    //  ★ HAR HARFNING O'Z HISOBI. Shart `LIKE 'C26-%'` — ya'ni stol
+    //  stuldan, stul korpusdan mustaqil sanaladi: zavod bitta raqamni
+    //  ko'rib nechta stol, nechta stul va nechta korpus chiqqanini
+    //  biladi. Umumiy hisob bo'lsa raqam shu ma'nosini yo'qotardi.
+    //
+    //  ★ BOSHLANISH raqami ham bazada (`doc_no_start`, izoh:
+    //  sql/sales.sql) — zakaz raqami bilan bir xil idiom: zavod
+    //  daftarida hisob boshqa joyda turgan bo'lsa, tizim undan orqada
+    //  qolmaydi. Qator yo'q bo'lsa eskicha, mavjud raqamdan davom etadi.
+    `SELECT GREATEST(
+              COALESCE(MAX(n), 0) + 1,
+              COALESCE((SELECT first_no FROM doc_no_start WHERE prefix = $2), 1)
+            ) AS n FROM (
        SELECT SUBSTRING(conveyor_no FROM '\\d+$')::int AS n
          FROM production_units WHERE conveyor_no LIKE $1
        UNION ALL
        SELECT SUBSTRING(conveyor_no FROM '\\d+$')::int
          FROM unit_requests
-        WHERE conveyor_no LIKE $1 AND status = 'pending') x`, [`${prefix}%`]);
+        WHERE conveyor_no LIKE $1 AND status = 'pending') x`,
+    [`${prefix}%`, prefix]);
   return prefix + String(rows[0].n).padStart(width, '0');
 }
 
@@ -873,6 +886,39 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
           `UPDATE orders SET status = 'reserved'
             WHERE id = (SELECT order_id FROM order_items WHERE id = $1)
               AND status = 'new'`, [q.order_item_id]);
+      }
+    }
+
+    //  ── ★ TASDIQLANGACH TSEX BOSHLIG'IGA XABAR ────────────────
+    //
+    //  Konver bo'limsiz ochiladi va tsexning «Boshlanmagan» ro'yxatida
+    //  turadi — boshliq uni bir bosishda yo'lga chiqaradi. Lekin u
+    //  ekranni ochmaguncha konver yotib qolardi, savdo esa buyurtmaning
+    //  chiqish sanasini kuta olmasdi: sana konver BOSHLANGAN kunidan
+    //  sanaladi. Shuning uchun xabar o'sha odamning O'ZIGA boradi.
+    //
+    //  Kimga — DOIRADAN chiqadi: stul stul tsexiga, stol va korpus
+    //  korpus tsexiga (`shopOfProduct` bilan bir xil qoida). Kodga na
+    //  ism, na tsex yozilmaydi (4-qoida). Menyudagi belgi ham bor
+    //  (`nav.js`) — ikkalasi bir-biriga bog'liq emas: belgi sayt ochiq
+    //  bo'lganda ko'rinadi, boshliqning cho'ntagida esa telefon turadi.
+    if (!q.section_id) {
+      const tsex = await shopOfProduct(client, q.product_id);
+      if (tsex) {
+        const kimga = (await client.query(
+          `SELECT DISTINCT w.id FROM workers w
+             JOIN worker_roles wr ON wr.worker_id = w.id
+                                 AND wr.scope_shop_id = $1
+             JOIN v_worker_permissions vp ON vp.worker_id = w.id
+            WHERE w.active AND vp.permission_code = 'production.entry'`,
+          [tsex])).rows;
+        for (const k of kimga)
+          await notify.queue({
+            worker_id: k.id, module: 'production',
+            title: 'Yangi konver — boshlanmagan',
+            body: `${u.conveyor_no} · ${q.qty} ta`
+                  + `\nBo'limlar ekranidan yo'lga chiqaring.`,
+          }, client);
       }
     }
 

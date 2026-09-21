@@ -272,7 +272,25 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        -- Mahsulotni zavoddan chiqarib bergan ombor mudirining telefoni:
        -- yuk xatida imzo joyida ismi bilan birga turadi. Ism ham,
        -- raqam ham BAZADAN keladi — kodga yozilmaydi (CLAUDE.md, 4-qoida).
-       shw.phone AS shipped_by_phone
+       shw.phone AS shipped_by_phone,
+       --  ★ CHERNOVIK: buyurtmaga biriktirilgan konverning qanchasi
+       --  hali YO'LGA CHIQMAGAN (bo'limsiz turibdi). Savdo so'rov yozib,
+       --  rahbariyat tasdiqlagan konver tsexning «Boshlanmagan»
+       --  ro'yxatida turadi — tsex boshlig'i uni ishga tushirmaguncha
+       --  T/M omborga tushish kunini tizim HISOBLAY OLMAYDI (sana
+       --  konverning boshlangan kunidan sanaladi), ya'ni mijozga
+       --  aytiladigan chiqish sanasi ham noma'lum.
+       --
+       --  Shuning uchun bunday buyurtma savdoda CHERNOVIK bo'lib
+       --  turadi: menejer uni ko'rib, ishlab chiqarish hali
+       --  boshlamaganini biladi va mijozga sana aytmaydi. Boshlangach
+       --  buyurtma o'zi odatdagi holatiga o'tadi — saqlanadigan belgi
+       --  emas, har safar hisoblanadi (bron holati bilan bir xil
+       --  idiom: saqlangan belgi bir kun haqiqatdan ajralib qolardi).
+       --
+       --  Ustun OXIRIDA: CREATE OR REPLACE VIEW faqat oxiriga qo'sha
+       --  oladi (CLAUDE.md, 2-qoida).
+       COALESCE(a.boshlanmagan, 0) AS not_started_qty
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id
@@ -287,7 +305,10 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
   LEFT JOIN LATERAL (
     SELECT COALESCE(SUM(r.qty), 0)::int AS qty,
            COALESCE(SUM(r.qty) FILTER (WHERE u.status IN ('fg', 'shipped')), 0)::int
-             AS in_wh
+             AS in_wh,
+           COALESCE(SUM(r.qty) FILTER (
+             WHERE u.status = 'production' AND u.current_section_id IS NULL), 0)::int
+             AS boshlanmagan
       FROM unit_reservations r
       JOIN order_items oi     ON oi.id = r.order_item_id
       JOIN production_units u ON u.id = r.unit_id

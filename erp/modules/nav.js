@@ -123,6 +123,35 @@ const NAVBATLAR = [
     ];
   },
 
+  //  3a. BOSHLANMAGAN KONVER — tsex boshlig'ining navbati.
+  //
+  //  Tasdiqlangan konver bo'limsiz ochiladi va tsex ekranining
+  //  tepasida «Boshlanmagan» ro'yxatida turadi. Ilgari uni BILISH
+  //  uchun o'sha sahifani ochib ko'rishdan boshqa yo'l yo'q edi:
+  //  direktor tasdiqlagan konver boshliq ekranni ochmaguncha yotib
+  //  qolardi — savdo esa buyurtmaning chiqish sanasini kuta olmasdi,
+  //  chunki sana konver YO'LGA CHIQQANDA hisoblanadi.
+  //
+  //  Shart `modules/units.js` dagi `/board` ning `unstarted` i bilan
+  //  bir xil: egasi MENING tsexim va bo'limi yo'q.
+  async (req) => {
+    const scope = scopeOf(req);
+    if (!scope || !bor(req, 'production.entry', 'production.view')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n
+         FROM v_unit_register r
+         JOIN product_groups g ON g.id = r.group_id
+         LEFT JOIN LATERAL (
+           SELECT sc.shop_id FROM v_product_route pr
+             JOIN sections sc ON sc.id = pr.section_id
+            WHERE pr.product_id = r.product_id
+            ORDER BY pr.step_no LIMIT 1) birinchi ON true
+        WHERE r.status = 'production' AND r.section_id IS NULL
+          AND COALESCE(r.owner_shop_id, birinchi.shop_id) = ANY($1)`, [scope]);
+    return [{ page: '/harakat.html', mod: 'production', n,
+              izoh: `${n} ta konver boshlanmagan — yo'lga chiqarilmagan` }];
+  },
+
   //  4. OMBORGA JO'NATILGAN KONVER — ombor mudirining navbati.
   //  Shart `modules/units.js` dagi `/stock/inbox` bilan bir xil.
   //

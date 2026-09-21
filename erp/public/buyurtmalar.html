@@ -117,14 +117,25 @@ const STATUS = { new: 'Yangi', reserved: 'Tayyor',
                  cancelled: 'Bekor qilingan' };
 //  «Kutmoqda» — alohida holat emas, hisoblanadi: bron qo'yilgan, lekin
 //  bir qismi hali ishlab chiqarishda (server: `status=waiting`).
-const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['waiting', 'Kutmoqda'],
+const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['draft', 'Chernovik'],
+                 ['waiting', 'Kutmoqda'],
                  ['reserved', 'Tayyor'], ['to_ship', 'Omborda'],
                  ['shipped', 'Chiqib ketdi'], ['cancelled', 'Bekor']];
 
 //  Buyurtma holati EKRANDA: bronning bir qismi hali omborga kelmagan
 //  bo'lsa «Kutmoqda» deb ko'rsatiladi — mijozga aytiladigan gap shu.
+//
+//  ★ CHERNOVIK — eng ustun holat: biriktirilgan konverning bir qismi
+//  hali YO'LGA CHIQMAGAN (tsexning «Boshlanmagan» ro'yxatida turibdi).
+//  Tsex boshlig'i uni ishga tushirmaguncha T/M omborga tushish kunini
+//  tizim hisoblay olmaydi — sana konverning BOSHLANGAN kunidan
+//  sanaladi — ya'ni mijozga aytiladigan chiqish sanasi ham noma'lum.
+//  «Kutmoqda» buni yashirardi: menejer konver yo'lda deb o'ylab,
+//  mijozga sana aytib qo'yardi.
 const statusOf = (o) =>
-  (o.status === 'reserved' || o.status === 'to_ship')
+  Number(o.not_started_qty) > 0 && o.status !== 'shipped'
+    && o.status !== 'cancelled' ? 'Chernovik'
+  : (o.status === 'reserved' || o.status === 'to_ship')
   && Number(o.assigned_qty) > Number(o.in_warehouse_qty)
     ? 'Kutmoqda' : (STATUS[o.status] || o.status);
 
