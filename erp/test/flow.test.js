@@ -3294,6 +3294,24 @@ test('bronda turgan konverning BO\'SH donasi ko\'chadi', async () => {
   const d = await admin('POST', '/api/warehouse/fg/moves',
     { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 6 }] });
   assert.equal(d.status, 200, d.text);
+
+  //  ★ OCHIQ HUJJATDAGI DONA IKKINCHI MARTA YOZILMAYDI. Hujjat
+  //  yozilgani bilan mahsulot qimirlamaydi, ya'ni qoldiqda turaveradi
+  //  va o'sha dona ikkinchi hujjatga ham tushib ketardi — xato faqat
+  //  QABUL qilishda bilinardi, mashina yo'lga chiqqandan keyin.
+  const ikki = await admin('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 1 }] });
+  assert.equal(ikki.status, 400, ikki.text);
+  assert.match(ikki.body.error, /ochiq hujjatda/);
+
+  //  Ro'yxatda esa qatori TURADI — sababi bilan: yashirilgan qator
+  //  «bu mahsulot omborda yo'q» degan javob bo'lib o'qilardi.
+  const band = (await admin('GET', '/api/warehouse/fg/returns/candidates?w=TM'))
+    .body.rows.find((x) => x.id === u.id);
+  assert.ok(band, 'bandi ham ro\'yxatda turadi');
+  assert.equal(band.free_qty, 0);
+  assert.equal(band.doc_qty, 6);
+  assert.equal(band.doc_no, d.body.doc_no);
   assert.equal((await admin('POST',
     `/api/warehouse/fg/returns/${d.body.id}/confirm`)).status, 200);
   assert.equal((await admin('POST',

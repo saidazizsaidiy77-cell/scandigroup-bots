@@ -263,31 +263,40 @@ async function qoldiq() {
   } catch (e) { return ($('mvRows').innerHTML =
     `<p class="muted">${esc(e.message)}</p>`); }
   //  ★ USTUN «BOR» EMAS, «BO'SH»: javonda o'n ta tursa-yu to'rttasi
-  //  mijozga va'da qilingan bo'lsa, ko'chadigani olti ta. Ilgari
-  //  bunday konver ro'yxatga UMUMAN chiqmasdi va mudir sababini
-  //  ekrandan topa olmasdi — endi qatori turadi, yonida nechtasi
-  //  buyurtmada ekani yozilib (izoh: modules/warehouse.js).
-  const list = bor.filter((x) => Number(x.free_qty ?? x.qty) > 0);
+  //  mijozga va'da qilingan bo'lsa, ko'chadigani olti ta.
+  //
+  //  ★ BO'SHI YO'Q QATOR HAM TURADI, SABABI BILAN. Ilgari u
+  //  ro'yxatdan umuman tushib qolardi va mudir «Milano penal omborda
+  //  bor-ku, nega ko'rsatmayapti» degan savolga javob topa olmasdi:
+  //  ekran konverning yo'qligini ham, band ekanini ham bir xil —
+  //  jimlik bilan aytardi. Bo'sh qator savol, yo'q qator esa yolg'on.
+  const list = bor.filter((x) => Number(x.qty) > 0);
+  const nima = (x) => [
+    x.reserved_qty ? `${x.reserved_qty} tasi buyurtmada` : '',
+    x.doc_qty ? `${x.doc_qty} tasi ${x.doc_no || 'ochiq'} hujjatida` : '',
+  ].filter(Boolean).join(' · ');
   $('mvRows').innerHTML = list.length
     ? `<div style="overflow-x:auto;max-height:44vh"><table>
         <thead><tr><th>Konver</th><th>Mahsulot</th><th class="num">Bo'sh</th>
           <th class="num">Ketadi</th></tr></thead>
         <tbody>${list.map((x) => {
           const bosh = Number(x.free_qty ?? x.qty);
-          return `<tr>
+          const izoh = nima(x);
+          return `<tr${bosh > 0 ? '' : ' style="opacity:.55"'}>
           <td><b>${esc(x.conveyor_no)}</b></td>
           <td>${esc(x.product)}
             <div class="muted" style="font-size:12px">${
               [x.product_type, x.color, x.fabric].filter(Boolean).map(esc).join(' · ')
             }</div></td>
-          <td class="num">${bosh}${x.reserved_qty
-            ? `<div class="muted" style="font-size:12px">${
-                x.reserved_qty} ta buyurtmada</div>` : ''}</td>
-          <td class="num"><input type="number" min="0" max="${bosh}" value="0"
-            data-unit="${x.id}" class="mvq"
-            style="width:80px;text-align:right"></td></tr>`; }).join('')}</tbody>
+          <td class="num">${bosh} <span class="muted">/ ${x.qty}</span>${izoh
+            ? `<div class="muted" style="font-size:12px">${esc(izoh)}</div>` : ''}</td>
+          <td class="num">${bosh > 0
+            ? `<input type="number" min="0" max="${bosh}" value="0"
+                 data-unit="${x.id}" class="mvq"
+                 style="width:80px;text-align:right">`
+            : '<span class="muted">band</span>'}</td></tr>`; }).join('')}</tbody>
       </table></div>`
-    : `<p class="muted">Bu omborda ko'chiriladigan bo'sh mahsulot yo'q.</p>`;
+    : `<p class="muted">Bu omborda mahsulot yo'q.</p>`;
 }
 
 async function saqla() {

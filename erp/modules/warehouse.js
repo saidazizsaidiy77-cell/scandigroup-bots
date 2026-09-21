@@ -535,12 +535,34 @@ router.get('/fg/returns/candidates', need(...RET, 'warehouse.view'),
     //  yo'nalishni hujjatning O'ZI hal qiladi.
     const wh = await whOf(req, req.query.w);
     const { rows } = await db.query(
-      `SELECT id, conveyor_no, product, product_type, uom, color, fabric,
-              qty, COALESCE(reserved_qty, 0)::int AS reserved_qty,
-              (qty - COALESCE(reserved_qty, 0))::int AS free_qty
-         FROM v_fg_units
-        WHERE warehouse_id = $1 AND qty > COALESCE(reserved_qty, 0)
-        ORDER BY product, conveyor_no
+      `SELECT u.id, u.conveyor_no, u.product, u.product_type, u.uom,
+              u.color, u.fabric, u.qty,
+              COALESCE(u.reserved_qty, 0)::int AS reserved_qty,
+              COALESCE(h.qty, 0)::int          AS doc_qty,
+              h.doc_no,
+              (u.qty - COALESCE(u.reserved_qty, 0)
+                     - COALESCE(h.qty, 0))::int AS free_qty
+         FROM v_fg_units u
+         --  ★ OCHIQ HUJJATDAGI DONA IKKINCHI MARTA YOZILMAYDI. Hujjat
+         --  yozilgani bilan mahsulot QIMIRLAMAYDI (u qabul qilinganda
+         --  ko'chadi), ya'ni qoldiqda turaveradi — va o'sha dona
+         --  ikkinchi hujjatga ham tushib ketardi. Xato faqat QABUL
+         --  qilishda bilinardi («allaqachon ko'chirilgan»), ya'ni
+         --  mashina yo'lga chiqqandan keyin.
+         LEFT JOIN LATERAL (
+           SELECT SUM(i.qty) AS qty, MIN(r.doc_no) AS doc_no
+             FROM wh_return_items i
+             JOIN wh_returns r ON r.id = i.return_id
+            WHERE i.unit_id = u.id
+              AND r.status IN ('new', 'confirmed')) h ON true
+        WHERE u.warehouse_id = $1
+        --  ★ BO'SHI YO'Q QATOR HAM QAYTADI, sababi bilan: yashirilgan
+        --  qator «bu mahsulot omborda yo'q» degan javob bo'lib
+        --  o'qilardi va mudir konverni ro'yxatdan izlab yurardi.
+        --  Bo'sh qator savol, yo'q qator esa yolg'on.
+        ORDER BY (u.qty - COALESCE(u.reserved_qty, 0)
+                        - COALESCE(h.qty, 0)) > 0 DESC,
+                 u.product, u.conveyor_no
         LIMIT 500`, [wh.id]);
     res.json({ rows, warehouse: wh });
   }));
@@ -584,6 +606,10 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
       const u = (await client.query(
         `SELECT u.id, u.conveyor_no, u.qty, u.status,
                 COALESCE(u.warehouse_id, tm.id) AS at_wh, w.kind, w.code,
+                COALESCE((SELECT SUM(i.qty) FROM wh_return_items i
+                            JOIN wh_returns d ON d.id = i.return_id
+                           WHERE i.unit_id = u.id
+                             AND d.status IN ('new','confirmed')), 0)::int AS in_doc,
                 COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
                            WHERE r.unit_id = u.id), 0)::int AS reserved
            FROM production_units u
@@ -606,11 +632,13 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
       //  Bron qo'yilgan dona qaytmaydi: u mijozniki bo'lib turibdi —
       //  lekin BO'SHI qaytaveradi. Konver qabul qilishda bo'linadi va
       //  bron eski qatorda qoladi (izoh: `candidates`).
-      const bosh = u.qty - u.reserved;
+      const bosh = u.qty - u.reserved - u.in_doc;
       const n = it.qty == null || it.qty === '' ? bosh : Number(it.qty);
       if (!Number.isInteger(n) || n <= 0 || n > bosh)
-        throw new Error(u.reserved
-          ? `${u.conveyor_no}: ${u.reserved} tasi buyurtmada, bo'shi ${bosh} ta`
+        throw new Error(u.reserved || u.in_doc
+          ? `${u.conveyor_no}: ${[u.reserved && `${u.reserved} tasi buyurtmada`,
+              u.in_doc && `${u.in_doc} tasi ochiq hujjatda`].filter(Boolean)
+              .join(', ')}, bo'shi ${bosh} ta`
           : `${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
       saved.push({ unit_id: u.id, conveyor_no: u.conveyor_no, qty: n });
     }
@@ -679,6 +707,10 @@ router.post('/fg/moves', need('warehouse.move', 'warehouse.manage',
       const u = (await client.query(
         `SELECT u.id, u.conveyor_no, u.qty, u.status,
                 COALESCE(u.warehouse_id, tm.id) AS at_wh,
+                COALESCE((SELECT SUM(i.qty) FROM wh_return_items i
+                            JOIN wh_returns d ON d.id = i.return_id
+                           WHERE i.unit_id = u.id
+                             AND d.status IN ('new','confirmed')), 0)::int AS in_doc,
                 COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
                            WHERE r.unit_id = u.id), 0)::int AS reserved
            FROM production_units u
@@ -698,11 +730,13 @@ router.post('/fg/moves', need('warehouse.move', 'warehouse.manage',
       //  mahsulot vitrinaga ketib qolardi (vitrina savdoga chiqmaydi).
       //  Konverning O'ZI esa ko'chaveradi — bo'sh donasi bilan
       //  (izoh: `candidates`).
-      const bosh = u.qty - u.reserved;
+      const bosh = u.qty - u.reserved - u.in_doc;
       const n = it.qty == null || it.qty === '' ? bosh : Number(it.qty);
       if (!Number.isInteger(n) || n <= 0 || n > bosh)
-        throw new Error(u.reserved
-          ? `${u.conveyor_no}: ${u.reserved} tasi buyurtmada, bo'shi ${bosh} ta`
+        throw new Error(u.reserved || u.in_doc
+          ? `${u.conveyor_no}: ${[u.reserved && `${u.reserved} tasi buyurtmada`,
+              u.in_doc && `${u.in_doc} tasi ochiq hujjatda`].filter(Boolean)
+              .join(', ')}, bo'shi ${bosh} ta`
           : `${u.conveyor_no}: soni 1..${u.qty} oralig'ida`);
       saved.push({ unit_id: u.id, conveyor_no: u.conveyor_no, qty: n });
     }
