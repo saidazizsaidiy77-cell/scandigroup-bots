@@ -742,6 +742,36 @@ tsex boshlig'i qo'ygan reja → marshrut va quvvatdan taxmin). Mijoz
 tezroq oladigan konver tepada tursin — menejer «shu kuni beramiz»
 deyishi uchun.
 
+**★ CHIQISH SANASIDAN KEYIN KELADIGAN KONVER OLINMAYDI** (zavod
+qarori, 2026-09; `assertMuddat`, `modules/sales.js`). Buyurtmada
+«chiqib ketish sanasi» turadi — mijozga aytilgan kun; ishlab
+chiqarishdagi konver esa o'z sanasi bilan keladi. Ikkalasi
+qarama-qarshi bo'lishi mumkin: mahsulot 5-oktabrda omborga tushadi,
+buyurtma esa 30-sentabrda chiqishi kerak.
+
+Ilgari bunday bron JIMGINA qabul qilinardi va buyurtma «Kutmoqda»
+bo'lib turaverardi: menejer mijozga sana aytib qo'ygan, ombor mudiri
+esa o'sha kuni chiqara olmasdi. Xato chiqish KUNI bilinardi, ya'ni
+tuzatishga kech edi. Endi bron rad etiladi va sabab menejerning
+O'ZIGA yoziladi: qaysi konver, qachon keladi va buyurtma qachon
+chiqadi. Ikki yo'l ham ochiq va ikkalasi ham menejerniki — sanani
+keyinga surish yoki omborda turgan boshqa konverni olish; tizim o'zi
+hech qaysisini tanlamaydi.
+
+Tekshiruv IKKI joyda va BITTA funksiyada: bron qo'yilganda va chiqish
+sanasi o'zgartirilganda. Ikkinchisisiz qoida bitta bosishda chetlab
+o'tilardi — uzoq sana bilan bron qilib, keyin sanani oldinga surish
+yetardi.
+
+Tegmaydigan uchta hol: **T/M omborda** turgan konver (allaqachon
+javonda, kutiladigan sanasi yo'q), **zahira** (unga muddat bashorat
+qilinmaydi) va **chiqish sanasi yozilmagan** buyurtma (va'da yo'q —
+buzilgan va'da ham yo'q).
+
+Nomzodlar ro'yxatidan OLIB TASHLANMAYDI, sanasi qizil bo'lib turadi
+(«chiqish sanasidan keyin»): menejer buni bosishdan oldin ko'radi,
+lekin sanani surish ham yo'l va u menejerning qaroriga qoladi.
+
 **Ekranda «bron» so'zi yo'q.** Bron — ICHKI mexanizm (konverni qatorga
 biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
 
