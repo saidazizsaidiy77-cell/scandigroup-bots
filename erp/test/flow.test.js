@@ -736,8 +736,11 @@ test('raqami noma\'lum qoldiq ham qabul qilinadi — tizim Q raqami beradi', asy
     'ketma-ket raqamlar, takrorlanmaydi');
 
   // Oddiy konver esa K bilan qoladi
+  //  Oddiy konver esa MAHSULOTNING harfi bilan: penal korpusniki,
+  //  ya'ni K va zavod daftaridagidek uch xonali.
   const k = await admin('POST', '/api/units/', { items: [{ product_id: PENAL, qty: 1 }] });
-  assert.match(k.body.created[0].conveyor_no, /^K\d\d-\d{4}$/);
+  assert.match(k.body.created[0].conveyor_no, /^K\d\d-\d{3}$/,
+    k.body.created[0].conveyor_no);
 
   // Fayldan: konveyer ustuni umuman yo'q
   const csv = [
@@ -3524,47 +3527,51 @@ test('konver so\'rovi: rad etiladi va o\'zi bekor qiladi', async () => {
     'pending', 'begona so\'rov joyida qoladi');
 });
 
-test('so\'rovda konver raqami majburiy va band raqam qabul qilinmaydi', async () => {
+test('so\'rovda konver raqamini TIZIM qo\'yadi', async () => {
   const kir = await xodim('Sinov raqamchi', 'kirituvchi');
 
-  //  Raqamsiz yozib bo'lmaydi: zavod uni mahsulotning o'ziga yozadi.
-  const yoq = await kir('POST', '/api/units/requests', { product_id: PENAL, qty: 1 });
-  assert.equal(yoq.status, 400, yoq.text);
-  assert.match(yoq.body.error, /raqami kiritilmagan/);
-
+  //  ★ Raqamsiz so'rov endi O'TADI — uni tizim qo'yadi. Ilgari katak
+  //  qo'lda to'ldirilardi va majburiy edi: zavod raqamni o'z daftarida
+  //  yuritardi, tizim esa faqat taklif qilardi. Ikki daftar ikki xil
+  //  hisob yuritardi — taklifni qabul qilmay o'zinikini yozgan odam
+  //  ketma-ketlikda teshik qoldirardi yoki bir xil raqam ikki
+  //  mahsulotga tushardi.
   const a = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', is_stock: true,
-      next_on: '2026-09-20' });
+    { product_id: PENAL, qty: 1, is_stock: true, next_on: '2026-09-20' });
   assert.equal(a.status, 200, a.text);
+  const n1 = (await H.id(`SELECT conveyor_no FROM unit_requests WHERE id = $1`,
+    [a.body.created[0]])).conveyor_no;
+  assert.match(n1, /^K\d\d-\d{3,}$/, n1);
 
-  //  Navbatda turgan raqam ikkinchi marta olinmaydi — aks holda
-  //  direktor tasdiqlaganda yiqilardi va sababi unga ko'rinmasdi.
-  const band = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' });
-  assert.equal(band.status, 400, band.text);
-  //  Xabar KIM ushlab turganini aytadi: navbatdagi so'rovni yozgan odam
-  //  o'zi bekor qiladi, ochilgan konver esa jurnaldan tuzatiladi —
-  //  «band» so'zining o'zi bu ikki yo'ldan qaysi biri ekanini aytmasdi.
-  assert.match(band.body.error, /navbatdagi so'rovda band/, band.body.error);
-  assert.match(band.body.error, /Sinov raqamchi/, band.body.error);
+  //  Yuborilgan raqam E'TIBORGA OLINMAYDI: hisob bitta joyda.
+  const b = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, conveyor_no: n1, next_on: '2026-09-20' });
+  assert.equal(b.status, 200, b.text);
+  const n2 = (await H.id(`SELECT conveyor_no FROM unit_requests WHERE id = $1`,
+    [b.body.created[0]])).conveyor_no;
+  assert.notEqual(n2, n1, 'ikkinchi so\'rovga boshqa raqam');
+  assert.equal(Number(n2.split('-')[1]), Number(n1.split('-')[1]) + 1,
+    'ketma-ketlik uzilmaydi');
 
-  //  Zahira belgisi ham so'rovdan konverga ko'chadi.
+  //  Zahira belgisi va raqam so'rovdan konverga o'zgarmasdan ko'chadi.
   const ok = await admin('POST', `/api/units/requests/${a.body.created[0]}/approve`);
   assert.equal(ok.status, 200, ok.text);
   const u = await H.id(`SELECT conveyor_no, is_stock FROM production_units WHERE id=$1`,
     [ok.body.unit_id]);
-  assert.equal(u.conveyor_no, 'S-8001');
+  assert.equal(u.conveyor_no, n1);
   assert.equal(u.is_stock, true);
 
-  //  Endi konver mavjud — o'sha raqam bilan yangi so'rov ham bo'lmaydi,
-  //  lekin xabar endi boshqacha: bo'shatish jurnaldan bo'ladi.
-  const ochiq = await kir('POST', '/api/units/requests',
-    { product_id: PENAL, qty: 1, conveyor_no: 'S-8001', next_on: '2026-09-20' });
-  assert.equal(ochiq.status, 400, ochiq.text);
-  assert.match(ochiq.body.error, /ochilgan konverda band/, ochiq.body.error);
+  //  Ochilgan konverning raqami endi band: keyingi so'rov undan
+  //  KEYINGISINI oladi, ustiga tushmaydi.
+  const c = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, next_on: '2026-09-20' });
+  assert.equal(c.status, 200, c.text);
+  const n3 = (await H.id(`SELECT conveyor_no FROM unit_requests WHERE id = $1`,
+    [c.body.created[0]])).conveyor_no;
+  assert.ok(Number(n3.split('-')[1]) > Number(n2.split('-')[1]), n3);
 });
 
-test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () => {
+test('raqam ko\'rinishi tsexdan va GURUHDAN: S26-104, K26-103, C26-227', async () => {
   const kir = await xodim('Sinov taklifchi', 'kirituvchi');
   const STUL = (await H.id(
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
@@ -3575,12 +3582,20 @@ test('raqam ko\'rinishi tsexdan: stulda S26-104, korpusda K26-0001', async () =>
   const st = (await kir('GET', '/api/units/requests/next-no?product_id=' + STUL)).body;
   assert.match(st.conveyor_no, new RegExp(`^S${yil}-\\d{3}$`), st.conveyor_no);
   const kor = (await kir('GET', '/api/units/requests/next-no?product_id=' + PENAL)).body;
-  assert.match(kor.conveyor_no, new RegExp(`^K${yil}-\\d{4}$`), kor.conveyor_no);
+  assert.match(kor.conveyor_no, new RegExp(`^K${yil}-\\d{3}$`), kor.conveyor_no);
+
+  //  ★ STOL korpus tsexida yuradi, lekin zavod uni «C» bilan yuritadi:
+  //  harf GURUHda ham bo'ladi va u tsexnikidan USTUN turadi.
+  const STOL = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'STL' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  const stol = (await kir('GET', '/api/units/requests/next-no?product_id=' + STOL)).body;
+  assert.match(stol.conveyor_no, new RegExp(`^C${yil}-\\d{3}$`), stol.conveyor_no);
 
   //  Taklif NAVBATDAGI so'rovni ham hisobga oladi: ikki odam bir vaqtda
   //  kiritsa bir xil raqam taklif qilinmasin.
   assert.equal((await kir('POST', '/api/units/requests',
-    { product_id: STUL, qty: 1, conveyor_no: st.conveyor_no })).status, 200);
+    { product_id: STUL, qty: 1 })).status, 200);
   const st2 = (await kir('GET', '/api/units/requests/next-no?product_id=' + STUL)).body;
   assert.notEqual(st2.conveyor_no, st.conveyor_no);
   assert.equal(Number(st2.conveyor_no.split('-')[1]),
@@ -3638,7 +3653,9 @@ test('navbatdagi so\'rov tasdiqlovchiga XABAR bo\'lib tushadi', async () => {
       ORDER BY id DESC LIMIT 1`);
   assert.equal(x.permission_code, 'production.approve');
   assert.match(x.title, /tasdiq kutmoqda/);
-  assert.match(x.body, /K-9701/, 'xabarda konver raqami turadi');
+  const so = await H.id(`SELECT conveyor_no FROM unit_requests WHERE id = $1`,
+    [q.body.created[0]]);
+  assert.match(x.body, new RegExp(so.conveyor_no), 'xabarda konver raqami turadi');
   assert.match(x.body, /Sinov xabarchi/, 'kim so\'raganini ham aytadi');
 
   //  Tasdiqlangach navbatdan chiqadi.
@@ -3724,7 +3741,8 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
   assert.equal(ok.status, 200, ok.text);
 
   //  Sanalar zanjirdan o'zi chiqdi.
-  const r1 = (await admin('GET', '/api/units/?conveyor_no=S-9001')).body[0];
+  //  Raqamni tizim qo'ydi — tasdiqlash javobidan olinadi.
+  const r1 = (await admin('GET', '/api/units/?conveyor_no=' + ok.body.conveyor_no)).body[0];
   assert.equal(String(r1.lak_on).slice(0, 10),  '2026-09-26');
   assert.equal(String(r1.pack_on).slice(0, 10), '2026-10-03');
   assert.equal(r1.lak_src, 'marshrut');
@@ -3739,7 +3757,7 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
   //  LAK QABUL QILADI — sanasiz ham o'tadi, lekin yozilgani yoziladi.
   assert.equal((await lak('POST', '/api/units/move',
     { items: [{ unit_id: ok.body.unit_id, plan_on: '2026-10-01' }] })).status, 200);
-  const r2 = (await admin('GET', '/api/units/?conveyor_no=S-9001')).body[0];
+  const r2 = (await admin('GET', '/api/units/?conveyor_no=' + ok.body.conveyor_no)).body[0];
   assert.equal(String(r2.pack_on).slice(0, 10), '2026-10-01', 'qo\'l formuladan ustun');
   assert.equal(r2.pack_src, 'reja');
 
@@ -3754,7 +3772,7 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
   const sanasiz = await lak('POST', '/api/units/move',
     { items: [{ unit_id: ok2.body.unit_id }] });
   assert.equal(sanasiz.status, 200, sanasiz.text);
-  const r3 = (await admin('GET', '/api/units/?conveyor_no=S-9003')).body[0];
+  const r3 = (await admin('GET', '/api/units/?conveyor_no=' + ok2.body.conveyor_no)).body[0];
   assert.equal(String(r3.pack_on).slice(0, 10), '2026-10-03');
   assert.equal(r3.pack_src, 'marshrut');
 
@@ -3935,8 +3953,10 @@ test('kiritgan ochmaydi, rahbariyat tasdiqlaydi', async () => {
     [ok.body.unit_id]);
   assert.equal(u.qty, 4);
   assert.equal(u.fabric, mato);
-  //  ★ Raqam SO'ROVDAN keladi — tizim o'zinikini bermaydi.
-  assert.equal(u.conveyor_no, 'S-7007');
+  //  ★ Raqamni TIZIM qo'ydi (so'rovda ham, konverda ham bir xil) va
+  //  harfi mahsulotdan chiqdi: penal korpusniki.
+  assert.equal(u.conveyor_no, ok.body.conveyor_no);
+  assert.match(u.conveyor_no, /^K\d\d-\d{3,}$/, u.conveyor_no);
 
   //  Jurnal unga umuman ochilmaydi: butun zavodning konverlari, narxi
   //  va mijozi u yerda turadi.

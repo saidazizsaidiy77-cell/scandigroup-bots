@@ -42,12 +42,18 @@
   <div class="form">
     <div class="wide"><label>Mahsulot</label>
       <select id="fProduct" onchange="taklif()"></select></div>
-    <!--  Konver raqami MAJBURIY: zavod uni o'z daftarida yuritadi va
-          mahsulotning o'ziga yozib qo'yadi. Tizim bergan raqam bilan
-          qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
-          topib bo'lmasdi. -->
+    <!--  ★ RAQAMNI TIZIM QO'YADI, XODIM EMAS (zavod qarori, 2026-09).
+          Ilgari katak tahrirlanardi: zavod raqamni o'z daftarida
+          yuritardi va tizim faqat taklif qilardi. Ikki daftar ikki xil
+          hisob yuritardi — taklif qabul qilinmay o'zinikini yozgan odam
+          ketma-ketlikda teshik qoldirardi yoki bir xil raqam ikki
+          mahsulotga tushardi. Katak QOLDI, lekin faqat ko'rsatkich
+          bo'lib: xodim mahsulotni tanlagan zahoti qaysi raqam
+          berilishini ko'radi va o'shani mahsulotning ustiga yozadi. -->
     <div><label>Konver raqami</label>
-      <input id="fNo" placeholder="S26-104" autocomplete="off"></div>
+      <input id="fNo" readonly tabindex="-1" placeholder="mahsulotni tanlang"
+             style="background:var(--bg);cursor:default">
+      <div class="hint">tizim qo'yadi</div></div>
     <div><label>Soni</label>
       <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
     <div><label>Boshlanish sanasi</label>
@@ -144,9 +150,9 @@ function eta(plan) {
 //  yuritadi (stulda `S26-104`: S — stul, 26 — yil, 104 — ketma-ketligi),
 //  lekin qayerda to'xtaganini yodda saqlab o'tirish shart emas.
 //
-//  Bu TAKLIF: katak tahrirlanadi va qog'ozdagi raqam boshqa bo'lsa
-//  o'sha yoziladi. Shuning uchun xodim allaqachon biror narsa yozgan
-//  bo'lsa ustidan yozilmaydi.
+//  Bu TAKLIF EMAS, JAVOB: raqamni server qo'yadi va katak faqat uni
+//  ko'rsatadi. Shuning uchun har safar qaytadan yoziladi — mahsulot
+//  almashsa harfi ham almashadi (stol C, stul S, korpus K).
 async function taklif(majburan) {
   const pid = $('fProduct').value;
   if (!pid) { eta(null); return; }
@@ -155,9 +161,7 @@ async function taklif(majburan) {
     const r = await App.api('/api/units/requests/next-no?product_id='
       + encodeURIComponent(pid)
       + '&started_on=' + encodeURIComponent($('fStart').value || ''));
-    //  Raqam ustidan YOZILMAYDI: xodim qog'ozdagisini kiritgan bo'lishi
-    //  mumkin. Majburan — faqat saqlangandan keyin, katak tozalanganda.
-    if (majburan || !$('fNo').value.trim()) $('fNo').value = r.conveyor_no;
+    $('fNo').value = r.conveyor_no;
     eta(r.plan);
     //  Katak keyingi tsexning NOMI bilan yoziladi: «keyingi tsex» degan
     //  umumiy so'z o'rniga «Lak tsexiga topshirish» deb tursin.
@@ -243,7 +247,6 @@ function draw() {
 async function send() {
   const it = {
     product_id:  Number($('fProduct').value) || null,
-    conveyor_no: $('fNo').value.trim(),
     is_stock:    $('fStock').checked,
     next_on:     $('fPlan').value || null,
     qty:        Number($('fQty').value) || 0,
@@ -253,7 +256,6 @@ async function send() {
     note:       $('fNote').value.trim() || null,
   };
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
-  if (!it.conveyor_no) { $('fNo').focus(); return alert('Konver raqami kiritilmagan'); }
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
   if (planKerak && !it.next_on) {
     $('fPlan').focus();
@@ -263,8 +265,8 @@ async function send() {
     await App.api('/api/units/requests', { method: 'POST', body: JSON.stringify(it) });
     //  Mahsulot va sana JOYIDA qoladi: boshliq ketma-ket bir necha qator
     //  yozadi va har safar qaytadan tanlab o'tirmasin.
-    //  Raqam ham tozalanadi: har konverning O'Z raqami bor va eskisi
-    //  qolib ketsa ikkinchi qator o'sha raqam bilan ketardi.
+    //  Raqam ham yangilanadi: har konverning O'Z raqami bor va eskisi
+    //  ekranda qolsa xodim uni ikkinchi mahsulotga yozib qo'yardi.
     $('fNo').value = ''; $('fQty').value = 1;
     $('fColor').value = ''; $('fFabric').value = '';
     $('fNote').value = ''; $('fStock').checked = false; $('fPlan').value = '';

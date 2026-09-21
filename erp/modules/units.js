@@ -441,9 +441,12 @@ function planUstunlar(milestone, due) {
 }
 
 //  Mahsulot qaysi tsexniki — raqamning harfi ham shundan chiqadi.
+//  ★ Guruhniki USTUN, tsexniki zaxira (izoh: sql/register.sql): stol
+//  korpus tsexida yuradi, lekin zavod uni «C» bilan yuritadi.
 async function noStyleOf(client, productId) {
   const r = (await client.query(
-    `SELECT COALESCE(sh.no_prefix, 'K') AS letter, COALESCE(sh.no_width, 4) AS width
+    `SELECT COALESCE(g.no_prefix, sh.no_prefix, 'K') AS letter,
+            COALESCE(g.no_width,  sh.no_width,  4)   AS width
        FROM products p
        JOIN product_groups g ON g.id = p.group_id
        LEFT JOIN LATERAL (
@@ -619,22 +622,37 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    //  Raqamni endi tizim qo'yadi, ya'ni ketma-ketlik SHU YERDA
+    //  hisoblanadi — ikki odam bir vaqtda yozsa ikkalasiga ham bitta
+    //  raqam chiqib qolardi. Qulf tasdiqlashdagi bilan bir xil nomda.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
     const created = [];
     for (const it of items) {
       if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
       const qty = Number(it.qty) || 0;
       if (qty <= 0) throw new Error('Soni kiritilmagan');
 
-      //  ★ KONVER RAQAMI MAJBURIY. Zavod raqamni o'z daftarida yuritadi
-      //  va mahsulotning O'ZIGA yozib qo'yadi: tizim bergan raqam bilan
-      //  qog'ozdagisi boshqa bo'lsa, tsexda turgan konverni jurnaldan
-      //  topib bo'lmasdi.
-      const no = String(it.conveyor_no || '').trim();
-      if (!no) throw new Error('Konver raqami kiritilmagan');
+      //  ★ RAQAMNI TIZIM QO'YADI, XODIM EMAS (zavod qarori, 2026-09).
+      //
+      //  Ilgari raqam so'rovda QO'LDA yozilardi va majburiy edi: zavod
+      //  uni o'z daftarida yuritardi, tizim esa faqat taklif qilardi.
+      //  Ikki daftar ikki xil hisob yuritardi — kimdir taklifni
+      //  qabul qilmay o'zinikini yozsa, ketma-ketlikda teshik qolardi
+      //  yoki bir xil raqam ikki mahsulotda turardi. Endi hisob BITTA
+      //  joyda: kelgan qiymat e'tiborga olinmaydi.
+      //
+      //  Harfi mahsulotdan chiqadi (`noStyleOf`): stol C, stul S,
+      //  sp/penal/kamod K — qaysi tsexniki ekani guruh va marshrutdan
+      //  o'qiladi, kodga yozilmaydi.
+      const { letter, width } = await noStyleOf(client, it.product_id);
+      const no = await nextConveyorNo(client, letter, width);
 
       //  Band raqam SHU YERDA tutiladi, tasdiqlashda emas: aks holda
       //  so'rov navbatda turib, direktor bosganda yiqilardi va sababi
-      //  unga ko'rinmasdi.
+      //  unga ko'rinmasdi. Raqamni endi tizim qo'yadi, ya'ni bu
+      //  tekshiruv kundalik ishda ishlamaydi — lekin eski bazada
+      //  qo'lda yozilgan raqam turgan bo'lishi mumkin va o'shanda
+      //  ketma-ketlik ustiga tushib qolardi.
       //
       //  ★ XABAR KIM USHLAB TURGANINI AYTADI. «Raqam band» ning o'zi
       //  yetarli emas edi: raqamni bo'shatish ikki xil ish — navbatdagi
@@ -890,10 +908,18 @@ async function createOne(client, req, it) {
       'va ishlab chiqarish boshlig\'i kiritadi');
     e.status = 403; throw e;
   }
-  // Raqam bo'sh qoldirilsa server o'zi beradi. Boshlang'ich qoldiqda
-  // esa Q bilan — raqamni tizim qo'ygani ko'rinib tursin.
+  //  Raqam bo'sh qoldirilsa server o'zi beradi. Boshlang'ich qoldiqda
+  //  esa Q bilan — raqamni zavod emas, TIZIM qo'ygani ko'rinib tursin.
+  //
+  //  ★ Qolganida harf MAHSULOTDAN chiqadi (`noStyleOf`): stol C, stul
+  //  S, sp/penal/kamod K. Ilgari bu yerda har doim «K» turardi va
+  //  jurnaldan ochilgan stul ham `K26-...` bo'lib ketardi — so'rov
+  //  orqali ochilgani esa `S26-...` bo'lardi, ya'ni bitta mahsulotning
+  //  raqami qaysi yo'ldan kelganiga qarab boshqacha chiqardi.
   if (!it.conveyor_no || !String(it.conveyor_no).trim()) {
-    it.conveyor_no = await nextConveyorNo(client, it.is_opening ? 'Q' : 'K');
+    const st = it.is_opening ? { letter: 'Q', width: 4 }
+                             : await noStyleOf(client, it.product_id);
+    it.conveyor_no = await nextConveyorNo(client, st.letter, st.width);
   }
 
   // Bo'lim berilsa, u mahsulot marshrutida borligini tekshiramiz

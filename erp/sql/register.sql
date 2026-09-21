@@ -108,6 +108,20 @@ ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS plan_fg_days   INT;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS no_prefix TEXT NOT NULL DEFAULT 'K';
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS no_width  INT  NOT NULL DEFAULT 4;
 
+--  ★ HARF GURUHDA HAM BO'LADI (zavod qarori, 2026-09).
+--
+--      C26-227   stol
+--      K26-103   sp, penal, kamod
+--      S26-462   stul
+--
+--  Stol KORPUS tsexida yuradi, lekin zavod uni «C» bilan yuritadi:
+--  tsexning harfi unga to'g'ri kelmaydi. Muddat kunlari bilan BIR XIL
+--  ikki qavat: TSEXda umumiy qoida turadi, GURUHda esa undan chetga
+--  chiqish. Guruhniki ustun; bo'sh bo'lsa tsexniki olinadi, ya'ni yangi
+--  guruh qo'shilganda u jim qolmaydi va raqam harfsiz chiqmaydi.
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS no_prefix TEXT;
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS no_width  INT;
+
 --  Bir martalik: saytdan o'zgartirilgani keyingi deployda qaytib
 --  qolmasin (izoh: CLAUDE.md, «Bir martalik ma'lumot ko'chirishlar»).
 DO $$
@@ -119,6 +133,16 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'raqam-korinishi') THEN
     UPDATE shops SET no_prefix = 'S', no_width = 3 WHERE code = 'STUL';
     INSERT INTO migration_flags (key) VALUES ('raqam-korinishi');
+  END IF;
+  --  Zavod daftarida raqam UCH xonali: K26-103, C26-227, S26-462.
+  --  Korpus to'rt xonali bo'lib turardi (K26-0041) va tizim bergan
+  --  raqam qog'ozdagisiga o'xshamasdi — tsexda turgan konverni
+  --  jurnaldan topish uchun nolini sanab o'tirish kerak bo'lardi.
+  --  Mingdan oshsa raqam o'zi to'rt xonaga o'tadi (kesilmaydi).
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'raqam-stol-C') THEN
+    UPDATE shops          SET no_width  = 3   WHERE code = 'KORPUS';
+    UPDATE product_groups SET no_prefix = 'C', no_width = 3 WHERE code = 'STL';
+    INSERT INTO migration_flags (key) VALUES ('raqam-stol-C');
   END IF;
   --  Korpus endi ham avtomat, lekin BOSHQA formula bilan: bosqichlar
   --  orasidagi masofa (yuqoridagi izoh). Tsex boshlig'ining qo'lda
