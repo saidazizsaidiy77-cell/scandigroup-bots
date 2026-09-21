@@ -1528,6 +1528,29 @@ test('chiqish sanasidan keyin keladigan konver bron qilinmaydi', async () => {
     'ombordagi konver har qanday sanada olinadi');
 });
 
+//  ★ Zakaz raqami zavod daftaridagi joydan davom etadi (`doc_no_start`).
+//  Tizim o'z hisobidan yursa nakladnoydagi raqam daftardagisiga to'g'ri
+//  kelmasdi va bitta buyurtmani ikki joyda izlash kerak bo'lardi.
+test('zakaz raqami boshlanish raqamidan past tushmaydi', async () => {
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const bosh = (await H.id(`SELECT first_no FROM doc_no_start WHERE prefix = 'Z26-'`));
+  assert.equal(Number(bosh.first_no), 757);
+
+  const z = (await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, items: [] })).body;
+  assert.match(z.order_no, /^Z\d\d-\d{4}$/);
+  const yil = 'Z' + String(new Date().getFullYear()).slice(-2) + '-';
+  if (z.order_no.startsWith('Z26-'))
+    assert.ok(Number(z.order_no.slice(4)) >= 757, z.order_no);
+  else
+    assert.equal(yil, z.order_no.slice(0, 4), 'yil almashsa prefiks ham almashadi');
+
+  //  Keyingisi bittaga oshadi — ketma-ketlik uzilmaydi.
+  const z2 = (await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, items: [] })).body;
+  assert.equal(Number(z2.order_no.slice(4)), Number(z.order_no.slice(4)) + 1);
+});
+
 test('buyurtmada jo\'natish tafsilotlari va mijoz balansi', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
 

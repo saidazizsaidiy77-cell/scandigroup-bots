@@ -345,3 +345,31 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('sotilgan-narx');
   END IF;
 END $$;
+
+-- ══════════════════════════════════════ HUJJAT RAQAMI QAYERDAN BOSHLANADI
+--
+--  ★ ZAVOD O'Z DAFTARIDA RAQAM YURITADI (zavod qarori, 2026-09).
+--
+--  Tizimda buyurtma raqami hozirgacha bo'lgan eng katta raqamdan davom
+--  etardi, zavodning qog'oz daftarida esa hisob boshqa joyda turibdi:
+--  2026 yilda 757-buyurtma yozilgan. Ikki raqam bir-biridan ajralib
+--  ketsa nakladnoydagi raqam daftardagisiga to'g'ri kelmasdi va bitta
+--  buyurtmani ikki joyda izlash kerak bo'lardi.
+--
+--  Shuning uchun har prefiks uchun BOSHLANISH raqami bazada turadi va
+--  hisob shundan past tushmaydi: `GREATEST(eng katta + 1, first_no)`.
+--  Yil almashganda prefiks ham almashadi (`Z27-`) va qator yo'q bo'lsa
+--  hisob eskicha 1 dan boshlanadi — 2027 uchun alohida qator yozish
+--  shart emas.
+--
+--  Raqam KODDA emas, BAZADA: zavod 757 ni 800 ga o'zgartirsa bitta
+--  katakcha tahrirlanadi (omborning `perm` i va tsexning `plan_*_days`
+--  i bilan bir xil idiom). `ON CONFLICT DO NOTHING` — saytdan yoki
+--  qo'lda tuzatilgani keyingi migratsiyada eskisiga qaytib qolmasin.
+CREATE TABLE IF NOT EXISTS doc_no_start (
+  prefix   TEXT PRIMARY KEY,
+  first_no INT  NOT NULL CHECK (first_no > 0)
+);
+
+INSERT INTO doc_no_start (prefix, first_no) VALUES ('Z26-', 757)
+  ON CONFLICT (prefix) DO NOTHING;

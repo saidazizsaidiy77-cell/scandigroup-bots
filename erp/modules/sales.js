@@ -64,11 +64,20 @@ const keeperOf = async () => {
 };
 
 // Z26-0001. Konveyer raqami bilan bir xil shakl: yil + ketma-ket raqam.
+//
+//  ★ BOSHLANISH RAQAMI BAZADA (`doc_no_start`, izoh: `sql/sales.sql`).
+//  Zavod o'z daftarida raqam yuritadi va tizim undan orqada qolmasligi
+//  kerak: nakladnoydagi raqam daftardagisiga to'g'ri kelmasa bitta
+//  buyurtmani ikki joyda izlash kerak bo'lardi. Qator yo'q bo'lsa
+//  (yangi yil, yangi prefiks) hisob eskicha 1 dan boshlanadi.
 async function nextOrderNo(client) {
   const prefix = `Z${String(new Date().getFullYear()).slice(-2)}-`;
   const { rows } = await client.query(
-    `SELECT COALESCE(MAX(SUBSTRING(order_no FROM '\\d+$')::int), 0) + 1 AS n
-       FROM orders WHERE order_no LIKE $1`, [`${prefix}%`]);
+    `SELECT GREATEST(
+              COALESCE(MAX(SUBSTRING(o.order_no FROM '\\d+$')::int), 0) + 1,
+              COALESCE((SELECT first_no FROM doc_no_start WHERE prefix = $1), 1)
+            ) AS n
+       FROM orders o WHERE o.order_no LIKE $1 || '%'`, [prefix]);
   return prefix + String(rows[0].n).padStart(4, '0');
 }
 
