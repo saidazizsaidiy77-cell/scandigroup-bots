@@ -45,8 +45,8 @@
     <button onclick="clearFilters()">Filtrni tozalash</button>
   </div>
   <div style="margin-top:16px">
-    <label>Maxsulot guruhi <span class="muted" style="text-transform:none;
-      letter-spacing:0">— keraksizini bosib o'chiring</span></label>
+    <label>Maxsulot guruhi <span class="muted" id="fGroupsHint"
+      style="text-transform:none;letter-spacing:0">— keragini bosing</span></label>
     <div class="row" id="fGroups" style="gap:8px;flex-wrap:wrap"></div>
   </div>
 </div>
@@ -236,32 +236,35 @@ function shopChanged(){
   load();
 }
 
-// Guruhlar ochilma ro'yxat emas, yoqib-o'chiriladigan tugma: "stuldan
-// tashqari hammasi" degan savolga bittalik tanlov javob bermaydi.
+// Guruhlar ochilma ro'yxat emas, yoqib-o'chiriladigan tugma: "stul va
+// stol" degan savolga bittalik tanlov javob bermaydi.
+//
+// ★ BOSILGANI TANLANADI, O'CHMAYDI (2026-09). Ilgari teskari edi:
+// hammasi yoqilgan turardi va bosilgani ro'yxatdan CHIQARDI
+// («keraksizini bosib o'chiring»). Odam esa tugmani ko'rganda uni
+// TANLASH deb o'qiydi — «Stul» ni bosib, stuldan boshqa hammasini
+// olardi va filtr buzuq deb o'ylardi. Endi bosilgani qo'shiladi:
+// birinchisi — faqat o'sha, ikkinchisi — ikkalasi.
+//
 // Bo'sh to'plam — hech qanday cheklov yo'q, ya'ni hammasi ko'rinadi.
 let allGroups = [], groupSel = new Set();
 
+// Hammasi tanlangani ham «cheklov yo'q» degani: so'rovga ortiqcha
+// ro'yxat yozilmaydi. Lekin to'plamning O'ZI tozalanmaydi — bosilgan
+// tugma yonib turishi kerak, aks holda beshinchisini bosganda
+// hammasi birdan o'chgandek ko'rinardi.
+const groupAll = () => !groupSel.size || groupSel.size === allGroups.length;
+
 function drawGroups(){
-  $('fGroups').innerHTML = allGroups.map(([id, name]) => {
-    const on = !groupSel.size || groupSel.has(id);
-    return `<button class="chip${on ? ' on' : ''}" onclick="toggleGroup(${id})"
-      >${esc(name)}</button>`;
-  }).join('');
+  $('fGroups').innerHTML = allGroups.map(([id, name]) =>
+    `<button class="chip${groupSel.has(id) ? ' on' : ''}"
+       onclick="toggleGroup(${id})">${esc(name)}</button>`).join('');
+  const h = $('fGroupsHint');
+  if (h) h.textContent = groupAll() ? '— hammasi' : '— keragini bosing';
 }
 
 function toggleGroup(id){
-  // "Hammasi" holatidan birinchi bosishda aniq ro'yxatga o'tamiz, shunda
-  // bosilgan guruh ro'yxatdan chiqadi — odam aynan shuni kutadi.
-  if (!groupSel.size) allGroups.forEach(([g]) => groupSel.add(g));
-  if (groupSel.has(id)){
-    // Oxirgi guruhni ham o'chirib bo'lmaydi: bo'sh jadval hech kimga
-    // kerak emas, va bo'sh to'plam "hammasi" degani.
-    if (groupSel.size === 1) return;
-    groupSel.delete(id);
-  } else {
-    groupSel.add(id);
-  }
-  if (groupSel.size === allGroups.length) groupSel.clear();
+  groupSel.has(id) ? groupSel.delete(id) : groupSel.add(id);
   drawGroups();
   load();
 }
@@ -270,7 +273,7 @@ function params(){
   const p = new URLSearchParams();
   if ($('fOrder').value.trim())  p.set('order_no', $('fOrder').value.trim());
   if ($('fFason').value)         p.set('fason_id', $('fFason').value);
-  if (groupSel.size)             p.set('group_ids', [...groupSel].join(','));
+  if (!groupAll())               p.set('group_ids', [...groupSel].join(','));
   if ($('fShop').value)          p.set('shop_id', $('fShop').value);
   if ($('fSection').value)       p.set('section_id', $('fSection').value);
   if ($('fCust').value)          p.set('customer_id', $('fCust').value);
