@@ -136,6 +136,10 @@ const App = (() => {
     { code: 'sales',      name: 'Savdo',                perm: ['sales.view', 'sales.manage'] },
     { code: 'purchasing', name: "Ta'minot",             perm: ['purchasing.view', 'purchasing.manage'] },
     { code: 'warehouse',  name: 'Ombor',                perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
+    //  Xom ashyo ALOHIDA bo'lim: «Ombor» da konver yuradi va uni ombor
+    //  mudiri yuritadi, bu yerda esa material va uni tsexga xom ashyo
+    //  ombori xodimi beradi — ikki xil ish, ikki xil odam.
+    { code: 'materials',  name: 'Xom ashyo',            perm: ['materials.view', 'materials.request', 'materials.manage'] },
     { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage', 'production.request', 'production.approve'] },
     { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
     { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
@@ -320,6 +324,16 @@ const App = (() => {
     { mod: 'sales', nav: 'Solishtirma dalolatnoma',     perm: ['sales.view'] },
 
     // Ta'minot
+    //  Xom ashyo
+    { href: '/materiallar.html', mod: 'materials', nav: 'Xom ashyo',
+      title: 'Xom ashyo', lead: 'Material spravochnigi',
+      text: "Nomi \u00b7 o'lchov birligi \u00b7 turkumi \u00b7 har rang alohida material",
+      perm: ['materials.view', 'materials.request', 'materials.manage',
+             'production.manage'] },
+    { mod: 'materials', nav: 'Tsex omborlari qoldig\'i', perm: ['materials.view'] },
+    { mod: 'materials', nav: 'Talabnoma',                perm: ['materials.request'] },
+    { mod: 'materials', nav: 'Sarf',                     perm: ['materials.request'] },
+
     { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },
     { mod: 'purchasing', nav: 'Kirim shakllantirish',              perm: ['purchasing.manage'] },
     { mod: 'purchasing', nav: 'Kirimlar arxivi',                   perm: ['purchasing.view'] },

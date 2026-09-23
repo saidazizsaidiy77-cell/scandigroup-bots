@@ -1769,6 +1769,87 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
   }
 });
 
+test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {
+  //  ★ HAR RANG ALOHIDA MATERIAL (zavod qarori): «LDSP 16mm oq» va
+  //  «LDSP 16mm venge» — ikkita qator, har birining o'z qoldig'i.
+  //  Rang ustun EMAS: ustun bo'lsa qoldiq material bo'yicha yig'ilib,
+  //  «oq LDSP tugadi» degan savolga javob bo'lmasdi.
+
+  //  Tsex omborlari TSEXGA bog'langan: mas'ul kodga yozilmaydi
+  //  (4-qoida), u ombor tsexidan va xodimning doirasidan chiqadi.
+  const tsexOmbor = (await H.id(
+    `SELECT COUNT(*)::int AS n FROM warehouses w JOIN shops s ON s.id = w.shop_id
+      WHERE w.kind = 'material' AND w.code LIKE 'TSEX-%'`)).n;
+  assert.equal(tsexOmbor, 7, 'yettita tsex ombori');
+
+  //  Tayyor mahsulot sahifalariga tsex omborlari CHIQMAYDI: qoida
+  //  ombor qatorida (`warehouses.perm`), kodda emas — `materials.view`
+  //  bo'lmagan xodim ularni umuman ko'rmaydi.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM warehouses
+      WHERE code LIKE 'TSEX-%' AND perm = 'materials.view'`)).n, 7);
+  const savdoOmbor = (await (await xodim('Sinov xom savdo', 'sotuvchi'))
+    ('GET', '/api/warehouse/list')).body.rows;
+  assert.ok(!savdoOmbor.some((w) => String(w.code).startsWith('TSEX-')),
+    'tsex ombori tayyor mahsulot ro\'yxatida turmaydi');
+
+  //  Spravochnikni xom ashyo ombori xodimi yuritadi.
+  const xom = await xodim('Sinov xom ombor', 'xom_ombor');
+  const ref = await xom('GET', '/api/materials/ref');
+  assert.equal(ref.status, 200, ref.text);
+  assert.ok(ref.body.uoms.length && ref.body.categories.length);
+  assert.equal(ref.body.warehouses.filter(
+    (w) => String(w.code).startsWith('TSEX-')).length, 7);
+
+  const m = await xom('POST', '/api/materials',
+    { name: 'LDSP 16mm oq', uom: 'list', category: 'LDSP' });
+  assert.equal(m.status, 200, m.text);
+
+  //  Bir xil nom IKKINCHI marta kirmaydi: qoldiq ikkiga bo'linardi.
+  const takror = await xom('POST', '/api/materials',
+    { name: 'ldsp 16mm OQ', uom: 'list' });
+  assert.equal(takror.status, 400, takror.text);
+
+  //  Rang boshqa bo'lsa — BOSHQA material, u kiraveradi.
+  assert.equal((await xom('POST', '/api/materials',
+    { name: 'LDSP 16mm venge', uom: 'list', category: 'LDSP' })).status, 200);
+
+  //  Fayldan yuklash: avval TEKSHIRIB ko'rsatiladi, keyin saqlanadi.
+  //  Ustunlar SARLAVHADAN topiladi, tartibi muhim emas.
+  const fayl = ["Turkumi;Nomi;O'lchov birligi",
+                'Mato;Mato Velvet qora;metr',
+                'Furnitura;Petlya Blum;dona'];
+  const kor = await (await post('/api/import/materials', fayl)).json();
+  assert.equal(kor.total, 2);
+  assert.equal(kor.bad, 0, JSON.stringify(kor.rows));
+
+  const saq = await (await post('/api/import/materials?save=1', fayl)).json();
+  assert.equal(saq.saved, 2);
+
+  //  Notanish o'lchov birligi butun faylni to'xtatadi: yarim kirgan
+  //  ro'yxat eng yomoni — qaysi biri o'tgani bilinmay qoladi.
+  assert.equal((await post('/api/import/materials?save=1',
+    ['Nomi;Birlik', 'Smala;bochka'])).status, 400);
+  assert.ok(!(await xom('GET', '/api/materials?q=Smala')).body.rows.length,
+    'xato fayldan hech narsa saqlanmaydi');
+
+  //  Tsex boshlig'i ro'yxatni KO'RADI (nimani so'rasa bo'ladi), lekin
+  //  spravochnikni yuritmaydi.
+  const usta = await xodim('Sinov xom usta', 'tsex_usta');
+  assert.equal((await usta('GET', '/api/materials')).status, 200);
+  assert.equal((await usta('POST', '/api/materials',
+    { name: 'Ruxsatsiz material', uom: 'dona' })).status, 403);
+
+  //  Material O'CHIRILMAYDI — faolsizlantiriladi: u eski hujjatlarda
+  //  turgan bo'lishi mumkin (harajat moddasi bilan bir xil qoida).
+  assert.equal((await xom('PATCH', '/api/materials/' + m.body.id,
+    { active: false })).status, 200);
+  const royxat = (await xom('GET', '/api/materials')).body.rows;
+  assert.ok(!royxat.some((r) => r.id === m.body.id), 'faolsizi ro\'yxatda yo\'q');
+  assert.ok((await xom('GET', '/api/materials?all=1')).body.rows
+    .some((r) => r.id === m.body.id), 'faolsizi ham so\'ralsa keladi');
+});
+
 test('stol va stulni FAQAT savdo so\'raydi, rangi bilan', async () => {
   //  ★ ZAVOD QARORI (2026-09). Stol va stul mijozning so'rovi bilan
   //  ishlanadi: nechta va qaysi rangda kerakligini savdo biladi, tsex

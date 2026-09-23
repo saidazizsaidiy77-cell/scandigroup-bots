@@ -54,6 +54,7 @@ app.use('/api/import', require('./modules/import'));
 app.use('/api/warehouse', require('./modules/warehouse'));
 app.use('/api/sales', require('./modules/sales'));
 app.use('/api/cash', require('./modules/cash'));
+app.use('/api/materials', require('./modules/materials'));
 // Menyudagi navbat belgisi: har bo'limda nechta ish kutayotgani.
 // Huquq tekshiruvi modul ichida — har navbat o'z egasiga ko'rinadi.
 app.use('/api/navbat', require('./modules/nav'));

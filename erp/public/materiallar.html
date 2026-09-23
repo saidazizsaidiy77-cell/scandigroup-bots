@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xom ashyo · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body class="wide">
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Xom ashyo</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px;
+    align-items:flex-end">
+    <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="min-width:220px"><label>Qidiruv</label>
+        <input id="fQ" placeholder="nomi yoki kodi" oninput="deb()"></div>
+      <div style="min-width:180px"><label>Turkum</label>
+        <select id="fCat" onchange="load()"></select></div>
+      <label class="row" style="gap:8px;align-items:center;text-transform:none;
+        font-size:14px;cursor:pointer">
+        <input type="checkbox" id="fOff" style="width:auto" onchange="load()">
+        <span>Faolsizi ham</span></label>
+    </div>
+    <div class="row" style="gap:8px" id="tools"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h2 style="margin:0">Materiallar</h2>
+    <span class="muted" id="cnt" style="font-size:13px"></span>
+  </div>
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+//  XOM ASHYO SPRAVOCHNIGI.
+//
+//  ★ HAR RANG ALOHIDA MATERIAL (zavod qarori): «LDSP 16mm oq» va
+//  «LDSP 16mm venge» — ikkita qator, har birining o'z qoldig'i va o'z
+//  narxi. Rang ustun EMAS: ustun bo'lsa qoldiq material bo'yicha
+//  yig'ilib, «oq LDSP tugadi» degan savolga javob bo'lmasdi.
+//
+//  Ro'yxat FAYLDAN yuklanadi — zavodda yuzlab material bor va ularni
+//  qo'lda terib chiqish bir kunlik ish va o'nlab xato bo'lardi.
+//  Mijozlar va ta'minotchilar bilan bir xil yo'l: avval TEKSHIRIB
+//  ko'rsatiladi, xato qator bo'lsa hech narsa saqlanmaydi.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+let ref = { categories: [], uoms: [], warehouses: [] };
+let rows = [], picked = null;
+const boshqara = () => App.can('materials.manage', 'production.manage');
+
+function toast(msg, bad) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), bad ? 5000 : 2600);
+}
+
+let t1 = null;
+const deb = () => { clearTimeout(t1); t1 = setTimeout(load, 350); };
+
+async function boot() {
+  ref = await App.api('/api/materials/ref');
+  $('fCat').innerHTML = '<option value="">Barcha turkum</option>'
+    + ref.categories.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join('');
+  $('tools').innerHTML = boshqara()
+    ? `<button onclick="yangi()">+ Material</button>
+       <button class="primary" onclick="yuklash()">Fayldan yuklash</button>`
+    : '';
+  await load();
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
+  if ($('fCat').value)      q.set('category', $('fCat').value);
+  if ($('fOff').checked)    q.set('all', '1');
+  rows = (await App.api('/api/materials?' + q)).rows;
+  draw();
+}
+
+function draw() {
+  $('cnt').textContent = rows.length ? `${rows.length} ta` : '';
+  if (!rows.length) {
+    $('body').innerHTML = `<p class="muted">Material yo'q.${
+      boshqara() ? ' Ro\'yxatni fayldan yuklang.' : ''}</p>`;
+    return;
+  }
+  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Nomi</th><th>Turkum</th><th>O'lchov</th><th>Kod</th>
+      <th>Izoh</th>${boshqara() ? '<th></th>' : ''}</tr></thead>
+    <tbody>${rows.map((r) => `<tr${r.active ? '' : ' style="opacity:.5"'}>
+      <td><b>${esc(r.name)}</b>${r.active ? ''
+        : ' <span class="tag">faolsiz</span>'}</td>
+      <td class="muted">${esc(r.category_name || '—')}</td>
+      <td class="muted">${esc(r.uom_name || r.uom)}</td>
+      <td class="muted">${esc(r.code || '')}</td>
+      <td class="muted" style="font-size:12px">${esc(r.note || '')}</td>
+      ${boshqara() ? `<td class="num"><button onclick="tahrir(${r.id})">✎</button></td>` : ''}
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+const yop = () => { $('modalRoot').innerHTML = ''; };
+
+//  Bitta material qo'lda ham qo'shiladi: ro'yxat fayldan yuklanadi,
+//  lekin ertaga bitta yangi material kelsa fayl yasab o'tirmasin.
+function oyna(r) {
+  const royxat = (list, v, bosh) => `<option value="">${bosh}</option>`
+    + list.map((x) => `<option value="${esc(x.code)}"${
+        x.code === v ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:560px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>${r ? 'Material' : 'Yangi material'}</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <div class="grid g2">
+          <div class="wide"><label>Nomi</label>
+            <input id="mName" value="${esc(r?.name || '')}"
+              placeholder="LDSP 16mm oq"></div>
+          <div><label>O'lchov birligi</label>
+            <select id="mUom">${royxat(ref.uoms, r?.uom, '— tanlang —')}</select></div>
+          <div><label>Turkum</label>
+            <select id="mCat">${royxat(ref.categories, r?.category, "— yo'q —")}</select></div>
+          <div><label>Kod</label>
+            <input id="mCode" value="${esc(r?.code || '')}" placeholder="ixtiyoriy"></div>
+          <div><label>Izoh</label>
+            <input id="mNote" value="${esc(r?.note || '')}" placeholder="ixtiyoriy"></div>
+          ${r ? `<div class="wide"><label class="row" style="gap:10px;
+            align-items:center;text-transform:none;font-size:14px;cursor:pointer">
+            <input type="checkbox" id="mActive" style="width:auto"${
+              r.active ? ' checked' : ''}>
+            <span>Faol — ro'yxatlarda turadi</span></label>
+            <div class="hint">Material O'CHIRILMAYDI: u eski hujjatlarda
+              turgan bo'lishi mumkin. Keraksizi faolsizlantiriladi.</div></div>` : ''}
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          ★ Har rang alohida material: «LDSP 16mm oq» va «LDSP 16mm venge» —
+          ikkita qator. Rang ustun emas, u nomning ichida turadi.</p>
+        <button class="primary" style="margin-top:14px"
+          onclick="saqla(${r ? r.id : 'null'})">Saqlash</button>
+      </div></div>`;
+}
+
+const yangi  = () => oyna(null);
+const tahrir = (id) => oyna(rows.find((x) => x.id === id));
+
+async function saqla(id) {
+  const it = {
+    name: $('mName').value.trim(), uom: $('mUom').value || null,
+    category: $('mCat').value || null, code: $('mCode').value.trim() || null,
+    note: $('mNote').value.trim() || null,
+  };
+  if (!it.name) return toast('Nomi kiritilmagan', true);
+  if (!it.uom)  return toast("O'lchov birligi tanlanmagan", true);
+  if (id != null) it.active = $('mActive').checked;
+  try {
+    await App.api(id == null ? '/api/materials' : '/api/materials/' + id,
+      { method: id == null ? 'POST' : 'PATCH', body: JSON.stringify(it) });
+    yop(); toast('Saqlandi'); await load();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ───────────────────────────────────────────────────── FAYLDAN YUKLASH
+//
+//  Ikki bosqich: avval TEKSHIRIB ko'rsatiladi (nechta qator, nechtasi
+//  mavjud, qaysi qatorda xato), keyin saqlanadi. Xato qator bo'lsa
+//  hech narsa saqlanmaydi — yarim kirgan ro'yxat eng yomoni: qaysi
+//  biri o'tgani bilinmay qoladi.
+function yuklash() {
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:640px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Fayldan yuklash</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:12px">Excel (.xlsx) yoki CSV.
+          Ustunlar SARLAVHADAN topiladi, tartibi muhim emas.<br>
+          Kerakli: <b>Nomi</b> va <b>O'lchov birligi</b>.
+          Ixtiyoriy: Turkum · Kod · Izoh.</p>
+        <input type="file" accept=".xlsx,.csv,.txt" onchange="tanla(this)">
+        <div id="impOut" style="margin-top:14px"></div>
+      </div></div>`;
+}
+
+async function tanla(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  picked = file;
+  $('impOut').innerHTML = '<p class="muted">Tekshirilmoqda…</p>';
+  try { korsat(await App.upload('/api/import/materials', file), file.name); }
+  catch (e) { $('impOut').innerHTML =
+    `<p class="tag bad" style="display:block">${esc(e.message)}</p>`; }
+}
+
+function korsat(r, nom) {
+  const bad = r.rows.filter((x) => x.errors.length);
+  $('impOut').innerHTML = `
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <b>${esc(nom)}</b>
+      <span class="muted" style="font-size:13px">${r.total} qator${
+        r.updates ? ` · ${r.updates} tasi mavjud` : ''}</span></div>
+    ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
+      Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+    ${bad.length ? `
+      <div style="max-height:30vh;overflow:auto;margin-bottom:10px">
+        <table><tbody>${bad.map((x) => `
+          <tr><td style="width:70px" class="muted">${x.line}-qator</td>
+              <td>${esc(x.errors.join(' · '))}</td></tr>`).join('')}</tbody></table></div>
+      <p class="muted" style="font-size:13px">${r.bad} ta qatorda xato bor.
+        Faylni tuzatib qaytadan tanlang — xato qator bo'lsa hech narsa
+        saqlanmaydi.</p>`
+    : `<p class="muted" style="font-size:13px;margin-bottom:12px">Hamma qator to'g'ri.${
+        r.updates ? ` Mavjud ${r.updates} tasining bo'sh maydonlari to'ldiriladi.` : ''}</p>
+      <button class="primary" id="impSave" onclick="saqlaFayl()" style="width:100%"
+        >${r.total} ta materialni saqlash</button>`}`;
+}
+
+async function saqlaFayl() {
+  $('impSave').disabled = true;
+  try {
+    const r = await App.upload('/api/import/materials?save=1', picked);
+    yop(); await load();
+    toast(`${r.saved} ta material kiritildi`
+      + (r.updated ? ` · ${r.updated} tasi yangilandi` : ''));
+  } catch (e) {
+    toast(e.message, true);
+    const b = $('impSave'); if (b) b.disabled = false;
+  }
+}
+
+App.start(boot, 'materials.view', 'materials.manage', 'materials.request',
+  'production.manage');
+</script>
+</body>
+</html>

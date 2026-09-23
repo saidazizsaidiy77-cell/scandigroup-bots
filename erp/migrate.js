@@ -30,6 +30,11 @@ const FILES = [
   //  to'lovlarni ham o'qiydi, ya'ni `cash_ops` dan keyin qurilishi
   //  kerak. Shuning uchun o'sha ikki view ham shu faylda.
   'cash.sql',            // kassa: hisoblar, harajat moddalari, pul harakati
+  //  Xom ashyo KASSADAN KEYIN: tsex omborlari `warehouses` ga qator
+  //  qo'shadi va u `warehouse.sql` da yaratiladi. Spravochnikning
+  //  o'zi hech kimga bog'liq emas, lekin ikkalasi bitta faylda
+  //  turgani ma'qul: modul bitta joydan o'qiladi.
+  'materials.sql',       // xom ashyo: spravochnik va tsex omborlari
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

@@ -38,6 +38,16 @@ INSERT INTO permissions (code, module, name) VALUES
   -- Xom ashyo omborlarini ko'rish. T/M ombordan alohida: savdo tayyor
   -- mahsulotni ko'radi, xom ashyoni esa ta'minot va o'z mudiri.
   ('warehouse.material','warehouse',  'Xom ashyo omborlarini ko''rish'),
+  --  ★ XOM ASHYO MODULI (zavod qarori, 2026-09). Tayyor mahsulot
+  --  ombori bilan bir xil huquqlar yozilmadi: u yerda konver yuradi,
+  --  bu yerda esa material — va ularni bitta odam yuritmaydi.
+  --  Uch huquq, uch xil odam:
+  --    view    — spravochnik va qoldiq (rahbariyat, ta'minot);
+  --    request — tsex boshlig'i: talabnoma yozadi va sarfni yozadi;
+  --    manage  — xom ashyo ombori xodimi: tayyorlaydi va chiqaradi.
+  ('materials.view',    'materials',  'Xom ashyo spravochnigi va qoldig''i'),
+  ('materials.request', 'materials',  'Talabnoma yozish va sarfni yozish'),
+  ('materials.manage',  'materials',  'Xom ashyo ombori: kirim, chiqim, tayyorlash'),
   -- Ta'minot (rejada)
   ('purchasing.view',   'purchasing', 'Ta''minotchilar va buyurtmalarni ko''rish'),
   ('purchasing.manage', 'purchasing', 'Ta''minot buyurtmasi berish'),
@@ -85,7 +95,12 @@ INSERT INTO roles (code, name, surface, sort) VALUES
   ('sotuvchi',     'Sotuv menejeri',          'web',    10),
   ('kassir',       'Kassir',                  'web',    11),
   ('buxgalter',    'Buxgalter',               'web',    12),
-  ('hr',           'HR / kadrlar',            'web',    13)
+  ('hr',           'HR / kadrlar',            'web',    13),
+  --  ★ XOM ASHYO OMBORI — ALOHIDA ODAM (zavod qarori, 2026-09).
+  --  Tayyor mahsulot ombori mudiri bilan bitta rolga qo'shilmadi:
+  --  u yerda konver sanaladi va mijozga chiqariladi, bu yerda esa
+  --  material tsexga beriladi — ikki xil ish, ikki xil odam.
+  ('xom_ombor',    'Xom ashyo ombori',        'web',    14)
 ON CONFLICT (code) DO NOTHING;
 
 --  Eski bazada tartib eskicha qolgan (`ON CONFLICT DO NOTHING` uni
@@ -121,6 +136,9 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('ishlab_boshl', 'production.plan'),
   ('ishlab_boshl', 'production.reports'), ('ishlab_boshl', 'warehouse.view'),
   ('ishlab_boshl', 'warehouse.material'),
+  --  Xom ashyo: boshliq butun zavodning talabnomasini ko'radi va o'zi
+  --  ham yozadi — tsexlar uning ostida.
+  ('ishlab_boshl', 'materials.view'), ('ishlab_boshl', 'materials.request'),
 
   -- Ma'lumot kirituvchining ishi BITTA: ishlab chiqarishga kiradigan
   -- konverni yozib berish. Kiritgani TASDIQDAN o'tadi (izoh:
@@ -137,6 +155,12 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  lekin konverni o'zi ochmaydi — so'rov yozadi (izoh: sql/units.sql).
   ('tsex_usta',    'production.entry'), ('tsex_usta', 'production.request'),
   ('tsex_usta',    'production.plan'),
+  --  ★ TSEX OMBORI BOSHLIQNIKI (zavod qarori, 2026-09). Talabnomani
+  --  u yozadi (qaysi ombordan, nima, qancha, qachon kerak) va sarfni
+  --  ham u yozadi. Qaysi ombor uniki ekani KODDA emas: ombor tsexga
+  --  biriktiriladi (`warehouses.shop_id`), xodimda esa tsex doirasi
+  --  bor — ismlar kodga yozilmaydi (4-qoida).
+  ('tsex_usta',    'materials.view'), ('tsex_usta', 'materials.request'),
   ('operator',     'production.entry'),
 
   -- Ombor mudiri: zavodning HAMMA omborini ko'radi — tayyor mahsulot,
@@ -149,6 +173,15 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
 
   ('taminotchi',   'purchasing.view'), ('taminotchi', 'purchasing.manage'),
   ('taminotchi',   'warehouse.view'), ('taminotchi', 'warehouse.material'),
+  --  Ta'minotchi xom ashyoni SOTIB OLADI: qoldiqni ko'rishi kerak
+  --  (nima tugadi), lekin tsexga berish ombor xodimining ishi.
+  ('taminotchi',   'materials.view'),
+
+  --  ★ XOM ASHYO OMBORI XODIMI. Talabnomani ko'radi, tayyorlaydi va
+  --  chiqaradi; chiqarilgan material avtomat tsex omboriga tushadi.
+  --  Tayyor mahsulot ombori unga ochilmaydi — u boshqa odamning ishi.
+  ('xom_ombor',    'materials.view'), ('xom_ombor', 'materials.manage'),
+  ('xom_ombor',    'purchasing.view'),
 
   -- Sotuv menejeriga ishlab chiqarishdan FAQAT jurnal: o'z buyurtmasi
   -- qaysi bo'limda turganini bilishi kerak. Zavod yuklamasi, panel va

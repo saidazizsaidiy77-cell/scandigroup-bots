@@ -781,4 +781,167 @@ router.post('/suppliers', need('purchasing.manage'),
     } finally { client.release(); }
   }));
 
+// ─────────────────────────────────────────────── XOM ASHYO SPRAVOCHNIGI
+//
+//  Zavodda yuzlab material bor va ularni qo'lda terib chiqish bir
+//  kunlik ish va o'nlab xato bo'lardi — mijozlar va ta'minotchilar
+//  bilan bir xil yo'l: avval TEKSHIRIB ko'rsatiladi, xato qator bo'lsa
+//  hech narsa saqlanmaydi; qayta yuklashda yozilgani o'chmaydi, faqat
+//  bo'sh maydon to'ladi.
+//
+//  ★ HAR RANG ALOHIDA MATERIAL (zavod qarori): rang ustun EMAS, u
+//  nomning ichida turadi — «LDSP 16mm oq» va «LDSP 16mm venge»
+//  ikkita qator bo'ladi. Ustun bo'lsa qoldiq material bo'yicha
+//  yig'ilib, «oq LDSP tugadi» degan savolga javob bo'lmasdi.
+const MFIELDS = {
+  name:     ['material', 'materialnomi', 'nomi', 'nom', 'nomlanishi',
+             'наименование', 'материал'],
+  code:     ['kod', 'kodi', 'artikul', 'код', 'артикул'],
+  //  Zavod faylida ustun «O'lchov birligi» yoki qisqa «birlik» bo'ladi.
+  uom:      ['olchovbirligi', 'olchov', 'birlik', 'birligi', 'olchambirligi',
+             'edizm', 'единицаизмерения', 'ед', 'единица'],
+  category: ['turkum', 'turkumi', 'turi', 'tur', 'guruh', 'guruhi',
+             'kategoriya', 'категория', 'группа'],
+  note:     ['izoh', 'izohi', 'примечание', 'комментарий'],
+};
+
+router.post('/materials', need('materials.manage', 'production.manage'),
+  express.raw({ type: '*/*', limit: '10mb' }),
+  wrap(async (req, res) => {
+    const buf = req.body;
+    if (!buf || !buf.length) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    let table;
+    try {
+      table = isXlsx(buf) ? readSheet(buf) : parseCsv(buf.toString('utf8'));
+    } catch (e) {
+      e.status = 400; e.message = 'Faylni o\'qib bo\'lmadi: ' + e.message; throw e;
+    }
+
+    const headIdx = table.findIndex((r) => r.some((c) => String(c).trim()));
+    if (headIdx < 0) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    const map = {}, unknown = [];
+    table[headIdx].forEach((h, i) => {
+      const n = norm(h);
+      if (!n) return;
+      const f = Object.keys(MFIELDS).find((k) => MFIELDS[k].includes(n));
+      if (f) { if (map[f] == null) map[f] = i; } else unknown.push(String(h).trim());
+    });
+    if (map.name == null) {
+      const e = new Error(
+        'Material nomi ustuni topilmadi. Sarlavhada «Nomi» yoki «Material» ' +
+        'bo\'lishi kerak. Topilgan ustunlar: ' +
+        table[headIdx].filter(Boolean).join(', '));
+      e.status = 400; throw e;
+    }
+    if (map.uom == null) {
+      const e = new Error(
+        'O\'lchov birligi ustuni topilmadi. Sarlavhada «O\'lchov birligi» ' +
+        'yoki «Birlik» bo\'lishi kerak. Topilgan ustunlar: ' +
+        table[headIdx].filter(Boolean).join(', '));
+      e.status = 400; throw e;
+    }
+
+    const [cat, uom, cur] = await Promise.all([
+      db.query(`SELECT code, name FROM material_categories ORDER BY sort`),
+      db.query(`SELECT code, name FROM material_uoms ORDER BY sort`),
+      db.query(`SELECT name FROM materials`),
+    ]);
+    //  Kodi bilan ham, nomi bilan ham topiladi: zavod faylida «MDF»
+    //  deb turishi ham, «Qadoqlash materiali» deb turishi ham mumkin.
+    const byCat = new Map();
+    for (const c of cat.rows) { byCat.set(norm(c.code), c.code); byCat.set(norm(c.name), c.code); }
+    const byUom = new Map();
+    for (const u of uom.rows) { byUom.set(norm(u.code), u.code); byUom.set(norm(u.name), u.code); }
+    //  Zavodda ko'p uchraydigan yozuvlar: «м2», «шт», «кг».
+    for (const [a, b] of [['m2', 'm2'], ['kv', 'm2'], ['kvm', 'm2'], ['m3', 'm3'],
+                          ['sht', 'dona'], ['pcs', 'dona'], ['db', 'dona'],
+                          ['l', 'litr'], ['metr', 'm'], ['pm', 'm'],
+                          ['kompl', 'komplekt'], ['kmpl', 'komplekt']])
+      if (!byUom.has(a) && byUom.has(b)) byUom.set(a, b);
+    const existing = new Set(cur.rows.map((c) => norm(c.name)));
+
+    const seen = new Set();
+    const rows = [];
+    for (let i = headIdx + 1; i < table.length; i++) {
+      const cells = table[i];
+      if (!cells.some((c) => String(c).trim())) continue;
+      const at = (f) => (map[f] == null ? '' : String(cells[map[f]] ?? '').trim());
+      const errors = [];
+      const it = {};
+
+      const name = at('name');
+      if (!name) errors.push('Material nomi bo\'sh');
+      else if (seen.has(norm(name))) errors.push(`Faylda takrorlangan: «${name}»`);
+      else seen.add(norm(name));
+      it.name = name;
+
+      const birlik = at('uom');
+      if (!birlik) errors.push('O\'lchov birligi bo\'sh');
+      else {
+        const code = byUom.get(norm(birlik));
+        if (!code) errors.push(`Bunday o'lchov birligi yo'q: «${birlik}». Bor: ` +
+          uom.rows.map((u) => u.name).join(', '));
+        else it.uom = code;
+      }
+
+      const turkum = at('category');
+      if (turkum) {
+        const code = byCat.get(norm(turkum));
+        if (!code) errors.push(`Bunday turkum yo'q: «${turkum}». Bor: ` +
+          cat.rows.map((c) => c.name).join(', '));
+        else it.category = code;
+      }
+
+      it.code = at('code') || null;
+      it.note = at('note') || null;
+      rows.push({ line: i + 1, it, errors, exists: existing.has(norm(name)) });
+    }
+    if (!rows.length) { const e = new Error('Faylda qator yo\'q'); e.status = 400; throw e; }
+
+    const bad = rows.filter((r) => r.errors.length);
+
+    if (req.query.save !== '1') {
+      return res.json({
+        preview: true, columns: Object.keys(map), unknown,
+        total: rows.length, bad: bad.length,
+        updates: rows.filter((r) => r.exists).length,
+        rows: rows.slice(0, 200),
+      });
+    }
+    if (bad.length) {
+      const e = new Error(`${bad.length} ta qatorda xato bor — saqlanmadi`);
+      e.status = 400; throw e;
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      for (const r of rows) {
+        //  Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh maydon
+        //  to'ladi. O'lchov birligi esa YANGILANADI: u materialning
+        //  o'zi haqida va faylda tuzatilgan bo'lishi mumkin.
+        await client.query(
+          `INSERT INTO materials (code, name, uom, category, note, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (lower(name)) DO UPDATE SET
+             code     = COALESCE(EXCLUDED.code,     materials.code),
+             uom      = EXCLUDED.uom,
+             category = COALESCE(EXCLUDED.category, materials.category),
+             note     = COALESCE(EXCLUDED.note,     materials.note)`,
+          [r.it.code, r.it.name, r.it.uom, r.it.category || null, r.it.note,
+           req.user.id]);
+      }
+      await audit(req, { module: 'materials', action: 'import', entity: 'materials',
+                         entity_id: rows.length, payload: { count: rows.length } }, client);
+      await client.query('COMMIT');
+      res.json({ saved: rows.length, updated: rows.filter((r) => r.exists).length });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (!e.status) e.status = 400;
+      throw e;
+    } finally { client.release(); }
+  }));
+
 module.exports = router;
