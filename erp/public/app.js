@@ -172,7 +172,9 @@ const App = (() => {
     { href: '/sorovlar.html', mod: 'production', nav: "Konver qo'shish",
       title: "Konver qo'shish", lead: 'Kiritildi → tasdiqlandi',
       text: "Ishlab chiqarishga nima kirishi kiritiladi, konver esa rahbariyat tasdiqlagandan keyin ochiladi",
-      perm: ['production.request', 'production.approve'] },
+      //  Savdo ham shu sahifadan yozadi: stol va stul so'rovini endi
+      //  FAQAT u beradi (izoh: modules/units.js, requestOne).
+      perm: ['production.request', 'production.approve', 'sales.manage'] },
     { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
       title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',
       text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",

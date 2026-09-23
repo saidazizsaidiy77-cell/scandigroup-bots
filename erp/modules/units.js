@@ -522,7 +522,11 @@ router.get('/next-no', need(...UNITS), wrap(async (_req, res) => {
  *    · Tasdiqlash konverni ODATDAGI `createOne()` bilan ochadi: raqam,
  *      harakat yozuvi va jamlanma hisobot bir xil yo'ldan o'tadi.
  * ========================================================================== */
-const REQUEST = ['production.request', 'production.approve'];
+//  ★ Savdo ham shu eshikdan kiradi: stol va stul so'rovini endi
+//  FAQAT u yozadi (izoh: `requestOne`). Huquqning O'ZI hech narsa
+//  ochmaydi — qaysi mahsulotga kimning qo'li borligi guruhdan
+//  chiqadi va tekshiruv bitta joyda turadi.
+const REQUEST = ['production.request', 'production.approve', 'sales.manage'];
 
 //  Mahsulot qaysi tsexniki. Javobgar tsex — konverni KIM boshqarayotgani,
 //  turgan joyi emas: stul lak tsexining bo'limida ishlansa ham stul
@@ -708,6 +712,70 @@ async function requestOne(client, req, it, scope = null, orderItemId = null) {
     const shopId = await shopOfProduct(client, it.product_id);
     if (scope && (!shopId || !scope.includes(shopId)))
       throw new Error('Bu mahsulot boshqa tsexniki');
+
+    //  ★ STOL VA STULNI FAQAT SAVDO SO'RAYDI (zavod qarori, 2026-09).
+    //
+    //  Bu ikkisi mijozning so'rovi bilan ishlanadi: nechta va qaysi
+    //  rangda kerakligini savdo biladi, tsex esa bilmaydi. Ilgari
+    //  so'rovni kirituvchi ham, tsex boshlig'i ham yozardi va
+    //  zavodda bir xil mahsulot ikki joydan buyurtma qilinardi.
+    //
+    //  Korpus (sp, penal, kamod) ESKICHA qoladi: uning rejasi
+    //  oldindan tuziladi va uni tsex o'zi yuritadi.
+    //
+    //  Ro'yxat BAZADA (`product_groups.sales_can_request`), kodda
+    //  emas — ertaga zavod «endi kamod ham» desa bitta katakcha
+    //  belgilanadi (4-qoida). Belgi savdoga IKKINCHI yo'lni ham
+    //  ochadi (buyurtma oynasidagi «So'rov yuborish»), ya'ni bitta
+    //  qator ikkala eshikni ham boshqaradi.
+    const guruh = (await client.query(
+      `SELECT COALESCE(g.sales_can_request, false) AS savdoniki,
+              COALESCE(g.needs_fabric, false)      AS matoli,
+              g.name
+         FROM products p JOIN product_groups g ON g.id = p.group_id
+        WHERE p.id = $1`, [it.product_id])).rows[0];
+    const bor = (...p) => p.some((x) => req.user.permissions.includes(x));
+    if (guruh?.savdoniki) {
+      if (!bor('sales.manage'))
+        throw new Error(`${guruh.name} so'rovini savdo bo'limi yozadi`);
+    } else if (!bor('production.request', 'production.approve')) {
+      throw new Error(`${guruh?.name || 'Bu mahsulot'} so'rovini `
+        + `ishlab chiqarish yozadi`);
+    }
+
+    //  ★ RANG VA MATO MAJBURIY, YOKI ZAHIRA (zavod qarori, 2026-09).
+    //
+    //  Rangsiz konver tsexda «qaysi rangga bo'yayman» degan savol
+    //  bo'lib turardi va javobini kiritgan odamdan so'rashdan boshqa
+    //  yo'l yo'q edi. Lekin rang HAR DOIM ham ma'lum emas: zahiraga
+    //  ishlanayotgan mahsulot buyurtma kutadi va rangi mijoz
+    //  aytganda tanlanadi.
+    //
+    //  Shuning uchun majburiylik ZAHIRA belgisi bilan yechiladi:
+    //  rangi ma'lum bo'lsa yoziladi, ma'lum bo'lmasa «zahira» deb
+    //  belgilanadi. Uchinchi yo'l — rangsiz, lekin zahira ham emas —
+    //  aynan o'sha javobsiz savol edi.
+    //
+    //  Mato faqat MATOSI BOR guruhda (`product_groups.needs_fabric`):
+    //  stolda u umuman ishlatilmaydi va majburiy qilinsa stol so'rovi
+    //  yozilmay qolardi.
+    //
+    //  Qoida SAVDO SO'RAYDIGAN guruhga tegadi (stol, stul): rangni
+    //  mijozdan savdo eshitadi va u so'rov yozilayotganda ALLAQACHON
+    //  ma'lum. Korpusda esa reja oldindan tuziladi va rang keyin,
+    //  mijoz chiqqanda ma'lum bo'ladi — u yerda majburiy qilinsa
+    //  kundalik kiritish har safar «zahira» ni belgilashga
+    //  aylanardi va belgi ma'nosini yo'qotardi. Ikkalasi bitta
+    //  katakchadan boshqariladi, ya'ni ertaga kamod ham savdoga
+    //  o'tsa rang qoidasi unga O'ZI keladi.
+    if (guruh?.savdoniki && it.is_stock !== true) {
+      const yoq = [
+        !trim(it.color) && 'rang',
+        guruh?.matoli && !trim(it.fabric) && 'mato',
+      ].filter(Boolean);
+      if (yoq.length) throw new Error(
+        `${yoq.join(' va ')} tanlanmagan — bilinmasa «zahira» deb belgilang`);
+    }
 
     //  ★ RANG VA MATO FAQAT BORIDAN (zavod qarori, 2026-09).
     //

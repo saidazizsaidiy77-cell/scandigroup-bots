@@ -46,7 +46,15 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
       //  qulaylik, himoya emas.
       db.query(`SELECT p.*, g.name AS group_name, g.line_id,
                        COALESCE(r.steps, 0)::int AS steps,
-                       COALESCE(g.owner_shop_id, r.shop_id) AS shop_id
+                       COALESCE(g.owner_shop_id, r.shop_id) AS shop_id,
+                       --  So'rovni KIM yozadi va matosi bormi. Ikkalasi
+                       --  ham guruhda (4-qoida): stol va stulni savdo
+                       --  so'raydi, mato esa faqat stulda bo'ladi.
+                       --  Sahifa shu ikki ustun bilan ro'yxatni
+                       --  qisqartiradi va majburiy katakni belgilaydi —
+                       --  chegara baribir SERVERDA: requestOne.
+                       COALESCE(g.sales_can_request, false) AS sales_can_request,
+                       COALESCE(g.needs_fabric, false)      AS needs_fabric
                   FROM products p JOIN product_groups g ON g.id = p.group_id
                   LEFT JOIN (SELECT pr.product_id, COUNT(*) AS steps,
                                     (array_agg(sc.shop_id ORDER BY pr.step_no))[1] AS shop_id

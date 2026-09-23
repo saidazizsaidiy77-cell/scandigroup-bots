@@ -1736,9 +1736,16 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
     '/api/units/requests/next-no?product_id=' + pid)).body.conveyor_no;
   const [s1, c1, k1] = [await no(STUL), await no(STOL), await no(PENAL)];
 
+  //  ★ Stul so'rovini KIRITUVCHI yoza olmaydi: stol va stulni faqat
+  //  savdo so'raydi (zavod qarori, 2026-09).
+  const notSavdo = await kir('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, color: 'Oq', fabric: 'Velvet-12' });
+  assert.equal(notSavdo.status, 400, notSavdo.text);
+  assert.match(notSavdo.body.error, /savdo/i);
+
   //  Stulga konver ochilsa STOL va KORPUS hisobi QIMIRLAMAYDI.
-  assert.equal((await kir('POST', '/api/units/requests',
-    { product_id: STUL, qty: 1 })).status, 200);
+  assert.equal((await admin('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, color: 'Oq', fabric: 'Velvet-12' })).status, 200);
   assert.notEqual(await no(STUL), s1, 'stul hisobi oshdi');
   assert.equal(await no(STOL), c1, 'stol hisobi joyida');
   assert.equal(await no(PENAL), k1, 'korpus hisobi joyida');
@@ -1762,6 +1769,71 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
   }
 });
 
+test('stol va stulni FAQAT savdo so\'raydi, rangi bilan', async () => {
+  //  ★ ZAVOD QARORI (2026-09). Stol va stul mijozning so'rovi bilan
+  //  ishlanadi: nechta va qaysi rangda kerakligini savdo biladi, tsex
+  //  esa bilmaydi. Korpus (sp, penal, kamod) eskicha qoladi — uning
+  //  rejasi oldindan tuziladi.
+  const savdo = await xodim('Sinov sorov savdo', 'sotuvchi');
+  const kir   = await xodim('Sinov sorov kir', 'kirituvchi');
+  const grp = async (code) => (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = $1 AND p.active ORDER BY p.id LIMIT 1`, [code])).id;
+  const STUL = await grp('STU'), STOL = await grp('STL');
+
+  //  Kirituvchi stulga so'rov yoza olmaydi — chegara SERVERDA.
+  const k = await kir('POST', '/api/units/requests',
+    { product_id: STUL, qty: 2, color: 'Oq', fabric: 'Velvet-12' });
+  assert.equal(k.status, 400, k.text);
+  assert.match(k.body.error, /savdo/i);
+
+  //  Savdo esa korpusga yoza olmaydi: u ishlab chiqarishniki.
+  const p = await savdo('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 2, color: 'Oq' });
+  assert.equal(p.status, 400, p.text);
+  assert.match(p.body.error, /ishlab chiqarish/i);
+
+  //  ★ RANG VA MATO MAJBURIY: rangsiz konver tsexda javobsiz savol
+  //  bo'lib turardi.
+  const rangsiz = await savdo('POST', '/api/units/requests',
+    { product_id: STUL, qty: 2 });
+  assert.equal(rangsiz.status, 400, rangsiz.text);
+  assert.match(rangsiz.body.error, /rang va mato/);
+
+  //  Stulda mato ham so'raladi, stolda esa YO'Q — zavodda stol
+  //  matosiz yuradi (`product_groups.needs_fabric`).
+  const matosiz = await savdo('POST', '/api/units/requests',
+    { product_id: STUL, qty: 2, color: 'Oq' });
+  assert.equal(matosiz.status, 400, matosiz.text);
+  assert.match(matosiz.body.error, /mato tanlanmagan/);
+
+  const stol = await savdo('POST', '/api/units/requests',
+    { product_id: STOL, qty: 1, color: 'Oq' });
+  assert.equal(stol.status, 200, stol.text);
+
+  //  ★ ZAHIRA majburiylikni yechadi: buyurtmasiz ishlanayotgan
+  //  mahsulotning rangi mijoz aytganda ma'lum bo'ladi.
+  const zahira = await savdo('POST', '/api/units/requests',
+    { product_id: STUL, qty: 3, is_stock: true });
+  assert.equal(zahira.status, 200, zahira.text);
+
+  const tola = await savdo('POST', '/api/units/requests',
+    { product_id: STUL, qty: 2, color: 'Oq', fabric: 'Velvet-12' });
+  assert.equal(tola.status, 200, tola.text);
+
+  //  Korpusda rang so'ralmaydi — qoida faqat savdo so'raydigan
+  //  guruhga tegadi va u BAZADA (`sales_can_request`).
+  const korp = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 1, next_on: '2026-10-10' });
+  assert.equal(korp.status, 200, korp.text);
+
+  //  Tasdiqlagandan keyin konver ODATDAGI yo'ldan ochiladi.
+  const ok = await admin('POST',
+    `/api/units/requests/${tola.body.created[0]}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+  assert.match(ok.body.conveyor_no, /^S\d\d-\d{3,}$/, ok.body.conveyor_no);
+});
+
 test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
   const STUL = (await H.id(
@@ -1769,7 +1841,7 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
       WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
 
   const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz, items: [
-    { product_id: STUL,  qty: 5 },
+    { product_id: STUL,  qty: 5, color: 'Oq', fabric: 'Velvet-12' },
     { product_id: PENAL, qty: 2 },
   ] })).body;
   const qatorlar = (await admin('GET', '/api/sales/orders/' + z.id)).body.items;
@@ -4060,8 +4132,8 @@ test('raqam ko\'rinishi tsexdan va GURUHDAN: S26-104, K26-103, C26-227', async (
 
   //  Taklif NAVBATDAGI so'rovni ham hisobga oladi: ikki odam bir vaqtda
   //  kiritsa bir xil raqam taklif qilinmasin.
-  assert.equal((await kir('POST', '/api/units/requests',
-    { product_id: STUL, qty: 1 })).status, 200);
+  assert.equal((await admin('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, color: 'Oq', fabric: 'Velvet-12' })).status, 200);
   const st2 = (await kir('GET', '/api/units/requests/next-no?product_id=' + STUL)).body;
   assert.notEqual(st2.conveyor_no, st.conveyor_no);
   assert.equal(Number(st2.conveyor_no.split('-')[1]),
@@ -4077,8 +4149,9 @@ test('so\'rov ro\'yxatida marshrut uzunligi SON bo\'lib keladi', async () => {
   const STUL = (await H.id(
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
-  const q = await kir('POST', '/api/units/requests',
-    { product_id: STUL, qty: 1, conveyor_no: 'S-9201', started_on: '2026-09-19' });
+  const q = await admin('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, conveyor_no: 'S-9201', started_on: '2026-09-19',
+      color: 'Oq', fabric: 'Velvet-12' });
   assert.equal(q.status, 200, q.text);
 
   const row = (await kir('GET', '/api/units/requests'))
@@ -4142,8 +4215,9 @@ test('so\'rov ro\'yxati sana AVTOMATMI deb aytadi', async () => {
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
 
-  const a = await kir('POST', '/api/units/requests',
-    { product_id: STUL, qty: 1, conveyor_no: 'S-9401', started_on: '2026-09-19' });
+  const a = await admin('POST', '/api/units/requests',
+    { product_id: STUL, qty: 1, conveyor_no: 'S-9401', started_on: '2026-09-19',
+      color: 'Oq', fabric: 'Velvet-12' });
   assert.equal(a.status, 200, a.text);
   const b = await kir('POST', '/api/units/requests',
     { product_id: PENAL, qty: 1, conveyor_no: 'K-9402',
@@ -4247,7 +4321,8 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
   const st = await admin('POST', '/api/units/requests',
-    { product_id: STUL, qty: 1, conveyor_no: 'S-9002' });
+    { product_id: STUL, qty: 1, conveyor_no: 'S-9002',
+      color: 'Oq', fabric: 'Velvet-12' });
   assert.equal(st.status, 200, st.text);
 });
 

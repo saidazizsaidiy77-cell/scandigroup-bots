@@ -861,6 +861,7 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     const it = (await client.query(
       `SELECT i.*, p.name AS product, g.name AS product_type,
               COALESCE(g.sales_can_request, false) AS mumkin,
+              COALESCE(g.needs_fabric, false)      AS matoli,
               i.qty - COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
                                  WHERE r.order_item_id = i.id), 0) AS qoldi
          FROM order_items i
@@ -882,8 +883,21 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
       qoldi > 0 ? `Qatorda ${qoldi} ta yopilmagan, ${qty} ta so'ralmoqda`
                 : 'Qator to\'liq yopilgan — so\'rov kerak emas');
 
+    //  ★ RANG VA MATO SHU YERDA ham tekshiriladi, lekin XABARI boshqa.
+    //  Qoida bitta va u `requestOne` da: rangsiz konver tsexda «qaysi
+    //  rangga bo'yayman» degan savol bo'lib turardi. U yerdagi xabar
+    //  «zahira deb belgilang» deydi — bu yerda esa zahira tugmasi
+    //  YO'Q: konver aynan shu mijoz uchun so'ralmoqda. Shuning uchun
+    //  javob qaysi katakni to'ldirish kerakligini aytadi.
+    const bosh = (v) => !String(v ?? '').trim();
+    const yoq = [bosh(it.color) && 'rangi',
+                 it.matoli && bosh(it.fabric) && 'matosi'].filter(Boolean);
+    if (yoq.length) throw new Error(
+      `Buyurtma qatorining ${yoq.join(' va ')} tanlanmagan `
+      + `— avval o'shani to'ldiring`);
+
     //  Rang va mato QATORDAN ko'chadi: mijoz aynan shuni so'ragan.
-    //  So'rovni yozadigan yagona joy — `requestOne` (modules/units.js):
+    //  So'rovni yozadigan yagona joy — requestOne (modules/units.js):
     //  raqam, rang tekshiruvi va muddat qoidasi u yerda turadi.
     const q = await requestOne(client, req, {
       product_id: it.product_id, qty, color: it.color, fabric: it.fabric,

@@ -122,6 +122,21 @@ ALTER TABLE shops ADD COLUMN IF NOT EXISTS no_width  INT  NOT NULL DEFAULT 4;
 ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS no_prefix TEXT;
 ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS no_width  INT;
 
+--  ★ MATOSI BOR GURUH (zavod qarori, 2026-09).
+--
+--  So'rov yozilayotganda rang va mato MAJBURIY: rangsiz konver
+--  tsexda «qaysi rangga bo'yayman» degan savol bo'lib turardi va
+--  javobini kiritgan odamdan telefon orqali so'rashdan boshqa yo'l
+--  yo'q edi. Lekin mato hamma mahsulotda YO'Q: stolda u umuman
+--  ishlatilmaydi va majburiy qilinsa stol so'rovi umuman
+--  yozilmasdi.
+--
+--  Belgi GURUHDA, kodda emas (4-qoida) — ertaga yangi guruh
+--  matoli bo'lsa bitta katakcha belgilanadi. Standarti FALSE:
+--  mavjud guruhlarning ekrani o'zidan-o'zi o'zgarmaydi.
+ALTER TABLE product_groups
+  ADD COLUMN IF NOT EXISTS needs_fabric BOOLEAN NOT NULL DEFAULT false;
+
 --  Bir martalik: saytdan o'zgartirilgani keyingi deployda qaytib
 --  qolmasin (izoh: CLAUDE.md, «Bir martalik ma'lumot ko'chirishlar»).
 DO $$
@@ -139,6 +154,12 @@ BEGIN
   --  raqam qog'ozdagisiga o'xshamasdi — tsexda turgan konverni
   --  jurnaldan topish uchun nolini sanab o'tirish kerak bo'lardi.
   --  Mingdan oshsa raqam o'zi to'rt xonaga o'tadi (kesilmaydi).
+  --  Zavodda matosi bor yagona guruh — stul. Stol, penal, kamod va
+  --  sp matosiz yuradi.
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'mato-stulda') THEN
+    UPDATE product_groups SET needs_fabric = true WHERE code = 'STU';
+    INSERT INTO migration_flags (key) VALUES ('mato-stulda');
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'raqam-stol-C') THEN
     UPDATE shops          SET no_width  = 3   WHERE code = 'KORPUS';
     UPDATE product_groups SET no_prefix = 'C', no_width = 3 WHERE code = 'STL';

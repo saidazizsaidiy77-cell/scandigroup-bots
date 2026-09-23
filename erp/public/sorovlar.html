@@ -68,10 +68,12 @@
           bitta «venge» ombor qoldig'ini ikkiga bo'lib yuborardi va savdo
           ro'yxatida bir xil rang ikki marta turardi. Yangi rang zavodning
           qarori: u jurnal orqali kiritiladi. -->
-    <div><label>Rangi</label>
-      <select id="fColor"></select></div>
-    <div><label>Matosi</label>
-      <select id="fFabric"></select></div>
+    <div><label>Rangi <span class="muted" id="colorReq"
+        style="text-transform:none;letter-spacing:0">— majburiy</span></label>
+      <select id="fColor" onchange="maydonlar()"></select></div>
+    <div id="fabricBox"><label>Matosi <span class="muted" id="fabricReq"
+        style="text-transform:none;letter-spacing:0">— majburiy</span></label>
+      <select id="fFabric" onchange="maydonlar()"></select></div>
     <div class="wide"><label>Izoh</label>
       <input id="fNote" placeholder="ixtiyoriy"></div>
     <!--  Zahira — buyurtmasiz, oldindan ishlanadigan mahsulot. Kutish
@@ -79,8 +81,9 @@
           rangi ham keyin, mijoz aytganda tanlanadi. -->
     <div class="wide"><label class="row" style="gap:10px;align-items:center;
       text-transform:none;font-size:14px;cursor:pointer">
-      <input type="checkbox" id="fStock" style="width:auto">
-      <span>Zahira uchun — buyurtmasiz, oldindan ishlanadi</span></label></div>
+      <input type="checkbox" id="fStock" style="width:auto" onchange="maydonlar()">
+      <span>Zahira uchun — buyurtmasiz, oldindan ishlanadi</span></label>
+      <div class="hint" id="stockHint"></div></div>
   </div>
   <div class="eta" id="etaLine"></div>
   <div class="row" style="margin-top:14px">
@@ -153,6 +156,56 @@ function eta(plan) {
 //  Bu TAKLIF EMAS, JAVOB: raqamni server qo'yadi va katak faqat uni
 //  ko'rsatadi. Shuning uchun har safar qaytadan yoziladi — mahsulot
 //  almashsa harfi ham almashadi (stol C, stul S, korpus K).
+//  ★ STOL VA STULNI FAQAT SAVDO SO'RAYDI (zavod qarori, 2026-09):
+//  nechta va qaysi rangda kerakligini mijozdan u eshitadi. Korpus
+//  (sp, penal, kamod) eskicha qoladi — uning rejasi oldindan
+//  tuziladi va uni tsex o'zi yuritadi.
+//
+//  Shart SERVERDAGI bilan AYNAN bir xil (`requestOne`): ro'yxatni
+//  qisqartirish qulaylik, himoya emas — id ni qo'lda yuborsa ham
+//  qabul qilinmaydi. Guruh belgisi bazadan keladi
+//  (`product_groups.sales_can_request`), kodga mahsulot nomi
+//  yozilmaydi.
+const yozaOladi = (p) => p.sales_can_request
+  ? App.can('sales.manage')
+  : App.can('production.request', 'production.approve');
+
+const tanlangan = () => mahsulotlar.find(
+  (p) => p.id === Number($('fProduct').value));
+
+//  ★ RANG VA MATO MAJBURIY, YOKI ZAHIRA. Rangsiz konver tsexda
+//  «qaysi rangga bo'yayman» degan savol bo'lib turardi. Lekin rang
+//  har doim ham ma'lum emas: zahiraga ishlanayotgan mahsulot
+//  buyurtma kutadi va rangi mijoz aytganda tanlanadi — shuning
+//  uchun majburiylikni ZAHIRA belgisi yechadi.
+//
+//  Mato faqat MATOSI BOR guruhda (`needs_fabric`): stolda u umuman
+//  ishlatilmaydi va katak ham chizilmaydi.
+function maydonlar() {
+  const p = tanlangan();
+  const zahira = $('fStock').checked;
+  const matoli = !!p?.needs_fabric;
+  //  Majburiylik SAVDO so'raydigan guruhda (stol, stul): rangni
+  //  mijozdan savdo eshitadi. Korpusda reja oldindan tuziladi va
+  //  rang keyin ma'lum bo'ladi — u yerda katak ixtiyoriy qoladi.
+  const kerak = !!p?.sales_can_request && !zahira;
+  $('fabricBox').hidden = !matoli;
+  $('fColor').disabled  = zahira;
+  $('fFabric').disabled = zahira;
+  if (zahira) { $('fColor').value = ''; $('fFabric').value = ''; }
+  const belgi = (id, on) => {
+    const el = $(id);
+    if (el) el.textContent = on ? '— majburiy' : '';
+  };
+  belgi('colorReq',  kerak);
+  belgi('fabricReq', kerak && matoli);
+  //  Katakcha nima qilishini O'ZI aytadi: rangni bilmagan odam uni
+  //  bo'sh qoldirib, «nega saqlanmadi» degan savolga tushardi.
+  $('stockHint').textContent = !p?.sales_can_request ? ''
+    : zahira ? 'Rang va mato so\'ralmaydi — mijoz aytganda bo\'yaladi'
+             : 'Rangi hali bilinmasa shu katakchani belgilang';
+}
+
 async function taklif(majburan) {
   const pid = $('fProduct').value;
   if (!pid) { eta(null); return; }
@@ -169,6 +222,9 @@ async function taklif(majburan) {
     $('planBox').hidden = !planKerak;
     $('planLbl').textContent = `${r.next_shop}ga topshirish`;
   } catch { /* taklif bermadi — xodim o'zi yozadi */ }
+  //  Mahsulot almashsa mato katagi ham almashadi: stulniki turadi,
+  //  stolniki umuman chizilmaydi.
+  maydonlar();
 }
 
 async function load() {
@@ -187,9 +243,9 @@ async function load() {
     //  Chegara baribir SERVERDA (`modules/units.js`, `shopOfProduct`):
     //  ro'yxatni qisqartirish qulaylik, himoya emas.
     const doira = App.me()?.scope_shop_ids || [];
-    mahsulotlar = doira.length
+    mahsulotlar = (doira.length
       ? ref.products.filter((p) => doira.includes(p.shop_id))
-      : ref.products;
+      : ref.products).filter(yozaOladi);
     $('fProduct').innerHTML = '<option value="">— tanlang —</option>'
       + mahsulotlar.map((p) => `<option value="${p.id}">${
           esc(p.name)}${p.size_label ? ' · ' + esc(p.size_label) : ''} · ${
@@ -201,7 +257,11 @@ async function load() {
     $('fColor').innerHTML  = royxat(sug.colors);
     $('fFabric').innerHTML = royxat(sug.fabrics);
     if (!$('fStart').value) $('fStart').value = new Date().toISOString().slice(0, 10);
-    $('newCard').hidden = !App.can('production.request');
+    //  Yozadigan mahsuloti qolmagan odamga oyna umuman chizilmaydi:
+    //  bo'sh ro'yxat ustida turgan tugma «nega ishlamayapti» degan
+    //  savol bo'lib qolardi.
+    $('newCard').hidden = !mahsulotlar.length;
+    maydonlar();
   }
   data = await App.api('/api/units/requests?status=' + encodeURIComponent($('fStatus').value));
   draw();
@@ -264,6 +324,15 @@ async function send() {
   };
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
+  //  Serverdagi qoidaning O'ZI (`requestOne`), shu yerda esa uning
+  //  ko'rinishi: xodim saqlashni bosgandan keyin emas, oldin bilsin.
+  const p = tanlangan();
+  if (p?.sales_can_request && !it.is_stock) {
+    const yoq = [!it.color && 'rang',
+                 p.needs_fabric && !it.fabric && 'mato'].filter(Boolean);
+    if (yoq.length) return alert(
+      yoq.join(' va ') + ' tanlanmagan — bilinmasa «zahira» deb belgilang');
+  }
   if (planKerak && !it.next_on) {
     $('fPlan').focus();
     return alert($('planLbl').textContent + ' sanasi kiritilmagan');
@@ -277,6 +346,7 @@ async function send() {
     $('fNo').value = ''; $('fQty').value = 1;
     $('fColor').value = ''; $('fFabric').value = '';
     $('fNote').value = ''; $('fStock').checked = false; $('fPlan').value = '';
+    maydonlar();
     //  Keyingi raqam darrov taklif qilinadi: qator ketma-ket
     //  kiritilganda har safar qo'lda terib o'tirmasin.
     await taklif(true);
@@ -306,7 +376,7 @@ async function reject(id, boss) {
   } catch (e) { alert(e.message); }
 }
 
-App.start(load, 'production.request', 'production.approve');
+App.start(load, 'production.request', 'production.approve', 'sales.manage');
 </script>
 </body>
 </html>
