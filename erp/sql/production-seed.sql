@@ -191,6 +191,25 @@ ON CONFLICT (code) DO NOTHING;
 
 -- ------------------------------------------------------------- TEST XODIMLARI
 -- Rollar va huquqlar yadroda: sql/core-seed.sql
+--
+--  ★ FAQAT BO'SH BAZADA (zavod qarori, 2026-09). Bular test
+--  hisoblari: «Korpus ustasi», «Arra operatori» — zavodda bunday
+--  odam yo'q. Ular ikki ish uchun turadi: testlar o'z bazasini shu
+--  yerdan quradi va birinchi deploy'da saytga kiradigan bitta hisob
+--  bo'lishi kerak (aks holda yangi baza hech kimni ichkariga
+--  kiritmasdi).
+--
+--  Haqiqiy xodimlar kiritilgach ular ortiqcha: oltmish kishilik
+--  ro'yxatda «Bo'yoq ustasi» degan qator aralashib turadi va oylik
+--  berayotgan kassir uni odam deb o'qiydi. Shuning uchun shart —
+--  jadval BO'SH bo'lsa: bir marta quriladi va qaytib kelmaydi.
+--
+--  ★ PIN'lari OCHIQ va OSON (0000, 1111…). Bu test uchun ataylab
+--  shunday, lekin ishlayotgan saytda xavf: «Administrator · 0000»
+--  bilan kirgan har kim butun zavodni ko'radi. Shuning uchun ular
+--  haqiqiy xodimlar kiritilgach saytdan O'CHIRILADI — migratsiya
+--  ularni qaytarmaydi.
+--
 --  ★ QAYTA YOZILMASLIK ISMGA QARAB tekshiriladi, PIN'ga emas: maxfiy
 --  kalit qo'yilgach PIN ochiq ustundan ko'chiriladi va u yerda bo'sh
 --  qoladi (izoh: `erp/pin.js`). PIN bo'yicha tekshirilsa keyingi
@@ -205,19 +224,29 @@ SELECT v.name, v.pin FROM (VALUES
   ('Direktor',         '5555'),
   ('Arra operatori',   '6666')
 ) AS v(name, pin)
-WHERE NOT EXISTS (SELECT 1 FROM workers w WHERE w.name = v.name);
+WHERE NOT EXISTS (SELECT 1 FROM workers w);
 
 -- Rol biriktirish. scope_shop_id — usta faqat o'z tsexini ko'radi.
 --  Xodim ISMI bo'yicha topiladi (yuqoridagi sabab). Ism takrorlansa
 --  birinchisi olinadi: seed faqat toza bazada ishlaydi.
-INSERT INTO worker_roles (worker_id, role_code, scope_shop_id) VALUES
-  ((SELECT id FROM workers WHERE name='Administrator'    ORDER BY id LIMIT 1), 'admin',     NULL),
-  ((SELECT id FROM workers WHERE name='Direktor'         ORDER BY id LIMIT 1), 'direktor',  NULL),
-  ((SELECT id FROM workers WHERE name='Korpus ustasi'    ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='KORPUS')),
-  ((SELECT id FROM workers WHERE name='Bo''yoq ustasi'   ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='BOYOQ')),
-  ((SELECT id FROM workers WHERE name='Qadoqlash ustasi' ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='QADOQ')),
-  ((SELECT id FROM workers WHERE name='Stul ustasi'      ORDER BY id LIMIT 1), 'tsex_usta', (SELECT id FROM shops WHERE code='STUL')),
-  ((SELECT id FROM workers WHERE name='Arra operatori'   ORDER BY id LIMIT 1), 'operator',  (SELECT id FROM shops WHERE code='KORPUS'))
+--
+--  JOIN bilan yoziladi, VALUES bilan emas: yuqoridagi xodimlar
+--  yaratilmagan bo'lsa (baza bo'sh emas edi) qator umuman chiqmaydi.
+--  Ilgari bu yerda `SELECT id ... ` turardi va xodim topilmasa
+--  NULL yozilib, migratsiya yiqilardi — ya'ni sayt ko'tarilmasdi.
+INSERT INTO worker_roles (worker_id, role_code, scope_shop_id)
+SELECT w.id, v.rol, sh.id
+  FROM (VALUES
+    ('Administrator',    'admin',     NULL),
+    ('Direktor',         'direktor',  NULL),
+    ('Korpus ustasi',    'tsex_usta', 'KORPUS'),
+    ('Bo''yoq ustasi',   'tsex_usta', 'BOYOQ'),
+    ('Qadoqlash ustasi', 'tsex_usta', 'QADOQ'),
+    ('Stul ustasi',      'tsex_usta', 'STUL'),
+    ('Arra operatori',   'operator',  'KORPUS')
+  ) AS v(ism, rol, tsex)
+  JOIN LATERAL (SELECT id FROM workers WHERE name = v.ism ORDER BY id LIMIT 1) w ON true
+  LEFT JOIN shops sh ON sh.code = v.tsex
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================

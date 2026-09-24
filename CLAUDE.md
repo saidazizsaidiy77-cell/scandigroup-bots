@@ -1714,6 +1714,33 @@ test o'z ilovasini o'zi quradi.
 
 ## Xodimlar — shtat va kirish
 
+**★ TEST HISOBLARI FAQAT BO'SH BAZADA** (zavod qarori, 2026-09;
+`sql/production-seed.sql`). «Administrator», «Korpus ustasi», «Arra
+operatori» — zavodda bunday odam yo'q. Ular ikki ish uchun turadi:
+testlar o'z bazasini shu yerdan quradi va birinchi deploy'da saytga
+kiradigan bitta hisob bo'lishi kerak (aks holda yangi baza hech kimni
+ichkariga kiritmasdi).
+
+Haqiqiy xodimlar kiritilgach ular ortiqcha: oltmish kishilik ro'yxatda
+«Bo'yoq ustasi» degan qator aralashib turadi va oylik berayotgan
+kassir uni odam deb o'qiydi. Shuning uchun shart — jadval BO'SH
+bo'lsa (`WHERE NOT EXISTS (SELECT 1 FROM workers)`): bir marta
+quriladi va qaytib kelmaydi.
+
+**★ PIN'lari OCHIQ va OSON** (0000, 1111…). Test uchun ataylab
+shunday, lekin ishlayotgan saytda bu XAVF: «Administrator · 0000»
+bilan kirgan har kim butun zavodni — narxni, mijozni, kassani —
+ko'radi. Haqiqiy xodimlar kiritilgach ular Xodimlar sahifasidan
+o'chiriladi («Faol» katakchasi), va migratsiya ularni QAYTARMAYDI.
+O'chirilgan xodim saytga ham kira olmaydi (`erp/auth.js`), ro'yxatlarda
+ham turmaydi.
+
+**Oxirgi administratorni o'chirib bo'lmaydi degan qoida YO'Q** —
+shuning uchun avval o'zingizga haqiqiy `admin` hisobi oching, kirib
+ko'ring, keyin eskisini o'chiring. Teskarisi qilinsa saytga kiradigan
+odam qolmaydi.
+
+
 **★ ZAVODDA OLTMISH KISHI, TIZIMGA O'NTASI KIRADI** (zavod qarori,
 2026-09; `workers.staff_group`, `shop_id`, `section_id`, `dept`,
 `position` — `sql/production.sql`). Boshliq, mudir, menejer va kassir
