@@ -337,7 +337,10 @@ const App = (() => {
     { href: '/narxlar.html', mod: 'sales', nav: 'Narxlar',
       title: 'Narxlar', lead: 'Ulgurji va chakana',
       text: "Har mahsulotning ikki narxi \u00b7 menejer undan past sota olmaydi",
-      perm: ['production.manage', 'sales.discount'] },
+      //  ★ FAQAT DIREKTORDA (zavod qarori, 2026-09): narx siyosati
+      //  uning ishi. `production.manage` yetarli emas \u2014 u katalog
+      //  huquqi. Tekshiruv baribir serverda.
+      perm: ['sales.discount'] },
 
     { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },
     { mod: 'purchasing', nav: 'Kirim shakllantirish',              perm: ['purchasing.manage'] },

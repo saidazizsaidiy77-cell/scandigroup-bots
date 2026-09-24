@@ -56,7 +56,7 @@ async function freeCode(client, table, base) {
 }
 
 // ─────────────────────────────────────────────────────────────── KATALOGNI OLISH
-router.get('/', need('production.view', 'production.manage'), wrap(async (_req, res) => {
+router.get('/', need('production.view', 'production.manage'), wrap(async (req, res) => {
   const [groups, fasons, products, lines, routes] = await Promise.all([
     db.query(`SELECT g.*, l.code AS line_code, l.name AS line_name,
                      (SELECT COUNT(*) FROM products p WHERE p.group_id = g.id) AS products
@@ -70,7 +70,15 @@ router.get('/', need('production.view', 'production.manage'), wrap(async (_req, 
     db.query(`SELECT * FROM lines ORDER BY sort`),
     db.query(`SELECT id, code, name, line_id FROM route_templates ORDER BY code`),
   ]);
-  res.json({ groups: groups.rows, fasons: fasons.rows, products: products.rows,
+  //  ★ NARX JAVOBDAN OLIB TASHLANADI (zavod qarori, 2026-09): u
+  //  `v_catalog` da bor, lekin katalogni ko'radigan har odamga
+  //  ko'rinmaydi. Ekranda yashirish himoya emas — javobning O'ZIDA
+  //  bo'lmasligi kerak, aks holda uni brauzer konsolidan o'qib olsa
+  //  bo'lardi.
+  const narxli = req.user.permissions.includes('sales.discount');
+  const mahsulot = narxli ? products.rows : products.rows.map(
+    ({ price_opt, price_retail, ...p }) => p);
+  res.json({ groups: groups.rows, fasons: fasons.rows, products: mahsulot,
              lines: lines.rows, routes: routes.rows });
 }));
 
@@ -264,6 +272,12 @@ router.patch('/products/:id', need('production.manage', 'sales.discount'),
   wrap(async (req, res) => {
   const { active, route_template_id, is_set } = req.body;
   const opt = narx(req.body.price_opt), ret = narx(req.body.price_retail);
+  //  ★ Narxga FAQAT direktor tegadi. Katalogni yuritadigan odam
+  //  mahsulotni yoqadi, marshrutini qo'yadi — lekin narxga emas:
+  //  tekshiruv SERVERDA, katakni yashirish himoya emas.
+  if ((opt !== undefined || ret !== undefined)
+      && !req.user.permissions.includes('sales.discount'))
+    return res.status(403).json({ error: 'Narxni direktor qo\'yadi' });
   if ((opt != null && !(opt >= 0)) || (ret != null && !(ret >= 0)))
     return res.status(400).json({ error: "Narx noto'g'ri" });
   const { rows } = await db.query(
@@ -304,9 +318,15 @@ router.delete('/products/:id', need('production.manage'), wrap(async (req, res) 
 //  birgalikda boshqaradi va narx u yerga sig'maydi, chunki har
 //  o'lchamning narxi boshqa.
 //
-//  Huquq: katalogniki (`production.manage`) va direktorniki
-//  (`sales.discount`) — narx siyosati ikkalasining ishi.
-const PRICE = ['production.manage', 'sales.discount'];
+//  ★ NARX FAQAT DIREKTORDA (zavod qarori, 2026-09): ko'rish ham,
+//  o'zgartirish ham. `production.manage` YETARLI EMAS — u katalog
+//  huquqi va ishlab chiqarish boshlig'ida ham bor, narx siyosati esa
+//  uning ishi emas.
+//
+//  Ismi kodga yozilmaydi (4-qoida): bu HUQUQ (`sales.discount`), ya'ni
+//  ertaga qaror boshqa odamga o'tsa rol yonidagi katakcha
+//  belgilanadi.
+const PRICE = ['sales.discount'];
 
 router.get('/prices', need(...PRICE), wrap(async (req, res) => {
   const q = String(req.query.q || '').trim() || null;

@@ -1869,6 +1869,27 @@ test('narxdan past sotilmaydi \u2014 direktor tasdiqlaydi', async () => {
   assert.equal((await opt('GET', '/api/sales/orders/' + z2))
     .body.order.discount_status, 'pending', 'narx tushirilsa tasdiq qayta so\'raladi');
 
+  //  ★ NARX RO'YXATI FAQAT DIREKTORDA: ko'rish ham, o'zgartirish ham.
+  //  `production.manage` yetarli emas \u2014 u katalog huquqi va ishlab
+  //  chiqarish boshlig'ida ham bor.
+  const ich = await xodim('Sinov narx boshliq', 'ishlab_boshl');
+  assert.equal((await ich('GET', '/api/catalog/prices')).status, 403);
+  assert.equal((await admin('GET', '/api/catalog/prices')).status, 200);
+
+  //  Katalog javobida ham narx YO'Q: ekranda yashirish himoya emas.
+  const kat = (await ich('GET', '/api/catalog')).body.products[0];
+  assert.ok(!('price_opt' in kat), 'narx javobdan olib tashlanadi');
+  assert.ok('price_opt' in (await admin('GET', '/api/catalog')).body.products[0],
+    'direktorga esa keladi');
+
+  //  Narxga tegish ham rad etiladi \u2014 tekshiruv SERVERDA.
+  const teg = await ich('PATCH', '/api/catalog/products/' + PENAL,
+    { price_opt: 1 });
+  assert.equal(teg.status, 403, teg.text);
+  //  Katalogning QOLGAN maydonlari unga ochiq qolaveradi.
+  assert.equal((await ich('PATCH', '/api/catalog/products/' + PENAL,
+    { active: true })).status, 200);
+
   //  Narxi QO'YILMAGAN mahsulotda chegara yo'q: bo'lmagan raqamni
   //  majburlab bo'lmaydi va buyurtma to'xtab qolmasligi kerak.
   await db.query(`UPDATE products SET price_opt = NULL, price_retail = NULL
