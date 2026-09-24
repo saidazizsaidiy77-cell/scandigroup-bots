@@ -3217,6 +3217,39 @@ test('kassadan pul faqat belgilangan xodimga beriladi', async () => {
     `SELECT can_hold_cash FROM workers WHERE id=$1`, [xodim])).can_hold_cash, true);
 });
 
+//  ★ YO'NALISH SERVERDAN KELADI. Lenta bitta JOY haqida va o'sha joy
+//  kim ekanini server aytadi (`side`) — sahifa esa har qatorda
+//  «kirimmi yoki chiqimmi» degan savolga SHU tomondan javob beradi.
+//  Ilgari sahifa yo'nalishni turiga qarab taxmin qilardi va xodimning
+//  qo'lidagi pul sahifasida (`?a=w12`) kassadan olingan avans CHIQIM
+//  bo'lib ko'rinardi: minus bilan, «Kim» ustunida esa o'sha xodimning
+//  O'Z ismi turardi.
+test('xodimning qo\'lidagi pul sahifasida kassadan olingani KIRIM', async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const xodim = (await H.id(`SELECT id FROM workers WHERE name='Korpus ustasi'`)).id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+
+  const ok = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: xodim,
+    currency: 'USD', amount: 50 });
+  assert.equal(ok.status, 200, ok.text);
+
+  //  Xodimning qo'li — TOMON: qabul qiluvchi shu joy, ya'ni kirim
+  const w = await kassir('GET', `/api/cash/ops?a=w${xodim}&dir=in`);
+  assert.equal(w.status, 200, w.text);
+  assert.deepEqual(w.body.side, { kind: 'worker', id: xodim },
+    'yo\'nalish shu tomondan o\'lchanadi');
+  const qator = w.body.rows.find(r => r.id === ok.body.id);
+  assert.ok(qator, 'kassadan olingan pul xodimda KIRIM bo\'lib turadi');
+  assert.equal(qator.to_id, xodim, 'qabul qiluvchi tomon — o\'sha xodim');
+
+  //  Kassada esa AYNAN o'sha operatsiya chiqim: bitta harakat ikki
+  //  joyda ikki xil ko'rinadi va ikkalasi ham to'g'ri.
+  const k = await kassir('GET', '/api/cash/ops?a=MAIN&dir=out');
+  assert.deepEqual(k.body.side, { kind: 'account', id: kassa });
+  assert.ok(k.body.rows.some(r => r.id === ok.body.id), 'kassada chiqim');
+});
+
 //  KASSAGA YOZILGAN HARAJAT IKKI HISOBOTGA BORADI: foyda-zararga
 //  hisobot oyi bilan, pul oqimiga to'lov sanasi bilan. Ikki sana atay
 //  boshqa — sentabrda to'langan avgust ijarasi avgust foydasini

@@ -1285,6 +1285,26 @@ menejerda chiqim, kassada kirim, va ikkalasi ham to'g'ri. Lentada
 ikkinchi tomon yoziladi, o'zi emas — har qatorda bittasi baribir
 «Asosiy kassa» bo'lardi.
 
+**★ YO'NALISHNI SERVER AYTADI** (`GET /api/cash/ops` javobidagi `side`,
+zavod qarori 2026-09). Lenta bitta JOY haqida va o'sha joy kim ekanini
+server allaqachon biladi — sahifa esa har qatorda «bu kirimmi yoki
+chiqimmi» degan savolga SHU tomondan javob beradi: operatsiyaning
+qabul qiluvchi tomoni shu joy bo'lsa — kirim.
+
+Ilgari javobda faqat qatorlar kelardi va sahifa yo'nalishni turiga
+qarab taxmin qilardi (`to_kind === 'account'`). Kassada u to'g'ri
+ishlardi, XODIMNING qo'lidagi pul sahifasida (`?a=w12`) esa hamma
+qator chiqim bo'lib ko'rinardi: kassadan olingan avansda MINUS turar,
+«Kim» ustunida esa o'sha xodimning O'Z ismi yozilib turardi — pul
+kirganmi yoki chiqqanmi, o'qib bo'lmasdi. Nom bo'yicha solishtirish
+ham shu bilan olib tashlandi: id bitta, nom esa takrorlanishi mumkin.
+
+**Ishora va rang ham shundan**: kirim yashil «+», chiqim qizil «−».
+Ishorasiz raqam qaysi tomon ekanini aytmasdi — kassadan olingan avans
+ham, kassaga topshirilgan pul ham bir xil «7 480,91» bo'lib turardi.
+«Kim» ustunida yo'nalish o'qi bo'lib turadi: kirimda «←», chiqimda
+«→».
+
 **Order — bankdagi to'lov topshiriqnomasiga o'xshash oyna.** Kassir
 qog'ozdagi hujjatni to'ldirgandek to'ldiradi: tepada hujjat nomi va
 qaysi kassa, ostida sana, kimdan/kimga, summa, valyuta va kurs, eng

@@ -97,7 +97,7 @@ const isMe = () => A === 'me';
 //  chunki ikkinchi tomoni baribir kassa.
 const W = /^w\d+$/.test(A) ? Number(A.slice(1)) : null;
 const isAcc = () => !isMe() && !W;
-let refs = null, here = null, ops = [], tab = 'in', boss = false;
+let refs = null, here = null, ops = [], tab = 'in', boss = false, side = null;
 const f = { from: '', to: '', q: '' };
 
 function toast(msg, bad) {
@@ -219,19 +219,31 @@ async function loadOps() {
   const q = new URLSearchParams({ a: A });
   if (tab !== 'all') q.set('dir', tab);
   Object.entries(f).forEach(([k, v]) => v && q.set(k, v));
-  ops = (await App.api('/api/cash/ops?' + q)).rows;
+  const d = await App.api('/api/cash/ops?' + q);
+  ops = d.rows; side = d.side;
   drawOps();
 }
 function setF(k, v) { f[k] = v; loadOps(); }
 function clearF() { Object.keys(f).forEach(k => f[k] = ''); loadOps(); }
 
+//  ★ YO'NALISH SERVERDAN KELGAN TOMON bilan o'lchanadi (`side`):
+//  operatsiyaning qabul qiluvchi tomoni SHU sahifaning joyi bo'lsa —
+//  kirim, aks holda chiqim. Ilgari sahifa buni turiga qarab taxmin
+//  qilardi («to_kind === 'account'») va xodimning qo'lidagi pul
+//  sahifasida (`?a=w12`) hamma qator chiqim bo'lib ko'rinardi:
+//  kassadan olingan avansda minus turar, «Kim» ustunida esa o'sha
+//  xodimning O'Z ismi yozilardi — qaysi tomonga pul yurgani
+//  o'qilmasdi. Nom bo'yicha solishtirish ham shu sababdan olib
+//  tashlandi: ikkita bir xil nom ikkita joy bo'lishi mumkin, id esa
+//  bitta.
+const buYer = (kind, id) => !!side && kind === side.kind
+  && Number(id) === Number(side.id);
+const kirimmi = o => buYer(o.to_kind, o.to_id);
+
 //  «Kim» ustuni — SHU joyga nisbatan ikkinchi tomon: kirimda kimdan
 //  keldi, chiqimda kimga ketdi. Ikkala ustunni chiqarish qatorni
 //  cho'zardi va har qatorda bittasi baribir «Asosiy kassa» bo'lardi.
-const other = o => (o.to_kind === 'account' && o.to_name === here.name)
-  || (o.to_kind === 'worker' && isMe()) ? o.from_name : o.to_name;
-const kirimmi = o => (isMe() ? o.to_kind === 'worker' : o.to_kind === 'account')
-  && (isMe() || o.to_name === here.name);
+const other = o => kirimmi(o) ? o.from_name : o.to_name;
 
 function drawOps() {
   const bor = f.from || f.to || f.q;
@@ -260,7 +272,8 @@ function drawOps() {
               faqat modda turardi («Oylik korpus») va oyning oxirida
               «Farruxga berdikmi» degan savolga javob beradigan yagona
               joy kassirning xotirasi bo'lib qolardi. -->
-        <td>${kirimmi(o) ? '' : '<span class="muted">→ </span>'}${esc(other(o) || '')}${
+        <td><span class="muted">${kirimmi(o) ? '←' : '→'} </span>${
+          esc(other(o) || '')}${
           o.staff_name ? ` · <b>${esc(o.staff_name)}</b>` : ''}${
           o.expense_group ? `<div class="muted" style="font-size:11.5px">${
             esc(o.expense_group)}${o.pl_month
@@ -268,7 +281,12 @@ function drawOps() {
         <td class="num">${o.currency === 'UZS'
           ? `${uzs(o.amount)} <span class="muted" style="font-size:11px">so'm</span>`
           : `${usd(o.amount)} <span class="muted" style="font-size:11px">$</span>`}</td>
-        <td class="num"><b>${kirimmi(o) ? '' : '&minus;'}${usd(o.amount_usd)}</b>${o.rate
+        <!--  ★ ISHORA VA RANG. Ishorasiz raqam qaysi tomon ekanini
+              aytmasdi: kassadan olingan avans ham, kassaga
+              topshirilgan pul ham bir xil «7 480,91» bo'lib turardi.
+              Kirim yashil «+», chiqim qizil «&minus;».  -->
+        <td class="num"><b class="${kirimmi(o) ? 'mny-in' : 'mny-out'}">${
+          kirimmi(o) ? '+' : '&minus;'}${usd(o.amount_usd)}</b>${o.rate
           ? `<div class="muted" style="font-size:11px">${uzs(o.rate)}</div>` : ''}</td>
         <td class="muted" style="font-size:12.5px">${esc(o.note || '')}${o.order_no
           ? ` <span class="tag">${esc(o.order_no)}</span>` : ''}</td>

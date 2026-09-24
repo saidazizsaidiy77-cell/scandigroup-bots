@@ -263,7 +263,16 @@ router.get('/ops', need(...ANY), wrap(async (req, res) => {
       LIMIT 500`,
     [sideKind, sideId, req.query.from || null, req.query.to || null,
      req.query.q || null, dir]);
-  res.json({ rows, boss });
+  //  ★ YO'NALISHNI SERVER AYTADI. Lenta bitta JOY haqida va o'sha joy
+  //  kim ekanini shu yerda hal qilinadi — sahifa esa har qatorda
+  //  «kirimmi yoki chiqimmi» degan savolga SHU tomondan javob beradi.
+  //  Ilgari javobda faqat qatorlar kelardi va sahifa yo'nalishni o'zi
+  //  taxmin qilardi (`to_kind === 'account'`): xodimning qo'lidagi pul
+  //  sahifasida (`?a=w12`) kassadan olingan avans CHIQIM bo'lib
+  //  ko'rinardi — minus bilan, «Kim» ustunida esa o'sha xodimning O'Z
+  //  ismi yozilib turardi. Qoida ikki joyda bo'lsa yana ajralib
+  //  ketardi, shuning uchun u BITTA joyda.
+  res.json({ rows, boss, side: sideKind ? { kind: sideKind, id: sideId } : null });
 }));
 
 // ═══════════════════════════════════════════════════ OPERATSIYA YOZISH

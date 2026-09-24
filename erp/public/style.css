@@ -191,6 +191,12 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
 /* Aylanma: kirdi yashil, chiqdi kulrang — ko'z qaysi tomon ekanini
    raqamni o'qimasdan oldin biladi. */
 .stock .s-in b{color:var(--ok)}
+
+/*  Kassa lentasi: bitta ustunda ikki yo'nalish turadi va ishorasiz
+    raqam qaysi tomon ekanini aytmasdi — kassadan olingan avans ham,
+    kassaga topshirilgan pul ham bir xil ko'rinardi.  */
+.mny-in{color:var(--ok)}
+.mny-out{color:var(--bad)}
 /* Jadval ostidagi JAMI qatori: ustunlar bilan bir chiziqda turadi,
    shuning uchun alohida kartochka emas — pastda, o'z joyida. */
 .stock tfoot td{border-top:2px solid var(--line);font-weight:600;
