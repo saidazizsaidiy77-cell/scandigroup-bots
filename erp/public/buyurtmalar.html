@@ -77,7 +77,11 @@
       <input id="fQ" placeholder="Z№ yoki mijoz" style="max-width:240px" oninput="load()">
     </div>
   </div>
-  <div style="overflow-x:auto"><table>
+  <!--  Jadval O'Z qutisida aylanadi (`max-height`): sticky faqat SCROLL
+        KONTEYNER ichida ishlaydi va sahifaning o'z aylanishida sarlavha
+        baribir yuqoriga chiqib ketardi. Qoldiq va Xodimlar ro'yxati
+        bilan BIR XIL yechim. -->
+  <div style="overflow:auto;max-height:70vh"><table class="orders">
     <!--  «Bron» ustuni yo'q: u qator sonini takrorlardi va «bron» degan
           ichki tushunchani ro'yxatga olib chiqardi. Buyurtma qay ahvolda
           ekani HOLAT ustunida turadi. -->
