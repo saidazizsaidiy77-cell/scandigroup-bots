@@ -47,9 +47,7 @@
           o'qilardi. Alohida ustunda esa ko'z bitta ustun bo'ylab
           pastga yuguradi — «stul tsexida kim bor» degan savolga
           javob shunday topiladi. -->
-    <thead><tr><th>Ism</th><th>Guruh</th><th>Tsex</th><th>Bo'lim</th><th>Lavozim</th>
-      <th>PIN</th><th>Telegram ID</th><th>Rollar</th>
-      <th>Holat</th><th></th></tr></thead>
+    <thead><tr id="wHead"></tr></thead>
     <tbody id="tW"></tbody>
   </table></div>
   <p class="muted" style="margin-top:12px;font-size:13px">
@@ -94,7 +92,48 @@ async function load(){
       <td class="num">${r.permission_count}</td></tr>`).join('');
 }
 
+//  ★ USTUN BO'YICHA SARALASH — KLIENTDA (zavod qarori, 2026-09).
+//  Ro'yxat bir marta o'qiladi va yetmishtacha qatordan iborat, ya'ni
+//  har bosishda serverga borish ortiqcha; qidiruv ham shu sababdan
+//  klientda turadi. Serverga chiqarilsa ikkita tartib paydo bo'lardi —
+//  biri so'rovda, biri sahifada.
+//
+//  Sarlavha va SARALANADIGAN QIYMAT bitta ro'yxatdan chiqadi: ikki
+//  joyda yozilsa «Tsex» sarlavhasi bir kun lavozimni saralab qo'yardi.
+//  Katakning KO'RINISHI esa o'z joyida qoladi — biri teg, biri rangli
+//  yozuv, biri oddiy matn.
+const USTUN = [
+  { k: 'name',  t: 'Ism',         v: w => w.name },
+  { k: 'group', t: 'Guruh',       v: w => w.staff_group },
+  { k: 'shop',  t: 'Tsex',        v: w => w.shop },
+  { k: 'dept',  t: "Bo'lim",      v: w => w.section || w.dept },
+  { k: 'pos',   t: 'Lavozim',     v: w => w.position },
+  { k: 'pin',   t: 'PIN',         v: w => (w.has_pin ? 'qo\'yilgan' : '') },
+  { k: 'tg',    t: 'Telegram ID', v: w => (w.tg_id ? String(w.tg_id) : '') },
+  { k: 'roles', t: 'Rollar',      v: w => w.roles.map(r => r.name).join(', ') },
+  { k: 'act',   t: 'Holat',       v: w => (w.active ? 'faol' : '') },
+];
+
+//  Standarti — SERVERNIKI: faol xodimlar tepada, ichida ism bo'yicha.
+//  Sahifa ochilganda hech narsa saralanmaydi, ya'ni kecha qanday
+//  turgan bo'lsa bugun ham shunday ochiladi.
+let sortK = null, sortAsc = true;
+
+function sortSet(k){
+  if (sortK === k) sortAsc = !sortAsc; else { sortK = k; sortAsc = true; }
+  drawWorkers();
+}
+
+function drawHead(){
+  $('wHead').innerHTML = USTUN.map(c => `
+    <th style="cursor:pointer;user-select:none;white-space:nowrap"
+        onclick="sortSet('${c.k}')">${esc(c.t)}<span style="opacity:.45">${
+      sortK === c.k ? (sortAsc ? ' \u25b2' : ' \u25bc') : ''}</span></th>`).join('')
+    + '<th></th>';
+}
+
 function drawWorkers(){
+  drawHead();
   const q = ($('wQ')?.value || '').trim().toLowerCase();
   const mos = (w) => !q
     || w.name.toLowerCase().includes(q)
@@ -107,6 +146,21 @@ function drawWorkers(){
     || w.roles.some(r => (r.name || '').toLowerCase().includes(q)
                       || (r.scope_shop || '').toLowerCase().includes(q));
   const ro = workers.filter(mos);
+  if (sortK) {
+    const col = USTUN.find(c => c.k === sortK);
+    //  ★ BO'SH KATAK HAR DOIM OXIRIDA, saralash yo'nalishidan qat'i
+    //  nazar. «Tsex» bosilganda tepaga o'n beshta bo'sh qator chiqsa
+    //  javob ko'rinmasdi — bo'shni qidirayotgan odam esa ro'yxat
+    //  oxirigacha tushadi va ularni o'sha yerda birga topadi.
+    ro.sort((a, b) => {
+      const x = (col.v(a) || '').toString(), y = (col.v(b) || '').toString();
+      if (!x !== !y) return x ? -1 : 1;
+      //  Ism bo'yicha ikkinchi darajali tartib: bir xil tsexdagi
+      //  qatorlar har chizilganda joyini almashtirib turmasin.
+      return x.localeCompare(y, 'uz') * (sortAsc ? 1 : -1)
+          || a.name.localeCompare(b.name, 'uz');
+    });
+  }
   $('tW').innerHTML = ro.length ? ro.map(w => `
     <tr>
       <td>${esc(w.name)}${w.phone ? `<div class="muted" style="font-size:12px">${esc(w.phone)}</div>` : ''}</td>
@@ -117,8 +171,9 @@ function drawWorkers(){
             o'sha, bo'lmasa qog'ozdagi nomi («HR», «Logistika») —
             ekranda ikkalasi ham BO'LIM, ajratib ko'rsatish
             xodimga hech narsa bermasdi (izoh: sql/production.sql). -->
-      ${[w.staff_group, w.shop, w.section || w.dept, w.position].map(v =>
-        `<td class="muted" style="font-size:13px">${v ? esc(v) : '—'}</td>`).join('')}
+      ${USTUN.slice(1, 5).map(c =>
+        `<td class="muted" style="font-size:13px">${
+          c.v(w) ? esc(c.v(w)) : '—'}</td>`).join('')}
       <td class="muted">${w.has_pin ? 'qo\'yilgan' : '—'}</td>
       <td class="muted">${w.tg_id ? esc(w.tg_id) : '<span class="tag warn">ulanmagan</span>'}</td>
       <td>${w.roles.length ? w.roles.map(r =>
