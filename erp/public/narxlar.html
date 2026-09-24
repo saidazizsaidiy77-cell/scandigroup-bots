@@ -28,6 +28,9 @@
       <span>Faolsizi ham</span></label>
   </div>
   <p class="muted" style="font-size:12px;margin-top:10px">
+    <b>Saqlash tugmasi yo'q</b> — narx katakdan chiqilganda (Tab yoki
+    boshqa joyga bosilganda) o'zi saqlanadi va yonida <b
+    style="color:var(--ok,#1a7f37)">✓</b> paydo bo'ladi.<br>
     Narx dollarda. Har o'lcham alohida mahsulot — narxi ham alohida.
     Bo'sh qoldirilgan narx «chegara yo'q» degani: menejer istalgan
     raqamni yoza oladi.</p>
@@ -101,29 +104,49 @@ function draw() {
           ? ` <span class="muted">· ${esc(r.size_label)}</span>` : ''}
         <div class="muted" style="font-size:11px">${esc(r.sku)}</div></td>
       <td class="muted">${esc(r.group_name)}</td>
-      <td class="num"><input type="number" step="0.01" min="0"
-        value="${r.price_opt ?? ''}" style="width:110px;text-align:right"
-        onchange="saqla(${r.id}, 'price_opt', this)"></td>
-      <td class="num"><input type="number" step="0.01" min="0"
-        value="${r.price_retail ?? ''}" style="width:110px;text-align:right"
-        onchange="saqla(${r.id}, 'price_retail', this)"></td>
+      <td class="num"><div class="row" style="gap:6px;justify-content:flex-end">
+        <input type="number" step="0.01" min="0"
+          value="${r.price_opt ?? ''}" style="width:110px;text-align:right"
+          onchange="saqla(${r.id}, 'price_opt', this)">
+        <span class="belgi" style="width:14px"></span></div></td>
+      <td class="num"><div class="row" style="gap:6px;justify-content:flex-end">
+        <input type="number" step="0.01" min="0"
+          value="${r.price_retail ?? ''}" style="width:110px;text-align:right"
+          onchange="saqla(${r.id}, 'price_retail', this)">
+        <span class="belgi" style="width:14px"></span></div></td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 
-//  Katakdan chiqilganda saqlanadi: «Saqlash» tugmasi bo'lsa yuzta
-//  qator to'ldirilgach uni bosish unutilardi va kiritilgan narx
-//  yo'qolardi.
+//  ★ SAQLASH TUGMASI YO'Q: narx katakdan chiqilganda o'zi saqlanadi.
+//  Tugma bo'lsa yuzta qator to'ldirilgach uni bosish unutilardi va
+//  kiritilgan narx yo'qolardi — sahifada yuzlab mahsulot bor.
+//
+//  Lekin «o'zi saqlanadi» degan narsa KO'RINISHI kerak, aks holda
+//  odam tugmani izlab yuradi va saqlanganiga ishonmaydi. Shuning
+//  uchun katakning yonida belgi turadi: ✓ saqlandi, ✕ saqlanmadi.
+//  Belgi O'CHMAYDI — qaysi qator yozilganini ekranga qarab bilish
+//  kerak, xabar esa bir necha soniyada yo'qoladi.
+function belgi(el, matn, rang) {
+  const b = el.parentElement?.querySelector('.belgi');
+  if (!b) return;
+  b.textContent = matn;
+  b.style.color = rang;
+  b.style.fontWeight = '700';
+}
+
 async function saqla(id, maydon, el) {
   const v = el.value.trim();
+  belgi(el, '…', 'var(--muted)');
   try {
     await App.api('/api/catalog/products/' + id,
       { method: 'PATCH', body: JSON.stringify({ [maydon]: v === '' ? '' : Number(v) }) });
     const r = rows.find((x) => x.id === id);
     if (r) r[maydon] = v === '' ? null : Number(v);
     el.style.borderColor = '';
-    toast('Saqlandi');
+    belgi(el, '\u2713', 'var(--ok, #1a7f37)');
   } catch (e) {
     el.style.borderColor = 'var(--bad)';
+    belgi(el, '\u2715', 'var(--bad)');
     toast(e.message, true);
   }
 }
