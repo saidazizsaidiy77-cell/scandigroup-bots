@@ -2363,11 +2363,24 @@ turadi, quti esa ekranning pastidan chiqib ketardi — odam qatorni
 ko'rish uchun SAHIFANI surardi va quti sarlavhasi bilan birga yuqoriga
 ketardi. Va'da buzilardi.
 
-Endi balandlikni `app.js` o'lchab qo'yadi va quti ekranning QOLGAN
-qismini to'ldiradi: sahifaning o'zi umuman surilmaydi. Uch tafsilot:
+Endi balandlikni `app.js` o'lchab qo'yadi.
 
-  · o'lchov sahifa surilishidan QAT'I NAZAR to'g'ri (`+ scrollY`) —
-    surilgan holatda o'lchansa quti har safar uzayib borardi;
+**★ QUTI TEPASIDAGI NARSA HISOBGA OLINMAYDI** (zavod qarori,
+2026-09). Birinchi urinishda quti ekranning QOLGAN qismini olardi —
+menyu va filtrdan keyingisini — va sahifa umuman surilmasdi. Natijasi
+teskari bo'lib chiqdi: modullar menyusi ekranning uchdan birini
+egallab HAR DOIM turib qolardi (u CSS da qotib turmaydi, shunchaki
+surish uchun joy qolmagandi) va jadvalga yetti-sakkiz qator joy
+qolardi.
+
+Endi quti EKRAN balandligini oladi, ya'ni sahifa aynan tepasidagi
+narsa chamasi suriladi: bir surishda menyu ham, filtr ham yuqoriga
+chiqib ketadi va ekranda faqat jadval qoladi — sarlavhasi tepada
+qotib turgan holda. 1440×900 da yetti qator o'rniga yigirma to'rtta
+ko'rinadi.
+
+Ikki tafsilot:
+
   · quti OSTIDAGI joy (kartochkaning bo'shlig'i, `body` ning
     `padding` i) **`body` ning O'Z pastidan** o'lchanadi,
     `scrollHeight` dan EMAS: `documentElement.scrollHeight` hech qachon

@@ -611,12 +611,23 @@ const App = (() => {
   //  Ikki to'rtburchakning AYIRMASI bo'lgani uchun u quti
   //  o'lchamidan ham, sahifa surilishidan ham qat'i nazar bir xil
   //  qoladi: kuzatuvchi o'zini o'zi chaqirib aylanmaydi.
+  //  ★ QUTI TEPASIDAGI NARSA HISOBGA OLINMAYDI (zavod qarori,
+  //  2026-09). Ilgari quti ekranning QOLGAN qismini olardi — menyu
+  //  va filtrdan keyingisini — va sahifa umuman surilmasdi. Natijasi
+  //  teskari bo'lib chiqdi: modullar menyusi ekranning uchdan birini
+  //  egallab, HAR DOIM turib qolardi (u CSS da qotib turmaydi,
+  //  shunchaki surish uchun joy qolmagandi) va jadvalga bir necha
+  //  qator joy qolardi.
+  //
+  //  Endi quti EKRAN balandligini oladi, ya'ni sahifa aynan tepasidagi
+  //  narsa chamasi suriladi: bir surishda menyu ham, filtr ham
+  //  yuqoriga chiqib ketadi va ekranda faqat jadval qoladi —
+  //  sarlavhasi tepada qotib turgan holda.
   function olcha() {
     document.querySelectorAll('.tbox').forEach((el) => {
       const r = el.getBoundingClientRect();
       const pastki = document.body.getBoundingClientRect().bottom - r.bottom;
-      const h = Math.max(ENG_PAST, Math.round(
-        window.innerHeight - (r.top + window.scrollY) - pastki));
+      const h = Math.max(ENG_PAST, Math.round(window.innerHeight - pastki));
       const hozir = parseFloat(el.style.maxHeight);
       if (!(Math.abs(hozir - h) <= 2)) el.style.maxHeight = h + 'px';
     });
