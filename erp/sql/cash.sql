@@ -148,11 +148,17 @@ INSERT INTO expense_items (group_code, name, sort) VALUES
   ('KOMUNAL', 'Gaz', 30),
   ('KOMUNAL', 'Internet', 40),
   ('MAOSH', 'Oylik AUP', 10),
+  --  Tsexi yo'q, lekin oyligi alohida ko'rinishi kerak bo'lgan ikki
+  --  guruh (zavod qarori, 2026-09): texnolog va dizayner butun ishlab
+  --  chiqarishga xizmat qiladi, ombor mudirlari esa umuman tsexda
+  --  emas. Ikkalasi ham GURUH bo'yicha bog'lanadi, tsex bo'yicha emas.
+  ('MAOSH', 'Oylik muhandis-texnik xodimlar', 15),
   ('MAOSH', 'Oylik korpus', 20),
   ('MAOSH', 'Oylik lak', 30),
   ('MAOSH', 'Oylik qadoqlash', 40),
   ('MAOSH', 'Oylik stul', 50),
   ('MAOSH', 'Oylik savdo', 60),
+  ('MAOSH', 'Oylik ombor', 65),
   ('MAOSH', 'Xodimlarga sarmoya', 70),
   ('MAOSH', 'Tibbiy yordam', 80),
   ('XOJALIK', 'Oziq-ovqat', 10),
@@ -362,6 +368,21 @@ BEGIN
      WHERE ei.group_code = 'MAOSH' AND lower(ei.name) = lower(v.modda);
 
     INSERT INTO migration_flags (key) VALUES ('oylik-doira');
+  END IF;
+END $$;
+
+--  Keyinroq qo'shilgan ikki modda: alohida bayroq bilan, chunki
+--  birinchisi allaqachon o'tib bo'lgan bazalarda ham bog'lanishi kerak.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'oylik-doira-2') THEN
+    UPDATE expense_items ei
+       SET staff_group = v.guruh
+      FROM (VALUES ('Oylik ombor', 'Ombor'),
+                   ('Oylik muhandis-texnik xodimlar', 'ITR')) AS v(modda, guruh)
+     WHERE ei.group_code = 'MAOSH' AND lower(ei.name) = lower(v.modda);
+
+    INSERT INTO migration_flags (key) VALUES ('oylik-doira-2');
   END IF;
 END $$;
 

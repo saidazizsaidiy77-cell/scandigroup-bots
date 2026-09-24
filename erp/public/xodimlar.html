@@ -266,8 +266,13 @@ function openForm(id){
             <div style="flex:1"><label>Guruh</label>
               <input id="wGroup" list="wGroups" value="${esc(w?.staff_group || '')}"
                      placeholder="Ishlab chiqarish · Ombor · Savdo · AUP">
+              <!--  Ro'yxat IKKI manbadan keladi (serverdagi staff_groups):
+                    shtatda ishlatilgani va OYLIK MODDASI kutayotgani.
+                    Yangi modda qo'shilganda uning guruhi hali hech
+                    kimda yo'q bo'ladi — qo'lda terilsa «ITR» va «itr »
+                    ikkita guruh bo'lib qolardi. -->
               <datalist id="wGroups">${
-                [...new Set(workers.map(x => x.staff_group).filter(Boolean))]
+                (meta.staff_groups || [])
                   .map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>
             <div style="flex:1"><label>Lavozim</label>
               <input id="wPos" value="${esc(w?.position || '')}"

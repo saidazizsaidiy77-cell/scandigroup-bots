@@ -1401,7 +1401,25 @@ tsexga bog'lasa yoki yangi modda qo'shsa bitta katakcha o'zgaradi.
 **Ikki o'lchov**, chunki zavodning oylik moddalari ikki xil:
 
     shop_id      TSEX bo'yicha   Oylik korpus · lak · qadoqlash · stul
-    staff_group  GURUH bo'yicha  Oylik AUP · Oylik savdo
+    staff_group  GURUH bo'yicha  Oylik AUP · savdo · ombor · ITR
+
+**Tsexi yo'q, lekin oyligi ALOHIDA ko'rinishi kerak bo'lgan ikki guruh**
+(zavod qarori, 2026-09): **muhandis-texnik xodimlar** (texnolog,
+dizayner — butun ishlab chiqarishga xizmat qiladi, bitta tsexniki
+emas) va **ombor** (xom ashyo va furnitura mudirlari, umuman tsexda
+emas). Ikkalasi ham GURUH bo'yicha bog'lanadi. Tsex biriktirib
+qo'yish yo'l emas edi: texnologning oyligi korpus tsexining
+summasiga qo'shilib ketardi va «texnologlarga qancha ketdi» degan
+savol foyda-zarardan yo'qolardi.
+
+**Guruh ro'yxati IKKI manbadan** (`GET /api/admin/roles` dagi
+`staff_groups`): shtatda ishlatilgani VA oylik moddasi kutayotgani
+(`expense_items.staff_group`). Yangi modda qo'shilganda uning guruhi
+hali hech kimda bo'lmaydi va ro'yxatda ham turmasdi — odam uni qo'lda
+terardi, «ITR» va «itr » ikkita guruh bo'lib qolardi va modda
+ikkalasini ham topmasdi. Endi u modda qo'shilgan zahoti Xodimlar
+sahifasidagi «Guruh» katagida tanlanadi (rang va mato bilan bir xil
+idiom: faqat boridan).
 
 Ikkalasi ham bo'sh bo'lishi MUMKIN va o'shanda ro'yxat umuman
 qisqarmaydi: «Xodimlarga sarmoya» va «Tibbiy yordam» zavodning har
@@ -1415,7 +1433,9 @@ server har faol xodimni qabul qilaveradi. Shuning uchun izohda
 **«hammasini ko'rsatish»** turadi — xodim boshqa tsexda yozilib
 qolgan bo'lsa kassirning ishi to'xtab qolmasin, va doira QAYSI ekani
 ham o'sha yerda yozilib turadi: qisqargan ro'yxat sababini aytmasa,
-kassir yo'q odamni qidirib yurardi. Modda almashsa tanlangan xodim
+kassir yo'q odamni qidirib yurardi — va QAYSI katak to'ldirilishi
+kerakligi ham: tsex bo'yicha bog'langan moddaga tsex, guruh
+bo'yichasiga esa guruh. Modda almashsa tanlangan xodim
 ham tozalanadi — «Oylik korpus» dan «Oylik stul» ga o'tilganda
 korpusning odami katakda turib qolardi.
 

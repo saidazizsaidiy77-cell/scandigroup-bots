@@ -93,7 +93,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
 }));
 
 router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
-  const [roles, shops, channels, houses, eg, secs] = await Promise.all([
+  const [roles, shops, channels, houses, eg, secs, sgroups] = await Promise.all([
     db.query(`SELECT r.code, r.name, r.surface,
                      COUNT(rp.permission_code) AS permission_count
                 FROM roles r LEFT JOIN role_permissions rp ON rp.role_code = r.code
@@ -115,10 +115,25 @@ router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
     db.query(`SELECT sc.id, sc.name, sc.shop_id, sh.name AS shop
                 FROM sections sc JOIN shops sh ON sh.id = sc.shop_id
                WHERE sc.active ORDER BY sh.sort, sc.sort`),
+    //  ★ GURUH RO'YXATI IKKI MANBADAN. Shtatda ishlatilgani ham,
+    //  OYLIK MODDASI kutayotgani ham (`expense_items.staff_group`):
+    //  yangi modda qo'shilganda uning guruhi hali hech kimda yo'q va
+    //  ro'yxatda ham turmasdi — odam uni qo'lda terardi, «ITR» va
+    //  «itr » ikkita guruh bo'lib qolardi va modda ikkalasining
+    //  birini ham topmasdi. Endi u modda qo'shilgan zahoti tanlanadi.
+    db.query(`SELECT DISTINCT g FROM (
+                SELECT staff_group AS g FROM workers
+                 WHERE staff_group IS NOT NULL AND btrim(staff_group) <> ''
+                UNION
+                SELECT staff_group FROM expense_items
+                 WHERE active AND staff_group IS NOT NULL
+                   AND btrim(staff_group) <> '') t
+               ORDER BY g`),
   ]);
   res.json({ roles: roles.rows, shops: shops.rows, channels: channels.rows,
              warehouses: houses.rows, expense_groups: eg.rows,
-             sections: secs.rows });
+             sections: secs.rows,
+             staff_groups: sgroups.rows.map(r => r.g) });
 }));
 
 // Telegram ID — RAQAM, @nom emas (bazada bigint). Bot ichida /myid

@@ -4235,6 +4235,23 @@ test('oylik moddasi o\'z tsexi bilan keladi', async () => {
 
   //  Doirasi yo'q modda ro'yxatni QISQARTIRMAYDI: sarmoya ham,
   //  tibbiy yordam ham zavodning har qanday xodimiga beriladi.
+  //  Tsexi yo'q, lekin oyligi alohida ko'rinishi kerak bo'lgan ikkitasi
+  const omb = refs.items.find((x) => x.name === 'Oylik ombor');
+  assert.equal(omb.staff_group, 'Ombor');
+  assert.equal(omb.shop_id, null, 'ombor tsex emas');
+  const itr = refs.items.find((x) => x.name === 'Oylik muhandis-texnik xodimlar');
+  assert.equal(itr.staff_group, 'ITR');
+  assert.equal(itr.shop_id, null, 'texnolog butun ishlab chiqarishga xizmat qiladi');
+
+  //  Modda kutayotgan guruh Xodimlar sahifasidagi ro'yxatda TURADI,
+  //  hali hech kimda bo'lmasa ham: aks holda qo'lda terilib, «ITR» va
+  //  «itr » ikkita guruh bo'lib qolardi va modda ikkalasini ham
+  //  topmasdi.
+  const meta = (await H.api(base, await H.sessionFor('Administrator'))(
+    'GET', '/api/admin/roles')).body;
+  assert.ok(meta.staff_groups.includes('ITR'),
+    'yangi moddaning guruhi ro\'yxatda turadi');
+
   const hamma = refs.items.find((x) => x.name === 'Xodimlarga sarmoya');
   assert.equal(hamma.needs_worker, true, 'u ham xodim so\'raydi');
   assert.equal(hamma.shop_id, null);

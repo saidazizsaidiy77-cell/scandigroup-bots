@@ -210,7 +210,14 @@ function staffFilter() {
     : `<div class="none">${doira.length
         ? 'Bunday xodim topilmadi'
         : (refs.staff || []).length
-        ? 'Bu doirada xodim yo\'q \u2014 Xodimlar sahifasida tsexini qo\'ying'
+        //  Doira bo'sh chiqsa SABABINI aytadi va qaysi katak
+        //  to'ldirilishi kerakligini ham: tsex bo'yicha bog'langan
+        //  moddaga tsex, guruh bo'yichasiga esa guruh. Ilgari har
+        //  ikkalasiga ham «tsexini qo'ying» deb yozilardi va guruh
+        //  bo'yicha bog'langan moddada bu noto'g'ri maslahat edi.
+        ? `Bu doirada xodim yo'q \u2014 Xodimlar sahifasida ${dr && dr.shop_id
+             ? 'tsexini' : `guruhini «${esc(dr ? dr.staff_group : '')}» deb`
+           } qo'ying`
         : "Ro'yxat bo'sh \u2014 Xodimlar sahifasidan kiriting"}</div>`;
   //  Qidiruvsiz oltmish qator ekranni egallab ketardi — kassir
   //  nomni yozadi, ro'yxat esa unga qisqaradi. Doira qo'yilgan bo'lsa
