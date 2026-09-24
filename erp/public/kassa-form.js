@@ -188,8 +188,12 @@ function staffFilter() {
   const ichida = (x) => !dr
     || ((!dr.shop_id || x.shop_id === dr.shop_id)
      && (!dr.staff_group
-         || String(x.staff_group || '').toLowerCase()
-            === String(dr.staff_group).toLowerCase()));
+         //  Ikkala tomon ham TOZALANADI: kiritishda bo'shliq
+         //  qirqiladi (`shtat()` va import), lekin ilgari yozilgan
+         //  qatorda «ITR » bo'lib qolgan bo'lishi mumkin va u jimgina
+         //  mos kelmasdi — ro'yxat bo'sh chiqib, sababi ko'rinmasdi.
+         || String(x.staff_group || '').trim().toLowerCase()
+            === String(dr.staff_group).trim().toLowerCase()));
 
   const q = ($('fStaffQ') ? $('fStaffQ').value : '').trim().toLowerCase();
   const mos = (x) => !q || x.name.toLowerCase().includes(q)
