@@ -2369,9 +2369,15 @@ qismini to'ldiradi: sahifaning o'zi umuman surilmaydi. Uch tafsilot:
   · o'lchov sahifa surilishidan QAT'I NAZAR to'g'ri (`+ scrollY`) —
     surilgan holatda o'lchansa quti har safar uzayib borardi;
   · quti OSTIDAGI joy (kartochkaning bo'shlig'i, `body` ning
-    `padding` i) bir marta o'lchanadi va yodda saqlanadi: har safar
-    qayta o'qilsa quti qisqarishi sahifa balandligini o'zgartirib,
-    kuzatuvchi o'zini o'zi cheksiz chaqirardi;
+    `padding` i) **`body` ning O'Z pastidan** o'lchanadi,
+    `scrollHeight` dan EMAS: `documentElement.scrollHeight` hech qachon
+    ekran balandligidan past tushmaydi, ya'ni jadval hali BO'SH
+    turganda — qatorlar keyinroq, so'rov bilan keladi — ekranning
+    butun bo'sh joyi «quti ostidagi joy» bo'lib hisoblanardi va quti
+    eng past chegaraga, IKKI QATORGA tushib qolardi. Ikki
+    to'rtburchakning AYIRMASI bo'lgani uchun u quti o'lchamidan ham,
+    sahifa surilishidan ham qat'i nazar bir xil qoladi va kuzatuvchi
+    o'zini o'zi chaqirib aylanmaydi;
   · qayta o'lchash `ResizeObserver` bilan — ombor sahifasida quti
     har chizilganda YANGIDAN yaratiladi va bir martalik `load` uni
     ko'rmasdi.

@@ -599,17 +599,24 @@ const App = (() => {
   //  Quti ostida ham joy bor — kartochkaning pastki bo'shlig'i va
   //  `body` ning `padding` i. Hisobga olinmasa sahifa bir necha o'n
   //  piksel surilib turardi va sarlavha o'sha surilishda ko'zdan
-  //  ketardi. U bir marta o'lchanadi va yodda saqlanadi: har
-  //  o'lchashda qayta o'qilsa quti qisqarishi sahifa balandligini
-  //  o'zgartirib, kuzatuvchi o'zini o'zi cheksiz chaqirardi.
-  const pastki = new WeakMap();
+  //  ketardi.
+  //
+  //  U `body` ning O'Z pastidan o'lchanadi, `scrollHeight` dan EMAS:
+  //  `documentElement.scrollHeight` hech qachon ekran balandligidan
+  //  past tushmaydi, ya'ni jadval hali BO'SH turganda (qatorlar
+  //  keyinroq, so'rov bilan keladi) ekranning butun bo'sh joyi
+  //  «quti ostidagi joy» bo'lib hisoblanardi va quti eng past
+  //  chegaraga — ikki qatorga — tushib qolardi.
+  //
+  //  Ikki to'rtburchakning AYIRMASI bo'lgani uchun u quti
+  //  o'lchamidan ham, sahifa surilishidan ham qat'i nazar bir xil
+  //  qoladi: kuzatuvchi o'zini o'zi chaqirib aylanmaydi.
   function olcha() {
     document.querySelectorAll('.tbox').forEach((el) => {
       const r = el.getBoundingClientRect();
-      if (!pastki.has(el)) pastki.set(el, Math.max(0, Math.round(
-        document.documentElement.scrollHeight - (r.top + window.scrollY + r.height))));
+      const pastki = document.body.getBoundingClientRect().bottom - r.bottom;
       const h = Math.max(ENG_PAST, Math.round(
-        window.innerHeight - (r.top + window.scrollY) - pastki.get(el)));
+        window.innerHeight - (r.top + window.scrollY) - pastki));
       const hozir = parseFloat(el.style.maxHeight);
       if (!(Math.abs(hozir - h) <= 2)) el.style.maxHeight = h + 'px';
     });
@@ -618,12 +625,7 @@ const App = (() => {
   //  YO'Q: kuzatuvchi darrov qo'yilsa xato bilan yiqilardi va quti
   //  umuman o'lchanmay qolardi.
   function ulan() {
-    //  Ekran o'lchami o'zgarsa quti ostidagi joy ham boshqacha
-    //  bo'ladi (filtrlar boshqa qatorga tushadi) — qaytadan o'lchanadi.
-    window.addEventListener('resize', () => {
-      document.querySelectorAll('.tbox').forEach((el) => pastki.delete(el));
-      olcha();
-    });
+    window.addEventListener('resize', olcha);
     if (window.ResizeObserver) new ResizeObserver(olcha).observe(document.body);
     olcha();
   }
