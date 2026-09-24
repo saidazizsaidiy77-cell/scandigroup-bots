@@ -39,13 +39,32 @@ router.get('/customers', need('production.view', 'sales.view'), wrap(async (req,
                  AND ($2::int IS NULL OR manager_id = $2)
                ORDER BY name`, [chans, own]),
     db.query(`SELECT * FROM customer_channels ORDER BY sort`),
-    // Savdo menejeri sifatida biriktirish mumkin bo'lgan xodimlar:
-    // savdo roli borlar birinchi turadi
+    //  ★ MENEJER RO'YXATIDA FAQAT SAVDO XODIMI (zavod qarori, 2026-09).
+    //  Ilgari butun shtat chiqardi va savdo roli borlar shunchaki
+    //  tepada turardi. Zavodning oltmish oltita xodimi kiritilgach bu
+    //  ro'yxat ishlatib bo'lmaydigan bo'lib qoldi: menejer tanlash
+    //  uchun qorovul, oshpaz va shkurkachining orasidan izlash kerak
+    //  edi — ularning hech qaysisi mijozga biriktirilmaydi ham.
+    //
+    //  Chegara HUQUQDAN chiqadi, lavozimdan emas (4-qoida): savdo
+    //  huquqi berilgan xodim ro'yxatda o'zi paydo bo'ladi.
+    //
+    //  ALLAQACHON BIRIKTIRILGANI ham qoladi — roli keyin olib
+    //  tashlangan bo'lsa ham: aks holda eski mijoz kartochkasi
+    //  ochilganda menejeri ro'yxatdan tushib, saqlashda JIMGINA
+    //  o'chib ketardi. Yonida `is_sales` bo'sh bo'lib keladi va
+    //  sahifa uni belgi bilan ko'rsatadi.
     db.query(
       `SELECT w.id, w.name,
               EXISTS (SELECT 1 FROM v_worker_permissions vp
                        WHERE vp.worker_id = w.id AND vp.module = 'sales') AS is_sales
-         FROM workers w WHERE w.active ORDER BY is_sales DESC, w.name`),
+         FROM workers w
+        WHERE w.active
+          AND (EXISTS (SELECT 1 FROM v_worker_permissions vp
+                        WHERE vp.worker_id = w.id AND vp.module = 'sales')
+            OR EXISTS (SELECT 1 FROM customers c WHERE c.manager_id = w.id)
+            OR EXISTS (SELECT 1 FROM orders o    WHERE o.manager_id = w.id))
+        ORDER BY is_sales DESC, w.name`),
   ]);
   res.json({ customers: customers.rows, channels: channels.rows, managers: managers.rows });
 }));

@@ -4075,6 +4075,46 @@ test('ta\'minotchilarni fayldan yuklash: turi nomi bilan ham o\'qiladi', async (
 
 
 
+
+//  ★ MENEJER RO'YXATIDA FAQAT SAVDO XODIMI (zavod qarori, 2026-09).
+//  Zavodning oltmish oltita xodimi kiritilgach butun shtat chiqadigan
+//  ro'yxat ishlatib bo'lmaydigan bo'lib qoldi: menejer tanlash uchun
+//  qorovul va shkurkachining orasidan izlash kerak edi.
+test('menejer ro\'yxati: faqat savdo xodimi va allaqachon biriktirilgani',
+  async () => {
+  //  Shtatdagi odam: PIN'i ham, roli ham yo'q
+  const opr = (await admin('POST', '/api/admin/workers',
+    { name: 'Sinov Shkurkachi Menejer', staff_group: 'Ishlab chiqarish',
+      position: 'Shkurkachi' })).body.id;
+  const sav = (await admin('POST', '/api/admin/workers',
+    { name: 'Sinov Savdo Menejer', pin: '7731',
+      roles: [{ code: 'sotuvchi' }] })).body.id;
+
+  const ro = async () => (await admin('GET', '/api/units/customers')).body.managers;
+
+  let m = await ro();
+  assert.ok(m.some((x) => x.id === sav), 'savdo xodimi ro\'yxatda');
+  assert.ok(!m.some((x) => x.id === opr), 'shkurkachi ro\'yxatda yo\'q');
+
+  //  ★ ALLAQACHON BIRIKTIRILGANI QOLADI — roli bo'lmasa ham: aks
+  //  holda eski kartochka ochilganda menejeri ro'yxatdan tushib,
+  //  saqlashda jimgina o'chib ketardi.
+  const c = await admin('POST', '/api/units/customers',
+    { name: 'Sinov Menejer Mijozi', manager_id: opr });
+  assert.equal(c.status, 200, c.text);
+
+  m = await ro();
+  const bor = m.find((x) => x.id === opr);
+  assert.ok(bor, 'biriktirilgan xodim ro\'yxatda qoladi');
+  assert.equal(bor.is_sales, false, 'lekin savdo emasligi belgisi bilan');
+
+  //  Savdo huquqi berilsa ro'yxatga O'ZI qo'shiladi: chegara
+  //  huquqdan chiqadi, lavozimdan emas.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + opr,
+    { roles: [{ code: 'sotuvchi' }] })).status, 200);
+  assert.equal((await ro()).find((x) => x.id === opr).is_sales, true);
+});
+
 //  ★ OYLIK KIMGA BERILGANI YOZILADI (zavod qarori, 2026-09).
 //  Ta'minotchiga to'lovdan farqi: xodim TOMON BO'LMAYDI — pul
 //  korxonadan chiqib ketadi, ya'ni tomoni harajat moddasi.

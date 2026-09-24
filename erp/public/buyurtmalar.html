@@ -465,10 +465,15 @@ function draw(){
                 c.region ? ' · ' + esc(c.region) : ''}</option>`).join('')}
           </select>
           <div id="oBal" class="hint"></div></div>
+        <!--  Ro'yxatda faqat SAVDO xodimi turadi (izoh:
+              modules/units.js). Roli olib tashlangan, lekin eski
+              buyurtmada turgan odam ham qoladi va yonida «·» bilan
+              belgilanadi — mijoz kartochkasidagi bilan bir xil. -->
         <div><label>Menejer</label>
           <select id="oMgr" ${dis}><option value="">— o'zim —</option>
             ${managers.map(m => `<option value="${m.id}"
-              ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+              ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}${
+                m.is_sales ? '' : ' ·'}</option>`).join('')}
           </select><div class="hint"></div></div>
         <div><label>Buyurtma sanasi</label>
           <input id="oOn" type="date" ${dis}

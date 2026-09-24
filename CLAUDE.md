@@ -1917,6 +1917,23 @@ ekranda boshqa menejerning mijozi ko'rinib qolardi. Qamrovi:
   · qarzdorlik, dalolatnoma va kirim orderi;
   · kassadagi mijoz ro'yxati va to'lov yozish.
 
+**★ MENEJER RO'YXATIDA FAQAT SAVDO XODIMI** (zavod qarori, 2026-09;
+`modules/units.js`, `GET /api/units/customers` dagi `managers`).
+Ilgari butun shtat chiqardi va savdo roli borlar shunchaki tepada
+turardi. Zavodning oltmish oltita xodimi kiritilgach bu ro'yxat
+ishlatib bo'lmaydigan bo'lib qoldi: mijozga yoki buyurtmaga menejer
+tanlash uchun qorovul, oshpaz va shkurkachining orasidan izlash kerak
+edi — ularning hech qaysisi menejer bo'lmaydi ham.
+
+Chegara HUQUQDAN chiqadi, lavozimdan emas (4-qoida): savdo huquqi
+berilgan xodim ro'yxatda O'ZI paydo bo'ladi.
+
+**Allaqachon biriktirilgani QOLADI** — roli keyin olib tashlangan
+bo'lsa ham: aks holda eski mijoz kartochkasi ochilganda menejeri
+ro'yxatdan tushib, saqlashda JIMGINA o'chib ketardi. Yonida `is_sales`
+bo'sh bo'lib keladi va sahifa uni «·» belgisi bilan ko'rsatadi —
+mijoz kartochkasida ham, buyurtma oynasida ham bir xil.
+
 **Egasi yo'q mijoz ko'rinmaydi**: u hech kimniki emas. Shuning uchun
 doirasi bor xodim YOZGAN mijoz o'sha zahoti O'ZINIKI bo'ladi — aks
 holda u mijozni kiritadi-yu, saqlangan zahoti ro'yxatdan yo'qolardi.
