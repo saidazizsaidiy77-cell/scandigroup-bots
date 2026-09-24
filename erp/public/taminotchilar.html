@@ -22,6 +22,12 @@
   <div class="brand"><span class="dot"></span><h1>Ta'minotchilar</h1></div>
   <div class="row"><button class="primary" onclick="openForm()">Ta'minotchi qo'shish</button>
     <button onclick="openImport()">Ro'yxatni import qilish</button>
+    <!--  ★ RO'YXATNI YUKLAB OLISH. Ta'minotchi NOMI boshqa fayllarda
+          KALIT bo'lib ishlatiladi — xom ashyo spravochnigida har
+          materialning yonida u yoziladi va import nomi bo'yicha
+          topadi. Bir harf farq qilsa butun fayl to'xtaydi, ya'ni odam
+          bazadagi AYNAN qanday yozilganini ko'ra olishi kerak. -->
+    <button onclick="yuklab()">Excelga yuklash</button>
     <span class="row" id="erpUser"></span></div>
 </div>
 
@@ -326,6 +332,9 @@ async function saveFile(){
     const b = $('impSave'); if (b) b.disabled = false;
   }
 }
+
+const yuklab = () => App.download('/api/purchasing/suppliers/export',
+  'taminotchilar.csv');
 
 async function runImport(){
   const unknown = new Set();

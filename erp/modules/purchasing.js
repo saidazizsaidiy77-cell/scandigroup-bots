@@ -217,4 +217,38 @@ router.get('/debts/:id', need(...SEE), wrap(async (req, res) => {
              total: jami, closing: opening + jami.credit - jami.debit });
 }));
 
+//  ─────────────────────────────────────────── RO'YXATNI YUKLAB OLISH
+//
+//  ★ Ta'minotchi NOMI boshqa fayllarda KALIT bo'lib ishlatiladi: xom
+//  ashyo spravochnigida har materialning yonida uning ta'minotchisi
+//  yoziladi va import nomi bo'yicha topadi. Nomi bir harf bilan farq
+//  qilsa butun fayl to'xtaydi («Ta'minotchi topilmadi»), ya'ni odam
+//  bazadagi AYNAN qanday yozilganini ko'ra olishi kerak.
+//
+//  Ilgari buning yo'li yo'q edi: ro'yxat faqat ekranda turardi va uni
+//  ko'chirib yozish xato manbai bo'lardi.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
+router.get('/suppliers/export', need('purchasing.view', 'purchasing.manage'),
+  wrap(async (_req, res) => {
+    const { rows } = await db.query(
+      `SELECT s.name, s.phone, s.country, s.region,
+              c.name AS category, s.inn, s.note,
+              CASE WHEN s.active THEN '' ELSE 'faolsiz' END AS holat
+         FROM suppliers s
+         LEFT JOIN supplier_categories c ON c.code = s.category
+        ORDER BY s.active DESC, s.name`);
+    const head = ['Nomi', 'Telefon', 'Davlat', 'Region', 'Turi', 'STIR',
+                  'Izoh', 'Holati'];
+    const body = rows.map((r) => [r.name, r.phone, r.country, r.region,
+      r.category, r.inn, r.note, r.holat].map(csvCell).join(';'));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition',
+      `attachment; filename="taminotchilar-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send('\uFEFF' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
+  }));
+
 module.exports = router;

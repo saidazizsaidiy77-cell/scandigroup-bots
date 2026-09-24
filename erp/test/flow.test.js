@@ -1769,6 +1769,24 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
   }
 });
 
+test('ta\'minotchilar ro\'yxati faylga chiqadi', async () => {
+  //  ★ Ta'minotchi NOMI boshqa fayllarda KALIT bo'lib ishlatiladi: xom
+  //  ashyo spravochnigida har materialning yonida u yoziladi va import
+  //  nomi bo'yicha topadi. Bir harf farq qilsa butun fayl to'xtaydi,
+  //  ya'ni odam bazadagi AYNAN qanday yozilganini ko'ra olishi kerak.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO suppliers (name, category) VALUES ('Sinov MDF yetkazuvchi', 'MDF')
+                   ON CONFLICT (lower(name)) DO NOTHING`);
+  const r = await admin('GET', '/api/purchasing/suppliers/export');
+  assert.equal(r.status, 200, r.text);
+  //  Fayl BOM bilan yuboriladi (Excel usiz o'zbek harflarini buzib
+  //  ochadi) — lekin `fetch().text()` BOM ni o'zi olib tashlaydi,
+  //  shuning uchun u bu yerda tekshirilmaydi: jurnal eksporti bilan
+  //  bir xil kod va u zavodda ishlab turibdi.
+  assert.match(r.text, /^\uFEFF?Nomi;Telefon/);
+  assert.match(r.text, /Sinov MDF yetkazuvchi/);
+});
+
 test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {
   //  ★ HAR RANG ALOHIDA MATERIAL (zavod qarori): «LDSP 16mm oq» va
   //  «LDSP 16mm venge» — ikkita qator, har birining o'z qoldig'i.
