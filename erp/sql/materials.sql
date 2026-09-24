@@ -247,3 +247,107 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('furnitura-guruh');
   END IF;
 END $$;
+
+-- ═══════════════════════════════════════════════════════ TALABNOMA
+--
+--  ★ ZAVOD QARORI (2026-09). Tsex boshlig'i xom ashyoni og'zaki
+--  so'ramaydi — HUJJAT yozadi: qaysi ombordan, qaysi material, qancha
+--  va qaysi kuni kerak. Savdoning yuk xati bilan bir xil idiom.
+--
+--  Uch bosqich, va har bosqichda BOSHQA odam qo'l ko'taradi:
+--
+--    1. tsex boshlig'i      talabnoma yozadi              new
+--    2. xom ashyo xodimi    «tayyorladim»                 ready
+--    3. xom ashyo xodimi    «chiqardim»                   done
+--       → material SHU PAYTDA tsex omboriga ko'chadi
+--
+--  Material faqat UCHINCHI bosqichda ko'chadi: yo'ldagi material
+--  ikkala qoldiqda ham to'g'ri turadi — omborda hali bor, tsexda hali
+--  yo'q (vitrinadan qaytarish va tsexdan tsexga topshirish bilan bir
+--  xil sabab).
+--
+--  ★ QAYTARISH — O'SHA HUJJAT, TESKARI YO'NALISHDA (`kind`). Ikkinchi
+--  mexanizm yozilmadi: tsexdan ortib qolgan material ham xuddi shu
+--  yo'ldan yuradi, faqat boshlovchisi boshqa. Qaytarishda «tayyorlash»
+--  bosqichi yo'q — tsex boshlig'i qaytardi, ombor qabul qildi:
+--
+--    1. tsex boshlig'i      «qaytaraman»                  new
+--    2. xom ashyo xodimi    «qabul qildim»                done
+--
+--  Ikkala yo'nalishda ham material QABUL QILINGANDA ko'chadi: hech
+--  kimning qo'l ko'tarishisiz birovning qoldig'i o'zgarmaydi.
+CREATE TABLE IF NOT EXISTS mat_requests (
+  id       SERIAL PRIMARY KEY,
+  doc_no   TEXT UNIQUE,
+  --  'issue'  — ombordan tsexga (talabnoma)
+  --  'return' — tsexdan omborga (qaytarish)
+  kind     TEXT NOT NULL DEFAULT 'issue' CHECK (kind IN ('issue', 'return')),
+  --  Qayerdan va qayerga: ikkalasi ham OMBOR. Yo'nalishni `kind`
+  --  emas, shu ikki ustunning O'ZI aytadi — hujjat qaysi tomonga
+  --  ketayotgani ro'yxatda ham ko'rinib tursin.
+  from_warehouse_id INT NOT NULL REFERENCES warehouses(id),
+  to_warehouse_id   INT NOT NULL REFERENCES warehouses(id),
+  --  Qaysi kuni kerak: ombor xodimi kunini shunga qarab tuzadi.
+  --  Qaytarishda bo'sh qoladi.
+  need_on  DATE,
+  status   TEXT NOT NULL DEFAULT 'new'
+           CHECK (status IN ('new', 'ready', 'done', 'rejected', 'cancelled')),
+  note     TEXT,
+  created_by  INT REFERENCES workers(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ready_by    INT REFERENCES workers(id),
+  ready_at    TIMESTAMPTZ,
+  done_by     INT REFERENCES workers(id),
+  done_on     DATE,
+  decided_by  INT REFERENCES workers(id),
+  decided_at  TIMESTAMPTZ,
+  decide_note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mat_request_items (
+  id          SERIAL PRIMARY KEY,
+  request_id  INT NOT NULL REFERENCES mat_requests(id) ON DELETE CASCADE,
+  material_id INT NOT NULL REFERENCES materials(id),
+  qty         NUMERIC(14,3) NOT NULL CHECK (qty > 0),
+  --  ★ QANCHA BERILGANI ALOHIDA. Ombor xodimi 100 so'ralganda 60 ta
+  --  bera oladi: qolgani hali kelmagan. Ilgari bunday yo'l bo'lmasa
+  --  u ikki yomon ishdan birini qilardi — yo 100 deb yozib, yo'q
+  --  materialni tsexga o'tkazardi, yo umuman bermasdi.
+  issued_qty  NUMERIC(14,3),
+  UNIQUE (request_id, material_id)
+);
+
+CREATE INDEX IF NOT EXISTS mat_requests_status_idx ON mat_requests (status, id DESC);
+
+--  Hujjat ro'yxati: ichida NIMA borligi bilan. Tayyorlaydigan odam
+--  javondagi materialni AYNAN shu ro'yxat bilan solishtiradi —
+--  vitrinadan qaytarish hujjati bilan bir xil qoida.
+DROP VIEW IF EXISTS v_mat_requests;
+CREATE VIEW v_mat_requests AS
+SELECT r.*,
+       fw.name AS from_warehouse, fw.code AS from_code, fw.shop_id AS from_shop,
+       tw.name AS to_warehouse,   tw.code AS to_code,   tw.shop_id AS to_shop,
+       COALESCE(sh.name, sh2.name) AS shop,
+       cw.name AS created_by_name,
+       rw.name AS ready_by_name,
+       dw.name AS done_by_name,
+       xw.name AS decided_by_name,
+       COALESCE(i.lines, 0)::int AS lines,
+       COALESCE(i.items, '[]'::json) AS items
+  FROM mat_requests r
+  JOIN warehouses fw ON fw.id = r.from_warehouse_id
+  JOIN warehouses tw ON tw.id = r.to_warehouse_id
+  LEFT JOIN shops sh  ON sh.id  = tw.shop_id
+  LEFT JOIN shops sh2 ON sh2.id = fw.shop_id
+  LEFT JOIN workers cw ON cw.id = r.created_by
+  LEFT JOIN workers rw ON rw.id = r.ready_by
+  LEFT JOIN workers dw ON dw.id = r.done_by
+  LEFT JOIN workers xw ON xw.id = r.decided_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'material_id', x.material_id, 'material', m.name, 'uom', m.uom,
+             'qty', x.qty, 'issued_qty', x.issued_qty) ORDER BY m.name) AS items
+      FROM mat_request_items x
+      JOIN materials m ON m.id = x.material_id
+     WHERE x.request_id = r.id) i ON true;
