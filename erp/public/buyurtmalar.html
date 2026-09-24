@@ -120,10 +120,13 @@ const money = (v) => {
 //  qatorga biriktirish), menejer esa buyurtma qay ahvolda ekanini
 //  o'qiydi.
 const STATUS = {
-  new:       'Yangi',
-  //  Konver bor, lekin tsex uni yo'lga chiqarmagan: chiqish sanasi
-  //  hali NOMA'LUM. Ilgari «Chernovik» deb turardi va noto'g'ri
-  //  o'qilardi — buyurtma emas, KONVER boshlanmagan.
+  //  ★ IKKI HOL, BITTA JAVOB (zavod qarori, 2026-09): konver umuman
+  //  biriktirilmagan YOKI biriktirilgan-u tsex uni yo'lga
+  //  chiqarmagan. Ikkalasida ham chiqish kuni NOMA'LUM — sana
+  //  konverning boshlangan kunidan sanaladi — ya'ni menejer mijozga
+  //  sana aytib qo'ymasligi kerak, va savol bitta. Alohida «Yangi»
+  //  tab shu sababdan qilinmadi. Ilgari «Chernovik» deb turardi va
+  //  noto'g'ri o'qilardi: buyurtma emas, KONVER boshlanmagan.
   draft:     'Boshlanmagan',
   waiting:   'Ishlab chiqarilmoqda',
   reserved:  'Tayyor',
@@ -133,7 +136,7 @@ const STATUS = {
 };
 //  Tab ro'yxati SHU nomlardan quriladi: ikkinchi ro'yxat yozilsa bir
 //  kun birinchisidan ajralib ketardi.
-const FILTERS = [['', 'Hammasi'], ...['new', 'draft', 'waiting', 'reserved',
+const FILTERS = [['', 'Hammasi'], ...['draft', 'waiting', 'reserved',
   'to_ship', 'shipped', 'cancelled'].map(k => [k, STATUS[k]])];
 
 const statusOf = (o) => STATUS[o.holat] || o.holat || o.status;
@@ -145,6 +148,18 @@ const statusOf = (o) => STATUS[o.holat] || o.holat || o.status;
 //  belgi bo'lib turadi, ya'ni ikkala javob ham bir vaqtda o'qiladi.
 const chegirmaKutmoqda = (o) => o.discount_status === 'pending'
   && o.holat !== 'shipped' && o.holat !== 'cancelled';
+
+//  ★ YUBORILGAN, LEKIN HALI TAYYOR EMAS — bu XATO EMAS, odatiy hol:
+//  savdo mudirga OLDINDAN aytadi («bu ketadi, qolganini kutyapmiz»),
+//  mudir esa kunini shunga qarab tuzadi. Mahsulot baribir chiqmaydi —
+//  to'siq `/ship` da, chiqarishda.
+//
+//  «Omborga yuborildi» tabida faqat haqiqatan javonda turganlari
+//  qoladi (zavod qarori), ya'ni bunday buyurtma o'z joyida —
+//  «Boshlanmagan» yoki «Ishlab chiqarilmoqda» da — ko'rinadi.
+//  Belgisiz qolsa menejer uni yubormaganman deb o'ylardi va ikkinchi
+//  marta yuborishga urinardi. Belgi OGOHLANTIRISH emas, oddiy yozuv.
+const yuborilgan = (o) => o.status === 'to_ship' && o.holat !== 'to_ship';
 
 let rows = [], customers = [], managers = [], products = [], dests = [];
 //  T/M ombor qoldig'i: turi · mahsulot · rang · mato · bo'sh soni.
@@ -256,7 +271,8 @@ async function load(){
             ko'rinardi. -->
       <td><span class="tag${o.holat === 'cancelled' ? ' warn' : ''}"
         >${esc(statusOf(o))}</span>${chegirmaKutmoqda(o)
-          ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}</td>
+          ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
+          yuborilgan(o) ? ` <span class="tag">Omborga yuborilgan</span>` : ''}</td>
       <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
             «ko'rish». Ochilganda u hujjat bo'lib chiqadi. -->
       <td class="num"><button onclick="openOrder(${o.id})"
@@ -449,7 +465,9 @@ function draw(){
           <h1 style="margin:0">${isNew ? 'Yangi buyurtma' : esc(o.order_no)}</h1>
           ${!isNew ? `<span class="tag">${esc(statusOf(o))}</span>${
             chegirmaKutmoqda(o)
-              ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}` : ''}
+              ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
+            yuborilgan(o)
+              ? ` <span class="tag">Omborga yuborilgan</span>` : ''}` : ''}
         </div>
         <div class="row" style="gap:8px">
           ${ro ? `<button onclick="window.print()">Chop etish</button>`

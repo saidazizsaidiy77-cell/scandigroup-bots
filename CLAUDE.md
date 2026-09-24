@@ -929,8 +929,8 @@ qator id sini qo'lda yuborsa ham qabul qilinmaydi.
 **Ekranda «bron» so'zi yo'q.** Bron — ICHKI mexanizm (konverni qatorga
 biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
 
-  · **Yangi** — konver biriktirilmagan, menejerning ishi;
-  · **Boshlanmagan** — konver bor, lekin tsex uni yo'lga chiqarmagan;
+  · **Boshlanmagan** — konver biriktirilmagan, yoki bor-u tsex uni
+    yo'lga chiqarmagan;
   · **Ishlab chiqarilmoqda** — bir qismi hali omborga kelmagan;
   · **Tayyor** — hammasi T/M omborda, chiqarishga tayyor;
   · **Omborga yuborildi** — savdo mudirga yubordi, u chiqarishni kutmoqda;
@@ -949,8 +949,22 @@ faqat NOMINI qo'yadi (`STATUS`); tab ro'yxati ham o'sha nomlardan
 quriladi.
 
 Tartib yuqoridan pastga o'qiladi, birinchi to'g'ri kelgani javob:
-tugagan buyurtma (bekor, chiqib ketdi) → konver yo'q (yangi) →
-boshlanmagan → ishlab chiqarilmoqda → omborga yuborildi → tayyor.
+tugagan buyurtma (bekor, chiqib ketdi) → boshlanmagan → ishlab
+chiqarilmoqda → omborga yuborildi → tayyor.
+
+**★ «BOSHLANMAGAN» — IKKI HOL, BITTA JAVOB** (zavod qarori, 2026-09):
+konver umuman biriktirilmagan YOKI biriktirilgan-u tsex uni yo'lga
+chiqarmagan. Ikkalasida ham chiqish kuni NOMA'LUM — sana konverning
+boshlangan kunidan sanaladi — ya'ni menejer mijozga sana aytib
+qo'ymasligi kerak, va savol bitta. Alohida «Yangi» tab shu sababdan
+olib tashlandi.
+
+**★ YUBORILGAN, LEKIN HALI TAYYOR EMAS — belgisi bilan.** Bunday
+buyurtma o'z joyida («Boshlanmagan» yoki «Ishlab chiqarilmoqda»)
+turadi, yonida esa **«Omborga yuborilgan»** yozuvi. Belgisiz qolsa
+menejer uni yubormaganman deb o'ylardi va ikkinchi marta yuborishga
+urinardi. Bu OGOHLANTIRISH emas, oddiy yozuv: yuborish to'liq
+bo'lmaganda ham mumkin (yuqorida).
 
 **★ MAHSULOT QAYERDA TURGANI «OMBORGA YUBORILDI» DAN USTUN**, va bu
 ataylab: o'sha tabda hali tsexda yurgan, hatto BOSHLANMAGAN buyurtmalar
@@ -1100,8 +1114,15 @@ CHIQIB KETISH sanasi bo'yicha, savdo qachon yuborganiga qarab emas:
 mudir kunini «bugun nima ketadi» deb tuzadi. Mijozlar ro'yxati SHU
 ro'yxatdan yig'iladi — unga zavodning barcha mijozi emas, hozir
 chiqishni kutayotganlari kerak. Filtr KLIENTDA: ro'yxat kichik (faqat
-chiqarilishi kerak bo'lganlar) va yozgan zahoti javob beradi. **Bronning hammasi omborga yetib kelmaguncha
-tugma ishlamaydi** — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
+chiqarilishi kerak bo'lganlar) va yozgan zahoti javob beradi.
+
+**★ CHEGARA CHIQARISHDA, YUBORISHDA EMAS.** To'liq bo'lmagan buyurtma
+ham omborga YUBORILADI va bu ataylab: savdo mudirga OLDINDAN aytadi —
+«bu ketadi, qolganini kutyapmiz» — mudir esa kunini shunga qarab
+tuzadi va konverlar qayerda turganini o'z ekranida ko'rib boradi.
+Mahsulot baribir chiqmaydi: **`/ship` bronning hammasi javonga
+kelmaguncha chiqarmaydi** va qaysi konver yetishmayotganini nomi
+bilan yozadi — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
 mijoz qarzini ham noto'g'ri oshirardi.
 
 Tasdiqlashda mudir **chiqib ketgan sanani** qo'yadi.

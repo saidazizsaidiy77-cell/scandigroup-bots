@@ -264,14 +264,15 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 //    1-2  TUGAGAN buyurtma: bekor qilingan va chiqib ketgan. Ularda
 //         mahsulot zavodda yo'q, ya'ni boshqa hech narsa o'zgartira
 //         olmaydi.
-//    3    konver biriktirilmagan — menejerning ishi.
-//    4    BOSHLANMAGAN: konver bor, lekin tsex uni yo'lga
-//         chiqarmagan. Sana konverning boshlangan kunidan sanaladi,
-//         ya'ni chiqish kuni hali NOMA'LUM va menejer mijozga sana
-//         aytib qo'ymasligi kerak.
-//    5    bir qismi hali omborga kelmagan — ishlab chiqarilmoqda.
-//    6    savdo omborga yubordi, mudir chiqarishni kutmoqda.
-//    7    qolgani — hammasi javonda, chiqarishga tayyor.
+//    3    BOSHLANMAGAN — ikki hol, bitta javob: konver umuman
+//         biriktirilmagan YOKI biriktirilgan-u tsex uni yo'lga
+//         chiqarmagan. Ikkalasida ham chiqish kuni NOMA'LUM: sana
+//         konverning boshlangan kunidan sanaladi, ya'ni menejer
+//         mijozga sana aytib qo'ymasligi kerak. Zavod qarori
+//         (2026-09): alohida «Yangi» tab qilinmadi — savol bitta.
+//    4    bir qismi hali omborga kelmagan — ishlab chiqarilmoqda.
+//    5    savdo omborga yubordi, mudir chiqarishni kutmoqda.
+//    6    qolgani — hammasi javonda, chiqarishga tayyor.
 //
 //  ★ MAHSULOT QAYERDA TURGANI «OMBORGA YUBORILDI» DAN USTUN, va bu
 //  ataylab: «Omborda» tabida hali tsexda yurgan, hatto BOSHLANMAGAN
@@ -287,8 +288,7 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 const HOLAT = `CASE
         WHEN o.status = 'cancelled' THEN 'cancelled'
         WHEN o.status = 'shipped'   THEN 'shipped'
-        WHEN o.status = 'new'       THEN 'new'
-        WHEN o.not_started_qty > 0  THEN 'draft'
+        WHEN o.status = 'new' OR o.not_started_qty > 0 THEN 'draft'
         WHEN o.assigned_qty > o.in_warehouse_qty THEN 'waiting'
         WHEN o.status = 'to_ship'   THEN 'to_ship'
         ELSE 'reserved' END`;
@@ -1163,6 +1163,14 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
     if (o.status === 'to_ship') throw new Error('Allaqachon omborga yuborilgan');
     if (!o.bron) throw new Error('Avval konver biriktiring');
+    //  ★ TO'LIQ BO'LMAGAN BUYURTMA HAM YUBORILADI, va bu ATAYLAB:
+    //  savdo mudirga OLDINDAN aytadi — «bu ketadi, qolganini kutyapmiz».
+    //  Mudir uni ro'yxatida ko'rib turadi va kunini shunga qarab
+    //  tuzadi. To'siq keyingi bosqichda: `/ship` bronning hammasi
+    //  javonga kelmaguncha chiqarmaydi (qaysi konver yetishmayotgani
+    //  nomi bilan yoziladi) — mahsulot zavoddan chiqmaydi, mijozning
+    //  qarzi ham oshmaydi. Ya'ni chegara CHIQARISHDA, yuborishda
+    //  emas.
     if (!o.ship_to) throw new Error('«Qayerga» tanlanmagan');
     //  ★ TASDIQLANMAGAN CHEGIRMA OMBORGA O'TMAYDI. Shu yer —
     //  qaytib bo'lmaydigan nuqta: ombordan mahsulot chiqadi va
