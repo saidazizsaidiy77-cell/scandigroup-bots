@@ -1769,6 +1769,75 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
   }
 });
 
+test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
+  //  ★ Qoldiq HARAKATdan yig'iladi, alohida ustun yo'q: ustun bo'lsa
+  //  u harakat bilan ajralib ketardi — bitta unutilgan UPDATE va
+  //  ombor raqami haqiqatdan uzilib qolardi.
+  const xom = await xodim('Sinov qoldiq xodim', 'xom_ombor');
+  const wh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Petlya Blum 110', uom: 'dona', category: 'FURN' })).body;
+
+  const a = await xom('POST', '/api/materials/opening', {
+    on: '2026-09-01',
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 250 }] });
+  assert.equal(a.status, 200, a.text);
+  assert.equal(a.body.saved, 1);
+
+  const st = (await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id);
+  assert.ok(st, 'qoldiqda turadi');
+  assert.equal(Number(st.qty), 250);
+  assert.equal(st.warehouse_id, wh);
+
+  //  ★ BIR MARTALIK: ikkinchi marta yozilsa qoldiq jimgina ikki
+  //  barobar bo'lib ketardi.
+  const b = await xom('POST', '/api/materials/opening',
+    { items: [{ warehouse_id: wh, material_id: m.id, qty: 10 }] });
+  assert.equal(b.status, 400, b.text);
+  assert.match(b.body.error, /allaqachon/);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id).qty), 250, 'qoldiq qimirlamadi');
+
+  //  Tayyor mahsulot ombori xom ashyo ombori EMAS: konver u yerda
+  //  sanaladi, material bu yerda — aralashtirib bo'lmaydi.
+  const tm = (await H.id(`SELECT id FROM warehouses WHERE code = 'TM'`)).id;
+  const yoq = await xom('POST', '/api/materials/opening',
+    { items: [{ warehouse_id: tm, material_id: m.id, qty: 5 }] });
+  assert.equal(yoq.status, 400, yoq.text);
+
+  //  Harakat tarixida «qayerdan» ochiq aytiladi: boshlang'ich qoldiq.
+  const mv = (await xom('GET', '/api/materials/moves')).body.rows
+    .find((r) => r.material === 'Petlya Blum 110');
+  assert.ok(mv, 'harakat yozildi');
+  assert.equal(mv.from_kind, 'opening');
+  assert.equal(mv.to_kind, 'warehouse');
+
+  //  ★ DOIRA CHEGARA: stul tsexining boshlig'iga korpus tsexining
+  //  ombori ko'rinmaydi.
+  const { db } = require('../db');
+  const stulShop = (await H.id(`SELECT id FROM shops WHERE code = 'STUL'`)).id;
+  await xodim('Sinov qoldiq stul', 'tsex_usta');
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = $1
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov qoldiq stul')`,
+    [stulShop]);
+  const usta = H.api(base, await H.sessionFor('Sinov qoldiq stul'));
+  assert.ok(!(await usta('GET', '/api/materials/stock')).body.rows
+    .some((r) => r.warehouse_id === wh), 'boshqa tsexning ombori ko\'rinmaydi');
+  assert.ok(!(await usta('GET', '/api/materials/ref')).body.warehouses
+    .some((w) => w.id === wh), 'ro\'yxatda ham yo\'q');
+
+  //  ★ FURNITURA GURUHDA: sp, penal va kamodga yig'iladi, stol va
+  //  stulga yo'q (zavod qarori) — belgi bazada, kodda emas.
+  const furn = await H.id(
+    `SELECT string_agg(code, ',' ORDER BY code) AS c FROM product_groups
+      WHERE needs_hardware`);
+  assert.equal(furn.c, 'KAMOD,PENAL,SP');
+});
+
 test('ta\'minotchilar ro\'yxati faylga chiqadi', async () => {
   //  ★ Ta'minotchi NOMI boshqa fayllarda KALIT bo'lib ishlatiladi: xom
   //  ashyo spravochnigida har materialning yonida u yoziladi va import

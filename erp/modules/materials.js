@@ -131,4 +131,122 @@ router.patch('/:id', need(...MANAGE), wrap(async (req, res) => {
   }
 }));
 
+// ═══════════════════════════════════════════════ QOLDIQ VA HARAKAT
+//
+//  Qoldiq `v_material_stock` dan yig'iladi — alohida «qoldiq» ustuni
+//  yo'q. Ustun bo'lsa u harakat bilan ajralib ketardi: bitta unutilgan
+//  UPDATE va ombor raqami haqiqatdan uzilib qolardi.
+//
+//  Doira CHEGARA: tsexi biriktirilgan xodim FAQAT o'z tsexining
+//  omborlarini ko'radi. Ombor xodimi va rahbariyatda doira yo'q —
+//  ularga hammasi ochiq.
+router.get('/stock', need(...VIEW), wrap(async (req, res) => {
+  const doira = req.user.scope_shop_ids || [];
+  const { rows } = await db.query(
+    `SELECT s.*, c.name AS category_name, u.name AS uom_name
+       FROM v_material_stock s
+       JOIN warehouses w ON w.id = s.warehouse_id
+       LEFT JOIN material_categories c ON c.code = s.category
+       LEFT JOIN material_uoms u       ON u.code = s.uom
+      WHERE ($1::int[] IS NULL OR w.shop_id = ANY($1))
+        AND ($2::int IS NULL OR s.warehouse_id = $2)
+        AND ($3::text IS NULL OR s.material ILIKE '%' || $3 || '%')
+      ORDER BY w.sort, c.code NULLS LAST, s.material
+      LIMIT 3000`,
+    [doira.length ? doira : null,
+     Number(req.query.warehouse_id) || null, trim(req.query.q)]);
+  res.json({ rows });
+}));
+
+//  Harakat tarixi: qaysi kuni, qayerdan qayerga, nechta va kim.
+//  «Qancha bor» degan savoldan keyingi savol «qayerdan keldi» bo'ladi.
+router.get('/moves', need(...VIEW), wrap(async (req, res) => {
+  const doira = req.user.scope_shop_ids || [];
+  const { rows } = await db.query(
+    `SELECT m.id, m.moved_on, m.qty, m.note, m.status,
+            m.from_kind, m.to_kind,
+            mt.name AS material, mt.uom,
+            fw.name AS from_name, tw.name AS to_name,
+            w.name  AS worker
+       FROM material_moves m
+       JOIN materials mt        ON mt.id = m.material_id
+       LEFT JOIN warehouses fw  ON fw.id = m.from_id AND m.from_kind = 'warehouse'
+       LEFT JOIN warehouses tw  ON tw.id = m.to_id   AND m.to_kind   = 'warehouse'
+       LEFT JOIN workers w      ON w.id  = m.worker_id
+      WHERE ($1::int[] IS NULL
+             OR fw.shop_id = ANY($1) OR tw.shop_id = ANY($1))
+        AND ($2::date IS NULL OR m.moved_on >= $2)
+        AND ($3::date IS NULL OR m.moved_on <= $3)
+        AND ($4::int IS NULL OR m.material_id = $4)
+      ORDER BY m.moved_on DESC, m.id DESC
+      LIMIT 500`,
+    [doira.length ? doira : null, trim(req.query.from), trim(req.query.to),
+     Number(req.query.material_id) || null]);
+  res.json({ rows });
+}));
+
+// ─────────────────────────────────────────────── BOSHLANG'ICH QOLDIQ
+//
+//  Tizim ishga tushgan kundagi holat: qaysi omborda qaysi materialdan
+//  nechta. Bir martalik ish, mijozning `opening_debt` i va kassaning
+//  boshlang'ich qoldig'i bilan bir xil mantiq — shusiz ombor birinchi
+//  kundanoq minusda turardi.
+//
+//  Harakat jadvalining O'ZIDA yoziladi (`from_kind = 'opening'`):
+//  ikkinchi manba har so'rovda UNION talab qilardi va bir kun
+//  qoldiqdan ajralib ketardi. «Qayerdan» i esa yashirilmaydi — u
+//  ochiq aytiladi: boshlang'ich qoldiq.
+router.post('/opening', need(...MANAGE), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+  const on = trim(req.body.on);
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    let n = 0;
+    for (const it of items) {
+      const qty = Number(it.qty);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const wh = (await client.query(
+        `SELECT id, name, kind FROM warehouses WHERE id = $1`,
+        [it.warehouse_id])).rows[0];
+      if (!wh) throw new Error('Ombor tanlanmagan');
+      if (wh.kind !== 'material')
+        throw new Error(`«${wh.name}» xom ashyo ombori emas`);
+      const mt = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1`, [it.material_id])).rows[0];
+      if (!mt) throw new Error('Material topilmadi');
+
+      //  Bir martalik: o'sha ombor va material uchun boshlang'ich
+      //  qoldiq ikkinchi marta yozilmaydi — aks holda qoldiq jimgina
+      //  ikki barobar bo'lib ketardi.
+      const bor = (await client.query(
+        `SELECT 1 FROM material_moves
+          WHERE from_kind = 'opening' AND to_kind = 'warehouse'
+            AND to_id = $1 AND material_id = $2 AND status = 'ok'`,
+        [wh.id, mt.id])).rowCount;
+      if (bor) throw new Error(
+        `«${mt.name}» uchun «${wh.name}» da boshlang'ich qoldiq allaqachon yozilgan`);
+
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, to_kind, to_id,
+                                     moved_on, note, worker_id)
+         VALUES ($1,$2,'opening','warehouse',$3,
+                 COALESCE($4::date, CURRENT_DATE), $5, $6)`,
+        [mt.id, qty, wh.id, on, trim(it.note), req.user.id]);
+      n++;
+    }
+    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+    await audit(req, { module: 'materials', action: 'opening',
+                       entity: 'material_moves', entity_id: n,
+                       payload: { count: n } }, client);
+    await client.query('COMMIT');
+    res.json({ saved: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 module.exports = router;

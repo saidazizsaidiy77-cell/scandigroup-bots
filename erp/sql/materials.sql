@@ -129,3 +129,121 @@ UPDATE warehouses w SET shop_id = s.id, perm = 'materials.view', kind = 'materia
      WHEN w.code = 'TSEX-QAD'     THEN 'QADOQ'
      ELSE 'STUL' END
    AND (w.shop_id IS DISTINCT FROM s.id OR w.perm IS DISTINCT FROM 'materials.view');
+
+-- ═══════════════════════════════════════════════ MATERIAL HARAKATI
+--
+--  ★ HAR HARAKAT — QAYERDAN → QAYERGA (kassadagi `cash_ops` bilan bir
+--  xil idiom). Material o'zidan-o'zi paydo bo'lmaydi va yo'qolmaydi,
+--  shuning uchun bitta jadval va har qatorda ikki tomon:
+--
+--    ta'minotchidan keldi        supplier  → ombor
+--    tsexga berildi              ombor     → tsex ombori
+--    tsexdan qaytdi              tsex omb. → ombor
+--    konverga sarflandi          tsex omb. → konver
+--    yuk xatiga yig'ildi         ombor     → buyurtma
+--    hisobdan chiqarildi         ombor     → chiqim
+--    boshlang'ich qoldiq         boshlan.  → ombor
+--
+--  Qoldiq shu jadvaldan YIG'ILADI — alohida «qoldiq» ustuni yo'q.
+--  Ustun bo'lsa u harakat bilan ajralib ketardi: bitta unutilgan
+--  UPDATE va ombor raqami haqiqatdan uzilib qolardi.
+--
+--  ★ BOSHLANG'ICH QOLDIQ ham SHU JADVALDA, alohida emas. Kassada u
+--  alohida ustun edi («qayerdan» i yo'q), lekin u yerda bitta kassaga
+--  bitta raqam to'g'ri keladi — bu yerda esa har OMBOR × MATERIAL
+--  uchun alohida qator kerak, ya'ni baribir jadval bo'lardi. Ikkita
+--  manba esa har so'rovda UNION talab qilardi va bir kun bir-biridan
+--  ajralib ketardi.
+CREATE TABLE IF NOT EXISTS material_moves (
+  id          SERIAL PRIMARY KEY,
+  material_id INT NOT NULL REFERENCES materials(id),
+  qty         NUMERIC(14,3) NOT NULL CHECK (qty > 0),
+  --  Tomon turi: ombor, ta'minotchi, buyurtma, konver, chiqim,
+  --  boshlang'ich qoldiq. Ro'yxat kodda emas, CHECK da: yangi tomon
+  --  qo'shilsa u yerda ham, bu yerda ham bitta joy tahrirlanadi.
+  from_kind   TEXT NOT NULL CHECK (from_kind IN
+                ('warehouse', 'supplier', 'order', 'unit', 'writeoff', 'opening')),
+  from_id     INT,
+  to_kind     TEXT NOT NULL CHECK (to_kind IN
+                ('warehouse', 'supplier', 'order', 'unit', 'writeoff', 'opening')),
+  to_id       INT,
+  moved_on    DATE NOT NULL DEFAULT CURRENT_DATE,
+  --  Qaysi hujjat bilan: talabnoma, furnitura yig'imi yoki kirim.
+  --  Hozircha bo'sh — hujjatlar keyingi qadamda yoziladi.
+  doc_id      INT,
+  note        TEXT,
+  --  O'CHIRILMAYDI, bekor qilinadi: qoldiqdan chiqadi, tarixda
+  --  qoladi. Pulda ham, omborda ham o'chirilgan qator eng yomoni.
+  status      TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'cancelled')),
+  worker_id   INT REFERENCES workers(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS material_moves_mat_idx
+  ON material_moves (material_id, moved_on);
+CREATE INDEX IF NOT EXISTS material_moves_from_idx
+  ON material_moves (from_kind, from_id);
+CREATE INDEX IF NOT EXISTS material_moves_to_idx
+  ON material_moves (to_kind, to_id);
+
+--  Har harakat IKKI QATOR bo'lib ochiladi: beruvchida minus,
+--  oluvchida plyus (`v_cash_flow` bilan bir xil). Shundan keyin har
+--  qanday qoldiq bitta yig'indi bo'lib qoladi — omborniki ham, tsex
+--  omboriniki ham, buyurtmaga berilgani ham.
+DROP VIEW IF EXISTS v_material_stock;
+DROP VIEW IF EXISTS v_material_flow;
+CREATE VIEW v_material_flow AS
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+       m.from_kind AS kind, m.from_id AS place_id, -m.qty AS qty,
+       m.to_kind   AS other_kind, m.to_id   AS other_id, m.created_at
+  FROM material_moves m WHERE m.status = 'ok'
+UNION ALL
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+       m.to_kind, m.to_id, m.qty,
+       m.from_kind, m.from_id, m.created_at
+  FROM material_moves m WHERE m.status = 'ok';
+
+--  Ombor qoldig'i: FAQAT ombor tomoni. Ta'minotchi, buyurtma va
+--  konver tomonlari bu yerda sanalmaydi — ular omborda turgan narsa
+--  emas, undan chiqib ketgani.
+CREATE VIEW v_material_stock AS
+SELECT f.place_id AS warehouse_id, w.code AS warehouse_code, w.name AS warehouse,
+       w.shop_id, f.material_id, mt.name AS material, mt.uom, mt.category,
+       SUM(f.qty)::NUMERIC(14,3) AS qty
+  FROM v_material_flow f
+  JOIN warehouses w  ON w.id  = f.place_id
+  JOIN materials  mt ON mt.id = f.material_id
+ WHERE f.kind = 'warehouse'
+ GROUP BY f.place_id, w.code, w.name, w.shop_id, f.material_id,
+          mt.name, mt.uom, mt.category
+HAVING SUM(f.qty) <> 0;
+
+-- ═══════════════════════════════════════════ FURNITURA YUK XATIGA
+--
+--  ★ ZAVOD QARORI (2026-09). Mebel mijozning UYIDA yig'iladi: ruchka,
+--  petlya, salyaska va boshqa furnitura mahsulot bilan birga ketadi.
+--
+--  Ilgari uni konverga biriktirish kerakdek ko'rinardi, lekin o'shanda
+--  furnitura mebel bilan birga T/M omborda QOTIB qolardi: mahsulot
+--  sotilmasa ruchkalar ham o'sha yerda yotardi, sotilgan boshqa
+--  mahsulotga esa ruchka topilmasdi. Ombor to'la, lekin ishlatib
+--  bo'lmaydi — pul muzlaydi.
+--
+--  Shuning uchun furnitura KONVERGA emas, YUK XATIGA biriktiriladi:
+--  xom ashyo mudiri chiqayotgan buyurtmani ko'radi, unga kerakli
+--  furniturani yig'adi va hisobdan o'sha paytda chiqaradi.
+--
+--  Belgi GURUHDA (4-qoida): sp, penal va kamodga furnitura yig'iladi,
+--  stol va stulga yo'q. Ertaga zavod «stolga ham» desa bitta katakcha
+--  belgilanadi va navbat o'sha buyurtmalarda ham yona boshlaydi.
+ALTER TABLE product_groups
+  ADD COLUMN IF NOT EXISTS needs_hardware BOOLEAN NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'furnitura-guruh') THEN
+    UPDATE product_groups SET needs_hardware = true
+     WHERE code IN ('SP', 'PENAL', 'KAMOD');
+    INSERT INTO migration_flags (key) VALUES ('furnitura-guruh');
+  END IF;
+END $$;
