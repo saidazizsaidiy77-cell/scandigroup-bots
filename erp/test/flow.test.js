@@ -4252,6 +4252,16 @@ test('oylik moddasi o\'z tsexi bilan keladi', async () => {
   assert.ok(meta.staff_groups.includes('ITR'),
     'yangi moddaning guruhi ro\'yxatda turadi');
 
+  //  ★ BUTUN GURUH XODIM SO'RAYDI — yangi qo'shilgani ham. Ilgari bu
+  //  `migration_flags` bilan bir marta qo'yilardi va bayroqdan KEYIN
+  //  qo'shilgan modda belgisiz qolardi: «Oylik ombor» va «Oylik
+  //  muhandis-texnik xodimlar» tanlanganda xodim katagi UMUMAN
+  //  ochilmasdi va kassir «kimga berildi» ni yoza olmasdi.
+  const maosh = refs.items.filter((x) => x.group_code === 'MAOSH');
+  assert.ok(maosh.length >= 10, 'oylik moddalari joyida');
+  assert.deepEqual(maosh.filter((x) => !x.needs_worker).map((x) => x.name), [],
+    'MAOSH guruhidagi HAR modda xodim so\'raydi');
+
   const hamma = refs.items.find((x) => x.name === 'Xodimlarga sarmoya');
   assert.equal(hamma.needs_worker, true, 'u ham xodim so\'raydi');
   assert.equal(hamma.shop_id, null);
@@ -4263,6 +4273,70 @@ test('oylik moddasi o\'z tsexi bilan keladi', async () => {
   const w = refs.staff.find((x) => x.name === 'Sinov Oylik Oluvchi');
   assert.ok(w, 'shtat ro\'yxatida turadi');
   assert.ok('shop_id' in w && 'staff_group' in w, 'doira ustunlari keladi');
+});
+
+//  ★ TSEXI BOR XODIMGA O'Z TSEXINING MODDASI. Guruh cheklovi «faqat
+//  oylik yozadi» deb aytadi, lekin QAYSI oylik ekanini aytmasdi: lak
+//  tsexining boshlig'i ro'yxatda korpus, stul va qadoqlash oyliklarini
+//  ham ko'rardi va adashib boshqa tsexning qatoriga yozib qo'yishi
+//  mumkin edi — foyda-zararda esa uni ajratib bo'lmasdi.
+test('tsex boshlig\'i faqat O\'Z tsexining oyligini yozadi', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const lak = (await H.id(`SELECT id FROM shops WHERE code='BOYOQ'`)).id;
+
+  await db.query(`INSERT INTO workers (name, can_hold_cash)
+                  SELECT 'Sinov lak boshlig''i', true
+                   WHERE NOT EXISTS (SELECT 1 FROM workers
+                                      WHERE name='Sinov lak boshlig''i')`);
+  const b = (await H.id(
+    `SELECT id FROM workers WHERE name='Sinov lak boshlig''i'`)).id;
+  await db.query(`UPDATE workers SET can_hold_cash = true WHERE id=$1`, [b]);
+  //  Doira ROLDA: xodim NIMANI ko'rishini u cheklaydi
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code, scope_shop_id)
+                  VALUES ($1,'tsex_usta',$2) ON CONFLICT DO NOTHING`, [b, lak]);
+  await db.query(`DELETE FROM worker_expense_groups WHERE worker_id=$1`, [b]);
+  await db.query(`INSERT INTO worker_expense_groups (worker_id, group_code)
+                  VALUES ($1,'MAOSH')`, [b]);
+
+  const bosh = H.api(base, await H.sessionFor('Sinov lak boshlig\'i'));
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'worker', to_id: b,
+    currency: 'USD', amount: 500 })).status, 200);
+
+  //  Doira sahifaga ham keladi — ro'yxat shu bilan qisqaradi
+  const refs = (await bosh('GET', '/api/cash/refs')).body;
+  assert.deepEqual(refs.my.shop_ids, [lak], 'doira xodimning o\'ziga keladi');
+  assert.deepEqual(refs.my.groups, ['MAOSH'], 'faqat oylik guruhi');
+
+  const modda = async (nom) => (await H.id(
+    `SELECT id FROM expense_items WHERE name=$1`, [nom])).id;
+  //  MAOSH guruhi kimga berilganini ham so'raydi (`needs_worker`)
+  const yoz = (id) => bosh('POST', '/api/cash/ops', {
+    to_kind: 'expense', currency: 'USD', amount: 10, staff_id: b,
+    op_date: '2026-09-25', expense_item_id: id, pl_month: '2026-09' });
+
+  //  Boshqa tsexning oyligi — YO'Q
+  const stul = await yoz(await modda('Oylik stul'));
+  assert.equal(stul.status, 400, stul.text);
+  assert.match(stul.body.error, /ochilmagan/);
+
+  //  Tsexga bog'lanmagan modda ham o'sha guruhda TURMAYDI: guruhda
+  //  uning tsexiniki bor, ya'ni qoida ishga tushadi.
+  const sarmoya = await yoz(await modda('Xodimlarga sarmoya'));
+  assert.equal(sarmoya.status, 400, sarmoya.text);
+
+  //  O'ziniki — yoziladi
+  const ok = await yoz(await modda('Oylik lak'));
+  assert.equal(ok.status, 200, ok.text);
+
+  //  ★ DOIRASI YO'Q XODIMDA HECH NARSA QISQARMAYDI: ombor mudiri va
+  //  ta'minotchi tsexga biriktirilmagan va ular hamma moddani
+  //  eskicha yozaveradi.
+  const erkin = H.api(base, await H.sessionFor('Sinov tsex boshlig\'i'));
+  assert.deepEqual((await erkin('GET', '/api/cash/refs')).body.my.shop_ids, [],
+    'doirasi yo\'q xodimda ro\'yxat qisqarmaydi');
 });
 
 //  ★ XODIMLAR FAYLDAN. Zavodda oltmish kishi ishlaydi, tizimga esa

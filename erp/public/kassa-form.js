@@ -59,10 +59,7 @@ function outGroups() {
   //  qilinardi. Pul kassa orqali yuradi: berish ham, qabul qilish ham
   //  KASSANING oynasida, chunki u yerda ikkinchi tomoni baribir kassa.
   const sarf = form === 'spend';
-  //  Cheklov esa faqat XODIMNING O'ZI yozganida: kassir boshqa
-  //  xodimning sahifasida chekni qo'lida ushlab turibdi va uni yozib
-  //  qo'yishi kerak.
-  const ozi = sarf && isMe();
+  const ozi = ozimi();
   const ruxsat = (refs.my && refs.my.groups) || [];
   //  Ro'yxati bo'sh bo'lsa ham turadi: ilgari qator umuman chiqmasdi
   //  va kassir «xodimga pul berish yo'q ekan» deb o'ylardi.
@@ -75,14 +72,35 @@ function outGroups() {
   return g;
 }
 
+//  Cheklov faqat XODIMNING O'ZI yozganida: kassir boshqa xodimning
+//  sahifasida chekni qo'lida ushlab turibdi va uni yozib qo'yishi
+//  kerak. Guruh ham, modda ham SHU shartdan o'tadi — ikki joyda
+//  yozilsa bir kun bir-biridan ajralib ketardi.
+const ozimi = () => form === 'spend' && isMe();
+
 //  Ikkinchi bosqich: tanlangan guruhning ichi. Qiymat baribir
 //  «tur:id» bo'lib qoladi — saqlash yo'li bitta (saveOp).
 function outItems(g) {
   if (g === 'worker') return (refs.payable || []).map(x => [`worker:${x.id}`, x.name]);
   if (g && g.startsWith('g:')) {
     const code = g.slice(2);
-    return (refs.items || []).filter(i => i.group_code === code)
-      .map(i => [`expense:${i.id}`, i.name]);
+    let list = (refs.items || []).filter(i => i.group_code === code);
+    //  ★ TSEXI BOR XODIMGA O'Z TSEXINING MODDASI. Guruh cheklovi
+    //  «Erbo'l faqat oylik yozadi» deb aytadi, lekin QAYSI oylik
+    //  ekanini aytmasdi: lak tsexining boshlig'i ro'yxatda korpus,
+    //  stul va qadoqlash oyliklarini ham ko'rardi.
+    //
+    //  Qoida GURUH ichida ishlaydi: o'sha guruhda xodimning tsexiga
+    //  bog'langan modda BO'LSA, undan faqat o'shanisi qoladi.
+    //  Bog'langani yo'q bo'lsa guruh butunligicha turaveradi —
+    //  «Ta'minot» va «Kommunal» tsexga bog'lanmagan va ombor mudiri
+    //  ularni eskicha yozaveradi. Tekshiruv SERVERDA ham
+    //  (`POST /ops`): ro'yxatni chetlab, id ni qo'lda yuborsa ham
+    //  qabul qilinmaydi.
+    const doira = ozimi() ? ((refs.my && refs.my.shop_ids) || []) : [];
+    if (doira.length && list.some(i => doira.includes(i.shop_id)))
+      list = list.filter(i => doira.includes(i.shop_id));
+    return list.map(i => [`expense:${i.id}`, i.name]);
   }
   return [];
 }

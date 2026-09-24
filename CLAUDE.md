@@ -1376,6 +1376,21 @@ beradigan yagona joy kassirning xotirasi bo'lib qolardi.
 ham MA'LUM bir odamga beriladi. Guruh bo'yicha qo'yiladi, nom bo'yicha
 emas — zavod moddani qayta nomlasa belgi yo'qolmasin.
 
+**★ BU BIR MARTALIK KO'CHIRISH EMAS, DOIMIY QOIDA** (PIN izi bilan bir
+xil idiom: `erp/migrate.js`, `hashPins`). Ilgari `migration_flags`
+bilan bir marta bajarilardi va aynan shu yerda tuzoq bor edi: bayroq
+qo'yilgandan KEYIN guruhga qo'shilgan modda belgisiz qolardi. «Oylik
+ombor» va «Oylik muhandis-texnik xodimlar» shunday qo'shildi — toza
+bazada hammasi to'g'ri ishlardi, ishlayotgan bazada esa xodim katagi
+UMUMAN ochilmasdi va kassir «kimga berildi» ni yoza olmasdi. Endi
+belgi har migratsiyada guruh bo'yicha qo'yiladi va testda BUTUN guruh
+tekshiriladi, bitta modda emas.
+
+**Doimiy qoida va bir martalik ko'chirishni ajratish**: bayroq
+O'TMISHDAGI ma'lumotni tuzatish uchun (saytdan qilingan o'zgarish
+qaytib qolmasin), GURUHGA tegishli qoida esa kelajakda qo'shiladigan
+qatorga ham tegishli — unga bayroq qo'yilmaydi.
+
 **★ XODIM TOMON BO'LMAYDI, va aynan shu yerda adashish oson.**
 Ta'minotchida pul UNING QARZIDAN ayriladi, ya'ni u operatsiyaning
 TOMONI bo'ladi (`to_kind='supplier'`). Oylikda esa pul korxonadan
@@ -1454,6 +1469,27 @@ korpusning odami katakda turib qolardi.
 
 Lentada ismi moddaning yonida turadi («Oylik korpus · Abubakirov
 Xasan»). Tekshiruv **serverda**: ro'yxatni chetlab, id ni qo'lda
+yuborsa ham qabul qilinmaydi.
+
+**★ TSEXI BOR XODIMGA O'Z TSEXINING MODDASI** (zavod qarori, 2026-09).
+Guruh cheklovi (`worker_expense_groups`) «Erbo'l faqat oylik yozadi»
+deb aytadi, lekin QAYSI oylik ekanini aytmasdi: lak tsexining
+boshlig'i ro'yxatda korpus, stul va qadoqlash oyliklarini ham ko'rardi
+va adashib boshqa tsexning qatoriga yozib qo'yishi mumkin edi —
+foyda-zararda esa uni keyin ajratib bo'lmasdi.
+
+Qoida **GURUH ichida** ishlaydi: o'sha guruhda xodimning tsexiga
+bog'langan modda BO'LSA, undan faqat o'shanisi qoladi. Bog'langani
+yo'q bo'lsa guruh butunligicha turaveradi — «Ta'minot» va «Kommunal»
+moddalari tsexga bog'lanmagan va ombor mudiri ularni eskicha
+yozaveradi. Doirasi yo'q xodimda (ombor mudiri, ta'minotchi) hech
+narsa qisqarmaydi, kassir boshqa xodimning sahifasidan yozganda ham:
+cheklov faqat XODIMNING O'ZI yozganida ishlaydi (guruh cheklovi bilan
+bir xil shart, `ozimi()`).
+
+Doira **rolniki** (`worker_roles.scope_shop_id` → `scopeOf`, bitta
+joyda) — ombor qoldig'i ham o'shani o'qiydi. Tekshiruv **serverda**
+(`POST /api/cash/ops`): ro'yxatni chetlab, modda id sini qo'lda
 yuborsa ham qabul qilinmaydi.
 
 **Ta'minotchiga to'lovni PODOTCHYOT OLGAN XODIM ham yozadi**: ombor

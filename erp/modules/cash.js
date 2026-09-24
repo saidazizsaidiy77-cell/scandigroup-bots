@@ -18,6 +18,10 @@
 // ============================================================================
 const express = require('express');
 const { db, wrap, audit } = require('../db');
+//  Tsex doirasi — ishlab chiqarishniki bilan BITTA joyda (`scopeOf`,
+//  modules/units.js). Ombor qoldig'i ham o'shani o'qiydi: doira ikki
+//  joyda yozilsa bir kun bir-biridan ajralib ketardi.
+const { scopeOf } = require('./units');
 const { need, ownOf } = require('../auth');
 
 const router = express.Router();
@@ -171,7 +175,9 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
           //  uning qo'lidagi pul mijozdan yig'ilgani va uning bitta
           //  yo'li bor — kassaga topshiriladi (izoh: sql/cash.sql).
           sarflaydi: (meniki.rows[0] || {}).can_spend_cash !== false,
-          groups: meniki.rows.map((r) => r.group_code).filter(Boolean) },
+          groups: meniki.rows.map((r) => r.group_code).filter(Boolean),
+          //  ★ TSEX DOIRASI MODDA RO'YXATIDA HAM (izoh: POST /ops).
+          shop_ids: scopeOf(req) || [] },
     rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null,
     me: { id: req.user.id, name: req.user.name }, boss,
   });
@@ -469,15 +475,38 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
           WHERE w.id = $1 AND w.active`, [req.user.id])).rows[0];
       if (!w || !(w.can_hold_cash || w.puli))
         throw new Error('Qo\'lingizda korxona puli yo\'q — harajat yozib bo\'lmaydi');
+      //  ★ TSEXI BOR XODIMGA O'Z TSEXINING MODDASI (zavod qarori,
+      //  2026-09). Guruh cheklovi «Erbo'l faqat oylik yozadi» deb
+      //  aytadi, lekin QAYSI oylik ekanini aytmasdi: lak tsexining
+      //  boshlig'i ro'yxatda korpus, stul va qadoqlash oyliklarini
+      //  ham ko'rardi va adashib boshqa tsexning qatoriga yozib
+      //  qo'yishi mumkin edi — foyda-zararda esa uni ajratib
+      //  bo'lmasdi.
+      //
+      //  Qoida GURUH ichida ishlaydi: o'sha guruhda xodimning
+      //  tsexiga bog'langan modda BO'LSA, undan faqat o'shanisi
+      //  qoladi. Bog'langani yo'q bo'lsa guruh butunligicha
+      //  turaveradi — «Ta'minot» va «Kommunal» moddalari tsexga
+      //  bog'lanmagan va ombor mudiri ularni eskicha yozaveradi.
+      //
+      //  Doirasi yo'q xodimda (ombor mudiri, ta'minotchi) hech narsa
+      //  qisqarmaydi. Kassir boshqa xodimning sahifasidan yozganda
+      //  ham — bu blok faqat XODIMNING O'ZI yozganida ishlaydi.
+      const doira = scopeOf(req);
       const ok = (await client.query(
         `SELECT 1 FROM expense_items i
           WHERE i.id = $1
             AND (NOT EXISTS (SELECT 1 FROM worker_expense_groups g
                               WHERE g.worker_id = $2)
                  OR EXISTS (SELECT 1 FROM worker_expense_groups g
-                             WHERE g.worker_id = $2 AND g.group_code = i.group_code))`,
-        [item_id, req.user.id])).rowCount;
-      if (!ok) throw new Error('Bu harajat guruhi sizga ochilmagan');
+                             WHERE g.worker_id = $2 AND g.group_code = i.group_code))
+            AND ($3::int[] IS NULL
+                 OR i.shop_id = ANY($3)
+                 OR NOT EXISTS (SELECT 1 FROM expense_items x
+                                 WHERE x.active AND x.group_code = i.group_code
+                                   AND x.shop_id = ANY($3)))`,
+        [item_id, req.user.id, doira])).rowCount;
+      if (!ok) throw new Error('Bu harajat moddasi sizga ochilmagan');
     }
 
     //  ★ INKASSATORNING QO'LIDAGI PUL SARFLANMAYDI (zavod qarori,

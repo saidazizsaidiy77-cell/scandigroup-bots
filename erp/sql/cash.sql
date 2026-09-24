@@ -210,16 +210,19 @@ END $$;
 --  `true` yoziladi (4-qoida).
 ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS needs_worker BOOLEAN NOT NULL DEFAULT false;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'modda-xodim') THEN
-    --  Butun MAOSH guruhi: oylik ham, sarmoya ham, tibbiy yordam ham
-    --  MA'LUM bir odamga beriladi. Guruh bo'yicha qo'yiladi, nom
-    --  bo'yicha emas — zavod moddani qayta nomlasa belgi yo'qolmasin.
-    UPDATE expense_items SET needs_worker = true WHERE group_code = 'MAOSH';
-    INSERT INTO migration_flags (key) VALUES ('modda-xodim');
-  END IF;
-END $$;
+--  ★ BU BIR MARTALIK KO'CHIRISH EMAS, DOIMIY QOIDA (PIN izi bilan bir
+--  xil idiom: `erp/migrate.js`, `hashPins`). Ilgari `migration_flags`
+--  bilan bir marta bajarilardi va aynan shu yerda tuzoq bor edi:
+--  bayroq qo'yilgandan KEYIN guruhga qo'shilgan modda belgisiz
+--  qolardi. «Oylik ombor» va «Oylik muhandis-texnik xodimlar» shunday
+--  qo'shildi — ekranda xodim katagi UMUMAN ochilmadi va kassir
+--  «kimga berildi» ni yoza olmadi.
+--
+--  Butun MAOSH guruhi: oylik ham, sarmoya ham, tibbiy yordam ham
+--  MA'LUM bir odamga beriladi. Guruh bo'yicha qo'yiladi, nom bo'yicha
+--  emas — zavod moddani qayta nomlasa belgi yo'qolmasin.
+UPDATE expense_items SET needs_worker = true
+ WHERE group_code = 'MAOSH' AND NOT needs_worker;
 
 -- ──────────────────────────────────────────────────────── OPERATSIYA
 CREATE TABLE IF NOT EXISTS cash_ops (
