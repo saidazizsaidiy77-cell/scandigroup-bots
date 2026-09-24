@@ -191,6 +191,23 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
    Qoldiq va Xodimlar bilan bir xil yechim va bir xil sabab. */
 .orders thead th{position:sticky;top:0;z-index:2;background:var(--surface);
   box-shadow:inset 0 -1px 0 var(--line)}
+/* Jurnalda ham shu — `.log thead th` allaqachon qotib turardi, lekin
+   pastki chizig'i yo'q edi: `border-collapse:collapse` da chegara jadval
+   bilan birga siljiydi va sarlavha qatorlarga yopishib qolardi. */
+.log thead th{box-shadow:inset 0 -1px 0 var(--line)}
+
+/*  ★ QOTIB TURADIGAN SARLAVHANING QUTISI (`.tbox`).
+    `position:sticky` faqat SCROLL KONTEYNER ichida ishlaydi, shuning
+    uchun uzun jadval o'z qutisida aylanadi. Balandligi 70vh edi va
+    aynan shu yerda tuzoq bor: tepada filtr kartochkasi turadi, ya'ni
+    quti ekranning pastidan chiqib ketardi va odam SAHIFANI surardi —
+    quti sarlavhasi bilan birga yuqoriga chiqib ketardi va «qotib
+    turadi» degan va'da buzilardi.
+
+    Shuning uchun balandlikni `app.js` o'lchab qo'yadi: quti ekranning
+    QOLGAN qismini to'ldiradi va sahifaning o'zi surilmaydi. Bu yerdagi
+    70vh — JS ishlamay qolgan holatga zaxira. */
+.tbox{overflow:auto;max-height:70vh}
 .stock .s-qty,.stock .s-price,.stock .s-amount,
 .stock .s-bron,.stock .s-free,.stock .s-in,.stock .s-out{text-align:right}
 /* Aylanma: kirdi yashil, chiqdi kulrang — ko'z qaysi tomon ekanini
@@ -408,7 +425,7 @@ tr.click:hover td{background:var(--surface-2)}
   h2{display:none}
   /* Ekranda jadval o'z oynasida siljiydi; qog'ozda esa to'liq chiqishi
      va sahifalarga o'zi bo'linishi kerak. */
-  .sheet{overflow:visible!important;max-height:none!important}
+  .sheet,.tbox{overflow:visible!important;max-height:none!important}
   table{font-size:9px;font-variant-numeric:tabular-nums}
   /* Sarlavha har sahifada takrorlansin — ikkinchi varaqdagi ustun
      nimaligini topish uchun birinchisiga qaytib qaralmasin. */

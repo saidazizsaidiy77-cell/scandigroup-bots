@@ -2348,6 +2348,47 @@ qaytishi «Qaytib olish» bilan yoziladi, u hali yo'q).
 
 ---
 
+## Uzun jadval — sarlavha qotib turadi
+
+**★ QUTINING BALANDLIGINI SERVER EMAS, EKRAN HAL QILADI** (`.tbox`,
+`erp/public/app.js`, zavod qarori 2026-09). Jurnal, buyurtmalar, ombor
+qoldig'i va xodimlar ro'yxati — to'rttasi ham uzun va ustuni ko'p:
+pastga tushganda qaysi raqam summa, qaysi biri soni ekani ko'rinmay
+qolardi. Shuning uchun `thead` qotib turadi.
+
+`position:sticky` faqat SCROLL KONTEYNER ichida ishlaydi, ya'ni jadval
+o'z qutisida aylanishi kerak. Quti balandligi qattiq qiymat edi
+(64–72vh) va aynan shu yerda tuzoq bor edi: tepada filtr kartochkasi
+turadi, quti esa ekranning pastidan chiqib ketardi — odam qatorni
+ko'rish uchun SAHIFANI surardi va quti sarlavhasi bilan birga yuqoriga
+ketardi. Va'da buzilardi.
+
+Endi balandlikni `app.js` o'lchab qo'yadi va quti ekranning QOLGAN
+qismini to'ldiradi: sahifaning o'zi umuman surilmaydi. Uch tafsilot:
+
+  · o'lchov sahifa surilishidan QAT'I NAZAR to'g'ri (`+ scrollY`) —
+    surilgan holatda o'lchansa quti har safar uzayib borardi;
+  · quti OSTIDAGI joy (kartochkaning bo'shlig'i, `body` ning
+    `padding` i) bir marta o'lchanadi va yodda saqlanadi: har safar
+    qayta o'qilsa quti qisqarishi sahifa balandligini o'zgartirib,
+    kuzatuvchi o'zini o'zi cheksiz chaqirardi;
+  · qayta o'lchash `ResizeObserver` bilan — ombor sahifasida quti
+    har chizilganda YANGIDAN yaratiladi va bir martalik `load` uni
+    ko'rmasdi.
+
+Sozlash DOM tayyor bo'lgach ulanadi: `app.js` `<head>` da turadi, ya'ni
+o'sha paytda `document.body` hali YO'Q.
+
+Sarlavhaning foni qattiq qiymat (shaffof bo'lsa ostidan qator ko'rinib
+o'tardi), pastki chizig'i esa `box-shadow` bilan: `border-collapse:
+collapse` da qotib turgan katakning chegarasi jadval bilan BIRGA
+siljiydi va sarlavha qatorlarga yopishib qolardi.
+
+Qog'ozda quti ochiladi (`@media print`: `.sheet,.tbox`) — jadval
+to'liq chiqib, sahifalarga o'zi bo'linadi.
+
+---
+
 ## Fayllar
 
 ```

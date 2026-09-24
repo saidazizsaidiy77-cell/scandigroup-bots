@@ -575,6 +575,63 @@ const App = (() => {
                ready: pages().some((p) => inMod(p, m.code) && p.href) })) };
 })();
 
+//  ★ QOTIB TURADIGAN SARLAVHANING QUTISI — BALANDLIGI BITTA JOYDA.
+//  Uzun jadval o'z qutisida aylanadi (`.tbox`), chunki `position:sticky`
+//  faqat SCROLL KONTEYNER ichida ishlaydi. Balandlik qattiq qiymat edi
+//  (64–72vh) va aynan shu yerda tuzoq bor edi: quti tepasida filtr
+//  kartochkasi turadi, ya'ni quti ekranning pastidan chiqib ketardi va
+//  odam qatorni ko'rish uchun SAHIFANI surardi — quti esa sarlavhasi
+//  bilan birga yuqoriga ketardi va «sarlavha qotib turadi» degan va'da
+//  buzilardi. Endi quti ekranning QOLGAN qismini to'ldiradi: surilish
+//  faqat quti ichida bo'ladi.
+//
+//  O'lchov SAHIFA SURILISHIDAN qat'i nazar to'g'ri bo'lishi kerak
+//  (`+ scrollY`), aks holda surilgan holatda o'lchansa quti har safar
+//  uzayib borardi.
+//
+//  Qayta o'lchash `ResizeObserver` bilan: quti ombor sahifasida har
+//  chizilganda YANGIDAN yaratiladi va bir martalik `load` uni
+//  ko'rmasdi. O'zgarish 2px dan kichik bo'lsa yozilmaydi — quti
+//  qisqarishi body balandligini o'zgartiradi va kuzatuvchi o'zini
+//  o'zi chaqirib, aylanib qolardi.
+(() => {
+  const ENG_PAST = 240;    // shundan past qilinmaydi: quti o'qilmay qoladi
+  //  Quti ostida ham joy bor — kartochkaning pastki bo'shlig'i va
+  //  `body` ning `padding` i. Hisobga olinmasa sahifa bir necha o'n
+  //  piksel surilib turardi va sarlavha o'sha surilishda ko'zdan
+  //  ketardi. U bir marta o'lchanadi va yodda saqlanadi: har
+  //  o'lchashda qayta o'qilsa quti qisqarishi sahifa balandligini
+  //  o'zgartirib, kuzatuvchi o'zini o'zi cheksiz chaqirardi.
+  const pastki = new WeakMap();
+  function olcha() {
+    document.querySelectorAll('.tbox').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (!pastki.has(el)) pastki.set(el, Math.max(0, Math.round(
+        document.documentElement.scrollHeight - (r.top + window.scrollY + r.height))));
+      const h = Math.max(ENG_PAST, Math.round(
+        window.innerHeight - (r.top + window.scrollY) - pastki.get(el)));
+      const hozir = parseFloat(el.style.maxHeight);
+      if (!(Math.abs(hozir - h) <= 2)) el.style.maxHeight = h + 'px';
+    });
+  }
+  //  `app.js` <head> da ulanadi, ya'ni bu yerda `document.body` hali
+  //  YO'Q: kuzatuvchi darrov qo'yilsa xato bilan yiqilardi va quti
+  //  umuman o'lchanmay qolardi.
+  function ulan() {
+    //  Ekran o'lchami o'zgarsa quti ostidagi joy ham boshqacha
+    //  bo'ladi (filtrlar boshqa qatorga tushadi) — qaytadan o'lchanadi.
+    window.addEventListener('resize', () => {
+      document.querySelectorAll('.tbox').forEach((el) => pastki.delete(el));
+      olcha();
+    });
+    if (window.ResizeObserver) new ResizeObserver(olcha).observe(document.body);
+    olcha();
+  }
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', ulan);
+  else ulan();
+})();
+
 // Telefonga o'rnatish. Xizmat ishchisi ro'yxatdan o'tgach brauzer ZELTA ni
 // alohida ilova sifatida bosh ekranga qo'sha oladi: xodim manzil yozmaydi,
 // brauzer paneli ko'rinmaydi. Ro'yxatdan o'tmasa ham sayt ishlayveradi —
