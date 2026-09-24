@@ -1762,10 +1762,24 @@ u kengroq — «HR», «Ma'muriy-xo'jalik bo'limi», «Logistika»: bularning
 orqali konver o'tmaydi. Matn HAR DOIM yoziladi, aks holda bo'limi
 topilmagan odam shtatdan tushib qolardi.
 
-**Tsex BO'LIMDAN chiqadi, alohida so'ralmaydi** (`shtat()`,
-`modules/admin.js`): ikki katak alohida to'ldirilsa bir kun ular
-qarama-qarshi bo'lib qolardi — odam «Korpus tsexi» da turib, bo'limi
-stulnikida bo'lardi.
+**★ TSEX BO'LIMSIZ HAM QO'YILADI** (zavod qarori, 2026-09). Tsex
+BOSHLIG'INING bo'limi YO'Q — u butun tsexga mas'ul; qorovul va
+oshpazda ham bo'lim bor, boshliqda esa yo'q. Ilgari tsexni faqat
+bo'lim orqali tanlash mumkin edi va Qodir, Erbo'l, Quvondiq,
+Azizning tsexi jadvalda bo'sh qolib ketardi — rolining doirasida
+«Stul tsexi» turgani bilan SHTATda joyi yo'q edi.
+
+**Rol doirasi bilan adashtirmaslik kerak**: `worker_roles.scope_shop_id`
+xodim NIMANI KO'RISHINI cheklaydi, `workers.shop_id` esa uning shtatdagi
+joyini aytadi. Ikkalasi bir odamda har xil bo'lishi mumkin va bu xato
+emas.
+
+**Bo'lim tanlansa tsex O'SHANIKI** (`shtat()`, `modules/admin.js`):
+ikki katak alohida to'ldirilsa bir kun qarama-qarshi bo'lib qolardi —
+odam «Korpus tsexi» da turib, bo'limi stulnikida bo'lardi. Sahifada
+ham shu: bo'lim tanlangan zahoti tsex katagi o'ziga keladi, tsex
+tanlansa esa bo'limlar ro'yxati o'sha tsexnikiga qisqaradi (zavodda
+yigirma sakkizta bo'lim bor va «Qadoqlash» ikkita tsexda uchraydi).
 
 **Fayldan yuklanadi** (`POST /api/import/workers`, Xodimlar →
 «Fayldan yuklash»): oltmish oltita qatorni qo'lda terib chiqish yarim

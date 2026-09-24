@@ -4276,6 +4276,30 @@ test('xodimlarni fayldan yuklash: bo\'lim tsex ichida izlanadi', async () => {
   assert.equal(k2.shop, null);
   assert.equal(k2.position, null);
 
+  //  ★ TSEX BO'LIMSIZ HAM QO'YILADI: tsex boshlig'ining bo'limi
+  //  YO'Q — u butun tsexga mas'ul. Ilgari tsexni faqat bo'lim orqali
+  //  tanlash mumkin edi va boshliqning tsexi bo'sh qolib ketardi.
+  const stul = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
+  const b = await admin('POST', '/api/admin/workers',
+    { name: 'Sinov Tsex Boshlig\'i', shop_id: stul,
+      staff_group: 'Ishlab chiqarish', position: 'Stul tsex boshlig\'i' });
+  assert.equal(b.status, 200, b.text);
+  const bj = await joy('Sinov Tsex Boshlig\'i');
+  assert.equal(bj.shop, 'STUL', 'tsexi bo\'limsiz yozildi');
+  assert.equal(bj.section, null, 'bo\'limi yo\'q — u butun tsexga mas\'ul');
+
+  //  Bo'lim tanlansa tsex O'SHANIKI bo'lib qoladi: ikkalasi
+  //  qarama-qarshi bo'lib qolmaydi.
+  const korArra = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + b.body.id,
+    { shop_id: stul, section_id: korArra })).status, 200);
+  const bj2 = await joy('Sinov Tsex Boshlig\'i');
+  assert.equal(bj2.shop, 'KORPUS', 'bo\'lim tsexdan ustun');
+
+  //  Bo'lmagan tsex qabul qilinmaydi
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + b.body.id,
+    { shop_id: 999999 })).status, 400);
+
   //  Boshqa maydon saqlanganda shtat o'chib qolmaydi
   assert.equal((await admin('PATCH', '/api/admin/workers/' + w.body.id,
     { section_id: lak, staff_group: 'Ishlab chiqarish' })).status, 200);

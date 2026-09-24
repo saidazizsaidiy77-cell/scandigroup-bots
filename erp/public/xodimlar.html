@@ -193,6 +193,25 @@ function drawWorkers(){
          «${esc(q)}» bo'yicha xodim topilmadi</td></tr>`;
 }
 
+//  Bo'lim ro'yxati TANLANGAN TSEXNIKIGA qisqaradi: zavodda yigirma
+//  sakkizta bo'lim bor va «Qadoqlash» ikkita tsexda uchraydi — tsexi
+//  yozilmagan ro'yxatdan to'g'risini terib olish qiyin.
+function bolimlarChiz(){
+  const sh = $('wShop').value;
+  const bor = $('wSection').value;
+  const list = (meta.sections || []).filter(x => !sh || String(x.shop_id) === sh);
+  $('wSection').innerHTML = `<option value="">— yo'q —</option>` +
+    list.map(x => `<option value="${x.id}"${String(x.id) === bor ? ' selected' : ''
+      }>${esc(x.name)}${sh ? '' : ' · ' + esc(x.shop)}</option>`).join('');
+  //  Tanlangani boshqa tsexniki bo'lib qolgan bo'lsa tushib ketadi —
+  //  katak bo'sh qoladi va bu TO'G'RI: tsex almashdi, bo'lim ham.
+}
+
+function tsexBolimdan(){
+  const s = (meta.sections || []).find(x => String(x.id) === $('wSection').value);
+  if (s) $('wShop').value = String(s.shop_id);
+}
+
 function openForm(id){
   const w = id ? workers.find(x => x.id === id) : null;
   const checked = (code) => w?.roles.some(r => r.code === code);
@@ -241,13 +260,21 @@ function openForm(id){
                      placeholder="Arra operatori"></div>
           </div>
           <div class="row" style="gap:12px">
-            <div style="flex:1"><label>Ishlab chiqarish bo'limi</label>
-              <select id="wSection">
+            <!--  ★ TSEX BO'LIMSIZ HAM QO'YILADI: tsex boshlig'ining
+                  bo'limi YO'Q — u butun tsexga mas'ul. Ilgari tsexni
+                  faqat bo'lim orqali tanlash mumkin edi va boshliqning
+                  tsexi jadvalda bo'sh qolib ketardi. -->
+            <div style="flex:1"><label>Tsex</label>
+              <select id="wShop" onchange="bolimlarChiz()">
                 <option value="">— yo'q —</option>
-                ${(meta.sections || []).map(x => `<option value="${x.id}"${
-                  w?.section_id === x.id ? ' selected' : ''}>${esc(x.name)} · ${
-                  esc(x.shop)}</option>`).join('')}
+                ${(meta.shops || []).map(x => `<option value="${x.id}"${
+                  w?.shop_id === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}
               </select></div>
+            <!--  Bo'lim tanlansa tsex O'SHANIKI bo'lib qo'yiladi
+                  (serverda ham shunday): ikkalasi alohida to'ldirilsa
+                  bir kun qarama-qarshi bo'lib qolardi. -->
+            <div style="flex:1"><label>Ishlab chiqarish bo'limi</label>
+              <select id="wSection" onchange="tsexBolimdan()"></select></div>
             <!--  Bo'lim MATNI alohida: «HR», «Logistika» va
                   «Ma'muriy-xo'jalik bo'limi» ishlab chiqarish bo'limi
                   emas va ro'yxatda yo'q — lekin qog'ozda bor va
@@ -419,6 +446,10 @@ function openForm(id){
         </div>
       </div>
     </div>`;
+  //  Bo'limlar ro'yxati modal chizilgandan KEYIN to'ldiriladi: u
+  //  tanlangan tsexga bog'liq va shablon ichida hisoblanmaydi.
+  bolimlarChiz();
+  if (w?.section_id) $('wSection').value = String(w.section_id);
 }
 const close_ = () => { $('modalRoot').innerHTML = ''; };
 
@@ -440,6 +471,7 @@ async function save(id){
     position:    $('wPos').value.trim(),
     dept:        $('wDept').value.trim(),
     section_id:  $('wSection').value || null,
+    shop_id:     $('wShop').value || null,
     phone: $('wPhone').value.trim() || null,
     pin:   $('wPin').value.trim() || null,
     tg_id: $('wTg').value.trim() || null,

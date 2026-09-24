@@ -23,6 +23,16 @@ const pinCols = (kod) => (kod && pin.ready) ? [null, pin.hash(kod)] : [kod, null
 async function shtat(client, body) {
   const secId = body.section_id ? Number(body.section_id) : null;
   let shopId  = body.shop_id    ? Number(body.shop_id)    : null;
+  //  ★ TSEX BO'LIMSIZ HAM QO'YILADI. Tsex boshlig'ining bo'limi
+  //  YO'Q — u butun tsexga mas'ul; ilgari tsexni faqat bo'lim orqali
+  //  tanlash mumkin edi va boshliqning tsexi bo'sh qolib ketardi.
+  if (shopId) {
+    const r = await client.query(`SELECT 1 FROM shops WHERE id = $1`, [shopId]);
+    if (!r.rows.length) { const e = new Error('Bunday tsex yo\'q'); e.status = 400; throw e; }
+  }
+  //  Bo'lim tanlangan bo'lsa tsex O'SHANIKI: ikkalasi alohida
+  //  to'ldirilsa bir kun qarama-qarshi bo'lib qolardi — odam «Korpus
+  //  tsexi» da turib, bo'limi stulnikida bo'lardi.
   if (secId) {
     const r = await client.query(`SELECT shop_id FROM sections WHERE id = $1`, [secId]);
     if (!r.rows.length) { const e = new Error('Bunday bo\'lim yo\'q'); e.status = 400; throw e; }
