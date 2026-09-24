@@ -36,6 +36,18 @@
 
           PIN bo'yicha qidirilmaydi: u bazada ochiq matnda turmaydi
           (izoh: `erp/pin.js`). -->
+    <!--  ★ O'CHIRILGAN XODIM RO'YXATDA TURMAYDI. Tizimda «o'chirish» —
+          «Faol» ni olib tashlash: xodim saytga kira olmaydi va hech
+          qaysi ro'yxatda chiqmaydi, lekin uning id si audit
+          jurnalida, konverda va harakatlarda qolaveradi — qator
+          BUTUNLAY o'chirilsa o'sha yozuvlar egasiz qolardi.
+          Shuning uchun jadvalda ham ko'rinmaydi; kerak bo'lsa
+          katakcha bilan qaytariladi (masalan, qaytadan ishga
+          olingan odamni topish uchun). -->
+    <label class="row" style="gap:8px;align-items:center;cursor:pointer;
+      white-space:nowrap;font-size:13px">
+      <input type="checkbox" id="wOff" style="width:auto" onchange="drawWorkers()">
+      O'chirilganlar</label>
     <div style="flex:1;max-width:340px"><label>Qidiruv</label>
       <input id="wQ" placeholder="ism · lavozim · bo'lim · rol" oninput="drawWorkers()"></div>
   </div>
@@ -149,7 +161,8 @@ function drawWorkers(){
     || (w.staff_group || '').toLowerCase().includes(q)
     || w.roles.some(r => (r.name || '').toLowerCase().includes(q)
                       || (r.scope_shop || '').toLowerCase().includes(q));
-  const ro = workers.filter(mos);
+  const off = $('wOff') && $('wOff').checked;
+  const ro = workers.filter(w => (off || w.active) && mos(w));
   if (sortK) {
     const col = USTUN.find(c => c.k === sortK);
     //  ★ BO'SH KATAK HAR DOIM OXIRIDA, saralash yo'nalishidan qat'i
@@ -190,7 +203,8 @@ function drawWorkers(){
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
     </tr>`).join('')
     : `<tr><td colspan="10" class="muted" style="padding:16px">
-         «${esc(q)}» bo'yicha xodim topilmadi</td></tr>`;
+         ${q ? `«${esc(q)}» bo'yicha xodim topilmadi`
+             : "Faol xodim yo'q \u2014 «O'chirilganlar» ni belgilang"}</td></tr>`;
 }
 
 //  Bo'lim ro'yxati TANLANGAN TSEXNIKIGA qisqaradi: zavodda yigirma
