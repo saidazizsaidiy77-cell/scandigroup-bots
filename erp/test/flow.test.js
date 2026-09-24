@@ -582,9 +582,15 @@ test('mijozlarni fayldan yuklash: notanish kanal butun faylni to\'xtatadi', asyn
   assert.equal(c2.note, 'Ikkinchi yuklash');
 });
 
-test('stul lak tsexining bo\'limida tursa ham stul tsexiniki bo\'lib qoladi', async () => {
+test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', async () => {
+  //  ★ ZAVOD QARORI (2026-09). Ilgari stul lak ishini BO'YOQLASH
+  //  tsexining kabinasida olardi va o'sha yerdan qaytib kelardi:
+  //  konver begona tsexning bo'limida turar, uni kim yuritishi esa
+  //  `owner_shop_id` bilan hal qilinardi. Endi stul tsexining O'Z
+  //  astar va lak bo'limlari bor — marshrut ularga ko'chdi va savol
+  //  umuman qolmadi.
   const STU_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='STU-SHKUR'`)).id;
-  const BOY_AST1  = (await H.id(`SELECT id FROM sections WHERE code='BOY-AST1'`)).id;
+  const STU_AST   = (await H.id(`SELECT id FROM sections WHERE code='STU-AST'`)).id;
   const STUL_ID   = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
   const OWEN = (await H.id(`SELECT id FROM products WHERE sku='STU-OWEN'`)).id;
 
@@ -593,15 +599,15 @@ test('stul lak tsexining bo\'limida tursa ham stul tsexiniki bo\'lib qoladi', as
   assert.equal(r.status, 200, r.text);
   const u = r.body.created[0];
 
+  //  Keyingi qadam — O'Z tsexining astar bo'limi, ya'ni topshirish ham
+  //  so'ralmaydi: konver hech kimning qo'liga o'tmayapti.
   const stul = H.api(base, await H.sessionFor('Stul ustasi'));
-  // Stul tsexi boshlig'i uni lak bo'limiga O'ZI o'tkazadi: topshirish
-  // so'ralmaydi, chunki konver boshqa odamning qo'liga o'tmayapti.
   const mv = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal(mv.status, 200, mv.text);
   assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
-    [u.id])).s, BOY_AST1, 'lak tsexining bo\'limiga o\'tdi');
+    [u.id])).s, STU_AST, 'astar bo\'limi ham stul tsexiniki');
 
-  // Lak tsexi ustasining ekranida stul YO'Q
+  //  Lak tsexi ustasining ekranida stul YO'Q — endi hech qachon
   const lakBoard = await lak('GET', '/api/units/board');
   assert.equal(lakBoard.status, 200, lakBoard.text);
   const lakda = lakBoard.body.sections.flatMap((sc) => sc.units).map((x) => x.conveyor_no);
@@ -609,19 +615,25 @@ test('stul lak tsexining bo\'limida tursa ham stul tsexiniki bo\'lib qoladi', as
   assert.ok(!lakBoard.body.inbox.some((x) => x.conveyor_no === u.conveyor_no),
     'qabul qilish ro\'yxatida ham yo\'q');
 
-  // Stul tsexi boshlig'ida esa — aynan lak bo'limining ustunida
+  //  Stul boshlig'ining ekranidagi ustunlarning HAMMASI o'z tsexiniki:
+  //  begona tsexning bo'limi endi ro'yxatda turmaydi.
   const stulBoard = await stul('GET', '/api/units/board');
   assert.equal(stulBoard.body.shop.id, STUL_ID);
-  const kolonka = stulBoard.body.sections.find((sc) => sc.id === BOY_AST1);
-  assert.ok(kolonka, 'lak tsexining bo\'limi stul ekranida ustun bo\'lib turadi');
+  const kolonka = stulBoard.body.sections.find((sc) => sc.id === STU_AST);
+  assert.ok(kolonka, 'astar bo\'limi stul ekranida ustun bo\'lib turadi');
   assert.ok(kolonka.units.some((x) => x.conveyor_no === u.conveyor_no));
+  const begona = (await H.id(
+    `SELECT COUNT(*)::int AS n FROM sections WHERE id = ANY($1) AND shop_id <> $2`,
+    [stulBoard.body.sections.map((sc) => sc.id), STUL_ID])).n;
+  assert.equal(begona, 0, 'stul ekranida begona tsexning bo\'limi yo\'q');
 
-  // Lak ustasi uni qimirlata olmaydi
+  //  Lak ustasi uni qimirlata olmaydi
   const urinish = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal(urinish.status, 400, urinish.text);
   assert.match(urinish.body.error, /doirangizda emas/);
 
-  // Stul boshlig'i esa oxirigacha o'zi olib boradi
+  //  Marshrutni oxirigacha o'zi olib boradi: STU-ASTSH → STU-LAK →
+  //  STU-QOPL → STU-QAD.
   for (let i = 0; i < 4; i++) {
     const step = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
     assert.equal(step.status, 200, `${i + 1}-qadam: ${step.text}`);
@@ -631,25 +643,24 @@ test('stul lak tsexining bo\'limida tursa ham stul tsexiniki bo\'lib qoladi', as
        FROM production_units u JOIN sections sc ON sc.id = u.current_section_id
       WHERE u.id = $1`, [u.id]);
   assert.equal(oxir.code, 'STU-QAD', 'qadoqlashgacha bir o\'zi o\'tkazdi');
-  assert.ok(oxir.lak_yozildi, 'lak tsexiga kirish sanasi baribir yozildi');
+  //  ★ LAK SANASI BARIBIR YOZILADI. Belgi ilgari faqat TSEXda turardi
+  //  (`shops.milestone`), stul esa endi lak tsexiga kirmaydi — sana
+  //  jimgina yo'qolib qolardi. Shuning uchun belgi BO'LIMda ham bor
+  //  (`sections.milestone`, STU-LAK) va o'qilishi bitta joyda:
+  //  COALESCE(bo'limniki, tsexniki).
+  assert.ok(oxir.lak_yozildi, 'lak bo\'limiga kirish sanasi yozildi');
 });
 
-test('jurnaldagi tsex filtri ham javobgar tsex bo\'yicha', async () => {
+test('jurnaldagi tsex filtri konverni egasiga qarab ajratadi', async () => {
   const STU_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='STU-SHKUR'`)).id;
   const BOY_AST1  = (await H.id(`SELECT id FROM sections WHERE code='BOY-AST1'`)).id;
   const STUL_ID   = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
   const BOYOQ_ID  = (await H.id(`SELECT id FROM shops WHERE code='BOYOQ'`)).id;
   const OWEN = (await H.id(`SELECT id FROM products WHERE sku='STU-OWEN'`)).id;
 
-  // Stul lak tsexining bo'limida turibdi
-  const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  //  Stul o'z tsexida, penal esa lak tsexida
   const s = (await admin('POST', '/api/units/',
     { items: [{ product_id: OWEN, qty: 1, section_id: STU_SHKUR }] })).body.created[0];
-  await stul('POST', '/api/units/move', { items: [{ unit_id: s.id }] });
-  assert.equal((await H.id(`SELECT current_section_id c FROM production_units WHERE id=$1`,
-    [s.id])).c, BOY_AST1);
-
-  // Penal ham lak tsexida
   const pen = (await admin('POST', '/api/units/',
     { items: [{ product_id: PENAL, qty: 1, section_id: BOY_AST1 }] })).body.created[0];
 
@@ -661,15 +672,16 @@ test('jurnaldagi tsex filtri ham javobgar tsex bo\'yicha', async () => {
   assert.ok(!lakda.includes(s.conveyor_no), 'stul lak tsexi filtrida chiqmaydi');
 
   const stulda = await kodlar(STUL_ID);
-  assert.ok(stulda.includes(s.conveyor_no),
-    'lak bo\'limida tursa ham stul tsexi filtrida chiqadi');
+  assert.ok(stulda.includes(s.conveyor_no), 'stul o\'z tsexi filtrida chiqadi');
   assert.ok(!stulda.includes(pen.conveyor_no));
 
-  // Bo'lim ro'yxatida lak bo'limlari stul tsexiga ham biriktirilgan
+  //  ★ BEGONA TSEX QOLMADI: lak tsexining bo'limlari endi hech qaysi
+  //  boshqa tsexning ro'yxatida turmaydi. Mexanizmning O'ZI joyida
+  //  (`run_by`, `owner_shop_id`) — kerak bo'lganda qaytadi, lekin
+  //  hozir zavodda bitta ham shunday marshrut yo'q.
   const ref = await admin('GET', '/api/ref');
   const ast = ref.body.sections.find((x) => x.id === BOY_AST1);
-  assert.ok(ast.run_by.includes(STUL_ID),
-    'lak bo\'limi stul tsexi ro\'yxatida ham tanlanadi');
+  assert.deepEqual(ast.run_by, [], 'lak bo\'limi faqat o\'z tsexiniki');
 });
 
 test('boshlanmagan konver tsex ekranida turadi va bitta bosishda yo\'lga chiqadi', async () => {
@@ -689,7 +701,8 @@ test('boshlanmagan konver tsex ekranida turadi va bitta bosishda yo\'lga chiqadi
   const bosh = board.body.unstarted.find((x) => x.id === u.id);
   assert.ok(bosh, 'boshlanmagan konver stul tsexi ekranida ko\'rinadi');
   assert.ok(bosh.on_route, 'u marshrutdan tashqarida emas, hali boshlanmagan');
-  assert.equal(bosh.next_section, 'Shkurka', 'tugmada marshrutning birinchi bo\'limi');
+  assert.equal(bosh.next_section, 'Shkurka karkas',
+    'tugmada marshrutning birinchi bo\'limi');
 
   // Bo'lim ustunlarida ham, qabul qilish ro'yxatida ham takrorlanmaydi
   assert.ok(!board.body.sections.some((sc) => sc.units.some((x) => x.id === u.id)));
@@ -4255,6 +4268,13 @@ test('muddat: korpusda bosqichlar zanjiri, stulda marshrut qadamlari', async () 
   assert.equal(r1.pack_src, 'marshrut');
   assert.equal(r1.fg_src, 'marshrut');
 
+  //  Arrada turibdi, ya'ni oldinda lak tsexi turadi — «keyingi tsexga
+  //  qachon beraman» degan savolning javobi o'sha zanjirdan chiqadi va
+  //  lak kuni bilan bir xil bo'ladi.
+  assert.equal(String(r1.next_shop_on).slice(0, 10), '2026-09-26',
+    'keyingi tsexga o\'tish kuni ham zanjirdan');
+  assert.equal(r1.next_shop_src, 'marshrut');
+
   //  ★ STOL KORPUS TSEXINIKI, LEKIN O'Z KUN SONI BILAN (4/5/0):
   //  19-sentabr arradan boshlansa 24-sentabr lak tsexiga kiradi,
   //  30-sentabr qadoqlashga kiradi va O'SHA KUNI omborga topshiriladi.
@@ -4740,14 +4760,19 @@ test('muddat marshrutdan hisoblanadi: har bo\'limda bir kun', async () => {
   assert.equal(ymd(r.fg_on), await kun(pl.steps));
   assert.equal(r.fg_src, 'marshrut');
 
-  //  Arrada turibdi, ya'ni keyingi tsex — korpusdan keyin keladigani.
-  //  Sanasi o'sha tsexning birinchi qadami: started_on + (qadam − 1).
-  assert.ok(pl.next_shop, 'keyingi tsex topiladi');
-  const step = await H.id(
-    `SELECT MIN(sp.step_no) AS n FROM v_unit_step_plan sp
-       JOIN shops sh ON sh.id = sp.shop_id AND sh.name = $2
-      WHERE sp.unit_id = $1`, [u.id, pl.next_shop]);
-  assert.equal(ymd(r.next_shop_on), await kun(step.n - 1));
+  //  ★ STUL O'Z TSEXIDAN CHIQMAYDI (zavod qarori, 2026-09): marshrut
+  //  Rover karkasdan Qadoqlashgacha bitta tsexda yuradi, ya'ni
+  //  «keyingi tsex» degan savol yo'q va sanasi ham taxmin qilinmaydi.
+  //  Korpusda esa u bor — o'sha yerda sinaladi («muddat: korpusda
+  //  bosqichlar zanjiri»).
+  assert.equal(pl.next_shop, null, 'stul marshruti bitta tsexda');
+  assert.equal(r.next_shop_on, null);
+  const begona = await H.id(
+    `SELECT COUNT(*)::int AS n FROM v_unit_step_plan sp
+       JOIN sections sc ON sc.id = sp.section_id
+      WHERE sp.unit_id = $1
+        AND sc.shop_id <> (SELECT id FROM shops WHERE code = 'STUL')`, [u.id]);
+  assert.equal(begona.n, 0, 'marshrutning hamma qadami stul tsexida');
 
   //  Qo'lda qo'yilgan reja formuladan USTUN turadi: tsex boshlig'ining
   //  va'dasi hisobdan kuchliroq.

@@ -1121,7 +1121,7 @@ async function createOne(client, req, it) {
   }
 
   const place = it.section_id ? (await client.query(
-    `SELECT s.is_exit, sh.milestone
+    `SELECT s.is_exit, COALESCE(s.milestone, sh.milestone) AS milestone
        FROM sections s JOIN shops sh ON sh.id = s.shop_id
       WHERE s.id = $1`, [it.section_id])).rows[0] : null;
   const isExit = place?.is_exit || false;
@@ -1782,12 +1782,14 @@ async function relocate(client, req, unitId, sectionId) {
     `UPDATE production_units u SET
        lak_on  = COALESCE((SELECT MIN(m.moved_on) FROM unit_moves m
                     JOIN sections s ON s.id = m.section_id
-                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'lak'
-                   WHERE m.unit_id = u.id), u.lak_on),
+                    JOIN shops sh   ON sh.id = s.shop_id
+                   WHERE m.unit_id = u.id
+                     AND COALESCE(s.milestone, sh.milestone) = 'lak'), u.lak_on),
        pack_on = COALESCE((SELECT MIN(m.moved_on) FROM unit_moves m
                     JOIN sections s ON s.id = m.section_id
-                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'pack'
-                   WHERE m.unit_id = u.id), u.pack_on)
+                    JOIN shops sh   ON sh.id = s.shop_id
+                   WHERE m.unit_id = u.id
+                     AND COALESCE(s.milestone, sh.milestone) = 'pack'), u.pack_on)
      WHERE u.id = $1`, [unitId]);
 
   await audit(req, { module: 'production', action: 'relocate', entity: 'unit',
@@ -1919,7 +1921,8 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
   }
 
   const sec = (await client.query(
-    `SELECT s.is_exit, s.shop_id, sh.name AS shop, sh.milestone,
+    `SELECT s.is_exit, s.shop_id, sh.name AS shop,
+            COALESCE(s.milestone, sh.milestone) AS milestone,
             --  Marshrutdagi o'rni: undan keyin qaysi tsex turganini
             --  topish uchun kerak (izoh: keyingiTsex).
             (SELECT step_no FROM v_product_route
@@ -2142,12 +2145,14 @@ async function undoLastMove(client, req, unit_id) {
     `UPDATE production_units u SET
        lak_on  = (SELECT MIN(m.moved_on) FROM unit_moves m
                     JOIN sections s ON s.id = m.section_id
-                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'lak'
-                   WHERE m.unit_id = u.id),
+                    JOIN shops sh   ON sh.id = s.shop_id
+                   WHERE m.unit_id = u.id
+                     AND COALESCE(s.milestone, sh.milestone) = 'lak'),
        pack_on = (SELECT MIN(m.moved_on) FROM unit_moves m
                     JOIN sections s ON s.id = m.section_id
-                    JOIN shops sh   ON sh.id = s.shop_id AND sh.milestone = 'pack'
-                   WHERE m.unit_id = u.id)
+                    JOIN shops sh   ON sh.id = s.shop_id
+                   WHERE m.unit_id = u.id
+                     AND COALESCE(s.milestone, sh.milestone) = 'pack')
      WHERE u.id = $1`, [row]);
 
   // T/M ombor qoldig'iga tegilmaydi: chiqish bo'limiga o'tish uni

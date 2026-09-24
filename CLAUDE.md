@@ -384,15 +384,42 @@ chiqarishdan kirim esa mahsulot BIRINCHI tushgan omborga yoziladi, hozir
 turganiga emas — aks holda ko'chirilgan mahsulot vitrinada ikki marta
 kirim bo'lib ko'rinardi.
 
+**★ STUL O'Z TSEXIDAN CHIQMAYDI** (zavod qarori, 2026-09;
+`sql/routes.sql`, `sql/production-seed.sql`). Ilgari stul lak ishini
+BO'YOQLASH tsexining kabinasida olardi va o'sha yerdan qaytib kelardi:
+konver begona tsexning bo'limida turar, uni kim yuritishi esa alohida
+ustun bilan hal qilinardi. Endi stul tsexining O'Z bo'limlari bor va
+marshrut ularga ko'chdi:
+
+    Rover karkas → Zborka karkas → Shkurka karkas →
+    Astar sepish karkas → Astar shkurka karkas → Lak karkas →
+    Qoplash → Qadoqlash
+
+Sakkizta qadamning hammasi stul tsexida, ya'ni topshirish ham, javobgar
+tsex savoli ham umuman qolmadi. Yo'lda turgan konverlar bir martalik
+ko'chirildi (`migration_flags`: `stul-lak-kochdi`) — aks holda ular
+marshrutdan TASHQARIDA qolib, usta ekranida «keyingi bo'lim» tugmasi
+yo'qolardi.
+
+**★ LAK SANASI BO'LIMDAN HAM O'QILADI** (`sections.milestone`). Belgi
+ilgari faqat TSEXda turardi (`shops.milestone`) va «lak tsexiga kirgan
+kun» o'sha tsexga kirishdan chiqardi. Stul endi u yerga kirmaydi, ya'ni
+`lak_on` jimgina yo'qolib qolardi — savdo mijozga sana ayta olmasdi.
+Shuning uchun belgi BO'LIMda ham bor (STU-LAK) va o'qilishi bitta
+joyda: `COALESCE(bo'limniki, tsexniki)`. Zahira ham shu bo'limda
+kutadi (`is_hold`).
+
 **Javobgar tsex** (`product_groups.owner_shop_id`) — bo'lim konver
-QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini. Stul lak
-ishini lak tsexining kabinasida oladi, lekin boshidan oxirigacha stul
-tsexi boshlig'i yuritadi: lak ustasiga stul ko'rinmaydi, stul boshlig'i
-esa lak bo'limlarini o'z ekranida ustun sifatida ko'radi va o'zi
-o'tkazadi. Javobgar o'zgarmagani uchun topshirish ham so'ralmaydi.
-Bo'sh bo'lsa (penal, kamod, sp, stol) — eskicha: turgan joyining tsexi
-boshqaradi. Doira, topshirish va ekran — hammasi shu ustunga tayanadi
+QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini: begona
+tsexning bo'limida turgan konver o'z boshlig'ining ekranida ustun bo'lib
+ko'rinadi va topshirish so'ralmaydi. Bo'sh bo'lsa — turgan joyining
+tsexi boshqaradi. Doira, topshirish va ekran shu ustunga tayanadi
 (`v_unit_register.owner_shop_id`).
+
+**Hozir zavodda bunday marshrut YO'Q** — stul ko'chgach hammasi o'z
+tsexida yuradi. Mexanizm OLIB TASHLANMADI: ustun ham, `run_by` ham
+joyida qoladi va kerak bo'lganda bitta katakcha to'ldiriladi
+(4-qoida). Olib tashlansa ertaga o'sha ish qaytadan yozilardi.
 
 **★ RO'YXAT FAQAT KETMA-KETLIK BO'YICHA** (zavod qarori, 2026-09).
 Tsex ekranida konverlar MUDDAT bo'yicha turardi: kechikkani tepaga
@@ -1077,7 +1104,7 @@ shuning uchun kerak bo'lsa shu yerda bo'linadi.
 
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
-stul → Lak). Zahiraga muddat bashorat qilinmaydi.
+stul → Lak karkas). Zahiraga muddat bashorat qilinmaydi.
 
 ---
 

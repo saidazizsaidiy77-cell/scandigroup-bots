@@ -93,20 +93,57 @@ INSERT INTO route_templates (line_id, code, name) VALUES
   ((SELECT id FROM lines WHERE code='L2'), 'L2-SHKUR', 'Stul · Shkurkadan boshlanadi')
 ON CONFLICT (code) DO NOTHING;
 
+--  ★ STUL O'Z TSEXIDAN CHIQMAYDI (zavod qarori, 2026-09). Ilgari u
+--  lak ishini BO'YOQLASH tsexining kabinasida olardi va oqim o'sha
+--  yerdan qaytib kelardi. Endi tsexning o'z astar va lak bo'limlari
+--  bor — marshrut ularga ko'chdi.
+--
+--  Natijada «javobgar tsex» ham kerak bo'lmay qoldi: stul begona
+--  tsexning bo'limida turmaydi, ya'ni uni kim yuritishi savol emas.
+--  Ustun joyida qoladi (korpus uchun ham kerak bo'lishi mumkin) va
+--  hech narsani buzmaydi: javobgar ham, turgan joyi ham stul tsexi.
 SELECT set_route('L2-FULL', ARRAY[
   'STU-ROVER','STU-ZBOR','STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-LAK',
+  'STU-AST','STU-ASTSH','STU-LAK',
   'STU-QOPL','STU-QAD']);
 
 SELECT set_route('L2-ONIX', ARRAY[
   'STU-ZBOR','STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-LAK',
+  'STU-AST','STU-ASTSH','STU-LAK',
   'STU-QOPL','STU-QAD']);
 
 SELECT set_route('L2-SHKUR', ARRAY[
   'STU-SHKUR',
-  'BOY-AST1','BOY-ASTSH','BOY-LAK',
+  'STU-AST','STU-ASTSH','STU-LAK',
   'STU-QOPL','STU-QAD']);
+
+--  ★ YO'LDA TURGAN KONVERLARNI KO'CHIRISH (bir martalik).
+--
+--  Marshrut o'zgarganda lak tsexining bo'limlarida turgan STUL
+--  konverlari marshrutdan TASHQARIDA qolardi: usta ekranida
+--  «keyingi bo'lim» tugmasi yo'qolar va konver hech qayerga
+--  qimirlamas edi (CLAUDE.md, «turgan bo'limi yangi marshrutda
+--  bo'lishi shart»). Shuning uchun ular o'z tsexining mos
+--  bo'limiga ko'chiriladi.
+--
+--  Faqat STUL guruhi: o'sha bo'limlarda korpus konverlari ham
+--  turibdi va ular joyida qolishi kerak.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'stul-lak-kochdi') THEN
+    UPDATE production_units u
+       SET current_section_id = (SELECT id FROM sections WHERE code = v.yangi)
+      FROM (VALUES ('BOY-AST1',  'STU-AST'),
+                   ('BOY-ASTSH', 'STU-ASTSH'),
+                   ('BOY-LAK',   'STU-LAK')) AS v(eski, yangi)
+     WHERE u.current_section_id = (SELECT id FROM sections WHERE code = v.eski)
+       AND u.status = 'production'
+       AND u.product_id IN (SELECT p.id FROM products p
+                              JOIN product_groups g ON g.id = p.group_id
+                             WHERE g.code = 'STU');
+    INSERT INTO migration_flags (key) VALUES ('stul-lak-kochdi');
+  END IF;
+END $$;
 
 -- Qoplashsiz stul shabloni ishlatilmayapti va endi u eskirgan tartibni
 -- ko'rsatib turibdi. Hech qayerga biriktirilmagan bo'lsa — olib tashlanadi:

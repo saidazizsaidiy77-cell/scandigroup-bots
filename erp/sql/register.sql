@@ -49,6 +49,23 @@ UPDATE shops SET name = 'Lak tsexi'
 UPDATE shops SET milestone = 'lak'  WHERE code = 'BOYOQ' AND milestone IS NULL;
 UPDATE shops SET milestone = 'pack' WHERE code = 'QADOQ' AND milestone IS NULL;
 
+--  ★ BOSQICH BO'LIMDA HAM BO'LADI (zavod qarori, 2026-09).
+--
+--  Ilgari belgi faqat TSEXDA turardi: lak bosqichi «Lak tsexi» degan
+--  tsexga tegishli edi. Stul endi lak ishini O'Z tsexida qiladi
+--  (`STU-LAK`), ya'ni tsex belgisi bilan bu bosqichni ko'rsatib
+--  bo'lmaydi — jurnaldagi «Lak» ustuni stulda BO'SH qolardi va
+--  kechikish ham ko'rinmasdi.
+--
+--  Bo'limniki USTUN, tsexniki esa standart bo'lib qoladi: qolgan
+--  o'n to'qqiz bo'lim o'z tsexining belgisini oladi va hech narsa
+--  o'zgarmaydi.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS milestone TEXT
+  CHECK (milestone IN ('lak','pack'));
+
+UPDATE sections SET milestone = 'lak'
+ WHERE code = 'STU-LAK' AND milestone IS DISTINCT FROM 'lak';
+
 --  ★ MUDDATNI KIM QO'YADI — TSEXGA QARAB (zavod qarori, 2026-09).
 --
 --  Stulda marshrut qisqa va bir tekis yuradi, shuning uchun sana
@@ -285,10 +302,26 @@ CREATE OR REPLACE VIEW v_unit_step_plan AS
 --  step_no — ROW_NUMBER(), ya'ni bigint; int ga keltiriladi.
 --  Sana yakshanbani chetlab o'tib qo'shiladi (izoh: `ish_kuni`).
 SELECT u.id AS unit_id, r.step_no::int AS step_no, sc.shop_id,
-       ish_kuni(u.started_on, (r.step_no - 1)::int) AS on_date
+       ish_kuni(u.started_on, (r.step_no - 1)::int) AS on_date,
+       --  Ustun OXIRIDA: CREATE OR REPLACE VIEW faqat oxiriga qo'sha
+       --  oladi (CLAUDE.md, 2-qoida). Bosqich endi bo'limda ham
+       --  bo'ladi, shuning uchun qaysi bo'lim ekani kerak.
+       sc.id AS section_id
   FROM production_units u
   JOIN v_product_route r ON r.product_id = u.product_id
   JOIN sections sc       ON sc.id = r.section_id;
+
+--  Bosqichga kirish REJA kuni: marshrutdagi BIRINCHI shunday qadam.
+--  Belgi bo'limnikidan, u bo'sh bo'lsa tsexnikidan olinadi — stul lak
+--  ishini o'z tsexida qiladi va tsex belgisi uni ko'rsata olmaydi.
+CREATE OR REPLACE VIEW v_unit_plan_milestone AS
+SELECT p.unit_id, COALESCE(sc.milestone, sh.milestone) AS milestone,
+       MIN(p.on_date) AS on_date
+  FROM v_unit_step_plan p
+  JOIN sections sc ON sc.id = p.section_id
+  JOIN shops    sh ON sh.id = sc.shop_id
+ WHERE COALESCE(sc.milestone, sh.milestone) IS NOT NULL
+ GROUP BY p.unit_id, COALESCE(sc.milestone, sh.milestone);
 
 --  Har TSEXGA kirish rejasi: o'sha tsexdagi eng birinchi qadam kuni.
 --  Lak va qadoqlash sanalari shundan o'qiladi. Stul lakdan keyin O'Z
@@ -370,10 +403,10 @@ SELECT o.unit_id, o.steps,
   --  Marshrut qadamlari bo'yicha lak va qadoqlash tsexiga kirish kuni.
   --  Qator bo'lmasligi ham javob: stul qadoqlash tsexiga BORMAYDI —
   --  u o'z tsexida qadoqlanadi va o'sha yerdan omborga tushadi.
-  LEFT JOIN v_unit_plan_shop lk ON lk.unit_id = o.unit_id
-       AND lk.shop_id = (SELECT id FROM shops WHERE milestone = 'lak'  LIMIT 1)
-  LEFT JOIN v_unit_plan_shop pk ON pk.unit_id = o.unit_id
-       AND pk.shop_id = (SELECT id FROM shops WHERE milestone = 'pack' LIMIT 1);
+  --  Bosqich BO'LIMDA ham bo'ladi (izoh: yuqorida): stul lak ishini
+  --  o'z tsexida qiladi va uni tsex belgisi bilan topib bo'lmaydi.
+  LEFT JOIN v_unit_plan_milestone lk ON lk.unit_id = o.unit_id AND lk.milestone = 'lak'
+  LEFT JOIN v_unit_plan_milestone pk ON pk.unit_id = o.unit_id AND pk.milestone = 'pack';
 
 -- ------------------------------------------------------------ ★ JURNAL
 -- Ishlab chiqarish boshlig'ining jadvali. Bu view FAQAT shu faylda

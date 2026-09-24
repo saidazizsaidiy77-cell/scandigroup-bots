@@ -58,19 +58,40 @@ INSERT INTO sections (shop_id, code, name, sort, is_exit) VALUES
   ((SELECT id FROM shops WHERE code='QADOQ'), 'QAD-QAD', 'Qadoqlash', 2, true)
 ON CONFLICT (code) DO NOTHING;
 
--- STUL TSEXI. Marshrut: Rover→Zborka→Shkurka → BO'YOQLASH TSEXI → Qoplash→Qadoqlash,
--- ya'ni oqim bo'yoqlashdan keyin shu tsexga QAYTADI. Marshrut tartibi
--- route_steps'da yozilgani uchun bu muammo tug'dirmaydi.
+-- STUL TSEXI.
+--
+-- ★ STULNING O'Z LAK LINIYASI BOR (zavod qarori, 2026-09). Ilgari stul
+-- lak ishini BO'YOQLASH tsexining kabinasida olardi va oqim o'sha
+-- yerdan qaytib kelardi. Endi tsexning o'z astar va lak bo'limlari
+-- bor: stul boshidan oxirigacha O'Z tsexida yuradi va lak tsexiga
+-- umuman bormaydi.
+--
+-- Nomlarida «karkas» turadi: stulda astar ham, lak ham KARKASGA
+-- uriladi, mato esa keyin qoplanadi. Lak tsexida ham «Lak» degan
+-- bo'lim bor va ikkalasi bitta ro'yxatda turganda qaysi biri ekani
+-- noaniq qolardi.
 INSERT INTO sections (shop_id, code, name, sort) VALUES
-  ((SELECT id FROM shops WHERE code='STUL'), 'STU-ROVER', 'Rover',   1),
-  ((SELECT id FROM shops WHERE code='STUL'), 'STU-ZBOR',  'Zborka',  2),
-  ((SELECT id FROM shops WHERE code='STUL'), 'STU-SHKUR', 'Shkurka', 3),
-  ((SELECT id FROM shops WHERE code='STUL'), 'STU-QOPL',  'Qoplash', 4)
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-ROVER',  'Rover karkas',         1),
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-ZBOR',   'Zborka karkas',        2),
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-SHKUR',  'Shkurka karkas',       3),
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-AST',    'Astar sepish karkas',  4),
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-ASTSH',  'Astar shkurka karkas', 5),
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-LAK',    'Lak karkas',           6),
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-QOPL',   'Qoplash',              7)
 ON CONFLICT (code) DO NOTHING;
 
+-- Eski bazada uchta bo'lim boshqa nom bilan turibdi (`ON CONFLICT DO
+-- NOTHING` ularni tegmaydi). Nom saytdan tahrirlanmaydi, ya'ni qoida
+-- kodda: har migratsiyada o'rnatiladi.
+UPDATE sections SET name = 'Rover karkas',   sort = 1 WHERE code = 'STU-ROVER'  AND name <> 'Rover karkas';
+UPDATE sections SET name = 'Zborka karkas',  sort = 2 WHERE code = 'STU-ZBOR'   AND name <> 'Zborka karkas';
+UPDATE sections SET name = 'Shkurka karkas', sort = 3 WHERE code = 'STU-SHKUR'  AND name <> 'Shkurka karkas';
+UPDATE sections SET sort = 7 WHERE code = 'STU-QOPL' AND sort <> 7;
+
 INSERT INTO sections (shop_id, code, name, sort, is_exit) VALUES
-  ((SELECT id FROM shops WHERE code='STUL'), 'STU-QAD', 'Qadoqlash', 5, true)
+  ((SELECT id FROM shops WHERE code='STUL'), 'STU-QAD', 'Qadoqlash', 8, true)
 ON CONFLICT (code) DO NOTHING;
+UPDATE sections SET sort = 8 WHERE code = 'STU-QAD' AND sort <> 8;
 
 -- KAMERALAR — sig'im (capacity_qty) va sikl (cycle_min) aniqlangach to'ldiriladi
 INSERT INTO chambers (shop_id, code, name) VALUES
@@ -85,7 +106,11 @@ ON CONFLICT (code) DO NOTHING;
 --  Ushlash nuqtasi ikki xil, chunki yo'llar boshqacha:
 --
 --    korpus mebel : «Rang sepish» — undan keyin rang qaytmaydi
---    stul         : «Lak»         — stul rang sepishdan umuman o'tmaydi
+--    stul         : «Lak karkas»  — stul rang sepishdan umuman o'tmaydi
+--
+--  ★ Stulniki O'Z TSEXIGA ko'chdi (zavod qarori, 2026-09): ilgari u
+--  lak tsexining «Lak» bo'limi edi, endi stulning o'z lak liniyasi
+--  bor va zahira o'sha yerda kutadi.
 --
 --  Har biri BIR MARTA belgilanadi: saytdan boshqa bo'lim tanlangan
 --  bo'lsa, keyingi deploy uni qaytarib qo'ymasligi kerak.
@@ -96,10 +121,20 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('hold-rang');
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'hold-lak') THEN
-    UPDATE sections SET is_hold = true WHERE code = 'BOY-LAK';
-    INSERT INTO migration_flags (key) VALUES ('hold-lak');
+  --  Stulning kutish nuqtasi o'z tsexiga ko'chdi. Eski belgi
+  --  olib tashlanadi: aks holda zahira ikki joyda kutayotgandek
+  --  ko'rinardi va korpus zahirasi ham stul bilan aralashardi.
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'hold-lak-karkas') THEN
+    UPDATE sections SET is_hold = true  WHERE code = 'STU-LAK';
+    UPDATE sections SET is_hold = false WHERE code = 'BOY-LAK';
+    INSERT INTO migration_flags (key) VALUES ('hold-lak-karkas');
   END IF;
+
+  --  Eski `hold-lak` bloki OLIB TASHLANDI: u «Lak» ni (lak tsexiniki)
+  --  kutish nuqtasi qilardi va yuqoridagi yangi belgini shu yerda
+  --  qaytarib qo'yardi. Endi stul o'z tsexida kutadi, lak tsexining
+  --  «Lak» bo'limi esa oddiy bo'lim bo'lib qoladi — u yerda faqat
+  --  korpus yuradi va korpus zahirasi «Rang sepish» da kutadi.
 END $$;
 
 -- Mahsulot guruhlari `catalog-groups.sql` da: u eski guruhlarni yangisiga
