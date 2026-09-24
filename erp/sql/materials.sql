@@ -351,3 +351,29 @@ SELECT r.*,
       FROM mat_request_items x
       JOIN materials m ON m.id = x.material_id
      WHERE x.request_id = r.id) i ON true;
+
+-- ═══════════════════════════════════════════ OMBORNING JAVOBGAR TSEXI
+--
+--  ★ ZAVOD QARORI (2026-09). «Lak karkas ombori» STUL tsexida turadi —
+--  u yerdagi material stul karkasi uchun. Lekin lak ishi LAK tsexining
+--  kabinasida bajariladi va materialni o'sha yerda LAK tsexi boshlig'i
+--  sarflaydi.
+--
+--  Bu ishlab chiqarishdagi «javobgar tsex» bilan AYNAN bir xil holat
+--  (`product_groups.owner_shop_id`): stul lak ishini lak tsexida
+--  oladi, lekin uni stul boshlig'i yuritadi. Bu yerda esa teskari —
+--  ombor stul tsexida, lekin uni lak boshlig'i yuritadi.
+--
+--  Shuning uchun ikkita ustun: `shop_id` ombor QAYERDA ekanini
+--  aytadi, `owner_shop_id` esa KIM yuritayotganini. Bo'sh bo'lsa —
+--  eskicha: turgan joyining tsexi yuritadi.
+ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS owner_shop_id INT REFERENCES shops(id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'lak-karkas-javobgar') THEN
+    UPDATE warehouses w SET owner_shop_id = s.id
+      FROM shops s WHERE s.code = 'BOYOQ' AND w.code = 'TSEX-STU-LAK';
+    INSERT INTO migration_flags (key) VALUES ('lak-karkas-javobgar');
+  END IF;
+END $$;

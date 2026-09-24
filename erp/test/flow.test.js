@@ -1969,6 +1969,34 @@ test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
   assert.ok(!(await usta('GET', '/api/materials/ref')).body.warehouses
     .some((w) => w.id === wh), 'ro\'yxatda ham yo\'q');
 
+  //  ★ OMBORNING JAVOBGAR TSEXI (zavod qarori, 2026-09). «Lak karkas
+  //  ombori» STUL tsexida turadi — u yerdagi material stul karkasi
+  //  uchun. Lekin lak ishi LAK tsexining kabinasida bajariladi va
+  //  materialni o'sha yerda lak boshlig'i sarflaydi. Ishlab
+  //  chiqarishdagi javobgar tsex bilan aynan bir xil qoida.
+  const lakOmbor = await H.id(
+    `SELECT w.id, s.code AS turgan, o.code AS yuritadi
+       FROM warehouses w JOIN shops s ON s.id = w.shop_id
+       LEFT JOIN shops o ON o.id = w.owner_shop_id
+      WHERE w.code = 'TSEX-STU-LAK'`);
+  assert.equal(lakOmbor.turgan, 'STUL', 'ombor stul tsexida turadi');
+  assert.equal(lakOmbor.yuritadi, 'BOYOQ', 'lak tsexi boshlig\'i yuritadi');
+
+  //  Lak boshlig'i uni KO'RADI, stul boshlig'i esa YO'Q — chegara
+  //  javobgar tsexdan chiqadi, turgan joyidan emas.
+  const lakShop = (await H.id(`SELECT id FROM shops WHERE code = 'BOYOQ'`)).id;
+  await xodim('Sinov lak usta', 'tsex_usta');
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = $1
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov lak usta')`,
+    [lakShop]);
+  const lakUsta = H.api(base, await H.sessionFor('Sinov lak usta'));
+  assert.ok((await lakUsta('GET', '/api/materials/ref')).body.warehouses
+    .some((w) => w.id === lakOmbor.id), 'lak boshlig\'ida ko\'rinadi');
+  assert.ok(!(await usta('GET', '/api/materials/ref')).body.warehouses
+    .some((w) => w.id === lakOmbor.id), 'stul boshlig\'ida ko\'rinmaydi');
+
   //  ★ FURNITURA GURUHDA: sp, penal va kamodga yig'iladi, stol va
   //  stulga yo'q (zavod qarori) — belgi bazada, kodda emas.
   const furn = await H.id(

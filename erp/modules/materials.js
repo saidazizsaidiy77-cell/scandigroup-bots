@@ -39,15 +39,22 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
     db.query(`SELECT code, name FROM material_categories WHERE active ORDER BY sort, name`),
     db.query(`SELECT code, name FROM material_uoms ORDER BY sort, name`),
     db.query(
-      `SELECT w.id, w.code, w.name, w.shop_id, s.name AS shop, w.is_active
+      `SELECT w.id, w.code, w.name, w.shop_id, s.name AS shop, w.is_active,
+              w.owner_shop_id, o.name AS owner_shop
          FROM warehouses w
          LEFT JOIN shops s ON s.id = w.shop_id
+         LEFT JOIN shops o ON o.id = w.owner_shop_id
         WHERE w.kind = 'material'
           --  Doira CHEGARA: tsexi biriktirilgan xodimga zavod
           --  omborlari ham, boshqa tsexning ombori ham ko'rinmaydi.
           --  Doirasi yo'q xodimda (ombor xodimi, rahbariyat) hammasi.
+          --
+          --  ★ JAVOBGAR TSEX USTUN (izoh: sql/materials.sql): «Lak
+          --  karkas ombori» stul tsexida turadi, lekin uni LAK tsexi
+          --  boshlig'i yuritadi — ishlab chiqarishdagi javobgar
+          --  tsex bilan aynan bir xil qoida.
           AND ($1::int[] IS NULL
-               OR (w.shop_id IS NOT NULL AND w.shop_id = ANY($1)))
+               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
         ORDER BY w.sort, w.name`,
       [doira.length ? doira : null]),
   ]);
@@ -148,7 +155,8 @@ router.get('/stock', need(...VIEW), wrap(async (req, res) => {
        JOIN warehouses w ON w.id = s.warehouse_id
        LEFT JOIN material_categories c ON c.code = s.category
        LEFT JOIN material_uoms u       ON u.code = s.uom
-      WHERE ($1::int[] IS NULL OR w.shop_id = ANY($1))
+      WHERE ($1::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
         AND ($2::int IS NULL OR s.warehouse_id = $2)
         AND ($3::text IS NULL OR s.material ILIKE '%' || $3 || '%')
       ORDER BY w.sort, c.code NULLS LAST, s.material
@@ -174,7 +182,8 @@ router.get('/moves', need(...VIEW), wrap(async (req, res) => {
        LEFT JOIN warehouses tw  ON tw.id = m.to_id   AND m.to_kind   = 'warehouse'
        LEFT JOIN workers w      ON w.id  = m.worker_id
       WHERE ($1::int[] IS NULL
-             OR fw.shop_id = ANY($1) OR tw.shop_id = ANY($1))
+             OR COALESCE(fw.owner_shop_id, fw.shop_id) = ANY($1)
+             OR COALESCE(tw.owner_shop_id, tw.shop_id) = ANY($1))
         AND ($2::date IS NULL OR m.moved_on >= $2)
         AND ($3::date IS NULL OR m.moved_on <= $3)
         AND ($4::int IS NULL OR m.material_id = $4)

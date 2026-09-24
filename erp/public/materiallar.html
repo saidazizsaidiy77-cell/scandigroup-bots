@@ -72,6 +72,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
   c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
 let ref = { categories: [], uoms: [], warehouses: [] };
+//  ★ JAVOBGAR TSEX yoziladi, turgan joyi emas: «Lak karkas ombori»
+//  stul tsexida turadi, lekin uni LAK tsexi boshlig'i yuritadi
+//  (izoh: sql/materials.sql) — ishlab chiqarishdagi javobgar tsex
+//  bilan aynan bir xil qoida. Xodim o'z ro'yxatida O'ZI javobgar
+//  bo'lgan omborni ko'rishi kerak.
+const tsexi = (w) => w.owner_shop || w.shop || '';
 let rows = [], picked = null, tab = 'ref';
 const boshqara = () => App.can('materials.manage', 'production.manage');
 
@@ -115,9 +121,13 @@ async function boot() {
     ? `<button onclick="yangi()">+ Material</button>
        <button class="primary" onclick="yuklash()">Fayldan yuklash</button>`
     : '';
+  //  ★ JAVOBGAR TSEX yoziladi, turgan joyi emas: «Lak karkas ombori»
+  //  stul tsexida turadi, lekin uni LAK tsexi boshlig'i yuritadi
+  //  (izoh: sql/materials.sql). Xodim o'z ro'yxatida o'zi
+  //  javobgar bo'lgan omborni ko'rishi kerak.
   $('sWh').innerHTML = '<option value="">Barcha ombor</option>'
     + ref.warehouses.map((w) => `<option value="${w.id}">${esc(w.name)}${
-        w.shop ? ' · ' + esc(w.shop) : ''}</option>`).join('');
+        tsexi(w) ? ' · ' + esc(tsexi(w)) : ''}</option>`).join('');
   $('stockTools').innerHTML = boshqara()
     ? `<button onclick="boshlangich()">✎ Boshlang'ich qoldiq</button>` : '';
   //  Boshlang'ich qoldiq oynasidagi ro'yxat uchun: qo'lda yozish yo'q.
@@ -243,7 +253,7 @@ function boshlangich() {
           <div style="flex:1;min-width:200px"><label>Ombor</label>
             <select id="oWh">${ref.warehouses.map((w) =>
               `<option value="${w.id}">${esc(w.name)}${
-                w.shop ? ' · ' + esc(w.shop) : ''}</option>`).join('')}</select></div>
+                tsexi(w) ? ' · ' + esc(tsexi(w)) : ''}</option>`).join('')}</select></div>
         </div>
         <p class="muted" style="margin-bottom:12px">Tizim ishga tushgan
           kundagi holat. Bir martalik ish: bir xil material ikkinchi
