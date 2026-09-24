@@ -2724,6 +2724,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal(qator_.places[1].omborda, false);
   assert.equal(qator_.places[1].joy, 'Arra');
   assert.equal(qator_.places[1].qty, 2);
+  assert.equal(qator_.places[1].boshlanmagan, false, 'Arrada — boshlangan');
 
   // Ombor mudiri hali ko'rmaydi — savdo yubormagan
   assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);

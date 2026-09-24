@@ -1064,6 +1064,16 @@ qoldiqda yo'q.
 keladi, omborda turgani birinchi. Ilgari ro'yxatda faqat holat turardi
 («Kutmoqda») va joyini bilish uchun buyurtmalarni birma-bir ochish kerak
 edi. Ikkitadan ko'p joy bo'lsa qolgani «+N» — hammasi buyurtma ichida.
+
+**★ «BOSHLANMAGAN» JOYI HAR DOIM KO'RINADI.** Ustunga ikkita joy
+sig'adi va aynan boshlanmagan qator «+N» ichida qolib ketardi:
+buyurtma «Boshlanmagan» tabida turar, ustunda esa T/M ombor va
+tsexdagi bo'lim ko'rinib, SABABI ko'rinmasdi — «hammasi boshlangan-ku,
+nega bu yerda?». Server uni omborning ORQASIDAN saralaydi
+(`boshlanmagan` ustuni), sahifa esa kafolatlaydi: omborlar ko'p bo'lsa
+ham u ikkinchi o'ringa ko'chiriladi. Rangi ham boshqa — u javob, oddiy
+joy emas. Ikkalasi bir manbadan: `u.status = 'production' AND
+u.current_section_id IS NULL` — tab ham, chip ham shundan.
 Konver biriktirilmagan bo'lsa katak BO'SH: «Yangi» holati buni
 allaqachon aytadi. Chiqib ketgan va bekor qilingan buyurtma so'ralmaydi
 ham — mahsulot zavodda yo'q. Savdo xodimi mijozga «qayerda ekan» degan savolga shu

@@ -326,6 +326,14 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
   if (ochiq.length) {
     const joy = (await db.query(
       `SELECT i.order_id, (u.status = 'fg') AS omborda,
+              --  ★ BOSHLANMAGAN — ALOHIDA BELGI, faqat nom emas.
+              --  Ro'yxatda ikkitasi ko'rinadi, qolgani «+N» bo'lib
+              --  yig'iladi — va aynan shu qator «+N» ichida qolib
+              --  ketardi: buyurtma «Boshlanmagan» tabida turar, lekin
+              --  SABABI ko'rinmasdi. Endi u omborning ORQASIDAN
+              --  saralanadi va ikkitalikka har doim tushadi.
+              (u.status <> 'fg' AND u.current_section_id IS NULL)
+                AS boshlanmagan,
               CASE WHEN u.status = 'fg' THEN wh.code END AS warehouse_code,
               CASE WHEN u.status = 'fg' THEN COALESCE(wh.name, 'T/M ombor')
                    ELSE COALESCE(s.name, 'boshlanmagan') END AS joy,
@@ -339,8 +347,8 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
          LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
                                      (SELECT id FROM warehouses WHERE code = 'TM'))
         WHERE i.order_id = ANY($1::int[]) AND u.status <> 'cancelled'
-        GROUP BY 1, 2, 3, 4, 5
-        ORDER BY omborda DESC, joy`, [ochiq])).rows;
+        GROUP BY 1, 2, 3, 4, 5, 6
+        ORDER BY omborda DESC, boshlanmagan DESC, joy`, [ochiq])).rows;
     for (const o of rows)
       o.places = joy.filter((x) => x.order_id === o.id);
   }

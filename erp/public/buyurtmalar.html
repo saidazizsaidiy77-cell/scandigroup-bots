@@ -223,17 +223,30 @@ function setStatus(k){ status = k; drawChips(); load(); }
 //  Konver biriktirilmagan bo'lsa katak BO'SH qoladi: «Yangi» holati buni
 //  allaqachon aytadi va ikkinchi marta yozish ustunni shovqinga
 //  to'ldirardi.
+//  ★ «BOSHLANMAGAN» HAR DOIM KO'RINADI. Ustunga ikkita joy sig'adi,
+//  qolgani «+N» bo'lib yig'iladi — va aynan boshlanmagan qator o'sha
+//  «+N» ichida qolib ketardi: buyurtma «Boshlanmagan» tabida turar,
+//  lekin ustunda T/M ombor va tsexdagi bo'lim ko'rinib, SABABI
+//  ko'rinmasdi («hammasi boshlangan-ku, nega bu yerda?»).
+//
+//  Server uni omborning orqasidan saralaydi, ya'ni odatda o'zi
+//  ikkitalikka tushadi; bu yerda esa KAFOLAT — omborlar ko'p bo'lsa
+//  ham u ikkinchi o'ringa ko'chiriladi. Rangi ham boshqa: u javob,
+//  oddiy joy emas.
 function joylar(o) {
   const list = o.places || [];
   if (!list.length) return '';
-  const ko = list.slice(0, 2).map((x) => `<div><span class="tag${
-    x.omborda ? ' ok' : ''}" style="font-size:11px">${esc(
+  let ko = list.slice(0, 2);
+  const bosh = list.find((x) => x.boshlanmagan);
+  if (bosh && !ko.includes(bosh)) ko = [ko[0], bosh];
+  const chiz = ko.map((x) => `<div><span class="tag${
+    x.omborda ? ' ok' : x.boshlanmagan ? ' warn' : ''}" style="font-size:11px">${esc(
       x.warehouse_code === 'TM' ? 'T/M ombor' : x.joy)}</span>
     <span class="muted" style="font-size:11px">${x.qty} ta</span>${x.shop
       ? `<div class="muted" style="font-size:11px">${esc(x.shop)}</div>` : ''}</div>`);
-  if (list.length > 2)
-    ko.push(`<div class="muted" style="font-size:11px">+${list.length - 2}</div>`);
-  return ko.join('');
+  if (list.length > ko.length)
+    chiz.push(`<div class="muted" style="font-size:11px">+${list.length - ko.length}</div>`);
+  return chiz.join('');
 }
 
 async function load(){
