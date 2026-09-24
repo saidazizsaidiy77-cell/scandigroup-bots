@@ -191,6 +191,29 @@ BEGIN
   END IF;
 END $$;
 
+--  ★ OYLIK — KIMNIKI EKANI SO'RALADI (zavod qarori, 2026-09).
+--
+--  «Oylik korpus» degan chiqim kassadan chiqib ketardi va kimga
+--  berilgani hech qayerda yozilmasdi: hujjatda faqat modda turardi.
+--  Oyning oxirida «Farruxga berdikmi» degan savolga javob beradigan
+--  yagona joy kassirning xotirasi bo'lib qolardi.
+--
+--  Belgi MODDADA, kodda emas — ta'minotchiniki bilan bir xil idiom:
+--  ertaga «Tibbiy yordam» ham odamga bog'lansa, o'sha qatorga bitta
+--  `true` yoziladi (4-qoida).
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS needs_worker BOOLEAN NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'modda-xodim') THEN
+    --  Butun MAOSH guruhi: oylik ham, sarmoya ham, tibbiy yordam ham
+    --  MA'LUM bir odamga beriladi. Guruh bo'yicha qo'yiladi, nom
+    --  bo'yicha emas — zavod moddani qayta nomlasa belgi yo'qolmasin.
+    UPDATE expense_items SET needs_worker = true WHERE group_code = 'MAOSH';
+    INSERT INTO migration_flags (key) VALUES ('modda-xodim');
+  END IF;
+END $$;
+
 -- ──────────────────────────────────────────────────────── OPERATSIYA
 CREATE TABLE IF NOT EXISTS cash_ops (
   id        SERIAL PRIMARY KEY,
@@ -273,6 +296,25 @@ ALTER TABLE cash_ops DROP CONSTRAINT IF EXISTS cash_ops_expense_needs;
 ALTER TABLE cash_ops ADD  CONSTRAINT cash_ops_expense_needs CHECK (
   to_kind <> 'expense' OR (expense_item_id IS NOT NULL AND pl_month IS NOT NULL));
 
+--  ★ KIMNING OYLIGI — TOMON EMAS, ALOHIDA USTUN.
+--
+--  Oylik ta'minotchiga to'lovga o'xshamaydi va aynan shu yerda
+--  adashish oson. Ta'minotchida pul UNING QARZIDAN ayriladi, ya'ni u
+--  operatsiyaning TOMONI bo'ladi (`to_kind = 'supplier'`). Oylikda esa
+--  pul korxonadan CHIQIB KETADI: uning tomoni — harajat moddasi.
+--
+--  `to_kind = 'worker'` yozilsa oylik «xodimning qo'lidagi pul» bo'lib
+--  qolardi (`v_worker_cash`): odam maoshini olgani uchun korxonaga
+--  qarzdor bo'lib turar, kassir esa undan o'sha pulni qaytarib
+--  so'rayveradigan ro'yxatda ko'rardi. Foyda-zararga ham tushmasdi.
+--
+--  Shuning uchun alohida ustun: pul harajatga ketadi, yonida esa
+--  KIMNIKI ekani yozilib turadi. Ishbay oylik moduli yozilganda
+--  hisoblangan va berilgan shu ustundan solishtiriladi.
+ALTER TABLE cash_ops ADD COLUMN IF NOT EXISTS staff_id INT REFERENCES workers(id);
+CREATE INDEX IF NOT EXISTS idx_cash_ops_staff ON cash_ops(staff_id)
+  WHERE staff_id IS NOT NULL;
+
 -- ═══════════════════════════════════════════════════════ PUL HARAKATI
 --
 --  Har operatsiya IKKI QATOR bo'lib ochiladi: beruvchi tomonda minus,
@@ -310,6 +352,8 @@ CREATE VIEW v_cash_ops AS
 SELECT o.id, o.doc_no, o.op_date, o.from_kind, o.from_id, o.to_kind, o.to_id,
        o.currency, o.amount, o.rate, o.amount_usd, o.pl_month,
        o.expense_item_id, o.order_id, o.note, o.status, o.created_at,
+       --  Kimning oyligi: TOMON emas, alohida ustun (izoh yuqorida).
+       o.staff_id, sw.name AS staff_name,
        COALESCE(fa.name, fw.name, fc.name, fs.name) AS from_name,
        COALESCE(ta.name, tw.name, tc.name, ts.name, ei.name) AS to_name,
        eg.name  AS expense_group,
@@ -328,6 +372,7 @@ SELECT o.id, o.doc_no, o.op_date, o.from_kind, o.from_id, o.to_kind, o.to_id,
   LEFT JOIN expense_items ei ON ei.id = o.expense_item_id
   LEFT JOIN expense_groups eg ON eg.code = ei.group_code
   LEFT JOIN orders        ord ON ord.id = o.order_id
+  LEFT JOIN workers       sw ON sw.id = o.staff_id
   LEFT JOIN workers       w  ON w.id = o.created_by;
 
 -- ──────────────────────────────────────────────────── KASSA QOLDIG'I

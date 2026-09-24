@@ -129,15 +129,69 @@ function itemFilter() {
   outThird();
 }
 
+//  ★ UCHINCHI BOSQICH IKKI XIL BO'LADI, lekin BITTA payt: modda yo
+//  ta'minotchini so'raydi, yo xodimni. Ikkalasi bir vaqtda kerak
+//  bo'ladigan harajat yo'q — ta'minotchiga to'lov odamga, oylik esa
+//  ta'minotchiga bog'lanmaydi.
 function outThird() {
   const box = $('fSupBox');
   if (!box) return;
   const val = $('fItem') ? $('fItem').value : '';
   const id  = val.startsWith('expense:') ? Number(val.slice(8)) : 0;
   const it  = (refs.items || []).find(x => x.id === id);
+
+  const xod = $('fStaffBox');
+  if (xod) {
+    xod.hidden = !(it && it.needs_worker);
+    if (xod.hidden) { $('fStaff').value = ''; $('fStaffQ').value = ''; }
+    else staffFilter();
+  }
+
   box.hidden = !(it && it.needs_supplier);
   if (box.hidden) { $('fSup').value = ''; $('fSupQ').value = ''; return calc(); }
   supFilter();
+}
+
+//  ★ KIMGA OYLIK BERILDI. Ta'minotchi bilan bir xil ko'rinish va bir
+//  xil sabab: oltmish ismni ochilmadan ko'z bilan qidirib bo'lmaydi,
+//  shuning uchun qidiruv katagi ustida turadi va topilganlar shu
+//  yerda ro'yxat bo'lib chiqadi.
+//
+//  Ism ostida LAVOZIMI va bo'limi yoziladi: zavodda bir xil familiya
+//  uchraydi (uchta Ro'zimurodov) va faqat ism ko'rinsa kassir qaysi
+//  biriga berayotganini bilmasdi.
+function staffFilter() {
+  const q = ($('fStaffQ') ? $('fStaffQ').value : '').trim().toLowerCase();
+  const mos = (x) => !q || x.name.toLowerCase().includes(q)
+    || (x.position || '').toLowerCase().includes(q)
+    || (x.dept || '').toLowerCase().includes(q)
+    || (x.shop || '').toLowerCase().includes(q);
+  const list = (refs.staff || []).filter(mos);
+  if (q && list.length === 1) $('fStaff').value = String(list[0].id);
+  const bor = $('fStaff').value;
+  $('fStaffList').innerHTML = list.length
+    ? list.map(x => `<button type="button"${
+        String(x.id) === bor ? ' class="on"' : ''
+      } onclick="staffPick(${x.id})">${esc(x.name)}${
+        x.position || x.dept ? `<span class="muted"> \u00b7 ${
+          esc([x.position, x.dept].filter(Boolean).join(' \u00b7 '))}</span>` : ''
+      }</button>`).join('')
+    : `<div class="none">${(refs.staff || []).length
+        ? 'Bunday xodim topilmadi'
+        : "Ro'yxat bo'sh \u2014 Xodimlar sahifasidan kiriting"}</div>`;
+  //  Qidiruvsiz oltmish qator ekranni egallab ketardi — kassir
+  //  nomni yozadi, ro'yxat esa unga qisqaradi.
+  $('fStaffHint').textContent = q ? `${list.length} ta topildi`
+    : `${(refs.staff || []).length} ta xodim \u2014 ismini yozing`;
+  calc();
+}
+
+function staffPick(id) {
+  const w = (refs.staff || []).find(x => x.id === id);
+  if (!w) return;
+  $('fStaff').value = String(id);
+  $('fStaffQ').value = w.name;
+  staffFilter();
 }
 
 //  Topilganlar SHU YERDA, ro'yxat bo'lib turadi — bosib ochiladigan
@@ -316,7 +370,18 @@ function openForm(kind) {
                    oninput="supFilter()" style="margin-bottom:8px">
             <input type="hidden" id="fSup">
             <div id="fSupList" class="pick"></div>
-            <div class="hint" id="fSupHint"></div></div>` : ''}
+            <div class="hint" id="fSupHint"></div></div>
+
+          <!--  Uchinchi bosqichning ikkinchi ko'rinishi: OYLIK kimga.
+                Modda shuni talab qilsa chiqadi (needs_worker) va
+                ta'minotchiniki bilan hech qachon birga turmaydi. -->
+          <div class="wide" id="fStaffBox" hidden>
+            <label>Kimga \u2014 xodim</label>
+            <input id="fStaffQ" placeholder="ism, lavozim yoki bo'lim"
+                   oninput="staffFilter()" style="margin-bottom:8px">
+            <input type="hidden" id="fStaff">
+            <div id="fStaffList" class="pick"></div>
+            <div class="hint" id="fStaffHint"></div></div>` : ''}
 
           <div><label>Summa</label>
             <input id="fAmt" type="number" min="0" step="0.01" inputmode="decimal"
@@ -408,6 +473,12 @@ async function saveOp() {
   }
 
   const supOchiq = $('fSupBox') && !$('fSupBox').hidden;
+  //  ★ OYLIKDA XODIM TOMON EMAS. Ta'minotchida u tomonga aylanadi
+  //  (pul uning qarzidan ayriladi), oylikda esa pul korxonadan
+  //  chiqib ketadi va tomoni harajat moddasi bo'lib qoladi — xodim
+  //  esa yonida, «kimniki» bo'lib yoziladi (izoh: sql/cash.sql).
+  const xodOchiq = $('fStaffBox') && !$('fStaffBox').hidden;
+  if (xodOchiq && !$('fStaff').value) return toast('Xodim tanlanmagan', true);
   const modda = $('fItem') && $('fItemBox') && !$('fItemBox').hidden
     ? String($('fItem').value || '') : '';
   const raw = String((supOchiq ? $('fSup').value : (modda || $('fSide').value)) || '');
@@ -440,6 +511,7 @@ async function saveOp() {
       ? { expense_item_id: Number(id), pl_month: $('fMonth').value }
       : supOchiq && modda.startsWith('expense:')
       ? { expense_item_id: Number(modda.slice(8)), pl_month: $('fMonth').value } : {}),
+    ...(xodOchiq ? { staff_id: Number($('fStaff').value) } : {}),
   };
   try {
     const r = await App.api('/api/cash/ops',

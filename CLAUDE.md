@@ -1332,6 +1332,46 @@ Belgi MODDADA (`expense_items.needs_supplier`), kodda emas: ertaga
 «Yetkazib berish xarajati» ham ta'minotchiga bog'lansa, o'sha qatorga
 bitta `true` yoziladi.
 
+**★ OYLIKDA HAM UCHINCHI BOSQICH — KIMGA BERILDI**
+(`expense_items.needs_worker`, `cash_ops.staff_id`; zavod qarori
+2026-09). «Oylik korpus» degan chiqim kassadan chiqib ketardi va
+kimga berilgani hech qayerda yozilmasdi: hujjatda faqat modda
+turardi. Oyning oxirida «Farruxga berdikmi» degan savolga javob
+beradigan yagona joy kassirning xotirasi bo'lib qolardi.
+
+**Belgi butun MAOSH guruhida**: oylik ham, sarmoya ham, tibbiy yordam
+ham MA'LUM bir odamga beriladi. Guruh bo'yicha qo'yiladi, nom bo'yicha
+emas — zavod moddani qayta nomlasa belgi yo'qolmasin.
+
+**★ XODIM TOMON BO'LMAYDI, va aynan shu yerda adashish oson.**
+Ta'minotchida pul UNING QARZIDAN ayriladi, ya'ni u operatsiyaning
+TOMONI bo'ladi (`to_kind='supplier'`). Oylikda esa pul korxonadan
+CHIQIB KETADI: tomoni — harajat moddasi. `to_kind='worker'` yozilsa
+oylik «xodimning qo'lidagi pul» bo'lib qolardi (`v_worker_cash`) —
+odam maoshini olgani uchun korxonaga qarzdor bo'lib turar, kassir
+esa undan o'sha pulni qaytarib so'raydigan ro'yxatda ko'rardi;
+foyda-zararga ham tushmasdi.
+
+Shuning uchun ALOHIDA ustun: pul harajatga ketadi, yonida esa KIMNIKI
+ekani yozilib turadi. Ishbay oylik moduli yozilganda hisoblangan va
+berilgan shu ustundan solishtiriladi.
+
+**Ro'yxatda BUTUN SHTAT turadi** — dasturga kiradiganlar emas:
+zavodda oltmish kishi ishlaydi va oylik hammasiga beriladi. Ism
+ostida lavozimi va bo'limi yoziladi (zavodda uchta Ro'zimurodov bor),
+qidiruv esa ism, lavozim va bo'lim bo'yicha ishlaydi. Ta'minotchilar
+bilan bir xil sabab: bu SPRAVOCHNIK, unda na qoldiq bor, na qarz —
+shuning uchun HAMMAGA keladi; tsex boshlig'i faqat oylik guruhiga
+sarflaydi, ya'ni uchinchi bosqich aynan unga kerak.
+
+**Ikki uchinchi bosqich hech qachon birga turmaydi**: modda yo
+ta'minotchini so'raydi, yo xodimni. Ta'minotchiga to'lov odamga,
+oylik esa ta'minotchiga bog'lanmaydi.
+
+Lentada ismi moddaning yonida turadi («Oylik korpus · Abubakirov
+Xasan»). Tekshiruv **serverda**: ro'yxatni chetlab, id ni qo'lda
+yuborsa ham qabul qilinmaydi.
+
 **Ta'minotchiga to'lovni PODOTCHYOT OLGAN XODIM ham yozadi**: ombor
 mudiri bozorda naqd to'laydi va o'sha odamning qarzi kamayishi kerak.
 Pul xodimning qo'lidan chiqadi (`worker → supplier`), modda esa

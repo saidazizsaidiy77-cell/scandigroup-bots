@@ -4074,6 +4074,70 @@ test('ta\'minotchilarni fayldan yuklash: turi nomi bilan ham o\'qiladi', async (
 });
 
 
+
+//  ★ OYLIK KIMGA BERILGANI YOZILADI (zavod qarori, 2026-09).
+//  Ta'minotchiga to'lovdan farqi: xodim TOMON BO'LMAYDI — pul
+//  korxonadan chiqib ketadi, ya'ni tomoni harajat moddasi.
+test('oylik: kimga berilgani so\'raladi va qo\'lidagi pulga qo\'shilmaydi', async () => {
+  const kassir = H.api(base, await H.sessionFor('Administrator'));
+
+  //  Shtatdagi odam — PIN'siz, dasturga kirmaydi, lekin oylik oladi
+  const xodim = (await admin('POST', '/api/admin/workers',
+    { name: 'Sinov Oylik Oluvchi', staff_group: 'Ishlab chiqarish',
+      position: 'Shkurkachi' })).body.id;
+
+  const refs = (await kassir('GET', '/api/cash/refs')).body;
+  const modda = refs.items.find((x) => x.group_code === 'MAOSH');
+  assert.ok(modda, 'maosh moddasi bor');
+  assert.equal(modda.needs_worker, true, 'oylik moddasi xodim so\'raydi');
+  //  Ro'yxat SPRAVOCHNIK: dasturga kirmaydigan odam ham turadi
+  assert.ok(refs.staff.some((x) => x.id === xodim),
+    'PIN\'siz xodim ham ro\'yxatda');
+
+  const kassa = refs.accounts.find((a) => a.code === 'MAIN').id;
+  const yoz = (extra) => kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense',
+    currency: 'USD', amount: 300, pl_month: '2026-09',
+    expense_item_id: modda.id, ...extra });
+
+  //  Xodimsiz yozib bo'lmaydi
+  const bosh = await yoz({});
+  assert.equal(bosh.status, 400, bosh.text);
+  assert.match(bosh.body.error, /Xodim tanlanmagan/);
+
+  //  Ro'yxatni chetlab, bo'lmagan id yuborilsa ham qabul qilinmaydi
+  assert.equal((await yoz({ staff_id: 999999 })).status, 400);
+
+  const ok = await yoz({ staff_id: xodim });
+  assert.equal(ok.status, 200, ok.text);
+
+  //  ★ QO'LIDAGI PULGA QO'SHILMAYDI: odam maoshini olgani uchun
+  //  korxonaga qarzdor bo'lib qolmasligi kerak.
+  const qol = await H.id(
+    `SELECT COALESCE(total_usd, 0) AS s FROM v_worker_cash WHERE id = $1`, [xodim]);
+  assert.equal(Number(qol ? qol.s : 0), 0, 'oylik podotchyot emas');
+
+  //  Lentada ismi bilan turadi
+  const op = await H.id(
+    `SELECT staff_id, staff_name, to_kind FROM v_cash_ops WHERE doc_no = $1`,
+    [ok.body.doc_no]);
+  assert.equal(op.to_kind, 'expense', 'tomoni harajat moddasi');
+  assert.equal(op.staff_id, xodim);
+  assert.equal(op.staff_name, 'Sinov Oylik Oluvchi');
+
+  //  Foyda-zararda o'z moddasida turadi
+  const pl = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
+  assert.ok(pl.rows.some((x) => x.item_id === modda.id),
+    'oylik foyda-zararda o\'z moddasida');
+
+  //  Xodim so'ramaydigan moddada katak umuman so'ralmaydi
+  const boshqa = refs.items.find((x) => !x.needs_worker && !x.needs_supplier);
+  assert.equal((await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense',
+    currency: 'USD', amount: 10, pl_month: '2026-09',
+    expense_item_id: boshqa.id })).status, 200, 'boshqa harajat eskicha yoziladi');
+});
+
 //  ★ XODIMLAR FAYLDAN. Zavodda oltmish kishi ishlaydi, tizimga esa
 //  o'ntasi kiradi — qolgani PIN'siz shtatda turadi va ularning oyligi
 //  ishbay hisobdan chiqadi. Fayl shuning uchun PIN'ni ham, rolni ham

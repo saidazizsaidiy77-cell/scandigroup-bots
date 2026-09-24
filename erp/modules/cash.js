@@ -63,13 +63,13 @@ async function nextDocNo(client) {
 router.get('/refs', need(...ANY), wrap(async (req, res) => {
   const boss = isBoss(req);
   const chans = channelsOf(req);
-  const [accounts, groups, items, customers, suppliers, workers, payable,
+  const [accounts, groups, items, customers, suppliers, staff, workers, payable,
          meniki, kurs] = await Promise.all([
     boss ? db.query(`SELECT id, code, name, kind FROM cash_accounts
                       WHERE is_active ORDER BY sort, name`) : { rows: [] },
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
-    db.query(`SELECT id, group_code, name, needs_supplier FROM expense_items
-               WHERE active ORDER BY sort, name`),
+    db.query(`SELECT id, group_code, name, needs_supplier, needs_worker
+                FROM expense_items WHERE active ORDER BY sort, name`),
     //  O'z mijozi chegarasi savdo bilan BIR XIL (izoh: erp/auth.js):
     //  menejer boshqa menejerning mijozidan to'lov yozib qo'ymasin.
     //  INKASSATORDA esa ikkala chegara ham ochiladi — pulni u hamma
@@ -84,6 +84,22 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  ro'yxat faqat kassirga kelardi va xodimda bo'sh chiqardi.
     //  Bu SPRAVOCHNIK — qarz ham, to'lov ham unda yo'q.
     db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`),
+    //  ★ OYLIK KIMGA BERILDI. Ta'minotchilar ro'yxati bilan bir xil
+    //  sabab: bu SPRAVOCHNIK, unda na qoldiq bor, na qarz — shuning
+    //  uchun HAMMAGA keladi. Tsex boshlig'i faqat oylik guruhiga
+    //  sarflaydi, ya'ni uchinchi bosqich aynan unga kerak.
+    //
+    //  Ro'yxatda BUTUN SHTAT turadi, dasturga kiradiganlar emas:
+    //  zavodda oltmish kishi ishlaydi va oylik hammasiga beriladi
+    //  (izoh: sql/production.sql). Lavozimi va bo'limi yonida
+    //  yoziladi — oltmish ism orasida bir xil familiya uchraydi va
+    //  faqat ismi ko'rinsa qaysi biri ekani noaniq qolardi.
+    db.query(`SELECT w.id, w.name, w.position,
+                     COALESCE(sc.name, w.dept) AS dept, sh.name AS shop
+                FROM workers w
+                LEFT JOIN sections sc ON sc.id = w.section_id
+                LEFT JOIN shops    sh ON sh.id = w.shop_id
+               WHERE w.active ORDER BY w.name`),
     //  Xodim ro'yxati — QO'LIDA KORXONA PULI BORLARI. Kassir uchun
     //  bu «kimdan pul olsam bo'ladi» degan savolning to'la javobi:
     //  qolgan xodimlar bu ro'yxatda turishi kerak emas, ular pul
@@ -128,6 +144,10 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
   res.json({
     accounts: accounts.rows, groups: groups.rows, items: items.rows,
     customers: customers.rows, suppliers: suppliers.rows, workers: workers.rows,
+    //  Butun shtat — oylik kimga berilayotganini yozish uchun
+    //  (`needs_worker`). Qo'lida puli borlar ro'yxati bu EMAS: u
+    //  «kimdan pul olsam bo'ladi» degan boshqa savolning javobi.
+    staff: staff.rows,
     payable: payable.rows,
     //  O'ZIM: qo'limga pul beriladimi va qaysi guruhlarga sarflay
     //  olaman. Bo'sh ro'yxat — hamma guruh.
@@ -377,6 +397,29 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
       pl_month = m + '-01';
     }
 
+    //  ★ OYLIK KIMNIKI EKANI SO'RALADI (zavod qarori, 2026-09).
+    //  Belgi MODDADA (`needs_worker`, izoh: sql/cash.sql), ya'ni
+    //  qoida bazada turadi va kodga ism yozilmaydi (4-qoida).
+    //
+    //  Xodim TOMON BO'LMAYDI: pul korxonadan chiqib ketadi, ya'ni
+    //  tomoni — harajat moddasi. `to_kind = 'worker'` yozilsa oylik
+    //  «qo'lidagi pul» bo'lib qolar va odam maoshini olgani uchun
+    //  korxonaga qarzdor bo'lib turardi.
+    let staff_id = null;
+    if (item_id) {
+      const it = (await client.query(
+        `SELECT needs_worker FROM expense_items WHERE id = $1`, [item_id])).rows[0];
+      if (it && it.needs_worker) {
+        staff_id = Number(b.staff_id) || null;
+        if (!staff_id) throw new Error('Xodim tanlanmagan');
+        //  Ro'yxatni chetlab, id ni qo'lda yuborish ham qabul
+        //  qilinmaydi: o'chirilgan xodimga oylik yozib bo'lmaydi.
+        const w = (await client.query(
+          `SELECT 1 FROM workers WHERE id = $1 AND active`, [staff_id])).rows[0];
+        if (!w) throw new Error('Bunday xodim yo\'q');
+      }
+    }
+
     //  ★ XODIM O'Z QO'LIDAGI PULDAN SARFLAYDI. Ikkita shart:
     //  qo'liga pul beriladigan xodim bo'lsin va modda unga ruxsat
     //  etilgan guruhdan bo'lsin (izoh: sql/cash.sql). Cheklov
@@ -459,13 +502,14 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     const { rows } = await client.query(
       `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind, to_id,
                              currency, amount, rate, pl_month, expense_item_id,
-                             order_id, note, created_by, status)
+                             order_id, note, created_by, status, staff_id)
        VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6,
-               $7, $8, $9, $10::date, $11, $12, $13, $14, $15)
+               $7, $8, $9, $10::date, $11, $12, $13, $14, $15, $16)
        RETURNING id, doc_no, amount_usd, status`,
       [doc_no, b.op_date || null, from_kind, from_id, to_kind, to_id,
        currency, amount, rate, pl_month, item_id,
-       b.order_id || null, (b.note || '').trim() || null, req.user.id, status]);
+       b.order_id || null, (b.note || '').trim() || null, req.user.id, status,
+       staff_id]);
 
     await audit(req, { module: 'cash', action: 'create', entity: 'cash_op',
                        entity_id: rows[0].id,

@@ -256,7 +256,12 @@ function drawOps() {
           ? ' <span class="tag warn">bekor</span>' : o.status === 'pending'
           ? ' <span class="tag warn">kutmoqda</span>' : ''}</td>
         <td class="muted">${d8(o.op_date)}</td>
+        <!--  ★ OYLIKDA KIMGA BERILGANI SHU YERDA. Ilgari katakda
+              faqat modda turardi («Oylik korpus») va oyning oxirida
+              «Farruxga berdikmi» degan savolga javob beradigan yagona
+              joy kassirning xotirasi bo'lib qolardi. -->
         <td>${kirimmi(o) ? '' : '<span class="muted">→ </span>'}${esc(other(o) || '')}${
+          o.staff_name ? ` · <b>${esc(o.staff_name)}</b>` : ''}${
           o.expense_group ? `<div class="muted" style="font-size:11.5px">${
             esc(o.expense_group)}${o.pl_month
               ? ' · ' + String(o.pl_month).slice(0, 7) : ''}</div>` : ''}</td>
