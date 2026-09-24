@@ -158,6 +158,7 @@ INSERT INTO expense_items (group_code, name, sort) VALUES
   ('XOJALIK', 'Oziq-ovqat', 10),
   ('XOJALIK', 'Tozalik mahsulotlari', 20),
   ('XOJALIK', 'Bog'' xarajati', 30),
+  ('XOJALIK', 'Kanstovar', 40),
   ('MARKET', 'Marketing', 10),
   ('MARKET', 'Target', 20),
   ('MARKET', 'Savdo', 30),
