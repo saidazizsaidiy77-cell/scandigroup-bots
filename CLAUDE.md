@@ -1131,6 +1131,21 @@ ro'yxatdan yig'iladi — unga zavodning barcha mijozi emas, hozir
 chiqishni kutayotganlari kerak. Filtr KLIENTDA: ro'yxat kichik (faqat
 chiqarilishi kerak bo'lganlar) va yozgan zahoti javob beradi.
 
+**★ SANASI O'TIB KETGANI QIZIL BO'LIB TURADI** (zavod qarori,
+2026-09). Chiqarish KUNINI mudir o'zi hal qiladi — `/ship` `due_on` ni
+tekshirmaydi va erta ham, kech ham chiqarish mumkin: mashina, haydovchi
+va yo'l uning ishi va tizim uning o'rniga qaror qilmaydi. Lekin sana
+SAVDONIKI: mijozga aytilgan kun, bron ham shundan tekshiriladi
+(`assertMuddat`). O'tib ketgani ko'rinmasa mudir uni oddiy qator deb
+o'qirdi — ro'yxat allaqachon shu sana bo'yicha saralanadi
+(`ORDER BY o.due_on NULLS LAST`), ya'ni kechikkani tepada turadi, lekin
+NEGA tepada turgani yozilmasdi. Endi sana qizil (`.late`) va yonida
+necha kun kechikkani turadi; bugun ketadigani «bugun» deb belgilanadi.
+
+Bu OGOHLANTIRISH, to'siq emas: tugma ishlayveradi. Bloklash yo'l emas
+edi — mijoz erta kelib qolsa yoki mashina bir kun kechiksa mudirning
+ishi butunlay to'xtardi.
+
 **★ CHEGARA CHIQARISHDA, YUBORISHDA EMAS.** To'liq bo'lmagan buyurtma
 ham omborga YUBORILADI va bu ataylab: savdo mudirga OLDINDAN aytadi —
 «bu ketadi, qolganini kutyapmiz» — mudir esa kunini shunga qarab

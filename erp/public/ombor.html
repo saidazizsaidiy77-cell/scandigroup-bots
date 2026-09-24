@@ -782,6 +782,7 @@ function drawShip() {
     return;
   }
   const list = shipRows();
+  const bugun = isoDay(new Date());
   if (!list.length) {
     $('body').innerHTML = shipFilter() + `<div class="card">
       <h2>Filtrga mos buyurtma yo'q</h2>
@@ -794,6 +795,13 @@ function drawShip() {
         list.length} ta \u00b7 jami ${ship.length} tadan</p>` : '')
     + list.map(o => {
     const tayyor = o.in_warehouse_qty >= o.assigned_qty;
+    //  Chiqib ketish sanasi — savdo mijozga aytgan kun. Tizim uni MAJBUR
+    //  qilmaydi: kunni mudir o'zi tuzadi va erta ham, kech ham chiqarish
+    //  mumkin. Lekin sana O'TIB KETGANI ko'rinib tursin — ro'yxat shu sana
+    //  bo'yicha saralanadi, ya'ni kechikkani allaqachon tepada turadi va
+    //  sababini aytmasa mudir uni oddiy qator deb o'qirdi.
+    const due = (o.due_on || '').slice(0, 10);
+    const kech = due && due < bugun;
     return `<div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div>
@@ -805,10 +813,15 @@ function drawShip() {
                 : (o.customer_phone ? ' · ' + esc(o.customer_phone) : '')}
           </div>
           <div class="muted" style="font-size:12px;margin-top:3px">
-            Chiqib ketish: ${o.due_on ? d8(o.due_on) : '—'} ·
+            Chiqib ketish: ${o.due_on
+              ? `<b class="${kech ? 'late' : ''}">${d8(o.due_on)}</b>${
+                  due === bugun ? ' · bugun' : ''}` : '—'} ·
             ${esc(o.manager_name || '')} yubordi ${d8(o.sent_to_wh_on)}</div>
         </div>
         <div class="row" style="gap:8px;align-items:center">
+          ${kech ? `<span class="tag bad">${
+            Math.round((Date.parse(bugun) - Date.parse(due)) / 864e5)
+            } kun kechikdi</span>` : ''}
           ${tayyor ? `<span class="tag ok">hammasi omborda</span>`
                    : `<span class="tag warn">${o.in_warehouse_qty} / ${
                         o.assigned_qty} omborda</span>`}
