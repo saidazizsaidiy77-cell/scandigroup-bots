@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Narxlar · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body class="wide">
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Narxlar</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="min-width:220px"><label>Qidiruv</label>
+      <input id="fQ" placeholder="mahsulot nomi yoki SKU" oninput="deb()"></div>
+    <div style="min-width:180px"><label>Guruh</label>
+      <select id="fGroup" onchange="load()"></select></div>
+    <label class="row" style="gap:8px;align-items:center;text-transform:none;
+      font-size:14px;cursor:pointer">
+      <input type="checkbox" id="fOff" style="width:auto" onchange="load()">
+      <span>Faolsizi ham</span></label>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    Narx dollarda. Har o'lcham alohida mahsulot — narxi ham alohida.
+    Bo'sh qoldirilgan narx «chegara yo'q» degani: menejer istalgan
+    raqamni yoza oladi.</p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h2 style="margin:0">Mahsulotlar</h2>
+    <span class="muted" id="cnt" style="font-size:13px"></span>
+  </div>
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<script>
+//  NARXLAR — ulgurji va chakana.
+//
+//  ★ ZAVOD QARORI (2026-09). Menejer qator yozganda narx o'zi to'ladi
+//  va undan PAST sota olmaydi — faqat direktor ruxsati bilan
+//  (izoh: modules/sales.js, `narxTuri`).
+//
+//  Alohida sahifa: katalog fason × guruh PANJARASI va u yerda bitta
+//  katak oltita o'lchamni birgalikda boshqaradi. Narx esa har
+//  o'lchamda boshqa — panjaraga sig'maydi.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const money = (v) => v == null || v === '' ? ''
+  : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+
+let rows = [], groups = [];
+
+function toast(msg, bad) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), bad ? 5000 : 2600);
+}
+
+let t1 = null;
+const deb = () => { clearTimeout(t1); t1 = setTimeout(load, 350); };
+
+async function boot() {
+  const cat = await App.api('/api/catalog');
+  groups = cat.groups.filter((g) => g.active);
+  $('fGroup').innerHTML = '<option value="">Barcha guruh</option>'
+    + groups.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  await load();
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
+  if ($('fGroup').value)    q.set('group_id', $('fGroup').value);
+  if ($('fOff').checked)    q.set('all', '1');
+  rows = (await App.api('/api/catalog/prices?' + q)).rows;
+  draw();
+}
+
+function draw() {
+  $('cnt').textContent = rows.length ? `${rows.length} ta` : '';
+  if (!rows.length) {
+    $('body').innerHTML = '<p class="muted">Mahsulot topilmadi.</p>';
+    return;
+  }
+  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Mahsulot</th><th>Guruh</th>
+      <th class="num">Ulgurji, $</th><th class="num">Chakana, $</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr${r.active ? '' : ' style="opacity:.5"'}>
+      <td><b>${esc(r.name)}</b>${r.size_label
+          ? ` <span class="muted">· ${esc(r.size_label)}</span>` : ''}
+        <div class="muted" style="font-size:11px">${esc(r.sku)}</div></td>
+      <td class="muted">${esc(r.group_name)}</td>
+      <td class="num"><input type="number" step="0.01" min="0"
+        value="${r.price_opt ?? ''}" style="width:110px;text-align:right"
+        onchange="saqla(${r.id}, 'price_opt', this)"></td>
+      <td class="num"><input type="number" step="0.01" min="0"
+        value="${r.price_retail ?? ''}" style="width:110px;text-align:right"
+        onchange="saqla(${r.id}, 'price_retail', this)"></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+//  Katakdan chiqilganda saqlanadi: «Saqlash» tugmasi bo'lsa yuzta
+//  qator to'ldirilgach uni bosish unutilardi va kiritilgan narx
+//  yo'qolardi.
+async function saqla(id, maydon, el) {
+  const v = el.value.trim();
+  try {
+    await App.api('/api/catalog/products/' + id,
+      { method: 'PATCH', body: JSON.stringify({ [maydon]: v === '' ? '' : Number(v) }) });
+    const r = rows.find((x) => x.id === id);
+    if (r) r[maydon] = v === '' ? null : Number(v);
+    el.style.borderColor = '';
+    toast('Saqlandi');
+  } catch (e) {
+    el.style.borderColor = 'var(--bad)';
+    toast(e.message, true);
+  }
+}
+
+App.start(boot, 'production.manage', 'sales.discount');
+</script>
+</body>
+</html>

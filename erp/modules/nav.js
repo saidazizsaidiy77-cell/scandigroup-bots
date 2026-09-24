@@ -227,6 +227,21 @@ const NAVBATLAR = [
               izoh: `${n} ta omborlar aro hujjat sizni kutmoqda` }];
   },
 
+  //  ★ 6a. CHEGIRMA TASDIG'I — DIREKTORNING NAVBATI (zavod qarori,
+  //  2026-09). Narxdan past yozilgan buyurtma u qaror qilmaguncha
+  //  omborga o'tmaydi, ya'ni menejer ham, mijoz ham kutib turadi.
+  //  Direktor esa kun bo'yi buyurtmalar sahifasida o'tirmaydi —
+  //  konver so'rovi bilan bir xil sabab.
+  async (req) => {
+    if (!bor(req, 'sales.discount')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM orders
+        WHERE discount_status = 'pending'
+          AND status NOT IN ('shipped', 'cancelled')`);
+    return [{ page: '/buyurtmalar.html', mod: 'sales', n,
+              izoh: `${n} ta buyurtma chegirma tasdig'ini kutmoqda` }];
+  },
+
   //  7. OMBORGA YUBORISHNI KUTAYOTGAN BUYURTMA — menejerning navbati.
   //  Bronning HAMMASI omborga yetib kelgan, ya'ni buyurtma chiqarishga
   //  tayyor va endi ombor mudiriga yuboriladi. Yetib kelmaganida tugma

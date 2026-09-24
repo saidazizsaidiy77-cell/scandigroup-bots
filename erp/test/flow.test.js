@@ -1769,6 +1769,124 @@ test('raqamlar harf bo\'yicha ALOHIDA sanaladi', async () => {
   }
 });
 
+test('narxdan past sotilmaydi \u2014 direktor tasdiqlaydi', async () => {
+  //  ★ ZAVOD QARORI (2026-09). Zavodda ikki narx bor: ulgurji va
+  //  chakana. Menejer qator yozganda narx o'zi to'ladi va uni
+  //  OSHIRISH mumkin, TUSHIRISH esa yo'q — faqat direktor ruxsati
+  //  bilan. Ismi kodga yozilmaydi: belgi XODIMDA.
+  const { db } = require('../db');
+  //  O'Z mijozi: bu test buyurtma yozadi va qarzdorlik lentasiga
+  //  tegmasligi kerak — keyingi testlar o'sha raqamlarni sanaydi.
+  await db.query(`INSERT INTO customers (name) VALUES ('Sinov narx mijozi')
+                   ON CONFLICT (lower(name)) DO NOTHING`);
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Sinov narx mijozi'`)).id;
+  const yozilgan = [];
+
+  await db.query(`UPDATE products SET price_opt = 100, price_retail = 130
+                   WHERE id = $1`, [PENAL]);
+
+  //  Ulgurji menejer (standart) va chakana menejer.
+  const opt = await xodim('Sinov narx ulgurji', 'sotuvchi');
+  await xodim('Sinov narx chakana', 'sotuvchi');
+  await db.query(
+    `UPDATE worker_roles SET price_kind = 'retail'
+      WHERE role_code = 'sotuvchi'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov narx chakana')`);
+  const ret = H.api(base, await H.sessionFor('Sinov narx chakana'));
+
+  //  Har menejer FAQAT o'z narxini ko'radi: ekranda bitta raqam.
+  const pOpt = (await opt('GET', '/api/sales/products')).body.rows
+    .find((p) => p.id === PENAL);
+  const pRet = (await ret('GET', '/api/sales/products')).body.rows
+    .find((p) => p.id === PENAL);
+  assert.equal(Number(pOpt.price), 100);
+  assert.equal(Number(pRet.price), 130);
+
+  //  Chegaradan YUQORI narx jim o'tadi.
+  const yaxshi = await opt('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, unit_price: 120 }] });
+  assert.equal(yaxshi.status, 200, yaxshi.text);
+  yozilgan.push(yaxshi.body.id);
+  assert.equal((await opt('GET', '/api/sales/orders/' + yaxshi.body.id))
+    .body.order.discount_status, null, 'tasdiq so\'ralmaydi');
+
+  //  Chegaradan PAST narx — buyurtma tasdiq kutadi.
+  const past = await opt('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, unit_price: 90 }] });
+  assert.equal(past.status, 200, past.text);
+  const z = past.body.id;
+  yozilgan.push(z);
+  assert.equal((await opt('GET', '/api/sales/orders/' + z))
+    .body.order.discount_status, 'pending');
+
+  //  ★ CHAKANA MENEJERGA CHEGARA BOSHQA: 120 unda ham past.
+  const r2 = await ret('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, unit_price: 120 }] });
+  yozilgan.push(r2.body.id);
+  assert.equal((await ret('GET', '/api/sales/orders/' + r2.body.id))
+    .body.order.discount_status, 'pending', 'chakana chegarasi 130');
+
+  //  ★ TASDIQLANMAGAN CHEGIRMA OMBORGA O'TMAYDI — qaytib bo'lmaydigan
+  //  nuqta: ombordan mahsulot chiqadi va mijozning qarzi yoziladi.
+  const qator = (await opt('GET', '/api/sales/orders/' + z)).body.items[0];
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  assert.equal((await opt('POST', `/api/sales/orders/${z}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 1 })).status, 200);
+  assert.equal((await opt('PATCH', '/api/sales/orders/' + z,
+    { ship_to: 'ZAVOD' })).status, 200);
+  const yubor = await opt('POST', `/api/sales/orders/${z}/send`);
+  assert.equal(yubor.status, 400, yubor.text);
+  assert.match(yubor.body.error, /direktor/i);
+
+  //  Menejerning O'ZIDA ruxsat yo'q.
+  assert.equal((await opt('POST', `/api/sales/orders/${z}/discount`,
+    { approve: true })).status, 403);
+
+  //  Rad etishda sabab majburiy: menejer nega bo'lmaganini bilmasa,
+  //  o'sha narxni ertaga yana yozardi.
+  assert.equal((await admin('POST', `/api/sales/orders/${z}/discount`,
+    { approve: false })).status, 400);
+
+  //  Direktor tasdiqlaydi — shundan keyin omborga o'tadi.
+  const ok = await admin('POST', `/api/sales/orders/${z}/discount`,
+    { approve: true, note: 'Doimiy mijoz' });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal((await opt('POST', `/api/sales/orders/${z}/send`)).status, 200);
+
+  //  ★ NARX O'ZGARSA TASDIQ QAYTA SO'RALADI: aks holda tasdiqlatib
+  //  olib, keyin narxni yana tushirish yetardi.
+  const z2 = (await opt('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, unit_price: 95 }] })).body.id;
+  yozilgan.push(z2);
+  assert.equal((await admin('POST', `/api/sales/orders/${z2}/discount`,
+    { approve: true })).status, 200);
+  const q2 = (await opt('GET', '/api/sales/orders/' + z2)).body.items[0];
+  assert.equal((await opt('PATCH', '/api/sales/orders/' + z2,
+    { items: [{ id: q2.id, product_id: PENAL, qty: 1, unit_price: 80 }] })).status, 200);
+  assert.equal((await opt('GET', '/api/sales/orders/' + z2))
+    .body.order.discount_status, 'pending', 'narx tushirilsa tasdiq qayta so\'raladi');
+
+  //  Narxi QO'YILMAGAN mahsulotda chegara yo'q: bo'lmagan raqamni
+  //  majburlab bo'lmaydi va buyurtma to'xtab qolmasligi kerak.
+  await db.query(`UPDATE products SET price_opt = NULL, price_retail = NULL
+                   WHERE id = $1`, [PENAL]);
+  const z3 = await opt('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, unit_price: 5 }] });
+  yozilgan.push(z3.body.id);
+  assert.equal((await opt('GET', '/api/sales/orders/' + z3.body.id))
+    .body.order.discount_status, null, 'narxsiz mahsulotda chegara yo\'q');
+
+  //  ★ TEST O'ZIDAN KEYIN TOZALAYDI: ombor navbati, qarzdorlik lentasi
+  //  va jo'natish ro'yxati keyingi testlarda sanaladi — bu yerda
+  //  qolgan buyurtma o'sha raqamlarni siljitib yuborardi.
+  assert.equal((await opt('POST', `/api/sales/orders/${z}/unsend`)).status, 200);
+  for (const id of yozilgan)
+    await opt('PATCH', '/api/sales/orders/' + id, { status: 'cancelled' });
+});
+
 test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
   //  ★ Qoldiq HARAKATdan yig'iladi, alohida ustun yo'q: ustun bo'lsa
   //  u harakat bilan ajralib ketardi — bitta unutilgan UPDATE va

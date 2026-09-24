@@ -25,7 +25,7 @@ async function loadWorker(workerId) {
     db.query(
       `SELECT wr.role_code AS code, r.name, r.surface,
               wr.scope_shop_id, wr.scope_line_id, wr.scope_channel,
-              wr.scope_warehouse_id, wr.scope_own
+              wr.scope_warehouse_id, wr.scope_own, wr.price_kind
          FROM worker_roles wr JOIN roles r ON r.code = wr.role_code
         WHERE wr.worker_id = $1 ORDER BY r.sort`, [workerId]),
   ]);
@@ -49,6 +49,14 @@ async function loadWorker(workerId) {
     //  Rollardan biri belgilangan bo'lsa yetarli — eng TOR doira
     //  ishlaydi, yo'nalish doirasi bilan bir xil qoida.
     scope_own: roles.rows.some((r) => r.scope_own),
+    //  ★ IKKI NARX: ULGURJI va CHAKANA (izoh: sql/sales.sql). Menejer
+    //  qaysi narx bilan ishlashi XODIMDA turadi, kodda emas
+    //  (4-qoida) — ismni yozib qo'yish o'sha odam almashgan kuni
+    //  yolg'onga aylanardi.
+    //
+    //  Standarti ULGURJI: menejerlarning ko'pchiligi shunda ishlaydi
+    //  va belgisi qo'yilmagan xodimning ekrani o'zgarmaydi.
+    price_kind: roles.rows.map((r) => r.price_kind).find(Boolean) || 'opt',
     //  ★ INKASSATOR: pulni hamma mijozdan u yig'adi, shuning uchun
     //  «o'z mijozi» va yo'nalish chegarasi FAQAT KASSADA ochiladi
     //  (izoh: sql/cash.sql). Savdo bo'limi eskicha qolaveradi — aks

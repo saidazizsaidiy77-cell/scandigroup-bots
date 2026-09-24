@@ -33,12 +33,23 @@ UPDATE product_groups g SET route_template_id = t.rt
 -- (Shu xato bir marta tutilgan: `size_label` o'rtaga qo'shilganda mavjud
 -- bazada migratsiya "cannot change name of view column" bilan yiqilgan.)
 -- Unga bog'liq boshqa view yo'q, shuning uchun DROP xavfsiz.
+--  ★ IKKI NARX: ULGURJI VA CHAKANA (zavod qarori, 2026-09; qoidasi
+--  `sql/sales.sql` da). Ustunlar SHU YERDA: ularni `v_catalog`
+--  o'qiydi va u shu faylda quriladi — savdo faylida qo'shilsa toza
+--  bazada view ularni topa olmasdi.
+--
+--  Narx o'lchamga o'zi bog'lanadi: har o'lcham allaqachon alohida
+--  mahsulot. Dollarda, butun tizimdagi hisob-kitob kabi.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS price_opt    NUMERIC(14,2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS price_retail NUMERIC(14,2);
+
 DROP VIEW IF EXISTS v_catalog;
 CREATE VIEW v_catalog AS
 SELECT p.id, p.sku, p.name, p.active, p.is_set,
        p.group_id, g.name AS group_name, g.code AS group_code,
        p.fason_id, f.name AS fason_name,
        p.route_template_id, rt.name AS route_name, p.size_label,
+       p.price_opt, p.price_retail,
        (SELECT COUNT(*) FROM production_units u WHERE u.product_id = p.id) AS units
 FROM products p
 JOIN product_groups g       ON g.id = p.group_id

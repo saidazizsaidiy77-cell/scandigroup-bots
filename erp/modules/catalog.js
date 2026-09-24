@@ -251,15 +251,31 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
-router.patch('/products/:id', need('production.manage'), wrap(async (req, res) => {
+//  ★ NARX ham shu yerdan (zavod qarori, 2026-09): ulgurji va chakana,
+//  dollarda. Bo'sh qoldirilgani «tegma» emas, «yo'q» degani —
+//  narxi qo'yilmagan mahsulotda chegara umuman ishlamaydi va menejer
+//  istalgan narxni yoza oladi (izoh: modules/sales.js, narxTuri).
+//  Shuning uchun `''` yuborilsa NULL yoziladi, kelmagan maydon esa
+//  tegilmaydi.
+const narx = (v) => (v === undefined ? undefined
+  : v === '' || v === null ? null : Number(v));
+
+router.patch('/products/:id', need('production.manage', 'sales.discount'),
+  wrap(async (req, res) => {
   const { active, route_template_id, is_set } = req.body;
+  const opt = narx(req.body.price_opt), ret = narx(req.body.price_retail);
+  if ((opt != null && !(opt >= 0)) || (ret != null && !(ret >= 0)))
+    return res.status(400).json({ error: "Narx noto'g'ri" });
   const { rows } = await db.query(
     `UPDATE products SET active            = COALESCE($2, active),
                          route_template_id = COALESCE($3, route_template_id),
-                         is_set            = COALESCE($4, is_set)
+                         is_set            = COALESCE($4, is_set),
+                         price_opt    = CASE WHEN $5::boolean THEN $6 ELSE price_opt END,
+                         price_retail = CASE WHEN $7::boolean THEN $8 ELSE price_retail END
       WHERE id = $1 RETURNING id`,
     [req.params.id, typeof active === 'boolean' ? active : null,
-     route_template_id || null, typeof is_set === 'boolean' ? is_set : null]);
+     route_template_id || null, typeof is_set === 'boolean' ? is_set : null,
+     opt !== undefined, opt ?? null, ret !== undefined, ret ?? null]);
   if (!rows[0]) return res.status(404).json({ error: 'Mahsulot topilmadi' });
   await audit(req, { module: 'production', action: 'update', entity: 'product',
                      entity_id: req.params.id, payload: req.body });
@@ -278,6 +294,35 @@ router.delete('/products/:id', need('production.manage'), wrap(async (req, res) 
   await audit(req, { module: 'production', action: 'delete', entity: 'product',
                      entity_id: req.params.id });
   res.json({ ok: true });
+}));
+
+// ═══════════════════════════════════════════════════════════ NARXLAR
+//
+//  ★ IKKI NARX: ULGURJI VA CHAKANA (zavod qarori, 2026-09; qoidasi
+//  `sql/sales.sql` da). Ro'yxat alohida yo'lda: katalog sahifasi
+//  fason × guruh PANJARASI — unda bitta katak oltita o'lchamni
+//  birgalikda boshqaradi va narx u yerga sig'maydi, chunki har
+//  o'lchamning narxi boshqa.
+//
+//  Huquq: katalogniki (`production.manage`) va direktorniki
+//  (`sales.discount`) — narx siyosati ikkalasining ishi.
+const PRICE = ['production.manage', 'sales.discount'];
+
+router.get('/prices', need(...PRICE), wrap(async (req, res) => {
+  const q = String(req.query.q || '').trim() || null;
+  const { rows } = await db.query(
+    `SELECT p.id, p.sku, p.name, p.size_label, p.active,
+            g.name AS group_name, g.sort AS group_sort,
+            p.price_opt, p.price_retail
+       FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE ($1::text IS NULL
+             OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
+        AND ($2::int IS NULL OR p.group_id = $2)
+        AND (p.active OR $3::boolean)
+      ORDER BY g.sort, p.name, p.size_label NULLS FIRST
+      LIMIT 2000`,
+    [q, Number(req.query.group_id) || null, req.query.all === '1']);
+  res.json({ rows });
 }));
 
 module.exports = router;

@@ -120,6 +120,11 @@ function openForm(id){
   const scopeOf = (code) => w?.roles.find(r => r.code === code)?.scope_shop_id || '';
   const chanOf  = (code) => w?.roles.find(r => r.code === code)?.scope_channel || '';
   const whOf    = (code) => w?.roles.find(r => r.code === code)?.scope_warehouse_id || '';
+  //  ★ IKKI NARX (izoh: sql/sales.sql). Standarti ULGURJI: menejerlar
+  //  ko'pchiligi shunda ishlaydi va yangi xodimning ekrani
+  //  o'zidan-o'zi o'zgarmaydi. Chakana bilan ishlaydiganida belgi
+  //  qo'yiladi — ism kodga yozilmaydi (4-qoida).
+  const priceOf = (code) => w?.roles.find(r => r.code === code)?.price_kind || 'opt';
   //  Yangi xodimda belgi QO'YILGAN bo'lib ochiladi: zavod qoidasi
   //  shunday — savdo xodimi o'zinikini ko'radi. Bosh ofis menejeri
   //  uchun katakcha olib tashlanadi.
@@ -250,6 +255,15 @@ function openForm(id){
                       ${chanOf(r.code) === c.code ? 'selected' : ''}
                       >${esc(c.name)}</option>`).join('')}
                   </select>
+                  <!--  Narx turi: menejer qaysi narx bilan ishlaydi.
+                        Chegara shundan chiqadi — undan past sotish
+                        direktor ruxsatini talab qiladi. -->
+                  <select class="pkind" data-role="${r.code}" style="width:130px">
+                    <option value="opt"${priceOf(r.code) === 'opt' ? ' selected' : ''}
+                      >Ulgurji narx</option>
+                    <option value="retail"${priceOf(r.code) === 'retail' ? ' selected' : ''}
+                      >Chakana narx</option>
+                  </select>
                   <!-- Vitrina sotuvchisi shaharning bir nuqtasida ishlaydi:
                        nuqtasi biriktirilsa u faqat o'sha vitrinaning
                        qoldig'ini ko'radi (ustiga T/M omborni). Bo'sh
@@ -296,6 +310,7 @@ async function save(id){
     code: cb.value,
     scope_shop_id: document.querySelector(`.scope[data-role="${cb.value}"]`)?.value || null,
     scope_channel: document.querySelector(`.chan[data-role="${cb.value}"]`)?.value || null,
+    price_kind: document.querySelector(`.pkind[data-role="${cb.value}"]`)?.value || null,
     scope_warehouse_id: document.querySelector(`.wh[data-role="${cb.value}"]`)?.value || null,
     scope_own: !!document.querySelector(`.own[data-role="${cb.value}"]`)?.checked,
   }));

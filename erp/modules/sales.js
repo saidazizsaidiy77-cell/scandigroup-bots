@@ -125,9 +125,16 @@ router.get('/suggest', need(...READ), wrap(async (_req, res) => {
   });
 }));
 
-router.get('/products', need(...READ), wrap(async (_req, res) => {
+router.get('/products', need(...READ), wrap(async (req, res) => {
+  //  ★ NARX MENEJERNING TURIDAN (izoh: `narxTuri`). Ekranda BITTA
+  //  raqam turadi — o'ziniki: ulgurji menejer chakana narxni
+  //  ko'rmaydi va aksincha. Ikkalasini ko'rsatish qatorda ikkita
+  //  raqam qoldirardi va menejer qaysi biri o'ziniki ekanini har
+  //  safar o'ylab turardi.
+  const ustun = narxTuri(req) === 'retail' ? 'price_retail' : 'price_opt';
   const { rows } = await db.query(
     `SELECT p.id, p.name, p.sku, g.name AS product_type, g.uom,
+            p.${ustun} AS price,
             COALESCE(f.qty, 0)::int AS free_fg,
             COALESCE(f.stock, 0)::int AS free_stock
        FROM products p
@@ -377,7 +384,7 @@ router.post('/orders', need(...WRITE), wrap(async (req, res) => {
        await assertDest(client, ship_to, address), address || null,
        receiver_phone || null])).rows[0];
 
-    await saveItems(client, o.id, items);
+    await saveItems(client, req, o.id, items);
     await audit(req, { module: 'sales', action: 'create', entity: 'order',
                        entity_id: o.id, payload: { order_no: o.order_no } }, client);
     await client.query('COMMIT');
@@ -425,7 +432,31 @@ async function assertRang(client, orderId, items) {
   }
 }
 
-async function saveItems(client, orderId, items) {
+// ═══════════════════════════════════════════════ NARX CHEGARASI
+//
+//  ★ ZAVOD QARORI (2026-09): narxdan PAST sotilmaydi, faqat direktor
+//  ruxsati bilan. Menejer qator yozganda narx o'zi to'ladi va uni
+//  OSHIRISH mumkin, TUSHIRISH esa yo'q.
+//
+//  Chegara menejerning NARX TURIDAN chiqadi (`worker_roles.price_kind`,
+//  izoh: erp/auth.js): ulgurji menejerga ulgurji narx, chakana
+//  menejerga chakana. Ismi kodga yozilmaydi — bu belgi, lavozim emas.
+//
+//  Narxi QO'YILMAGAN mahsulotda chegara YO'Q: bo'lmagan raqamni
+//  majburlab bo'lmaydi va buyurtma to'xtab qolmasligi kerak. Katalogda
+//  «narx qo'yilmagan» bo'lib ko'rinadi va zavod uni o'zi to'ldiradi.
+const narxTuri = (req) => (req.user?.price_kind === 'retail' ? 'retail' : 'opt');
+
+async function floorMap(client, req, ids) {
+  if (!ids.length) return new Map();
+  const ustun = narxTuri(req) === 'retail' ? 'price_retail' : 'price_opt';
+  const { rows } = await client.query(
+    `SELECT id, ${ustun} AS floor, name FROM products WHERE id = ANY($1::int[])`,
+    [ids]);
+  return new Map(rows.map((r) => [r.id, r]));
+}
+
+async function saveItems(client, req, orderId, items) {
   await assertRang(client, orderId, items);
 
   const keep = items.map((i) => i.id).filter(Boolean);
@@ -445,28 +476,55 @@ async function saveItems(client, orderId, items) {
     `DELETE FROM order_items WHERE order_id = $1 AND NOT (id = ANY($2::int[]))`,
     [orderId, keep]);
 
-  let sort = 0;
+  const narx = await floorMap(client, req, items.map((i) => i.product_id).filter(Boolean));
+
+  let sort = 0, past = false;
   for (const it of items) {
     if (!it.product_id) throw new Error('Qatorda mahsulot tanlanmagan');
     const qty = Number(it.qty) || 1;
     if (!Number.isInteger(qty) || qty <= 0) throw new Error('Soni noto\'g\'ri');
     const price = it.unit_price === '' || it.unit_price == null ? null : Number(it.unit_price);
+    //  Chegara qatorda QOTIB qoladi: narxlar keyin o'zgarsa
+    //  allaqachon tasdiqlangan qator qaytadan «past» bo'lib
+    //  qolmasligi kerak.
+    const p = narx.get(Number(it.product_id));
+    const floor = p?.floor == null ? null : Number(p.floor);
+    if (floor != null && price != null && price < floor) past = true;
     if (it.id) {
       await client.query(
         `UPDATE order_items SET product_id=$2, qty=$3, color=$4, fabric=$5,
-                unit_price=$6, note=$7, sort=$8
+                unit_price=$6, note=$7, sort=$8, price_floor=$10
           WHERE id=$1 AND order_id=$9`,
         [it.id, it.product_id, qty, it.color || null, it.fabric || null,
-         price, it.note || null, sort++, orderId]);
+         price, it.note || null, sort++, orderId, floor]);
     } else {
       await client.query(
         `INSERT INTO order_items (order_id, product_id, qty, color, fabric,
-                                  unit_price, note, sort)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                                  unit_price, note, sort, price_floor)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [orderId, it.product_id, qty, it.color || null, it.fabric || null,
-         price, it.note || null, sort++]);
+         price, it.note || null, sort++, floor]);
     }
   }
+
+  //  ★ NARX O'ZGARSA TASDIQ QAYTA SO'RALADI. Aks holda qoida bitta
+  //  bosishda chetlab o'tilardi: tasdiqlatib olib, keyin narxni yana
+  //  tushirish yetardi (chiqish sanasi qoidasi bilan bir xil sabab).
+  //
+  //  Chegirmaga RUXSATI BOR odam (direktor) yozgan buyurtma darrov
+  //  tasdiqlangan bo'ladi: u baribir o'zi tasdiqlaydigan qarorni
+  //  ikkinchi marta bosib o'tirmasin.
+  const ruxsat = req.user.permissions.includes('sales.discount');
+  await client.query(
+    `UPDATE orders SET
+       discount_status = CASE WHEN $2::boolean
+                              THEN (CASE WHEN $3::boolean THEN 'approved'
+                                         ELSE 'pending' END) END,
+       discount_by   = CASE WHEN $2::boolean AND $3::boolean THEN $4::int END,
+       discount_at   = CASE WHEN $2::boolean AND $3::boolean THEN NOW() END,
+       discount_note = CASE WHEN $2::boolean AND $3::boolean
+                            THEN 'Chegirmani o''zi yozdi'::text END
+     WHERE id = $1`, [orderId, past, ruxsat, req.user.id]);
 }
 
 router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
@@ -552,7 +610,7 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
         [cur.order_no, yangiNo]);
     }
 
-    if (Array.isArray(items)) await saveItems(client, Number(req.params.id), items);
+    if (Array.isArray(items)) await saveItems(client, req, Number(req.params.id), items);
     await audit(req, { module: 'sales', action: 'update', entity: 'order',
                        entity_id: Number(req.params.id),
                        payload: { order_no: cur.order_no } }, client);
@@ -1020,6 +1078,34 @@ router.get('/waybill/:id', need(...READ, ...SHIP), wrap(async (req, res) => {
   res.json({ order: o, items, keeper: await keeperOf() });
 }));
 
+//  ★ CHEGIRMANI DIREKTOR TASDIQLAYDI (zavod qarori, 2026-09). Savdo
+//  boshlig'i emas: narx siyosati direktorning ishi. Huquq
+//  `sales.discount` — ismi kodga yozilmaydi (4-qoida).
+//
+//  Yo'nalish va «o'z buyurtmasi» chegarasi bu yerda QO'YILMAYDI:
+//  tasdiqlovchida doira bo'lmaydi va u butun savdoni ko'radi
+//  (konver so'rovini tasdiqlash bilan bir xil qoida).
+router.post('/orders/:id/discount', need('sales.discount'), wrap(async (req, res) => {
+  const ok = req.body.approve === true;
+  const note = String(req.body.note || '').trim() || null;
+  //  Rad etishda SABAB majburiy: menejer nega bo'lmaganini bilmasa,
+  //  o'sha narxni ertaga yana yozardi (konver so'rovi bilan bir xil).
+  if (!ok && !note)
+    return res.status(400).json({ error: 'Rad etish sababi yozilmagan' });
+
+  const { rows } = await db.query(
+    `UPDATE orders SET discount_status = CASE WHEN $2 THEN 'approved' ELSE 'rejected' END,
+            discount_by = $3, discount_at = NOW(), discount_note = $4
+      WHERE id = $1 AND discount_status = 'pending'
+      RETURNING id, order_no, discount_status`, [req.params.id, ok, req.user.id, note]);
+  if (!rows[0]) return res.status(400).json({
+    error: 'Buyurtma topilmadi yoki chegirma allaqachon hal qilingan' });
+  await audit(req, { module: 'sales', action: 'discount-' + rows[0].discount_status,
+                     entity: 'order', entity_id: rows[0].id,
+                     payload: { order_no: rows[0].order_no, note } });
+  res.json({ ok: true, status: rows[0].discount_status });
+}));
+
 router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
   const client = await db.connect();
   try {
@@ -1041,6 +1127,16 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     if (o.status === 'to_ship') throw new Error('Allaqachon omborga yuborilgan');
     if (!o.bron) throw new Error('Avval konver biriktiring');
     if (!o.ship_to) throw new Error('«Qayerga» tanlanmagan');
+    //  ★ TASDIQLANMAGAN CHEGIRMA OMBORGA O'TMAYDI. Shu yer —
+    //  qaytib bo'lmaydigan nuqta: ombordan mahsulot chiqadi va
+    //  mijozning qarzi o'sha narxdan hisoblanadi. Buyurtma yozilishini
+    //  to'xtatish yomon bo'lardi (menejer mijoz bilan gaplashib
+    //  turibdi), chiqarishni to'xtatish esa to'g'ri: direktor qaror
+    //  qilgunicha qog'oz ham, qarz ham yozilmaydi.
+    if (o.discount_status === 'pending')
+      throw new Error('Narxdan past yozilgan — avval direktor chegirmani tasdiqlasin');
+    if (o.discount_status === 'rejected')
+      throw new Error('Chegirma rad etilgan — narxni to\'g\'rilang');
 
     await client.query(
       `UPDATE orders SET status = 'to_ship', sent_to_wh_on = CURRENT_DATE,

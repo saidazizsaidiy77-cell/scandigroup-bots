@@ -133,6 +133,10 @@ const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['draft', 'Chernovik'],
 //  «Kutmoqda» buni yashirardi: menejer konver yo'lda deb o'ylab,
 //  mijozga sana aytib qo'yardi.
 const statusOf = (o) =>
+  //  ★ Chegirma tasdig'i eng tepada: buyurtma boshqa hamma jihatdan
+  //  tayyor bo'lsa ham, direktor qaror qilmaguncha omborga o'tmaydi.
+  o.discount_status === 'pending' && o.status !== 'shipped'
+    && o.status !== 'cancelled' ? 'Chegirma kutmoqda' :
   Number(o.not_started_qty) > 0 && o.status !== 'shipped'
     && o.status !== 'cancelled' ? 'Chernovik'
   : (o.status === 'reserved' || o.status === 'to_ship')
@@ -335,6 +339,56 @@ function docHtml(o) {
 //
 //  Chiqib ketgan va bekor qilingan buyurtmada ko'rsatilmaydi: mahsulot
 //  zavodda yo'q, «qayerda» degan savol ham qolmaydi.
+// ═══════════════════════════════════════ CHEGIRMA TASDIG'I
+//
+//  ★ Narxdan past yozilgan buyurtma DIREKTOR tasdiqlagunicha omborga
+//  o'tmaydi (zavod qarori, 2026-09). Buyurtma yozilishini to'xtatish
+//  yomon bo'lardi — menejer mijoz bilan gaplashib turibdi; chiqarishni
+//  to'xtatish esa to'g'ri: qaror qilinmaguncha qog'oz ham, qarz ham
+//  yozilmaydi.
+//
+//  Kartochka `.no-print`: bu ish quroli, hujjatning o'zi emas — mijoz
+//  qo'liga beriladigan yuk xatiga korxonaning ichki qarori chiqmaydi.
+function chegirmaCard(o) {
+  if (!o.discount_status) return '';
+  const ruxsat = App.can('sales.discount');
+  const H = { pending: ['warn', 'Chegirma tasdiq kutmoqda'],
+              approved: ['ok', 'Chegirma tasdiqlandi'],
+              rejected: ['bad', 'Chegirma rad etildi'] };
+  const [cls, matn] = H[o.discount_status] || ['', o.discount_status];
+  return `<div class="card no-print" style="margin-bottom:16px">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <span class="tag ${cls}">${matn}</span>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          ${o.discount_status === 'pending'
+            ? 'Narxdan past yozilgan — direktor tasdiqlagunicha omborga yuborilmaydi.'
+            : `${esc(o.discount_by_name || '')}${o.discount_note
+                ? ' · ' + esc(o.discount_note) : ''}`}</div>
+      </div>
+      ${o.discount_status === 'pending' && ruxsat ? `<div class="row" style="gap:8px">
+        <button class="primary" onclick="chegirma(true)">Tasdiqlash</button>
+        <button onclick="chegirma(false)">Rad etish</button></div>` : ''}
+    </div></div>`;
+}
+
+async function chegirma(ok) {
+  //  Rad etishda SABAB majburiy: menejer nega bo'lmaganini bilmasa,
+  //  o'sha narxni ertaga yana yozardi (konver so'rovi bilan bir xil).
+  let note = null;
+  if (!ok) {
+    note = prompt('Rad etish sababi?');
+    if (note == null || !note.trim()) return;
+  }
+  const id = cur.order.id;
+  try {
+    await App.api(`/api/sales/orders/${id}/discount`, { method: 'POST',
+      body: JSON.stringify({ approve: ok, note }) });
+    await openOrder(id);
+    await load();
+  } catch (e) { alert(e.message); }
+}
+
 function trackCard(o) {
   const list = cur.units || [];
   if (!list.length || o.status === 'shipped' || o.status === 'cancelled') return '';
@@ -393,6 +447,7 @@ function draw(){
         </div>
       </div>
 
+      ${chegirmaCard(o)}
       ${ro ? docHtml(o) + trackCard(o) : `
       <div class="card"><div class="fields">
         <!--  Zakaz raqami qo'lda ham yoziladi: zavod o'z daftarida raqam
@@ -724,7 +779,10 @@ function drawItems(){
             style="text-align:right" oninput="setField(${i},'qty',this.value)">
         ${p ? `<div class="muted" style="font-size:11px">${esc(p.uom || '')}</div>` : ''}</td>
       <td class="num"><input type="number" step="0.01" value="${it.unit_price ?? ''}"
-            style="text-align:right" oninput="setField(${i},'unit_price',this.value)"></td>
+            style="text-align:right${past(it) ? ';border-color:var(--bad)' : ''}"
+            oninput="narxYoz(${i}, this)">
+        <div class="hint" style="font-size:11px${
+          past(it) ? ';color:var(--bad)' : ''}">${chegara(it)}</div></td>
       <td class="num">${summa ? `<b>${money(summa)}</b>`
         : '<span class="muted">—</span>'}</td>
       <td style="font-size:12px">${qayerda(it.id)}</td>
@@ -737,12 +795,9 @@ function drawItems(){
     </tr>`;
   }).join('') : `<tr><td class="muted" colspan="8">Qator qo\'shilmagan</td></tr>`;
 
-  //  Jami summa: yuk xatida mijoz shu raqamni ko'radi.
-  const jami = cur.items.reduce((a, it) =>
-    a + (Number(it.qty) || 0) * (Number(it.unit_price) || 0), 0);
-  $('tIf').innerHTML = jami ? `<tr>
-    <td colspan="5"><b>Jami</b></td>
-    <td class="num"><b>${money(jami)}</b></td><td></td><td></td></tr>` : '';
+  //  Jami summa: yuk xatida mijoz shu raqamni ko'radi. Hisob BITTA
+  //  joyda (`jamiYoz`) — narx yozilganda ham shu chaqiriladi.
+  jamiYoz();
 }
 
 //  Katak tanlanganda undan KEYINGILARI tozalanadi: eski rang yangi
@@ -765,7 +820,83 @@ function where(u) {
                : ' <span class="muted" style="font-size:11px">ishlanmoqda</span>'}`;
 }
 
-function setField(i, k, v){ cur.items[i][k] = v; }
+// ═══════════════════════════════════════════════ NARX CHEGARASI
+//
+//  ★ ZAVOD QARORI (2026-09): narxdan PAST sotilmaydi, faqat direktor
+//  ruxsati bilan. Menejer qator yozganda narx O'ZI to'ladi — uning
+//  narx turidan (ulgurji yoki chakana, `worker_roles.price_kind`).
+//  Ekranda BITTA raqam turadi: ulgurji menejer chakana narxni
+//  ko'rmaydi va aksincha.
+//
+//  Chegara SERVERDAN keladi (`/api/sales/products` dagi `price`) —
+//  ro'yxat klientda quriladi, ya'ni bu yerdagisi faqat KO'RINISH.
+//  Tekshiruv baribir serverda: qo'lda yuborilgan past narx o'sha
+//  yerda tutiladi va buyurtma tasdiq kutadi.
+const narxi = (pid) => {
+  const p = products.find((x) => x.id === Number(pid));
+  return p && p.price != null ? Number(p.price) : null;
+};
+
+//  Qator yozilgan PAYTDAGI chegara ustun turadi: narxlar keyin
+//  o'zgarsa allaqachon tasdiqlangan qator qaytadan «past» bo'lib
+//  qolmasligi kerak (serverdagi `price_floor` bilan bir xil qoida).
+const chegarasi = (it) =>
+  it.price_floor != null ? Number(it.price_floor) : narxi(it.product_id);
+
+const past = (it) => {
+  const f = chegarasi(it), v = Number(it.unit_price);
+  return f != null && it.unit_price !== '' && it.unit_price != null && v < f;
+};
+
+//  Chegara raqamning OSTIDA yoziladi: menejer nega qizil ekanini
+//  o'ylab o'tirmasin. Narxi qo'yilmagan mahsulotda chegara yo'q va
+//  katak ham jim turadi — bo'lmagan raqamni majburlab bo'lmaydi.
+const chegara = (it) => {
+  const f = chegarasi(it);
+  return f == null ? '' : `eng kami ${money(f)}`;
+};
+
+//  ★ NARX YOZILGANDA JADVAL QAYTA CHIZILMAYDI: har harfda chizilsa
+//  kursor katakdan uchib ketardi. Faqat o'sha katakning belgisi va
+//  «Jami» yangilanadi.
+function narxYoz(i, el) {
+  cur.items[i].unit_price = el.value;
+  const it = cur.items[i];
+  el.style.borderColor = past(it) ? 'var(--bad)' : '';
+  const hint = el.nextElementSibling;
+  if (hint) {
+    hint.textContent = chegara(it);
+    hint.style.color = past(it) ? 'var(--bad)' : '';
+  }
+  //  Qator summasi va «Jami» ham darrov yangilanadi: menejer
+  //  mijozga aytadigan raqam shu.
+  const td = el.closest('td')?.nextElementSibling;
+  const summa = (Number(it.qty) || 0) * (Number(it.unit_price) || 0);
+  if (td) td.innerHTML = summa ? `<b>${money(summa)}</b>`
+    : '<span class="muted">&mdash;</span>';
+  jamiYoz();
+}
+
+function jamiYoz() {
+  const jami = cur.items.reduce((a, it) =>
+    a + (Number(it.qty) || 0) * (Number(it.unit_price) || 0), 0);
+  if ($('tIf')) $('tIf').innerHTML = jami ? `<tr>
+    <td colspan="5"><b>Jami</b></td>
+    <td class="num"><b>${money(jami)}</b></td><td></td><td></td></tr>` : '';
+}
+
+function setField(i, k, v){
+  cur.items[i][k] = v;
+  //  Mahsulot tanlanganda narx O'ZI to'ladi: menejer uni prays-listdan
+  //  qidirib o'tirmasin. Qo'lda yozilgani almashtirilmaydi — kelishilgan
+  //  narx bo'lishi mumkin.
+  if (k === 'product_id') {
+    const f = narxi(v);
+    if (f != null && !cur.items[i].unit_price) cur.items[i].unit_price = f;
+    cur.items[i].price_floor = f;
+    drawItems();
+  }
+}
 function addItem(){ cur.items.push({ qty: 1 }); drawItems(); }
 function delItem(i){
   if (Number(cur.items[i].assigned_qty) > 0)

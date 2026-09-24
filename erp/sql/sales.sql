@@ -242,6 +242,12 @@ WHERE o.status <> 'cancelled';
 --  BOSHQA narsa — konverlardagi zakaz raqami bo'yicha kesim (units.sql).
 --  Bir xil nom ikki faylda bo'lsa ikkinchi deployda migratsiya yiqiladi
 --  va sayt ko'tarilmaydi (CLAUDE.md, 2-qoida).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_status TEXT
+  CHECK (discount_status IN ('pending', 'approved', 'rejected'));
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_by   INT REFERENCES workers(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_at   TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_note TEXT;
+
 CREATE OR REPLACE VIEW v_sales_orders AS
 SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        o.customer_id, c.name AS customer_name, c.region, c.phone,
@@ -290,13 +296,20 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        --
        --  Ustun OXIRIDA: CREATE OR REPLACE VIEW faqat oxiriga qo'sha
        --  oladi (CLAUDE.md, 2-qoida).
-       COALESCE(a.boshlanmagan, 0) AS not_started_qty
+       COALESCE(a.boshlanmagan, 0) AS not_started_qty,
+       --  ★ CHEGIRMA HOLATI (zavod qarori, 2026-09). Narxdan past
+       --  yozilgan buyurtma direktor tasdiqlagunicha omborga
+       --  o'tmaydi. Ustun OXIRIDA — CREATE OR REPLACE VIEW faqat
+       --  oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
+       o.discount_status, o.discount_note,
+       dw.name AS discount_by_name, o.discount_at
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id
   LEFT JOIN order_destinations d ON d.code = o.ship_to
   LEFT JOIN workers sw  ON sw.id = o.sent_by
   LEFT JOIN workers shw ON shw.id = o.shipped_by
+  LEFT JOIN workers dw  ON dw.id  = o.discount_by
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::int AS lines,
            COALESCE(SUM(oi.qty), 0)::int AS qty,
@@ -463,3 +476,53 @@ END $$;
 --  jimgina yo'qotib bo'lmaydi.
 ALTER TABLE unit_requests ADD COLUMN IF NOT EXISTS order_item_id INT
   REFERENCES order_items(id) ON DELETE SET NULL;
+
+-- ═══════════════════════════════════════════════ IKKI NARX: ULGURJI VA CHAKANA
+--
+--  ★ ZAVOD QARORI (2026-09). Zavodda ikki narx bor: ULGURJI va
+--  CHAKANA. Savdo menejerlarining deyarli hammasi ulgurji bilan
+--  ishlaydi, bittasi esa chakana bilan.
+--
+--  Narx MAHSULOTDA: har o'lcham allaqachon alohida mahsulot
+--  («Sheikh 3,5 m» va «Sheikh 2,8 m» — ikki qator), ya'ni narx
+--  o'lchamga o'zi bog'lanadi va uchinchi jadval kerak emas.
+--
+--  ★ Ustunlarning O'ZI `catalog.sql` da: ularni `v_catalog` o'qiydi
+--  va u shu faylda quriladi. Migratsiyada katalog SAVDODAN OLDIN
+--  yuradi, ya'ni ustun bu yerda qo'shilsa toza bazada view uni topa
+--  olmasdi va sayt umuman ko'tarilmasdi (CLAUDE.md, 2-qoida).
+
+--  ★ KIM QAYSI NARXDA ISHLASHI — XODIMDA, kodda emas (4-qoida).
+--  Standarti ULGURJI: menejerlarning ko'pchiligi shunda ishlaydi va
+--  yangi xodimning ekrani o'zidan-o'zi o'zgarmaydi. Chakana bilan
+--  ishlaydiganida katakcha belgilanadi — ertaga o'sha odam almashsa
+--  yoki ikkinchisi qo'shilsa bitta katakcha tahrirlanadi.
+--
+--  `worker_roles` da, `scope_channel` ning yonida: u ham savdo
+--  rolining xususiyati va Xodimlar sahifasida o'sha yerda so'raladi.
+ALTER TABLE worker_roles ADD COLUMN IF NOT EXISTS price_kind TEXT
+  CHECK (price_kind IN ('opt', 'retail'));
+
+--  ★ NARXDAN PAST SOTILMAYDI — FAQAT DIREKTOR RUXSATI BILAN
+--  (zavod qarori, 2026-09).
+--
+--  Menejer qator yozganda narx o'zi to'ladi va uni OSHIRISH mumkin,
+--  TUSHIRISH esa yo'q. Lekin haqiqiy kelishuvda chegirma kerak
+--  bo'ladi, shuning uchun yo'l yopilmadi: past narx yozilgan buyurtma
+--  «chegirma kutmoqda» bo'lib turadi va direktor tasdiqlaydi.
+--
+--  Tasdiq BUYURTMA darajasida, qator darajasida emas: direktorning
+--  qarori bitta — «bu mijozga shu narxda beramizmi». Qatorma-qator
+--  tasdiqlash o'sha bitta qarorni o'nta bosishga aylantirardi.
+--
+--  ★ NARX O'ZGARSA TASDIQ QAYTA SO'RALADI. Aks holda qoida bitta
+--  bosishda chetlab o'tilardi: tasdiqlatib olib, keyin narxni yana
+--  tushirish yetardi (chiqish sanasi qoidasi bilan bir xil sabab,
+--  izoh: `assertMuddat`).
+--  Ustunlarning O'ZI yuqorida, view dan OLDIN qo'shiladi: view ularni
+--  o'qiydi va fayl tepadan pastga yuradi.
+
+--  Qator yozilgan PAYTDAGI chegara. Narxlar keyin o'zgarsa
+--  allaqachon tasdiqlangan qator qaytadan «past» bo'lib qolmasligi
+--  kerak — shuning uchun chegara qatorda qotib qoladi.
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price_floor NUMERIC(14,2);

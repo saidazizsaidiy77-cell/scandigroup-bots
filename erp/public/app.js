@@ -334,6 +334,11 @@ const App = (() => {
     { mod: 'materials', nav: 'Talabnoma',                perm: ['materials.request'] },
     { mod: 'materials', nav: 'Sarf',                     perm: ['materials.request'] },
 
+    { href: '/narxlar.html', mod: 'sales', nav: 'Narxlar',
+      title: 'Narxlar', lead: 'Ulgurji va chakana',
+      text: "Har mahsulotning ikki narxi \u00b7 menejer undan past sota olmaydi",
+      perm: ['production.manage', 'sales.discount'] },
+
     { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },
     { mod: 'purchasing', nav: 'Kirim shakllantirish',              perm: ['purchasing.manage'] },
     { mod: 'purchasing', nav: 'Kirimlar arxivi',                   perm: ['purchasing.view'] },

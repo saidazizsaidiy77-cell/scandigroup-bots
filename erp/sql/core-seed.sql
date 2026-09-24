@@ -54,6 +54,13 @@ INSERT INTO permissions (code, module, name) VALUES
   -- Savdo va mijozlar (rejada)
   ('sales.view',        'sales',      'Mijozlar va sotuvni ko''rish'),
   ('sales.manage',      'sales',      'Sotuv, zakaz, jo''natma'),
+  --  ★ CHEGIRMAGA RUXSAT (zavod qarori, 2026-09). Menejer narxni
+  --  oshira oladi, tushira olmaydi — lekin haqiqiy kelishuvda
+  --  chegirma kerak bo'ladi va yo'l butunlay yopilmadi: past narx
+  --  yozilgan buyurtma tasdiq kutadi. Qarorni DIREKTOR beradi, savdo
+  --  boshlig'i emas: narx siyosati uning ishi. Ismi kodga
+  --  yozilmaydi (4-qoida) — bu huquq, lavozim emas.
+  ('sales.discount',    'sales',      'Narxdan past sotishga ruxsat'),
   -- Kassa (rejada)
   ('cash.view',         'cash',       'Kassa hisobotlarini ko''rish'),
   ('cash.entry',        'cash',       'Kirim / chiqim kiritish'),
@@ -126,6 +133,8 @@ UNION ALL SELECT 'direktor', 'production.reports'
 --  Direktor konver so'rovini TASDIQLAYDI: qolgan hamma joyda u faqat
 --  qaraydi, bu esa uning qarori (izoh: sql/units.sql).
 UNION ALL SELECT 'direktor', 'production.approve'
+--  Chegirmani ham DIREKTOR tasdiqlaydi: narx siyosati uning ishi.
+UNION ALL SELECT 'direktor', 'sales.discount'
 UNION ALL SELECT 'direktor', 'admin.audit'
 ON CONFLICT DO NOTHING;
 

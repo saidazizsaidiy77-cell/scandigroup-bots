@@ -39,6 +39,9 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
               'code', wr.role_code, 'name', r.name, 'surface', r.surface,
               'scope_shop_id', wr.scope_shop_id, 'scope_shop', sh.name,
               'scope_channel', wr.scope_channel, 'scope_channel_name', ch.name,
+              --  ★ Qaysi narx bilan ishlaydi: ulgurji yoki chakana
+              --  (izoh: sql/sales.sql). Ismi kodga yozilmaydi.
+              'price_kind', wr.price_kind,
               -- Vitrina sotuvchisi qaysi nuqtada ishlaydi (sql/warehouse.sql)
               'scope_warehouse_id', wr.scope_warehouse_id, 'scope_warehouse', wh.name
             ) ORDER BY r.sort) FILTER (WHERE wr.role_code IS NOT NULL), '[]') AS roles
@@ -137,10 +140,11 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
-                                   scope_warehouse_id, scope_own)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+                                   scope_warehouse_id, scope_own, price_kind)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [w.id, r.code, r.scope_shop_id || null, r.scope_channel || null,
-         r.scope_warehouse_id || null, r.scope_own === true]);
+         r.scope_warehouse_id || null, r.scope_own === true,
+         r.price_kind === 'retail' ? 'retail' : null]);
     }
     await saveCashGroups(client, w.id, req.body.cash_groups);
     await audit(req, { module: 'admin', action: 'create', entity: 'worker',
@@ -199,10 +203,11 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
       for (const r of roles) {
         await client.query(
           `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
-                                   scope_warehouse_id, scope_own)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
+                                   scope_warehouse_id, scope_own, price_kind)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [id, r.code, r.scope_shop_id || null, r.scope_channel || null,
-           r.scope_warehouse_id || null, r.scope_own === true]);
+           r.scope_warehouse_id || null, r.scope_own === true,
+           r.price_kind === 'retail' ? 'retail' : null]);
       }
     }
     await saveCashGroups(client, id, req.body.cash_groups);
