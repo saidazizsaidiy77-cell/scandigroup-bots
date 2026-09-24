@@ -40,7 +40,15 @@
       <input id="wQ" placeholder="ism · lavozim · bo'lim · rol" oninput="drawWorkers()"></div>
   </div>
   <div style="overflow-x:auto"><table>
-    <thead><tr><th>Ism</th><th>Joyi</th><th>PIN</th><th>Telegram ID</th><th>Rollar</th>
+    <!--  ★ GURUH, TSEX, BO'LIM va LAVOZIM — ALOHIDA USTUN.
+          Ilgari to'rtalasi bitta «Joyi» katagida turardi va oltmish
+          qatorli ro'yxatda ko'z ularni ajrata olmasdi: qaysi biri
+          bo'lim, qaysi biri lavozim ekani har qatorda qayta
+          o'qilardi. Alohida ustunda esa ko'z bitta ustun bo'ylab
+          pastga yuguradi — «stul tsexida kim bor» degan savolga
+          javob shunday topiladi. -->
+    <thead><tr><th>Ism</th><th>Guruh</th><th>Tsex</th><th>Bo'lim</th><th>Lavozim</th>
+      <th>PIN</th><th>Telegram ID</th><th>Rollar</th>
       <th>Holat</th><th></th></tr></thead>
     <tbody id="tW"></tbody>
   </table></div>
@@ -105,15 +113,12 @@ function drawWorkers(){
       <!--  ★ PIN KO'RSATILMAYDI. Bazada uning izi turadi, izdan raqamni
             tiklab bo'lmaydi — shuning uchun «unutdim» degan xodimga eski
             PIN aytilmaydi, YANGISI qo'yiladi. -->
-      <!--  ★ JOYI — lavozim va bo'lim. Oltmish kishilik ro'yxatda
-            «kim bu» degan savol birinchi bo'ladi: rol ustuni
-            ko'pchilikda bo'sh turadi, chunki ular dasturga
-            kirmaydi. Tsex bo'lim yonida yoziladi, chunki
-            «Qadoqlash» ikkita tsexda bor. -->
-      <td class="muted" style="font-size:13px">${
-        esc(w.position || '') || '—'}${
-        (w.section || w.dept) ? `<div style="font-size:12px;opacity:.75">${
-          esc(w.section || w.dept)}${w.shop ? ' · ' + esc(w.shop) : ''}</div>` : ''}</td>
+      <!--  Bo'lim IKKI manbadan: ishlab chiqarish bo'limi bo'lsa
+            o'sha, bo'lmasa qog'ozdagi nomi («HR», «Logistika») —
+            ekranda ikkalasi ham BO'LIM, ajratib ko'rsatish
+            xodimga hech narsa bermasdi (izoh: sql/production.sql). -->
+      ${[w.staff_group, w.shop, w.section || w.dept, w.position].map(v =>
+        `<td class="muted" style="font-size:13px">${v ? esc(v) : '—'}</td>`).join('')}
       <td class="muted">${w.has_pin ? 'qo\'yilgan' : '—'}</td>
       <td class="muted">${w.tg_id ? esc(w.tg_id) : '<span class="tag warn">ulanmagan</span>'}</td>
       <td>${w.roles.length ? w.roles.map(r =>
@@ -125,7 +130,7 @@ function drawWorkers(){
       <td>${w.active ? '<span class="tag ok">faol</span>' : '<span class="tag">o\'chirilgan</span>'}</td>
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
     </tr>`).join('')
-    : `<tr><td colspan="7" class="muted" style="padding:16px">
+    : `<tr><td colspan="10" class="muted" style="padding:16px">
          «${esc(q)}» bo'yicha xodim topilmadi</td></tr>`;
 }
 
