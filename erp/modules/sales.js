@@ -247,33 +247,69 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 //  Saqlangan belgi bir kun haqiqatdan ajralib qolardi (konver omborga
 //  keldi — belgi eski holida qolardi), shuning uchun filtr ham shartdan
 //  o'tadi, ustundan emas.
+//  ★ BUYURTMANING HOLATI — BITTA JOYDA (zavod qarori, 2026-09).
+//
+//  Ilgari u IKKI joyda hisoblanardi: sahifa ekrandagi yozuvni o'zi
+//  chiqarardi, server esa tab uchun boshqa shart yozardi. Shartlar
+//  bir-birining ustiga tushardi va qator o'zi turgan tabdan boshqa
+//  nom bilan chiqardi: «Kutmoqda» tabidagi buyurtma yonida
+//  «Chernovik» deb yozilib turardi va ikkalasi ham to'g'ri edi —
+//  qaysi biri javob ekani noaniq qolardi.
+//
+//  Endi hisob SHU YERDA, SQL da: tab ham, yozuv ham aynan shundan
+//  chiqadi (`holat` ustuni) va ular hech qachon ajralmaydi. Tartib
+//  muhim va yuqoridan pastga o'qiladi — birinchi to'g'ri kelgani
+//  javob bo'ladi:
+//
+//    1-2  TUGAGAN buyurtma: bekor qilingan va chiqib ketgan. Ularda
+//         mahsulot zavodda yo'q, ya'ni boshqa hech narsa o'zgartira
+//         olmaydi.
+//    3    konver biriktirilmagan — menejerning ishi.
+//    4    BOSHLANMAGAN: konver bor, lekin tsex uni yo'lga
+//         chiqarmagan. Sana konverning boshlangan kunidan sanaladi,
+//         ya'ni chiqish kuni hali NOMA'LUM va menejer mijozga sana
+//         aytib qo'ymasligi kerak.
+//    5    bir qismi hali omborga kelmagan — ishlab chiqarilmoqda.
+//    6    savdo omborga yubordi, mudir chiqarishni kutmoqda.
+//    7    qolgani — hammasi javonda, chiqarishga tayyor.
+//
+//  ★ MAHSULOT QAYERDA TURGANI «OMBORGA YUBORILDI» DAN USTUN, va bu
+//  ataylab: «Omborda» tabida hali tsexda yurgan, hatto BOSHLANMAGAN
+//  buyurtmalar ham turardi va tab «bu yerdagilarni mudir chiqaradi»
+//  degan yolg'on va'dani berardi. Yuborilgani odamning bosgan
+//  tugmasi, javonda turgani esa mahsulotning O'ZI haqida — ikkinchisi
+//  kuchliroq. Endi o'sha tabda faqat haqiqatan chiqarishga tayyor
+//  turgani qoladi, qolgani o'z joyida ko'rinadi.
+//
+//  «Chegirma kutmoqda» bu ro'yxatda YO'Q: u holat emas, buyurtmaning
+//  ustiga tushgan ikkinchi savol va ekranda alohida belgi bo'lib
+//  turadi. Holatning o'rniga yozilsa tab bilan yana ajralib ketardi.
+const HOLAT = `CASE
+        WHEN o.status = 'cancelled' THEN 'cancelled'
+        WHEN o.status = 'shipped'   THEN 'shipped'
+        WHEN o.status = 'new'       THEN 'new'
+        WHEN o.not_started_qty > 0  THEN 'draft'
+        WHEN o.assigned_qty > o.in_warehouse_qty THEN 'waiting'
+        WHEN o.status = 'to_ship'   THEN 'to_ship'
+        ELSE 'reserved' END`;
+
 router.get('/orders', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
-  const kutmoqda = req.query.status === 'waiting';
-  //  ★ CHERNOVIK ham saqlanadigan holat EMAS (izoh: sql/sales.sql):
-  //  biriktirilgan konverning bir qismi hali yo'lga chiqmagan.
-  const chernovik = req.query.status === 'draft';
   const { rows } = await db.query(
-    `SELECT * FROM v_sales_orders
+    `SELECT o.*, ${HOLAT} AS holat FROM v_sales_orders o
       WHERE ($1::text[] IS NULL OR channel = ANY($1))
-        AND ($2::text IS NULL OR status = $2)
-        AND (NOT $6::boolean
-             OR (status IN ('reserved', 'to_ship')
-                 AND assigned_qty > in_warehouse_qty))
-        AND (NOT $8::boolean
-             OR (not_started_qty > 0 AND status NOT IN ('shipped', 'cancelled')))
+        AND ($2::text IS NULL OR ${HOLAT} = $2)
         AND ($3::int  IS NULL OR customer_id = $3)
         AND ($4::int  IS NULL OR manager_id = $4)
         AND ($5::text IS NULL OR order_no ILIKE '%' || $5 || '%'
              OR customer_name ILIKE '%' || $5 || '%')
         --  O'z buyurtmasi chegarasi: filtr EMAS, klient o'chira olmaydi.
-        AND ($7::int IS NULL OR manager_id = $7)
+        AND ($6::int IS NULL OR manager_id = $6)
       ORDER BY ordered_on DESC, id DESC
       LIMIT 500`,
-    [chans, kutmoqda || chernovik ? null : (req.query.status || null),
+    [chans, req.query.status || null,
      req.query.customer_id || null,
-     req.query.manager_id || null, req.query.q || null, kutmoqda, ownOf(req),
-     chernovik]);
+     req.query.manager_id || null, req.query.q || null, ownOf(req)]);
 
   //  ★ HAR BUYURTMA QAYERDA — ro'yxatning o'zida.
   //
@@ -314,8 +350,9 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
 // Bitta buyurtma: sarlavha, qatorlar va har qatorga biriktirilgan konverlar
 router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
+  //  Kartochkadagi yozuv ham ro'yxatdagi bilan BIR manbadan chiqadi.
   const o = (await db.query(
-    `SELECT * FROM v_sales_orders
+    `SELECT o.*, ${HOLAT} AS holat FROM v_sales_orders o
       WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
         AND ($3::int IS NULL OR manager_id = $3)`,
     [req.params.id, chans, ownOf(req)])).rows[0];

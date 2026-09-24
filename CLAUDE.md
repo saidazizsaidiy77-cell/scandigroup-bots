@@ -929,18 +929,49 @@ qator id sini qo'lda yuborsa ham qabul qilinmaydi.
 **Ekranda «bron» so'zi yo'q.** Bron — ICHKI mexanizm (konverni qatorga
 biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
 
+  · **Yangi** — konver biriktirilmagan, menejerning ishi;
+  · **Boshlanmagan** — konver bor, lekin tsex uni yo'lga chiqarmagan;
+  · **Ishlab chiqarilmoqda** — bir qismi hali omborga kelmagan;
   · **Tayyor** — hammasi T/M omborda, chiqarishga tayyor;
-  · **Kutmoqda** — bir qismi hali ishlab chiqarishda, omborga kelmagan;
-  · **Omborda** — savdo ombor mudiriga yubordi, u chiqarishni kutmoqda;
+  · **Omborga yuborildi** — savdo mudirga yubordi, u chiqarishni kutmoqda;
   · **Chiqib ketdi** — mudir tasdiqladi, mahsulot zavoddan chiqdi va
-    mijoz balansiga qo'shildi.
+    mijoz balansiga qo'shildi;
+  · **Bekor qilingan**.
 
-Ikkalasi ham saqlanadigan holat EMAS, har safar bronlardan hisoblanadi
-(`assigned_qty > in_warehouse_qty` bo'lsa «Kutmoqda»): saqlangan belgi
-konver omborga kelgan kuni haqiqatdan ajralib qolardi. Ro'yxatda filtri
-bor (`/api/sales/orders?status=waiting`). Buyurtma baribir BITTA
-nakladnoy: yarmi tayyor bo'lgani uchun bo'linmaydi — hammasi omborga
-yetib kelmaguncha chiqarilmaydi.
+**★ HOLAT BITTA JOYDA HISOBLANADI** (`HOLAT`, `modules/sales.js`;
+zavod qarori 2026-09). Ilgari u IKKI joyda edi: sahifa qatordagi
+yozuvni o'zi chiqarardi, tab esa serverdagi boshqa shartdan kelardi.
+Shartlar bir-birining ustiga tushardi va qator O'ZI TURGAN TABDAN
+boshqa nom bilan ko'rinardi — «Omborda» tabida «Chernovik» va
+«Kutmoqda» yozuvli qatorlar aralashib yotardi va qaysi biri javob
+ekani noaniq qolardi. Endi server `holat` ustunini beradi, sahifa esa
+faqat NOMINI qo'yadi (`STATUS`); tab ro'yxati ham o'sha nomlardan
+quriladi.
+
+Tartib yuqoridan pastga o'qiladi, birinchi to'g'ri kelgani javob:
+tugagan buyurtma (bekor, chiqib ketdi) → konver yo'q (yangi) →
+boshlanmagan → ishlab chiqarilmoqda → omborga yuborildi → tayyor.
+
+**★ MAHSULOT QAYERDA TURGANI «OMBORGA YUBORILDI» DAN USTUN**, va bu
+ataylab: o'sha tabda hali tsexda yurgan, hatto BOSHLANMAGAN buyurtmalar
+ham turardi va tab «bu yerdagilarni mudir chiqaradi» degan yolg'on
+va'dani berardi. Yuborilgani ODAMNING bosgan tugmasi, javonda turgani
+esa MAHSULOTNING o'zi haqida — ikkinchisi kuchliroq.
+
+**Holat saqlanmaydi, har safar bronlardan hisoblanadi**: saqlangan
+belgi konver omborga kelgan kuni haqiqatdan ajralib qolardi. Saqlanib
+turadigani faqat odam bosgan tugmaning izi (`orders.status`) va
+tahrirlash, «Qaytarib olish», chop etish o'shanga qaraydi — ekrandagi
+nomga emas: `to_ship` buyurtma «Boshlanmagan» bo'lib ko'rinsa ham
+savdo uchun YOPIQ bo'lib qolaveradi.
+
+**«Chegirma kutmoqda» — holat EMAS**, buyurtmaning ustiga tushgan
+ikkinchi savol: yonida ALOHIDA belgi bo'lib turadi. Ilgari holatning
+O'RNIGA yozilardi va qator yana o'z tabidan boshqa nom bilan
+ko'rinardi; endi ikkala javob ham bir vaqtda o'qiladi.
+
+Buyurtma baribir BITTA nakladnoy: yarmi tayyor bo'lgani uchun
+bo'linmaydi — hammasi omborga yetib kelmaguncha chiqarilmaydi.
 
 Shu sababdan buyurtma ekranida ham, ro'yxatda ham alohida «bron» ustuni
 yo'q: u qator sonini takrorlardi («4 / 4»). **Konver biriktirish ham,

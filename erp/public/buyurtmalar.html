@@ -106,42 +106,45 @@ const money = (v) => {
   return f && f !== '00' ? `${g}.${f}` : g;
 };
 
-// Holat nomlari bitta joyda: jadval ham, tahrir oynasi ham shundan oladi.
+//  ★ HOLATNI SERVER HISOBLAYDI (`holat` ustuni, `modules/sales.js`
+//  dagi `HOLAT`). Sahifa faqat NOMINI qo'yadi — tab ham, qatordagi
+//  yozuv ham aynan shu bitta ustundan chiqadi.
+//
+//  Ilgari hisob IKKI joyda edi: sahifa yozuvni o'zi chiqarardi, tab
+//  esa serverdagi boshqa shartdan kelardi. Shartlar bir-birining
+//  ustiga tushardi va qator o'zi turgan tabdan BOSHQA nom bilan
+//  ko'rinardi — «Omborda» tabida «Chernovik» va «Kutmoqda» yozuvli
+//  qatorlar aralashib yotardi.
+//
 //  Holat nomlarida «bron» so'zi yo'q: u ichki mexanizm (konverni
 //  qatorga biriktirish), menejer esa buyurtma qay ahvolda ekanini
-//  o'qiydi — «tayyor» yoki «kutmoqda».
-//  «Chiqib ketdi» — ombor mudiri tasdiqlagandan keyin: mahsulot
-//  zavoddan jismonan chiqdi, mijoz balansiga qo'shildi.
-const STATUS = { new: 'Yangi', reserved: 'Tayyor',
-                 to_ship: 'Omborda', shipped: 'Chiqib ketdi',
-                 cancelled: 'Bekor qilingan' };
-//  «Kutmoqda» — alohida holat emas, hisoblanadi: bron qo'yilgan, lekin
-//  bir qismi hali ishlab chiqarishda (server: `status=waiting`).
-const FILTERS = [['', 'Hammasi'], ['new', 'Yangi'], ['draft', 'Chernovik'],
-                 ['waiting', 'Kutmoqda'],
-                 ['reserved', 'Tayyor'], ['to_ship', 'Omborda'],
-                 ['shipped', 'Chiqib ketdi'], ['cancelled', 'Bekor']];
+//  o'qiydi.
+const STATUS = {
+  new:       'Yangi',
+  //  Konver bor, lekin tsex uni yo'lga chiqarmagan: chiqish sanasi
+  //  hali NOMA'LUM. Ilgari «Chernovik» deb turardi va noto'g'ri
+  //  o'qilardi — buyurtma emas, KONVER boshlanmagan.
+  draft:     'Boshlanmagan',
+  waiting:   'Ishlab chiqarilmoqda',
+  reserved:  'Tayyor',
+  to_ship:   'Omborga yuborildi',
+  shipped:   'Chiqib ketdi',
+  cancelled: 'Bekor qilingan',
+};
+//  Tab ro'yxati SHU nomlardan quriladi: ikkinchi ro'yxat yozilsa bir
+//  kun birinchisidan ajralib ketardi.
+const FILTERS = [['', 'Hammasi'], ...['new', 'draft', 'waiting', 'reserved',
+  'to_ship', 'shipped', 'cancelled'].map(k => [k, STATUS[k]])];
 
-//  Buyurtma holati EKRANDA: bronning bir qismi hali omborga kelmagan
-//  bo'lsa «Kutmoqda» deb ko'rsatiladi — mijozga aytiladigan gap shu.
-//
-//  ★ CHERNOVIK — eng ustun holat: biriktirilgan konverning bir qismi
-//  hali YO'LGA CHIQMAGAN (tsexning «Boshlanmagan» ro'yxatida turibdi).
-//  Tsex boshlig'i uni ishga tushirmaguncha T/M omborga tushish kunini
-//  tizim hisoblay olmaydi — sana konverning BOSHLANGAN kunidan
-//  sanaladi — ya'ni mijozga aytiladigan chiqish sanasi ham noma'lum.
-//  «Kutmoqda» buni yashirardi: menejer konver yo'lda deb o'ylab,
-//  mijozga sana aytib qo'yardi.
-const statusOf = (o) =>
-  //  ★ Chegirma tasdig'i eng tepada: buyurtma boshqa hamma jihatdan
-  //  tayyor bo'lsa ham, direktor qaror qilmaguncha omborga o'tmaydi.
-  o.discount_status === 'pending' && o.status !== 'shipped'
-    && o.status !== 'cancelled' ? 'Chegirma kutmoqda' :
-  Number(o.not_started_qty) > 0 && o.status !== 'shipped'
-    && o.status !== 'cancelled' ? 'Chernovik'
-  : (o.status === 'reserved' || o.status === 'to_ship')
-  && Number(o.assigned_qty) > Number(o.in_warehouse_qty)
-    ? 'Kutmoqda' : (STATUS[o.status] || o.status);
+const statusOf = (o) => STATUS[o.holat] || o.holat || o.status;
+
+//  ★ CHEGIRMA — HOLAT EMAS, ikkinchi savol. Buyurtma boshqa hamma
+//  jihatdan tayyor bo'lsa ham, direktor qaror qilmaguncha omborga
+//  o'tmaydi. Ilgari u holatning O'RNIGA yozilardi va qator o'zi
+//  turgan tabdan boshqa nom bilan ko'rinardi; endi yonida alohida
+//  belgi bo'lib turadi, ya'ni ikkala javob ham bir vaqtda o'qiladi.
+const chegirmaKutmoqda = (o) => o.discount_status === 'pending'
+  && o.holat !== 'shipped' && o.holat !== 'cancelled';
 
 let rows = [], customers = [], managers = [], products = [], dests = [];
 //  T/M ombor qoldig'i: turi · mahsulot · rang · mato · bo'sh soni.
@@ -246,8 +249,14 @@ async function load(){
       <td class="num">${o.lines}</td><td class="num">${o.qty}</td>
       <td class="num">${money(o.amount)}</td>
       <td>${joylar(o)}</td>
-      <td><span class="tag${o.status === 'cancelled' ? ' warn' : ''}"
-        >${esc(statusOf(o))}</span></td>
+      <!--  Holat va chegirma IKKI belgi bo'lib turadi: biri
+            buyurtma qayerda ekanini, ikkinchisi direktorning javobini
+            kutayotganini aytadi. Bittasi ikkinchisining o'rniga
+            yozilsa qator o'zi turgan tabdan boshqa nom bilan
+            ko'rinardi. -->
+      <td><span class="tag${o.holat === 'cancelled' ? ' warn' : ''}"
+        >${esc(statusOf(o))}</span>${chegirmaKutmoqda(o)
+          ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}</td>
       <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
             «ko'rish». Ochilganda u hujjat bo'lib chiqadi. -->
       <td class="num"><button onclick="openOrder(${o.id})"
@@ -438,7 +447,9 @@ function draw(){
       <div class="order-top">
         <div class="row" style="gap:10px">
           <h1 style="margin:0">${isNew ? 'Yangi buyurtma' : esc(o.order_no)}</h1>
-          ${!isNew ? `<span class="tag">${esc(statusOf(o))}</span>` : ''}
+          ${!isNew ? `<span class="tag">${esc(statusOf(o))}</span>${
+            chegirmaKutmoqda(o)
+              ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}` : ''}
         </div>
         <div class="row" style="gap:8px">
           ${ro ? `<button onclick="window.print()">Chop etish</button>`
