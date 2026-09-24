@@ -952,6 +952,11 @@ Tartib yuqoridan pastga o'qiladi, birinchi to'g'ri kelgani javob:
 tugagan buyurtma (bekor, chiqib ketdi) → boshlanmagan → ishlab
 chiqarilmoqda → omborga yuborildi → tayyor.
 
+**Ekrandagi tab tartibi esa boshqa** va u ISHNING joyi bo'yicha:
+«Omborga yuborildi» «Tayyor» dan OLDIN turadi — birinchisi chiqishi
+aniq bo'lganlar va mudir kunini o'shandan tuzadi, ikkinchisi esa hali
+menejerning qo'lida.
+
 **★ «BOSHLANMAGAN» — IKKI HOL, BITTA JAVOB** (zavod qarori, 2026-09):
 konver umuman biriktirilmagan YOKI biriktirilgan-u tsex uni yo'lga
 chiqarmagan. Ikkalasida ham chiqish kuni NOMA'LUM — sana konverning
@@ -1130,10 +1135,28 @@ chiqarilishi kerak bo'lganlar) va yozgan zahoti javob beradi.
 ham omborga YUBORILADI va bu ataylab: savdo mudirga OLDINDAN aytadi —
 «bu ketadi, qolganini kutyapmiz» — mudir esa kunini shunga qarab
 tuzadi va konverlar qayerda turganini o'z ekranida ko'rib boradi.
-Mahsulot baribir chiqmaydi: **`/ship` bronning hammasi javonga
-kelmaguncha chiqarmaydi** va qaysi konver yetishmayotganini nomi
-bilan yozadi — yarmi tsexda turganda «jo'natildi» deb yozib qo'yish
-mijoz qarzini ham noto'g'ri oshirardi.
+Mahsulot baribir chiqmaydi: `/ship` **IKKI** shartni qo'yadi va
+ikkalasi ham boshqa savolga javob beradi.
+
+**1. Biriktirilgani omborga keldimi** — bronning hammasi javonga
+kelmaguncha chiqarmaydi va qaysi konver yetishmayotganini nomi bilan
+yozadi: yarmi tsexda turganda «jo'natildi» deb yozib qo'yish mijoz
+qarzini ham noto'g'ri oshirardi.
+
+**2. ★ MIJOZ SO'RAGAN DONAGA KONVER BIRIKTIRILGANMI** (zavod qarori,
+2026-09). Birinchi shart buni TUTMASDI: qatorga konver umuman
+biriktirilmagan bo'lsa u savolga tushmasdi ham. Buyurtma 15 ta bo'lib,
+13 tasiga konver biriktirilgan holda chiqib ketaverardi — va natijasi
+qog'oz bilan haqiqatni ajratardi: yuk xatining qatorlari BUYURTMADAN
+olinadi (15 ta), zavoddan esa 13 ta chiqardi va mijozning qarziga ham
+13 tasi yozilardi. Mijoz imzolagan hujjat balansdan farq qilardi va
+xato mashina ochilganda bilinardi, ya'ni tuzatishga kech edi.
+
+Yetishmayotgani MAHSULOT NOMI bilan yoziladi: buyurtmada bir nechta
+qator bo'ladi va «to'liq emas» degan xabar qaysi biri ekanini
+aytmasdi. Tuzatish yo'li ham xabarda — savdo «Qaytarib olish» bilan
+orqaga oladi, konver biriktiradi va qaytadan yuboradi (yuborilgan
+buyurtma tahrirlanmaydi).
 
 Tasdiqlashda mudir **chiqib ketgan sanani** qo'yadi.
 
@@ -2493,8 +2516,10 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 **Jo'natma**
 - Mashina raqami, haydovchi va hujjat raqami yoziladimi? Hozir buyurtmada
   faqat qayerga, manzil va kutib oluvchining raqami bor.
-- Buyurtma QISMAN chiqadimi? Hozir yo'q: bronning hammasi omborga
-  kelmaguncha chiqarib bo'lmaydi.
+- ✅ HAL BO'LDI: **buyurtma QISMAN chiqmaydi** (zavod qarori, 2026-09).
+  `/ship` ikki shartni qo'yadi: bronning hammasi omborga kelgan
+  bo'lishi va mijoz so'ragan DONAGA konver biriktirilgan bo'lishi
+  (izoh: «Chegara chiqarishda, yuborishda emas»).
 
 **Kassa** — ✅ HAL BO'LDI va yozildi. Zavod qarorlari: pulni savdo
 menejeri o'zi kiritadi va mijozning qarzi o'sha zahoti kamayadi; pul

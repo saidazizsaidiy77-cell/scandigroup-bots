@@ -1306,6 +1306,38 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
       throw new Error('Hali omborga kelmagan: ' + kutmoqda
         .map((u) => `${u.conveyor_no} (${u.section || 'boshlanmagan'})`).join(', '));
 
+    //  ★ MIJOZ SO'RAGAN DONAGA KONVER BIRIKTIRILGAN BO'LISHI SHART
+    //  (zavod qarori, 2026-09). Yuqoridagi tekshiruv boshqa savolga
+    //  javob beradi: BIRIKTIRILGANI omborga keldimi. Qatorga konver
+    //  umuman biriktirilmagan bo'lsa u savolga tushmasdi ham —
+    //  buyurtma 15 ta bo'lib, 13 tasiga konver biriktirilgan holda
+    //  chiqib ketaverardi.
+    //
+    //  Natijasi qog'oz bilan haqiqatni ajratardi: yuk xatining
+    //  qatorlari BUYURTMADAN olinadi (15 ta), zavoddan esa 13 ta
+    //  chiqardi va mijozning qarziga ham 13 tasi yozilardi — mijoz
+    //  imzolagan hujjat balansdan farq qilardi. Xato mijoz mashinani
+    //  ochganda bilinardi, ya'ni tuzatishga kech edi.
+    //
+    //  Yetishmayotgani MAHSULOT NOMI bilan yoziladi: buyurtmada bir
+    //  nechta qator bo'ladi va «to'liq emas» degan xabar qaysi biri
+    //  ekanini aytmasdi.
+    const kam = (await client.query(
+      `SELECT p.name AS product, i.qty, b.bron
+         FROM order_items i
+         JOIN products p ON p.id = i.product_id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(r.qty), 0)::int AS bron
+             FROM unit_reservations r
+             JOIN production_units u ON u.id = r.unit_id
+            WHERE r.order_item_id = i.id AND u.status <> 'cancelled') b ON true
+        WHERE i.order_id = $1 AND b.bron < i.qty
+        ORDER BY p.name`, [o.id])).rows;
+    if (kam.length)
+      throw new Error('Konver biriktirilmagan: ' + kam
+        .map((x) => `${x.product} — ${x.qty - x.bron} ta`).join(', ')
+        + '. Avval savdo qaytarib olib, konver biriktirsin');
+
     //  Faqat SHU buyurtmaga bron qilingan dona chiqadi. Konverning
     //  qolgan qismi boshqa mijozniki bo'lishi mumkin — u omborda qoladi,
     //  shuning uchun konver kerak bo'lsa bo'linadi.

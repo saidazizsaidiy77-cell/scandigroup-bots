@@ -136,8 +136,11 @@ const STATUS = {
 };
 //  Tab ro'yxati SHU nomlardan quriladi: ikkinchi ro'yxat yozilsa bir
 //  kun birinchisidan ajralib ketardi.
-const FILTERS = [['', 'Hammasi'], ...['draft', 'waiting', 'reserved',
-  'to_ship', 'shipped', 'cancelled'].map(k => [k, STATUS[k]])];
+//  Tartib — buyurtmaning yo'li bo'yicha emas, ISHNING joyi bo'yicha:
+//  «Omborga yuborildi» chiqishi aniq bo'lganlar va mudir kunini
+//  o'shandan tuzadi, «Tayyor» esa hali menejerning qo'lida turgani.
+const FILTERS = [['', 'Hammasi'], ...['draft', 'waiting', 'to_ship',
+  'reserved', 'shipped', 'cancelled'].map(k => [k, STATUS[k]])];
 
 const statusOf = (o) => STATUS[o.holat] || o.holat || o.status;
 

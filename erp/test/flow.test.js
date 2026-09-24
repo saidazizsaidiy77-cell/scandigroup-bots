@@ -2771,6 +2771,36 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('POST', `/api/units/${yolda.id}/to-warehouse`,
     { warehouse_code: 'TM' })).status, 200);
 
+  //  ★ MIJOZ SO'RAGAN DONAGA KONVER BIRIKTIRILGAN BO'LISHI SHART.
+  //  Yuqoridagi tekshiruv boshqa savolga javob beradi — BIRIKTIRILGANI
+  //  omborga keldimi. Qatorga konver umuman biriktirilmagan bo'lsa u
+  //  savolga tushmasdi ham: buyurtma 15 ta bo'lib, 13 tasiga konver
+  //  biriktirilgan holda chiqib ketaverardi va yuk xatida 15 ta
+  //  yozilgan bo'lardi — mijoz imzolagan hujjat balansdan farq qilardi.
+  const oz = (await admin('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: qator.id, product_id: PENAL, qty: 8, color: 'Sut',
+                unit_price: 250 }] }));
+  assert.equal(oz.status, 400, 'yuborilgan buyurtma tahrirlanmaydi');
+  //  Qatorni oshirish uchun avval qaytarib olinadi
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unsend`)).status, 200);
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: qator.id, product_id: PENAL, qty: 8, color: 'Sut',
+                unit_price: 250 }] })).status, 200);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+
+  const kam = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: '2026-10-04' });
+  assert.equal(kam.status, 400, kam.text);
+  assert.match(kam.body.error, /Konver biriktirilmagan/);
+  assert.match(kam.body.error, /2 ta/, 'yetishmayotgani soni bilan yoziladi');
+
+  //  Qatorni qaytarib 6 ta qilamiz — endi to'liq
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unsend`)).status, 200);
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: qator.id, product_id: PENAL, qty: 6, color: 'Sut',
+                unit_price: 250 }] })).status, 200);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+
   // Endi chiqadi. Mudir faqat chiqqan kunni qo'yadi — pul kirim
   // sanasi savdoniki va ombordan yozilmaydi.
   const r = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
