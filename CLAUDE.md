@@ -2382,15 +2382,26 @@ ko'rinadi.
 Ikki tafsilot:
 
   · quti OSTIDAGI joy (kartochkaning bo'shlig'i, `body` ning
-    `padding` i) **`body` ning O'Z pastidan** o'lchanadi,
-    `scrollHeight` dan EMAS: `documentElement.scrollHeight` hech qachon
-    ekran balandligidan past tushmaydi, ya'ni jadval hali BO'SH
-    turganda — qatorlar keyinroq, so'rov bilan keladi — ekranning
-    butun bo'sh joyi «quti ostidagi joy» bo'lib hisoblanardi va quti
-    eng past chegaraga, IKKI QATORGA tushib qolardi. Ikki
-    to'rtburchakning AYIRMASI bo'lgani uchun u quti o'lchamidan ham,
-    sahifa surilishidan ham qat'i nazar bir xil qoladi va kuzatuvchi
-    o'zini o'zi chaqirib aylanmaydi;
+    `padding` i) **faqat QUTIDAN KEYIN HECH NARSA YO'Q bo'lgan
+    joygacha** sanaladi: yuqoriga ko'tarilib boriladi va ortida joy
+    egallaydigan element uchrasa to'xtaladi. Ilgari `body` ning
+    pastidan o'lchanardi va XODIMLAR sahifasida o'sha o'lchovga pastda
+    turgan ROLLAR kartochkasi ham qo'shilib ketardi — quti eng past
+    chegaraga, UCH QATORGA tushib qolardi. Qutidan keyin kartochka
+    bo'lsa sahifa unga TUSHISHI kerak: bu ortiqcha surilish emas,
+    ikkinchi bo'lim;
+
+  · «keyin hech narsa yo'q» degani JOY EGALLAYDIGAN narsa yo'q
+    degani. `<script>` ham element va `lastElementChild` unga ilinib
+    qolardi — o'shanda `body` ning pastki bo'shlig'i sanalmay,
+    oxirigacha surilganda quti ekran tepasidan chiqib ketar va sarlavha
+    kesilardi. Oqimdan chiqarilgani ham sanalmaydi: oyna ochilganda
+    `.overlay` (`position:fixed`) quti ostida turgandek ko'rinib, uni
+    eng past chegaragacha qisqartirardi;
+
+  · o'lchov quti o'lchamidan ham, sahifa surilishidan ham qat'i
+    nazar bir xil qoladi (ikki to'rtburchakning AYIRMASI), ya'ni
+    kuzatuvchi o'zini o'zi chaqirib aylanmaydi;
   · qayta o'lchash `ResizeObserver` bilan — ombor sahifasida quti
     har chizilganda YANGIDAN yaratiladi va bir martalik `load` uni
     ko'rmasdi.

@@ -598,36 +598,49 @@ const App = (() => {
   const ENG_PAST = 240;    // shundan past qilinmaydi: quti o'qilmay qoladi
   //  Quti ostida ham joy bor — kartochkaning pastki bo'shlig'i va
   //  `body` ning `padding` i. Hisobga olinmasa sahifa bir necha o'n
-  //  piksel surilib turardi va sarlavha o'sha surilishda ko'zdan
-  //  ketardi.
+  //  piksel surilib turardi.
   //
-  //  U `body` ning O'Z pastidan o'lchanadi, `scrollHeight` dan EMAS:
-  //  `documentElement.scrollHeight` hech qachon ekran balandligidan
-  //  past tushmaydi, ya'ni jadval hali BO'SH turganda (qatorlar
-  //  keyinroq, so'rov bilan keladi) ekranning butun bo'sh joyi
-  //  «quti ostidagi joy» bo'lib hisoblanardi va quti eng past
-  //  chegaraga — ikki qatorga — tushib qolardi.
+  //  Lekin u faqat QUTIDAN KEYIN HECH NARSA YO'Q bo'lgan joygacha
+  //  sanaladi: yuqoriga ko'tarilib boriladi va element o'z ota-onasining
+  //  OXIRGISI bo'lmasa to'xtaladi. Ilgari `body` ning pastidan
+  //  o'lchanardi va Xodimlar sahifasida o'sha o'lchovga pastda turgan
+  //  ROLLAR kartochkasi ham qo'shilib ketardi: quti eng past chegaraga,
+  //  uch qatorga tushib qolardi. Qutidan keyin kartochka bo'lsa sahifa
+  //  unga TUSHISHI kerak — bu ortiqcha surilish emas, ikkinchi bo'lim.
   //
-  //  Ikki to'rtburchakning AYIRMASI bo'lgani uchun u quti
-  //  o'lchamidan ham, sahifa surilishidan ham qat'i nazar bir xil
-  //  qoladi: kuzatuvchi o'zini o'zi chaqirib aylanmaydi.
-  //  ★ QUTI TEPASIDAGI NARSA HISOBGA OLINMAYDI (zavod qarori,
-  //  2026-09). Ilgari quti ekranning QOLGAN qismini olardi — menyu
-  //  va filtrdan keyingisini — va sahifa umuman surilmasdi. Natijasi
-  //  teskari bo'lib chiqdi: modullar menyusi ekranning uchdan birini
-  //  egallab, HAR DOIM turib qolardi (u CSS da qotib turmaydi,
-  //  shunchaki surish uchun joy qolmagandi) va jadvalga bir necha
-  //  qator joy qolardi.
-  //
-  //  Endi quti EKRAN balandligini oladi, ya'ni sahifa aynan tepasidagi
-  //  narsa chamasi suriladi: bir surishda menyu ham, filtr ham
-  //  yuqoriga chiqib ketadi va ekranda faqat jadval qoladi —
-  //  sarlavhasi tepada qotib turgan holda.
+  //  Ikki to'rtburchakning AYIRMASI bo'lgani uchun u quti o'lchamidan
+  //  ham, sahifa surilishidan ham qat'i nazar bir xil qoladi: kuzatuvchi
+  //  o'zini o'zi chaqirib aylanmaydi.
+  //  «Keyin hech narsa yo'q» degani JOY EGALLAYDIGAN narsa yo'q degani:
+  //  `<script>` ham element va `lastElementChild` unga ilinib qolardi —
+  //  o'shanda `body` ning pastki bo'shlig'i sanalmay, oxirigacha
+  //  surilganda quti ekran tepasidan chiqib ketar va sarlavha kesilardi.
+  //  Oqimdan chiqarilgani ham sanalmaydi: oyna ochilganda `.overlay`
+  //  (`position:fixed`) quti ostida turgandek ko'rinib, uni eng past
+  //  chegaragacha qisqartirardi.
+  const oqimda = (k) => {
+    const r = k.getBoundingClientRect();
+    if (!r.height) return false;
+    const p = getComputedStyle(k).position;
+    return p !== 'fixed' && p !== 'absolute';
+  };
+  function ostidagiJoy(el) {
+    let joy = 0;
+    for (let k = el; k && k !== document.body; k = k.parentElement) {
+      const ota = k.parentElement;
+      if (!ota) break;
+      let keyin = false;
+      for (let s = k.nextElementSibling; s; s = s.nextElementSibling)
+        if (oqimda(s)) { keyin = true; break; }
+      if (keyin) break;
+      joy += ota.getBoundingClientRect().bottom - k.getBoundingClientRect().bottom;
+    }
+    return joy;
+  }
   function olcha() {
     document.querySelectorAll('.tbox').forEach((el) => {
-      const r = el.getBoundingClientRect();
-      const pastki = document.body.getBoundingClientRect().bottom - r.bottom;
-      const h = Math.max(ENG_PAST, Math.round(window.innerHeight - pastki));
+      const h = Math.max(ENG_PAST,
+        Math.round(window.innerHeight - ostidagiJoy(el)));
       const hozir = parseFloat(el.style.maxHeight);
       if (!(Math.abs(hozir - h) <= 2)) el.style.maxHeight = h + 'px';
     });
