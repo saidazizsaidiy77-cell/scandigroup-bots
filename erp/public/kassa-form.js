@@ -115,19 +115,18 @@ function oyOptions(tanlangan) {
 //
 //  Qirqta ta'minotchi ro'yxatdan ko'z bilan qidiriladigan narsa emas,
 //  shuning uchun ustida qidiruv katagi turadi.
-//  Ikkinchi bosqich ro'yxatini qidiruv bo'yicha qayta chizadi.
-//  Tanlangani saqlanadi: qidiruv yozilganda tanlov yo'qolmasin.
-function itemFilter() {
-  const g = $('fSide') ? $('fSide').value : '';
-  const q = ($('fItemQ').value || '').trim().toLowerCase();
-  const bor = $('fItem').value;
-  const list = outItems(g).filter(([, t]) => !q || t.toLowerCase().includes(q));
-  $('fItem').innerHTML = `<option value="">— tanlang —</option>` +
-    list.map(([v, t]) => `<option value="${esc(v)}"${
-      v === bor ? ' selected' : ''}>${esc(t)}</option>`).join('');
-  $('fItemHint').textContent = q ? `${list.length} ta topildi` : '';
-  outThird();
-}
+//
+//  ★ MODDADA ESA QIDIRUV YO'Q (zavod qarori, 2026-09). Ilgari bor edi
+//  va ro'yxat o'ntadan oshganda o'zi chiqardi. Natijada BITTA
+//  «Harajat moddasi» yozuvining ostida IKKITA katak turardi: tepasi
+//  bo'sh qidiruv, pastida esa haqiqiy ro'yxat — kassir moddani ikki
+//  marta so'rayotgandek o'qirdi va yuqoridagi bo'sh katakka yozardi.
+//
+//  Ro'yxat baribir qisqa: guruh BIRINCHI bosqichda tanlanadi va
+//  ichida o'ntacha modda qoladi. Ochilmaning o'zida esa harf bosilsa
+//  brauzer o'sha qatorga sakraydi — qidiruv allaqachon bor.
+//  Ta'minotchi va xodimda boshqacha: u yerda ro'yxat OCHILMA emas,
+//  yozuvlar ro'yxati va uzunligi oltmishgacha boradi.
 
 //  ★ UCHINCHI BOSQICH IKKI XIL BO'LADI, lekin BITTA payt: modda yo
 //  ta'minotchini so'raydi, yo xodimni. Ikkalasi bir vaqtda kerak
@@ -299,10 +298,6 @@ function outSecond() {
     : `<option value="">${g === 'worker'
         ? "— qo'liga pul beriladigan xodim belgilanmagan —"
         : '— modda yo\'q —'}</option>`;
-  //  Qidiruv katagi UZUN ro'yxatda kerak: qirqta ta'minotchini ko'z
-  //  bilan qidirib bo'lmaydi, oltita moddani esa qidirish shart emas.
-  $('fItemQ').hidden = list.length < 10;
-  if ($('fItemQ').hidden) $('fItemQ').value = '';
   $('fItemHint').textContent = g === 'worker' && !list.length
     ? "Xodimlar sahifasida «Qo'liga pul beriladi» katagini belgilang" : '';
   outThird();
@@ -408,8 +403,6 @@ function openForm(kind) {
                 Boshida yashirin turadi — bo'sh ro'yxat savol berdiradi. -->
           ${F.two ? `<div class="wide" id="fItemBox" hidden>
             <label id="fItemLab">Modda</label>
-            <input id="fItemQ" placeholder="nomi bo'yicha qidirish" hidden
-                   oninput="itemFilter()" style="margin-bottom:8px">
             <select id="fItem" onchange="outThird()"></select>
             <div class="hint" id="fItemHint"></div></div>
 

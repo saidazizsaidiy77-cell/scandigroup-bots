@@ -1321,6 +1321,19 @@ yo'q: xodimga berilgan pul harajat EMAS, korxonaning puli bir joydan
 ikkinchisiga ko'chadi va uning moddasi yo'q. Tanlangach ikkinchi katak
 ochiladi va faqat o'shaning ichidagilar turadi.
 
+**★ MODDA RO'YXATIDA QIDIRUV YO'Q** (zavod qarori, 2026-09). Ilgari
+bor edi va ro'yxat o'ntadan oshganda O'ZI chiqardi. «Oylik ombor» va
+«Oylik muhandis-texnik xodimlar» qo'shilgach MAOSH guruhi o'ntaga
+yetdi va qidiruv yonib ketdi: BITTA «Harajat moddasi» yozuvining
+ostida IKKITA katak turib qoldi — tepasi bo'sh qidiruv, pastida esa
+haqiqiy ro'yxat. Kassir moddani ikki marta so'rayotgandek o'qirdi.
+
+Ro'yxat baribir qisqa: guruh BIRINCHI bosqichda tanlanadi va ichida
+o'ntacha modda qoladi. Ochilmaning o'zida harf bosilsa brauzer o'sha
+qatorga sakraydi — qidiruv allaqachon bor. Ta'minotchi va xodimda
+boshqacha va u yerda QOLDI: ro'yxat ochilma emas, yozuvlar ro'yxati
+va uzunligi oltmishgacha boradi.
+
 **Ta'minotchiga to'lov esa yuqorida TURMAYDI** (zavod qarori): u
 «Ta'minot» guruhining ichida, «Ta'minotchilarga to'lov» moddasi bo'lib.
 Ilgari ikkalasi ham bor edi va bitta ishga ikkita yo'l ochilib qolgandi:
