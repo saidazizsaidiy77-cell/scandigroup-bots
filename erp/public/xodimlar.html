@@ -39,7 +39,11 @@
     <div style="flex:1;max-width:340px"><label>Qidiruv</label>
       <input id="wQ" placeholder="ism · lavozim · bo'lim · rol" oninput="drawWorkers()"></div>
   </div>
-  <div style="overflow-x:auto"><table>
+  <!--  Jadval O'Z qutisida aylanadi (`max-height`): sarlavha tepada
+        qotib turishi uchun scroll konteyner kerak, sahifaning o'z
+        aylanishida u baribir yuqoriga chiqib ketardi — jurnal va
+        ombor qoldig'i bilan bir xil yechim (izoh: style.css). -->
+  <div style="overflow:auto;max-height:72vh"><table class="staff">
     <!--  ★ GURUH, TSEX, BO'LIM va LAVOZIM — ALOHIDA USTUN.
           Ilgari to'rtalasi bitta «Joyi» katagida turardi va oltmish
           qatorli ro'yxatda ko'z ularni ajrata olmasdi: qaysi biri
