@@ -316,6 +316,55 @@ ALTER TABLE cash_ops ADD COLUMN IF NOT EXISTS staff_id INT REFERENCES workers(id
 CREATE INDEX IF NOT EXISTS idx_cash_ops_staff ON cash_ops(staff_id)
   WHERE staff_id IS NOT NULL;
 
+--  ★ OYLIK — O'Z TSEXINING XODIMIGA (zavod qarori, 2026-09).
+--
+--  «Oylik korpus» ni tanlagan kassirga oltmish oltita ism kerak emas:
+--  javob o'sha tsexning o'n beshtasi orasida. Ilgari uchinchi bosqichda
+--  BUTUN shtat turardi va kassir har safar «Oylik lak» ni tanlab,
+--  keyin lak tsexining odamini oltmish ism orasidan qidirib o'tirardi.
+--
+--  Doira MODDADA turadi, kodda emas (4-qoida): zavod «Oylik lak» ni
+--  boshqa tsexga bog'lasa yoki yangi modda qo'shsa bitta katakcha
+--  o'zgaradi. Ikki o'lchov, chunki zavodning oylik moddalari ikki xil:
+--
+--    shop_id      TSEX bo'yicha — Oylik korpus, lak, qadoqlash, stul
+--    staff_group  GURUH bo'yicha — Oylik AUP, Oylik savdo
+--
+--  Ikkalasi ham bo'sh bo'lishi mumkin va o'shanda ro'yxat umuman
+--  qisqarmaydi: «Xodimlarga sarmoya» va «Tibbiy yordam» zavodning
+--  har qanday xodimiga beriladi. Ikkalasi birga qo'yilsa ikkala shart
+--  ham talab qilinadi.
+--
+--  Bu QULAYLIK, himoya emas — oylik xavfsizlik chegarasi emas va
+--  server har faol xodimni qabul qilaveradi. Shuning uchun ekranda
+--  «hammasini ko'rsatish» ham bor: xodim boshqa tsexda yozilib qolgan
+--  bo'lsa kassirning ishi to'xtab qolmaydi.
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS shop_id     INT REFERENCES shops(id);
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS staff_group TEXT;
+
+--  Boshlang'ich bog'lanish — bir martalik (izoh: CLAUDE.md,
+--  «Bir martalik ma'lumot ko'chirishlar»). Keyin o'zgartirilgani
+--  qaytarib qo'yilmaydi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'oylik-doira') THEN
+    UPDATE expense_items ei
+       SET shop_id = sh.id
+      FROM (VALUES ('Oylik korpus', 'KORPUS'), ('Oylik lak',  'BOYOQ'),
+                   ('Oylik qadoqlash', 'QADOQ'), ('Oylik stul', 'STUL'))
+             AS v(modda, tsex)
+      JOIN shops sh ON sh.code = v.tsex
+     WHERE ei.group_code = 'MAOSH' AND lower(ei.name) = lower(v.modda);
+
+    UPDATE expense_items ei
+       SET staff_group = v.guruh
+      FROM (VALUES ('Oylik AUP', 'AUP'), ('Oylik savdo', 'Savdo')) AS v(modda, guruh)
+     WHERE ei.group_code = 'MAOSH' AND lower(ei.name) = lower(v.modda);
+
+    INSERT INTO migration_flags (key) VALUES ('oylik-doira');
+  END IF;
+END $$;
+
 -- ═══════════════════════════════════════════════════════ PUL HARAKATI
 --
 --  Har operatsiya IKKI QATOR bo'lib ochiladi: beruvchi tomonda minus,

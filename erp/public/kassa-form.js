@@ -143,8 +143,15 @@ function outThird() {
   const xod = $('fStaffBox');
   if (xod) {
     xod.hidden = !(it && it.needs_worker);
-    if (xod.hidden) { $('fStaff').value = ''; $('fStaffQ').value = ''; }
-    else staffFilter();
+    //  Modda almashsa tanlangan xodim ham, doiradan chiqish ham
+    //  tozalanadi: «Oylik korpus» dan «Oylik stul» ga o'tilganda
+    //  korpusning odami katakda turib qolardi va kassir uni
+    //  sezmasdan saqlab yuborardi.
+    if (xod.hidden || id !== staffItem) {
+      $('fStaff').value = ''; $('fStaffQ').value = ''; staffAll = false;
+    }
+    staffItem = xod.hidden ? 0 : id;
+    if (!xod.hidden) staffFilter();
   }
 
   box.hidden = !(it && it.needs_supplier);
@@ -160,13 +167,37 @@ function outThird() {
 //  Ism ostida LAVOZIMI va bo'limi yoziladi: zavodda bir xil familiya
 //  uchraydi (uchta Ro'zimurodov) va faqat ism ko'rinsa kassir qaysi
 //  biriga berayotganini bilmasdi.
+//  ★ RO'YXAT MODDANING DOIRASIGA QISQARADI (izoh: sql/cash.sql).
+//  «Oylik korpus» ni tanlagan kassirga oltmish oltita ism kerak emas:
+//  javob o'sha tsexning o'n beshtasi orasida. Doira MODDADA turadi
+//  (`shop_id` — tsex, `staff_group` — guruh) va bo'sh bo'lsa ro'yxat
+//  umuman qisqarmaydi: «Xodimlarga sarmoya» har qanday xodimga
+//  beriladi.
+//
+//  Bu QULAYLIK, himoya emas: server baribir har faol xodimni qabul
+//  qiladi. Shuning uchun izohda «hammasini ko'rsatish» turadi —
+//  xodim boshqa tsexda yozilib qolgan bo'lsa ish to'xtab qolmasin.
+let staffAll = false, staffItem = 0;
+
+function staffAllToggle() { staffAll = !staffAll; staffFilter(); }
+
 function staffFilter() {
+  const it = (refs.items || []).find(x => x.id === staffItem);
+  const cheklov = it && (it.shop_id || it.staff_group) ? it : null;
+  const dr = staffAll ? null : cheklov;
+  const ichida = (x) => !dr
+    || ((!dr.shop_id || x.shop_id === dr.shop_id)
+     && (!dr.staff_group
+         || String(x.staff_group || '').toLowerCase()
+            === String(dr.staff_group).toLowerCase()));
+
   const q = ($('fStaffQ') ? $('fStaffQ').value : '').trim().toLowerCase();
   const mos = (x) => !q || x.name.toLowerCase().includes(q)
     || (x.position || '').toLowerCase().includes(q)
     || (x.dept || '').toLowerCase().includes(q)
     || (x.shop || '').toLowerCase().includes(q);
-  const list = (refs.staff || []).filter(mos);
+  const doira = (refs.staff || []).filter(ichida);
+  const list = doira.filter(mos);
   if (q && list.length === 1) $('fStaff').value = String(list[0].id);
   const bor = $('fStaff').value;
   $('fStaffList').innerHTML = list.length
@@ -176,13 +207,22 @@ function staffFilter() {
         x.position || x.dept ? `<span class="muted"> \u00b7 ${
           esc([x.position, x.dept].filter(Boolean).join(' \u00b7 '))}</span>` : ''
       }</button>`).join('')
-    : `<div class="none">${(refs.staff || []).length
+    : `<div class="none">${doira.length
         ? 'Bunday xodim topilmadi'
+        : (refs.staff || []).length
+        ? 'Bu doirada xodim yo\'q \u2014 Xodimlar sahifasida tsexini qo\'ying'
         : "Ro'yxat bo'sh \u2014 Xodimlar sahifasidan kiriting"}</div>`;
   //  Qidiruvsiz oltmish qator ekranni egallab ketardi — kassir
-  //  nomni yozadi, ro'yxat esa unga qisqaradi.
-  $('fStaffHint').textContent = q ? `${list.length} ta topildi`
-    : `${(refs.staff || []).length} ta xodim \u2014 ismini yozing`;
+  //  nomni yozadi, ro'yxat esa unga qisqaradi. Doira qo'yilgan bo'lsa
+  //  QAYSI doira ekani ham shu yerda yoziladi: qisqargan ro'yxat
+  //  sababini aytmasa, kassir yo'q odamni qidirib yurardi.
+  $('fStaffHint').innerHTML = (q ? `${list.length} ta topildi`
+    : `${doira.length} ta xodim \u2014 ismini yozing`)
+    + (cheklov ? ` \u00b7 ${dr
+        ? `<b>${esc(cheklov.scope_name || '')}</b> <button type="button"
+             class="lnk" onclick="staffAllToggle()">hammasini ko'rsatish</button>`
+        : `<button type="button" class="lnk" onclick="staffAllToggle()">faqat ${
+             esc(cheklov.scope_name || '')}</button>`}` : '');
   calc();
 }
 

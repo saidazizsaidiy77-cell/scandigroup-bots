@@ -68,8 +68,17 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     boss ? db.query(`SELECT id, code, name, kind FROM cash_accounts
                       WHERE is_active ORDER BY sort, name`) : { rows: [] },
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
-    db.query(`SELECT id, group_code, name, needs_supplier, needs_worker
-                FROM expense_items WHERE active ORDER BY sort, name`),
+    //  ★ OYLIK DOIRASI MODDADAN KELADI (izoh: sql/cash.sql). `scope_name`
+    //  — ekranda nima deb yozilishi: tsexning nomi yoki guruhning o'zi.
+    //  Sahifa ikki ustunni birlashtirib o'tirmasin — nom bitta joyda
+    //  hisoblanadi, aks holda ikki ekranda ikki xil yozilardi.
+    db.query(`SELECT ei.id, ei.group_code, ei.name,
+                     ei.needs_supplier, ei.needs_worker,
+                     ei.shop_id, ei.staff_group,
+                     COALESCE(sh.name, ei.staff_group) AS scope_name
+                FROM expense_items ei
+                LEFT JOIN shops sh ON sh.id = ei.shop_id
+               WHERE ei.active ORDER BY ei.sort, ei.name`),
     //  O'z mijozi chegarasi savdo bilan BIR XIL (izoh: erp/auth.js):
     //  menejer boshqa menejerning mijozidan to'lov yozib qo'ymasin.
     //  INKASSATORDA esa ikkala chegara ham ochiladi — pulni u hamma
@@ -94,7 +103,9 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  (izoh: sql/production.sql). Lavozimi va bo'limi yonida
     //  yoziladi — oltmish ism orasida bir xil familiya uchraydi va
     //  faqat ismi ko'rinsa qaysi biri ekani noaniq qolardi.
-    db.query(`SELECT w.id, w.name, w.position,
+    //  `shop_id` va `staff_group` ham keladi: oylik moddasi doirasi
+    //  shular bilan solishtiriladi (izoh: sql/cash.sql).
+    db.query(`SELECT w.id, w.name, w.position, w.shop_id, w.staff_group,
                      COALESCE(sc.name, w.dept) AS dept, sh.name AS shop
                 FROM workers w
                 LEFT JOIN sections sc ON sc.id = w.section_id

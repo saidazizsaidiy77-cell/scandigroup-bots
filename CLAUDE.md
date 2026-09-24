@@ -1388,6 +1388,37 @@ sarflaydi, ya'ni uchinchi bosqich aynan unga kerak.
 ta'minotchini so'raydi, yo xodimni. Ta'minotchiga to'lov odamga,
 oylik esa ta'minotchiga bog'lanmaydi.
 
+**★ RO'YXAT MODDANING DOIRASIGA QISQARADI** (`expense_items.shop_id`,
+`expense_items.staff_group`; zavod qarori 2026-09). «Oylik korpus» ni
+tanlagan kassirga oltmish oltita ism kerak emas: javob o'sha tsexning
+o'n beshtasi orasida. Ilgari uchinchi bosqichda BUTUN shtat turardi
+va kassir «Oylik lak» ni tanlagach lak tsexining odamini oltmish ism
+orasidan qidirib o'tirardi — ro'yxat qaysi oylik yozilayotganini
+bilardi-yu, hech narsa qilmasdi.
+
+Doira MODDADA, kodda emas (4-qoida): zavod «Oylik lak» ni boshqa
+tsexga bog'lasa yoki yangi modda qo'shsa bitta katakcha o'zgaradi.
+**Ikki o'lchov**, chunki zavodning oylik moddalari ikki xil:
+
+    shop_id      TSEX bo'yicha   Oylik korpus · lak · qadoqlash · stul
+    staff_group  GURUH bo'yicha  Oylik AUP · Oylik savdo
+
+Ikkalasi ham bo'sh bo'lishi MUMKIN va o'shanda ro'yxat umuman
+qisqarmaydi: «Xodimlarga sarmoya» va «Tibbiy yordam» zavodning har
+qanday xodimiga beriladi. Ikkalasi birga qo'yilsa ikkala shart ham
+talab qilinadi. Boshlang'ich bog'lanish bir martalik
+(`migration_flags`: `oylik-doira`), keyin o'zgartirilgani qaytarib
+qo'yilmaydi.
+
+**Bu QULAYLIK, himoya emas**: oylik xavfsizlik chegarasi emas va
+server har faol xodimni qabul qilaveradi. Shuning uchun izohda
+**«hammasini ko'rsatish»** turadi — xodim boshqa tsexda yozilib
+qolgan bo'lsa kassirning ishi to'xtab qolmasin, va doira QAYSI ekani
+ham o'sha yerda yozilib turadi: qisqargan ro'yxat sababini aytmasa,
+kassir yo'q odamni qidirib yurardi. Modda almashsa tanlangan xodim
+ham tozalanadi — «Oylik korpus» dan «Oylik stul» ga o'tilganda
+korpusning odami katakda turib qolardi.
+
 Lentada ismi moddaning yonida turadi («Oylik korpus · Abubakirov
 Xasan»). Tekshiruv **serverda**: ro'yxatni chetlab, id ni qo'lda
 yuborsa ham qabul qilinmaydi.

@@ -4211,6 +4211,43 @@ test('oylik: kimga berilgani so\'raladi va qo\'lidagi pulga qo\'shilmaydi', asyn
     expense_item_id: boshqa.id })).status, 200, 'boshqa harajat eskicha yoziladi');
 });
 
+//  ★ OYLIK MODDASINING DOIRASI. «Oylik korpus» ni tanlagan kassirga
+//  butun shtat kerak emas — javob o'sha tsexning xodimlari orasida.
+//  Doira MODDADA turadi (`expense_items.shop_id` / `staff_group`),
+//  kodda emas: zavod boshqa tsexga bog'lasa bitta katakcha o'zgaradi.
+//  Ro'yxatni SAHIFA qisqartiradi, shuning uchun test doiraning
+//  O'ZINI tekshiradi: nimaga tayanib qisqarayotgani shu.
+test('oylik moddasi o\'z tsexi bilan keladi', async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const refs = (await kassir('GET', '/api/cash/refs')).body;
+
+  const tsex = refs.items.find((x) => x.name === 'Oylik korpus');
+  const korpus = (await H.id(`SELECT id, name FROM shops WHERE code='KORPUS'`));
+  assert.equal(tsex.shop_id, korpus.id, 'oylik korpus \u2014 korpus tsexi');
+  assert.equal(tsex.scope_name, korpus.name, 'ekranda tsexning nomi yoziladi');
+  assert.equal(tsex.staff_group, null, 'tsex bo\'yicha, guruh bo\'yicha emas');
+
+  //  Guruh bo'yicha: AUP ham, savdo ham tsex emas
+  const guruh = refs.items.find((x) => x.name === 'Oylik AUP');
+  assert.equal(guruh.shop_id, null);
+  assert.equal(guruh.staff_group, 'AUP');
+  assert.equal(guruh.scope_name, 'AUP');
+
+  //  Doirasi yo'q modda ro'yxatni QISQARTIRMAYDI: sarmoya ham,
+  //  tibbiy yordam ham zavodning har qanday xodimiga beriladi.
+  const hamma = refs.items.find((x) => x.name === 'Xodimlarga sarmoya');
+  assert.equal(hamma.needs_worker, true, 'u ham xodim so\'raydi');
+  assert.equal(hamma.shop_id, null);
+  assert.equal(hamma.staff_group, null);
+  assert.equal(hamma.scope_name, null, 'doira yo\'q \u2014 yozilmaydi ham');
+
+  //  Xodimlar ro'yxati solishtirish uchun kerak bo'lgan ikki ustunni
+  //  ham beradi — sahifa ularni moddaning doirasi bilan taqqoslaydi.
+  const w = refs.staff.find((x) => x.name === 'Sinov Oylik Oluvchi');
+  assert.ok(w, 'shtat ro\'yxatida turadi');
+  assert.ok('shop_id' in w && 'staff_group' in w, 'doira ustunlari keladi');
+});
+
 //  ★ XODIMLAR FAYLDAN. Zavodda oltmish kishi ishlaydi, tizimga esa
 //  o'ntasi kiradi — qolgani PIN'siz shtatda turadi va ularning oyligi
 //  ishbay hisobdan chiqadi. Fayl shuning uchun PIN'ni ham, rolni ham
