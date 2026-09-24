@@ -20,7 +20,8 @@
 
 <div class="top">
   <div class="brand"><span class="dot"></span><h1>Xodimlar va rollar</h1></div>
-  <div class="row"><button class="primary" onclick="openForm()">Xodim qo'shish</button>
+  <div class="row"><button onclick="openImport()">Fayldan yuklash</button>
+    <button class="primary" onclick="openForm()">Xodim qo'shish</button>
     <span class="row" id="erpUser"></span></div>
 </div>
 
@@ -36,10 +37,10 @@
           PIN bo'yicha qidirilmaydi: u bazada ochiq matnda turmaydi
           (izoh: `erp/pin.js`). -->
     <div style="flex:1;max-width:340px"><label>Qidiruv</label>
-      <input id="wQ" placeholder="ism · telefon · rol" oninput="drawWorkers()"></div>
+      <input id="wQ" placeholder="ism · lavozim · bo'lim · rol" oninput="drawWorkers()"></div>
   </div>
   <div style="overflow-x:auto"><table>
-    <thead><tr><th>Ism</th><th>PIN</th><th>Telegram ID</th><th>Rollar</th>
+    <thead><tr><th>Ism</th><th>Joyi</th><th>PIN</th><th>Telegram ID</th><th>Rollar</th>
       <th>Holat</th><th></th></tr></thead>
     <tbody id="tW"></tbody>
   </table></div>
@@ -90,6 +91,11 @@ function drawWorkers(){
   const mos = (w) => !q
     || w.name.toLowerCase().includes(q)
     || (w.phone || '').toLowerCase().includes(q)
+    || (w.position || '').toLowerCase().includes(q)
+    || (w.section || '').toLowerCase().includes(q)
+    || (w.dept || '').toLowerCase().includes(q)
+    || (w.shop || '').toLowerCase().includes(q)
+    || (w.staff_group || '').toLowerCase().includes(q)
     || w.roles.some(r => (r.name || '').toLowerCase().includes(q)
                       || (r.scope_shop || '').toLowerCase().includes(q));
   const ro = workers.filter(mos);
@@ -99,6 +105,15 @@ function drawWorkers(){
       <!--  ★ PIN KO'RSATILMAYDI. Bazada uning izi turadi, izdan raqamni
             tiklab bo'lmaydi — shuning uchun «unutdim» degan xodimga eski
             PIN aytilmaydi, YANGISI qo'yiladi. -->
+      <!--  ★ JOYI — lavozim va bo'lim. Oltmish kishilik ro'yxatda
+            «kim bu» degan savol birinchi bo'ladi: rol ustuni
+            ko'pchilikda bo'sh turadi, chunki ular dasturga
+            kirmaydi. Tsex bo'lim yonida yoziladi, chunki
+            «Qadoqlash» ikkita tsexda bor. -->
+      <td class="muted" style="font-size:13px">${
+        esc(w.position || '') || '—'}${
+        (w.section || w.dept) ? `<div style="font-size:12px;opacity:.75">${
+          esc(w.section || w.dept)}${w.shop ? ' · ' + esc(w.shop) : ''}</div>` : ''}</td>
       <td class="muted">${w.has_pin ? 'qo\'yilgan' : '—'}</td>
       <td class="muted">${w.tg_id ? esc(w.tg_id) : '<span class="tag warn">ulanmagan</span>'}</td>
       <td>${w.roles.length ? w.roles.map(r =>
@@ -110,7 +125,7 @@ function drawWorkers(){
       <td>${w.active ? '<span class="tag ok">faol</span>' : '<span class="tag">o\'chirilgan</span>'}</td>
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
     </tr>`).join('')
-    : `<tr><td colspan="6" class="muted" style="padding:16px">
+    : `<tr><td colspan="7" class="muted" style="padding:16px">
          «${esc(q)}» bo'yicha xodim topilmadi</td></tr>`;
 }
 
@@ -139,6 +154,44 @@ function openForm(id){
         <div class="stack">
           <div><label>Ism familiya</label>
             <input id="wName" value="${esc(w?.name || '')}"></div>
+
+          <!--  ★ SHTAT JOYI — ishbay oylik shundan hisoblanadi
+                (izoh: sql/production.sql). Dasturga KIRMAYDIGAN xodim
+                ham shu yerda turadi: uning PIN'i ham, roli ham yo'q,
+                lekin oylik beriladi.
+
+                Bo'lim tanlansa tsex O'ZI aniqlanadi — server qo'yadi
+                (shtat funksiyasi): ikki katak alohida to'ldirilsa bir kun
+                ular qarama-qarshi bo'lib qolardi. Ro'yxatda bo'lim
+                nomi tsexi bilan turadi, chunki «Qadoqlash» ikkita
+                tsexda ham bor. -->
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Guruh</label>
+              <input id="wGroup" list="wGroups" value="${esc(w?.staff_group || '')}"
+                     placeholder="Ishlab chiqarish · Ombor · Savdo · AUP">
+              <datalist id="wGroups">${
+                [...new Set(workers.map(x => x.staff_group).filter(Boolean))]
+                  .map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>
+            <div style="flex:1"><label>Lavozim</label>
+              <input id="wPos" value="${esc(w?.position || '')}"
+                     placeholder="Arra operatori"></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><label>Ishlab chiqarish bo'limi</label>
+              <select id="wSection">
+                <option value="">— yo'q —</option>
+                ${(meta.sections || []).map(x => `<option value="${x.id}"${
+                  w?.section_id === x.id ? ' selected' : ''}>${esc(x.name)} · ${
+                  esc(x.shop)}</option>`).join('')}
+              </select></div>
+            <!--  Bo'lim MATNI alohida: «HR», «Logistika» va
+                  «Ma'muriy-xo'jalik bo'limi» ishlab chiqarish bo'limi
+                  emas va ro'yxatda yo'q — lekin qog'ozda bor va
+                  odamning joyi yozilib turishi kerak. -->
+            <div style="flex:1"><label>Bo'lim nomi</label>
+              <input id="wDept" value="${esc(w?.dept || '')}"
+                     placeholder="HR · Logistika"></div>
+          </div>
           <div class="row" style="gap:12px">
             <div style="flex:1"><label>Telefon</label>
               <input id="wPhone" value="${esc(w?.phone || '')}" placeholder="+998..."></div>
@@ -316,6 +369,13 @@ async function save(id){
   }));
   const body = {
     name:  $('wName').value.trim(),
+    //  Shtat maydonlari HAR DOIM yuboriladi (bo'shi ham): bo'sh
+    //  qoldirilgani «tegma» emas, «yo'q» degani — noto'g'ri
+    //  qo'yilgan bo'lim shu yerdan olib tashlanadi.
+    staff_group: $('wGroup').value.trim(),
+    position:    $('wPos').value.trim(),
+    dept:        $('wDept').value.trim(),
+    section_id:  $('wSection').value || null,
     phone: $('wPhone').value.trim() || null,
     pin:   $('wPin').value.trim() || null,
     tg_id: $('wTg').value.trim() || null,
@@ -333,6 +393,99 @@ async function save(id){
       { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
     close_(); load();
   }catch(e){ alert(e.message); }
+}
+
+// ───────────────────────────────────────────────────── FAYLDAN YUKLASH
+//
+//  ★ ZAVODDA OLTMISH KISHI, TIZIMGA O'NTASI KIRADI. Qolgani — arra
+//  operatori, shkurkachi, qorovul, oshpaz: ular dasturni ochmaydi,
+//  lekin OYLIK hammasiga beriladi va ishbay hisob konver qaysi
+//  bo'limdan o'tganiga bog'lanadi. Shuning uchun shtat ro'yxati
+//  hoziroq kiritiladi va uni qo'lda terib chiqish yarim kunlik ish
+//  bo'lardi.
+//
+//  Ikki bosqich, ta'minotchilar bilan bir xil: avval TEKSHIRIB
+//  ko'rsatiladi, keyin saqlanadi. Xato qator bo'lsa hech narsa
+//  saqlanmaydi — yarim kirgan ro'yxat eng yomoni.
+let picked = null;
+
+function openImport(){
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:700px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Xodimlarni fayldan yuklash</h1>
+          <button onclick="close_()">Yopish</button></div>
+        <p class="muted" style="font-size:13px;margin-bottom:14px">
+          Ustunlar sarlavhadan topiladi, tartibi muhim emas:
+          <b>F.I.SH</b> · Guruh · Tsex · Bo'lim · Lavozim · Telefon.
+          Faqat F.I.SH majburiy.<br>
+          <b>PIN va rol fayldan o'qilmaydi</b> — PIN yozilgan fayl
+          pochtada va stol ustida qolardi. Ular xodim kartochkasidan
+          beriladi.</p>
+        <input type="file" accept=".xlsx,.csv,.txt" onchange="pick(this)">
+        <div id="impOut" style="margin-top:14px"></div>
+      </div></div>`;
+}
+
+async function pick(input){
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  picked = file;
+  $('impOut').innerHTML = `<p class="muted">Tekshirilmoqda\u2026</p>`;
+  try { show(await App.upload('/api/import/workers', file), file.name); }
+  catch (e) { $('impOut').innerHTML =
+    `<p class="tag bad" style="display:block">${esc(e.message)}</p>`; }
+}
+
+function show(r, filename){
+  const bad = r.rows.filter(x => x.errors.length);
+  $('impOut').innerHTML = `
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <b>${esc(filename)}</b>
+      <span class="muted" style="font-size:13px">${r.total} qator${
+        r.updates ? ` \u00b7 ${r.updates} tasi mavjud` : ''}</span>
+    </div>
+    ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
+      Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+    ${(r.no_section || []).length ? `
+      <div class="tag warn" style="display:block;margin-bottom:10px;
+        text-align:left;white-space:normal">
+        <b>${r.no_section.length} ta xodimning bo'limi ro'yxatda topilmadi.</b>
+        Ular baribir kiritiladi, lekin ishbay oyligi bo'limga
+        bog'lanmaydi \u2014 bo'limini kartochkadan qo'yish kerak:<br>
+        <span style="font-size:12px">${esc(r.no_section.join(' \u00b7 '))}</span></div>` : ''}
+    ${bad.length ? `
+      <div style="max-height:30vh;overflow:auto;margin-bottom:10px">
+        <table><tbody>${bad.map(x => `
+          <tr><td style="width:70px" class="muted">${x.line}-qator</td>
+              <td>${esc(x.errors.join(' \u00b7 '))}</td></tr>`).join('')}</tbody></table>
+      </div>
+      <p class="muted" style="font-size:13px">${r.bad} ta qatorda xato bor.
+        Faylni tuzatib qaytadan tanlang \u2014 xato qator bo'lsa hech narsa
+        saqlanmaydi.</p>`
+    : `<p class="muted" style="font-size:13px;margin-bottom:12px">Hamma qator to'g'ri.${
+        r.updates ? ` Mavjud ${r.updates} tasi yangilanadi: PIN, rol va pul
+        belgilariga tegilmaydi.` : ''}</p>
+      <button class="primary" id="impSave" onclick="saveFile()" style="width:100%"
+        >${r.total} ta xodimni saqlash</button>`}`;
+}
+
+async function saveFile(){
+  $('impSave').disabled = true;
+  try {
+    const r = await App.upload('/api/import/workers?save=1', picked);
+    close_(); await load();
+    alert(`${r.saved} ta xodim kiritildi` +
+          (r.created ? ` \u2014 ${r.created} tasi yangi` : '') +
+          (r.updated ? `, ${r.updated} tasi yangilandi` : '') + '.' +
+          (r.no_section ? `\n\n${r.no_section} tasining bo'limi topilmadi \u2014 ` +
+            "kartochkasidan qo'yish kerak." : ''));
+  } catch (e) {
+    alert(e.message);
+    const b = $('impSave'); if (b) b.disabled = false;
+  }
 }
 
 App.start(load, 'admin.users');

@@ -1672,6 +1672,63 @@ va u raqamni ro'yxatning UZUNLIGI bilan solishtiradi
 Modul `erp/server.js` da ham, `erp/test/helper.js` da ham ulanadi:
 test o'z ilovasini o'zi quradi.
 
+## Xodimlar — shtat va kirish
+
+**★ ZAVODDA OLTMISH KISHI, TIZIMGA O'NTASI KIRADI** (zavod qarori,
+2026-09; `workers.staff_group`, `shop_id`, `section_id`, `dept`,
+`position` — `sql/production.sql`). Boshliq, mudir, menejer va kassir
+dasturda ishlaydi: ularning PIN'i va roli bor. Arra operatori,
+shkurkachi, qorovul va oshpaz esa dasturni umuman ochmaydi — lekin
+OYLIK hammasiga beriladi va ishbay hisob konver qaysi bo'limdan
+o'tganiga bog'lanadi. Shuning uchun shtat ro'yxati hoziroq
+kiritiladi: modul ma'lumotsiz ishga tushmaydi.
+
+**Alohida «xodimlar» jadvali yozilmadi**: o'shanda bitta odam ikki
+joyda bo'lib, ishbay oylik qaysi biriga yozilishi noaniq qolardi.
+Ajratadigan belgi — PIN: bo'lsa kiradi, bo'lmasa shtatda turadi.
+
+**★ BO'LIM IKKI USTUNDA, va bu takror EMAS.** `section_id` —
+zavodning ISHLAB CHIQARISH bo'limi (Arra, Shkurka, Lak karkas):
+ishbay oylik aynan shundan hisoblanadi. `dept` esa qog'ozdagi nomi va
+u kengroq — «HR», «Ma'muriy-xo'jalik bo'limi», «Logistika»: bularning
+`sections` da qatori yo'q va bo'lishi ham kerak emas, chunki ular
+orqali konver o'tmaydi. Matn HAR DOIM yoziladi, aks holda bo'limi
+topilmagan odam shtatdan tushib qolardi.
+
+**Tsex BO'LIMDAN chiqadi, alohida so'ralmaydi** (`shtat()`,
+`modules/admin.js`): ikki katak alohida to'ldirilsa bir kun ular
+qarama-qarshi bo'lib qolardi — odam «Korpus tsexi» da turib, bo'limi
+stulnikida bo'lardi.
+
+**Fayldan yuklanadi** (`POST /api/import/workers`, Xodimlar →
+«Fayldan yuklash»): oltmish oltita qatorni qo'lda terib chiqish yarim
+kunlik ish va o'nlab xato bo'lardi. Mijozlar va ta'minotchilar bilan
+bir xil yo'l — avval TEKSHIRIB ko'rsatiladi, xato qator bo'lsa hech
+narsa saqlanmaydi. Ustunlar sarlavhadan topiladi: F.I.SH (majburiy) ·
+Guruh · Tsex · Bo'lim · Lavozim · Telefon.
+
+**★ PIN VA ROL FAYLDAN O'QILMAYDI** — ustun bo'lsa ham. PIN yozilgan
+Excel pochtada, telefonda va stol ustida qoladi, ya'ni izini yashirish
+(`erp/pin.js`) hech narsa bermasdi. Ikkalasi ham kartochkadan
+beriladi: doira va huquq bitta-bitta qo'yiladi.
+
+**★ BO'LIM TSEX ICHIDA IZLANADI**: «Qadoqlash» nomli bo'lim IKKITA
+tsexda bor (qadoqlash tsexida va stulda), «Lak» ham shunday — faqat
+nom bo'yicha izlansa odam begona tsexning bo'limiga tushib, ishbay
+oylik boshqa bo'limga yozilardi.
+
+**Bo'limi topilmasa — OGOHLANTIRISH, xato emas**: odam baribir
+kiritiladi va bo'limi kartochkadan qo'yiladi. Xato qilinsa butun fayl
+saqlanmasdi va bitta noto'g'ri yozilgan nom oltmish kishini tizimdan
+tashqarida qoldirardi. Ro'yxat saqlashdan OLDIN ko'rsatiladi.
+
+**Qayta yuklashda to'ldirilgan katak USTUN turadi, bo'sh katak
+tegmaydi**: shtat ro'yxatida fayl haqiqat manbai — odam Arradan
+Frezaga o'tsa yangi fayl buni aytadi va eski bo'lim qolib ketmasligi
+kerak. PIN, rol, doira va pul belgilariga esa umuman tegilmaydi.
+
+---
+
 ## Kim nima ko'radi
 
 Huquqlar: `permissions` → `roles` → `role_permissions` → `worker_roles`.

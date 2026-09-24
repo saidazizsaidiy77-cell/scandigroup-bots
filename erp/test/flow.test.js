@@ -4073,6 +4073,114 @@ test('ta\'minotchilarni fayldan yuklash: turi nomi bilan ham o\'qiladi', async (
     `SELECT category FROM suppliers WHERE name='Sinov Karton'`)).category, 'QADOQ');
 });
 
+
+//  ★ XODIMLAR FAYLDAN. Zavodda oltmish kishi ishlaydi, tizimga esa
+//  o'ntasi kiradi — qolgani PIN'siz shtatda turadi va ularning oyligi
+//  ishbay hisobdan chiqadi. Fayl shuning uchun PIN'ni ham, rolni ham
+//  o'qimaydi: PIN yozilgan Excel pochtada va stol ustida qolardi.
+test('xodimlarni fayldan yuklash: bo\'lim tsex ichida izlanadi', async () => {
+  const fayl = [
+    "T/R;F.I.SH;Guruh;Tsex;Bo'lim;Lavozim",
+    //  «Qadoqlash» nomli bo'lim IKKITA tsexda bor — faqat nom
+    //  bo'yicha izlansa odam begona tsexga tushib, ishbay oyligi
+    //  boshqa bo'limga yozilardi.
+    "1;Sinov Qadoqchi Stul;Ishlab chiqarish;Stul tsexi;Qadoqlash;Qadoqlovchi",
+    "2;Sinov Qadoqchi Qad;Ishlab chiqarish;Qadoqlash tsexi;Qadoqlash;Qadoqlovchi",
+    //  Bo'limi ro'yxatda yo'q: XATO emas, ogohlantirish — odam
+    //  baribir kiritiladi, aks holda bitta noto'g'ri yozilgan nom
+    //  butun ro'yxatni to'xtatardi.
+    "3;Sinov Qorovul;AUP;;Ma'muriy-xo'jalik bo'limi;Qorovul",
+  ];
+  const pre = await (await post('/api/import/workers', fayl)).json();
+  assert.equal(pre.total, 3);
+  assert.equal(pre.bad, 0, JSON.stringify(pre.rows));
+  assert.equal(pre.no_section.length, 0, 'tsexsiz qatorda bo\'lim izlanmaydi');
+
+  const done = await (await post('/api/import/workers?save=1', fayl)).json();
+  assert.equal(done.saved, 3);
+  assert.equal(done.created, 3);
+
+  const joy = async (ism) => H.id(
+    `SELECT w.staff_group, w.position, w.dept, sc.code AS section, sh.code AS shop,
+            (w.pin IS NOT NULL OR w.pin_hash IS NOT NULL) AS pinli
+       FROM workers w
+       LEFT JOIN sections sc ON sc.id = w.section_id
+       LEFT JOIN shops    sh ON sh.id = w.shop_id
+      WHERE w.name = $1`, [ism]);
+
+  const st = await joy('Sinov Qadoqchi Stul');
+  assert.equal(st.section, 'STU-QAD', 'stulning qadoqlashi');
+  assert.equal(st.shop, 'STUL', 'tsex bo\'limdan chiqadi');
+  assert.equal(st.position, 'Qadoqlovchi');
+  assert.ok(!st.pinli, 'fayldan kelgan xodimda PIN yo\'q');
+
+  const qd = await joy('Sinov Qadoqchi Qad');
+  assert.equal(qd.section, 'QAD-QAD', 'qadoqlash tsexiniki');
+  assert.equal(qd.shop, 'QADOQ');
+
+  //  Ishlab chiqarish bo'limi bo'lmagan odam ham kiradi: matni
+  //  yoziladi, `section_id` esa bo'sh qoladi.
+  const qr = await joy('Sinov Qorovul');
+  assert.equal(qr.section, null);
+  assert.equal(qr.shop, null);
+  assert.equal(qr.dept, 'Ma\'muriy-xo\'jalik bo\'limi');
+  assert.equal(qr.staff_group, 'AUP');
+
+  //  Qayta yuklash nusxa ochmaydi va bo'sh katak tegmaydi
+  const yana = await (await post('/api/import/workers?save=1', [
+    "F.I.SH;Lavozim", 'Sinov Qorovul;'])).json();
+  assert.equal(yana.saved, 1);
+  assert.equal(yana.created, 0);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM workers WHERE name='Sinov Qorovul'`)).n, 1);
+  assert.equal((await joy('Sinov Qorovul')).position, 'Qorovul',
+    'bo\'sh katak yozilganini o\'chirmaydi');
+
+  //  ★ BO'LIMI TOPILMASA — OGOHLANTIRISH, XATO EMAS
+  const noto = await (await post('/api/import/workers', [
+    "F.I.SH;Tsex;Bo'lim", "Sinov Bolimsiz;Stul tsexi;Bunaqa bo'lim yo'q"])).json();
+  assert.equal(noto.bad, 0);
+  assert.equal(noto.no_section.length, 1);
+  assert.match(noto.no_section[0], /Sinov Bolimsiz/);
+
+  //  Faylda takrorlangan ism — XATO: oylik qaysi biriga yozilishi
+  //  noaniq qolardi.
+  const takror = await (await post('/api/import/workers', [
+    'F.I.SH', 'Sinov Egizak', 'Sinov Egizak'])).json();
+  assert.equal(takror.bad, 1);
+  assert.match(takror.rows[1].errors[0], /takrorlangan/);
+  assert.equal((await post('/api/import/workers?save=1',
+    ['F.I.SH', 'Sinov Egizak', 'Sinov Egizak'])).status, 400);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int n FROM workers WHERE name='Sinov Egizak'`)).n, 0,
+    'xato bo\'lsa bitta xodim ham kirmaydi');
+
+  //  Kartochkadan ham qo'yiladi va bo'lim tanlansa tsex O'ZI aniqlanadi
+  const lak = (await H.id(`SELECT id FROM sections WHERE code='STU-LAK'`)).id;
+  const w = await admin('POST', '/api/admin/workers',
+    { name: 'Sinov Shtat Kartochka', section_id: lak,
+      staff_group: 'Ishlab chiqarish', position: 'Lakchi' });
+  assert.equal(w.status, 200, w.text);
+  const k = await joy('Sinov Shtat Kartochka');
+  assert.equal(k.shop, 'STUL', 'tsex bo\'limdan chiqadi, alohida so\'ralmaydi');
+
+  //  Bo'sh yuborilgani «tegma» emas, «yo'q» degani
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + w.body.id,
+    { section_id: null, position: '' })).status, 200);
+  const k2 = await joy('Sinov Shtat Kartochka');
+  assert.equal(k2.section, null);
+  assert.equal(k2.shop, null);
+  assert.equal(k2.position, null);
+
+  //  Boshqa maydon saqlanganda shtat o'chib qolmaydi
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + w.body.id,
+    { section_id: lak, staff_group: 'Ishlab chiqarish' })).status, 200);
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + w.body.id,
+    { phone: '+998900000000' })).status, 200);
+  assert.equal((await joy('Sinov Shtat Kartochka')).section, 'STU-LAK',
+    'telefon saqlansa bo\'lim o\'chmaydi');
+});
+
 //  ★ TA'MINOTCHINING BOSHLANG'ICH QARZI. Mijoznikiga TESKARI tomon:
 //  musbat raqam KORXONA ta'minotchiga qarzdorligini anglatadi. Shusiz
 //  kassadan qilingan birinchi to'lov uni minusga tushirardi.

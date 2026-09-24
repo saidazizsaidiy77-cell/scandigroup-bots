@@ -944,4 +944,212 @@ router.post('/materials', need('materials.manage', 'production.manage'),
     } finally { client.release(); }
   }));
 
+// ──────────────────────────────────────────────────── XODIMLAR RO'YXATI
+//
+//  ★ ZAVODDA OLTMISH KISHI ISHLAYDI, TIZIMGA O'NTASI KIRADI.
+//  Boshliq, mudir, menejer va kassir dasturda ishlaydi — ularning
+//  PIN'i va roli bor. Arra operatori, shkurkachi, qorovul va oshpaz
+//  esa dasturni umuman ochmaydi, lekin OYLIK hammasiga beriladi va
+//  ishbay hisob konver qaysi bo'limdan o'tganiga bog'lanadi. Shtat
+//  ro'yxati shu sababdan hoziroq kiritiladi: modul ma'lumotsiz ishga
+//  tushmaydi (CLAUDE.md, «avval kiritish, keyin modul»).
+//
+//  Oltmish oltita qatorni qo'lda terib chiqish yarim kunlik ish va
+//  o'nlab xato bo'lardi — mijozlar, ta'minotchilar va materiallar
+//  bilan BIR XIL yo'l: avval TEKSHIRIB ko'rsatiladi, xato qator
+//  bo'lsa hech narsa saqlanmaydi.
+//
+//  ★ PIN FAYLDAN O'QILMAYDI — ustun bo'lsa ham. PIN yozilgan Excel
+//  pochtada, telefonda va stol ustida qoladi, ya'ni izini yashirish
+//  (`erp/pin.js`) hech narsa bermasdi. U faqat xodim kartochkasidan
+//  qo'yiladi. Rol ham shunday: doira va huquq bitta-bitta beriladi,
+//  ro'yxatdan emas.
+const WFIELDS = {
+  name:     ['fish', 'fio', 'ism', 'ismi', 'ismfamiliya', 'xodim', 'hodim',
+             'xodimnomi', 'nomi', 'nom', 'фио', 'сотрудник'],
+  group:    ['guruh', 'guruhi', 'toifa', 'bolinma', 'группа'],
+  shop:     ['tsex', 'tseh', 'sex', 'цех'],
+  dept:     ['bolim', 'bolimi', 'uchastka', 'отдел', 'участок'],
+  position: ['lavozim', 'lavozimi', 'kasb', 'vazifa', 'должность'],
+  phone:    ['tel', 'telefon', 'telraqam', 'telraqami', 'telefonraqami',
+             'raqam', 'nomer', 'телефон'],
+  hired_at: ['ishgakirgan', 'ishgakirgansana', 'qabulsanasi', 'sana',
+             'принят', 'датаприема'],
+};
+
+router.post('/workers', need('admin.users'),
+  express.raw({ type: '*/*', limit: '10mb' }),
+  wrap(async (req, res) => {
+    const buf = req.body;
+    if (!buf || !buf.length) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    let table;
+    try {
+      table = isXlsx(buf) ? readSheet(buf) : parseCsv(buf.toString('utf8'));
+    } catch (e) {
+      e.status = 400; e.message = 'Faylni o\'qib bo\'lmadi: ' + e.message; throw e;
+    }
+
+    const headIdx = table.findIndex((r) => r.some((c) => String(c).trim()));
+    if (headIdx < 0) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
+
+    const map = {}, unknown = [];
+    table[headIdx].forEach((h, i) => {
+      const n = norm(h);
+      if (!n) return;
+      const f = Object.keys(WFIELDS).find((k) => WFIELDS[k].includes(n));
+      if (f) { if (map[f] == null) map[f] = i; } else unknown.push(String(h).trim());
+    });
+    if (map.name == null) {
+      const e = new Error(
+        'Xodim ismi ustuni topilmadi. Sarlavhada «F.I.SH» yoki «Ismi» ' +
+        'bo\'lishi kerak. Topilgan ustunlar: ' +
+        table[headIdx].filter(Boolean).join(', '));
+      e.status = 400; throw e;
+    }
+
+    const [sh, sc, cur] = await Promise.all([
+      db.query(`SELECT id, code, name FROM shops`),
+      db.query(`SELECT id, shop_id, name FROM sections WHERE active`),
+      db.query(`SELECT id, name FROM workers`),
+    ]);
+    //  Tsex kodi bilan ham, nomi bilan ham: zavod faylida «Korpus
+    //  tsexi» turadi, kod esa KORPUS.
+    const byShop = new Map();
+    for (const s of sh.rows) { byShop.set(norm(s.code), s); byShop.set(norm(s.name), s); }
+    //  ★ BO'LIM TSEX ICHIDA IZLANADI. «Qadoqlash» nomli bo'lim IKKITA
+    //  tsexda bor (qadoqlash tsexida va stulda), «Lak» ham shunday —
+    //  faqat nom bo'yicha izlansa odam noto'g'ri tsexning bo'limiga
+    //  tushib, ishbay oylik begona bo'limga yozilardi.
+    const bySection = new Map();
+    for (const s of sc.rows) bySection.set(s.shop_id + '|' + norm(s.name), s);
+    const existing = new Map(cur.rows.map((w) => [norm(w.name), w.id]));
+
+    const seen = new Set(), noSection = [];
+    const rows = [];
+    for (let i = headIdx + 1; i < table.length; i++) {
+      const cells = table[i];
+      if (!cells.some((c) => String(c).trim())) continue;
+      const at = (f) => (map[f] == null ? '' : String(cells[map[f]] ?? '').trim());
+      const errors = [];
+      const it = {};
+
+      const name = at('name');
+      if (!name) errors.push('Xodim ismi bo\'sh');
+      //  Bir xil ism ikki qatorda — qaysi biri kim ekanini aytib
+      //  bo'lmaydi, ya'ni oylik ham qaysi biriga yozilishi noaniq.
+      else if (seen.has(norm(name))) errors.push(`Faylda takrorlangan: «${name}»`);
+      else seen.add(norm(name));
+      it.name = name;
+
+      const tsex = at('shop');
+      if (tsex) {
+        const hit = byShop.get(norm(tsex));
+        if (!hit) errors.push(`Bunday tsex yo'q: «${tsex}». Bor: ` +
+          sh.rows.map((x) => x.name).join(', '));
+        else it.shop_id = hit.id;
+      }
+
+      //  Bo'lim MATNI har doim yoziladi, `section_id` esa faqat
+      //  topilganda: «HR» va «Logistika» ishlab chiqarish bo'limi
+      //  emas va `sections` da qatori yo'q — odam shu sababdan
+      //  shtatdan tushib qolmasligi kerak.
+      const bolim = at('dept');
+      it.dept = bolim || null;
+      if (bolim && it.shop_id) {
+        const hit = bySection.get(it.shop_id + '|' + norm(bolim));
+        if (hit) it.section_id = hit.id;
+        //  Xato EMAS, OGOHLANTIRISH: odam kiritiladi, bo'limi esa
+        //  kartochkadan qo'yiladi. Xato qilinsa butun fayl
+        //  saqlanmasdi va bitta noto'g'ri yozilgan nom oltmish
+        //  kishini tizimdan tashqarida qoldirardi.
+        else noSection.push(`${name} — «${tsex} · ${bolim}»`);
+      }
+
+      const sana = at('hired_at');
+      if (sana) {
+        const dt = toDate(sana);
+        if (dt === undefined) errors.push(`Ishga kirgan sana tushunarsiz: «${sana}»`);
+        else it.hired_at = dt;
+      }
+
+      it.staff_group = at('group')    || null;
+      it.position    = at('position') || null;
+      it.phone       = at('phone')    || null;
+      rows.push({ line: i + 1, it, errors, exists: existing.has(norm(name)) });
+    }
+    if (!rows.length) { const e = new Error('Faylda qator yo\'q'); e.status = 400; throw e; }
+
+    const bad = rows.filter((r) => r.errors.length);
+
+    if (req.query.save !== '1') {
+      return res.json({
+        preview: true, columns: Object.keys(map), unknown,
+        total: rows.length, bad: bad.length,
+        updates: rows.filter((r) => r.exists).length,
+        //  Bo'limi topilmaganlar ALOHIDA ro'yxat bo'lib chiqadi:
+        //  ularning ishbay oyligi bo'limga bog'lanmaydi va buni
+        //  saqlashdan OLDIN ko'rish kerak.
+        no_section: noSection,
+        rows: rows.slice(0, 200),
+      });
+    }
+    if (bad.length) {
+      const e = new Error(`${bad.length} ta qatorda xato bor — saqlanmadi`);
+      e.status = 400; throw e;
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      let yangi = 0;
+      for (const r of rows) {
+        const id = existing.get(norm(r.it.name));
+        //  ★ QAYTA YUKLASHDA BO'SH KATAK TEGMAYDI, TO'LDIRILGANI
+        //  USTUN TURADI. Shtat ro'yxatida fayl haqiqat manbai: odam
+        //  Arradan Frezaga o'tsa yangi fayl buni aytadi va eski
+        //  bo'lim qolib ketmasligi kerak. Bo'sh katak esa «tegma»
+        //  degani — mijoz va ta'minotchi bilan bir xil qoida.
+        //
+        //  PIN, rol, doira va pul belgilariga umuman tegilmaydi: ular
+        //  kartochkadan beriladi va fayl ularni bilmaydi.
+        if (id) {
+          await client.query(
+            `UPDATE workers SET
+               staff_group = COALESCE($2, staff_group),
+               shop_id     = COALESCE($3, shop_id),
+               section_id  = COALESCE($4, section_id),
+               dept        = COALESCE($5, dept),
+               position    = COALESCE($6, position),
+               phone       = COALESCE($7, phone),
+               hired_at    = COALESCE($8, hired_at)
+             WHERE id = $1`,
+            [id, r.it.staff_group, r.it.shop_id || null, r.it.section_id || null,
+             r.it.dept, r.it.position, r.it.phone, r.it.hired_at || null]);
+        } else {
+          //  PIN'siz ochiladi: bu odam dasturga kirmaydi. Kerak
+          //  bo'lsa kartochkadan PIN ham, rol ham beriladi.
+          await client.query(
+            `INSERT INTO workers (name, staff_group, shop_id, section_id,
+                                  dept, position, phone, hired_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [r.it.name, r.it.staff_group, r.it.shop_id || null,
+             r.it.section_id || null, r.it.dept, r.it.position,
+             r.it.phone, r.it.hired_at || null]);
+          yangi++;
+        }
+      }
+      await audit(req, { module: 'admin', action: 'import', entity: 'workers',
+                         entity_id: rows.length,
+                         payload: { count: rows.length, yangi } }, client);
+      await client.query('COMMIT');
+      res.json({ saved: rows.length, created: yangi,
+                 updated: rows.length - yangi, no_section: noSection.length });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (!e.status) e.status = 400;
+      throw e;
+    } finally { client.release(); }
+  }));
+
 module.exports = router;

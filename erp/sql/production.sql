@@ -588,3 +588,34 @@ JOIN sections sc ON sc.id = r.section_id
 JOIN shops sh    ON sh.id = sc.shop_id
 LEFT JOIN v_section_totals t ON t.product_id = r.product_id AND t.section_id = r.section_id
 LEFT JOIN v_wip w            ON w.product_id = r.product_id AND w.section_id = r.section_id;
+
+-- ============================================================================
+--  ★ XODIMNING SHTAT JOYI — ishbay oylik shundan boshlanadi
+--
+--  Tizimga KIRADIGAN xodim o'ntacha (boshliq, mudir, menejer, kassir),
+--  zavodda esa oltmish kishi ishlaydi: arra operatori, shkurkachi,
+--  qoplovchi, qorovul, oshpaz. Ularning PIN'i ham, roli ham yo'q va
+--  bo'lishi shart emas — lekin OYLIK hammasiga beriladi va ishbay
+--  hisob konverning qaysi bo'limdan o'tganiga bog'lanadi.
+--
+--  Shuning uchun `workers` jadvali endi ikki xil odamni ko'taradi:
+--  dasturga kiradiganini ham, kirmaydiganini ham. Ajratadigan belgi —
+--  PIN: u bo'lsa kiradi, bo'lmasa shtatda turadi. Alohida «xodimlar»
+--  jadvali yozilmadi: o'shanda bitta odam ikki joyda bo'lib, ishbay
+--  oylik qaysi biriga yozilishi noaniq qolardi.
+--
+--  ★ BO'LIM IKKI USTUNDA, va bu takror EMAS. `section_id` — zavodning
+--  ISHLAB CHIQARISH bo'limi (Arra, Shkurka, Lak karkas): ishbay oylik
+--  aynan shundan hisoblanadi. `dept` esa qog'ozdagi nomi va u ancha
+--  kengroq: «HR», «Ma'muriy-xo'jalik bo'limi», «Logistika» —
+--  bularning `sections` da qatori yo'q va bo'lishi ham kerak emas,
+--  chunki ular orqali konver o'tmaydi. Matn HAR DOIM yoziladi:
+--  bo'limi topilmagan odam shtatdan tushib qolmasin.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS staff_group TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS shop_id     INT REFERENCES shops(id);
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS section_id  INT REFERENCES sections(id);
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS dept        TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS position    TEXT;
+
+CREATE INDEX IF NOT EXISTS workers_shop_idx    ON workers (shop_id)    WHERE shop_id    IS NOT NULL;
+CREATE INDEX IF NOT EXISTS workers_section_idx ON workers (section_id) WHERE section_id IS NOT NULL;

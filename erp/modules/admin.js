@@ -15,6 +15,25 @@ const router = express.Router();
 //  bilmasdi. Qaytadi: [pin, pin_hash].
 const pinCols = (kod) => (kod && pin.ready) ? [null, pin.hash(kod)] : [kod, null];
 
+//  ★ TSEX BO'LIMDAN CHIQADI, ikkalasi alohida so'ralmaydi. Bo'lim
+//  tanlangan bo'lsa tsexi ham o'sha bo'limniki: ikki katak alohida
+//  to'ldirilsa bir kun ular qarama-qarshi bo'lib qolardi — odam
+//  «Korpus tsexi» da turib, bo'limi stulnikida bo'lardi va ishbay
+//  oylik qaysi biriga yozilishi noaniq qolardi (izoh: sql/production.sql).
+async function shtat(client, body) {
+  const secId = body.section_id ? Number(body.section_id) : null;
+  let shopId  = body.shop_id    ? Number(body.shop_id)    : null;
+  if (secId) {
+    const r = await client.query(`SELECT shop_id FROM sections WHERE id = $1`, [secId]);
+    if (!r.rows.length) { const e = new Error('Bunday bo\'lim yo\'q'); e.status = 400; throw e; }
+    shopId = r.rows[0].shop_id;
+  }
+  const t = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+  return { shop_id: shopId, section_id: secId,
+           staff_group: t(body.staff_group), dept: t(body.dept),
+           position: t(body.position), hired_at: t(body.hired_at) };
+}
+
 router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
   const { rows } = await db.query(
     //  ★ PIN QAYTARILMAYDI. Bazada uning izi turadi va izdan raqamni
@@ -29,6 +48,12 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
             w.can_spend_cash,
             --  Ombor bo'limi shu xodimga ochiladimi (izoh: sql/warehouse.sql).
             w.sees_warehouse,
+            --  ★ SHTAT JOYI: guruh, tsex, bo'lim va lavozim
+            --  (izoh: sql/production.sql). Ishbay oylik shundan
+            --  hisoblanadi, shuning uchun dasturga KIRMAYDIGAN xodim
+            --  ham shu ro'yxatda turadi.
+            w.staff_group, w.shop_id, w.section_id, w.dept, w.position,
+            wsh.name AS shop, wsc.name AS section,
             (w.pin IS NOT NULL OR w.pin_hash IS NOT NULL) AS has_pin,
             --  Qo'lidagi pulni qaysi harajat guruhlariga sarflay oladi.
             --  BO'SH = hammasi (izoh: sql/cash.sql).
@@ -46,17 +71,19 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
               'scope_warehouse_id', wr.scope_warehouse_id, 'scope_warehouse', wh.name
             ) ORDER BY r.sort) FILTER (WHERE wr.role_code IS NOT NULL), '[]') AS roles
        FROM workers w
+       LEFT JOIN shops    wsh ON wsh.id = w.shop_id
+       LEFT JOIN sections wsc ON wsc.id = w.section_id
        LEFT JOIN worker_roles wr ON wr.worker_id = w.id
        LEFT JOIN roles r         ON r.code = wr.role_code
        LEFT JOIN shops sh        ON sh.id = wr.scope_shop_id
        LEFT JOIN customer_channels ch ON ch.code = wr.scope_channel
        LEFT JOIN warehouses wh   ON wh.id = wr.scope_warehouse_id
-      GROUP BY w.id ORDER BY w.active DESC, w.name`);
+      GROUP BY w.id, wsh.name, wsc.name ORDER BY w.active DESC, w.name`);
   res.json(rows);
 }));
 
 router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
-  const [roles, shops, channels, houses, eg] = await Promise.all([
+  const [roles, shops, channels, houses, eg, secs] = await Promise.all([
     db.query(`SELECT r.code, r.name, r.surface,
                      COUNT(rp.permission_code) AS permission_count
                 FROM roles r LEFT JOIN role_permissions rp ON rp.role_code = r.code
@@ -72,9 +99,16 @@ router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
     // Harajat guruhlari: qo'liga pul beriladigan xodim nimaga
     // sarflay olishi shu ro'yxatdan belgilanadi.
     db.query(`SELECT code, name FROM expense_groups ORDER BY sort, name`),
+    //  Bo'limlar: xodimning SHTAT joyi (izoh: sql/production.sql).
+    //  Rol doirasi bilan adashtirmaslik kerak — u tsex bo'yicha
+    //  qo'yiladi va bo'limga tushmaydi.
+    db.query(`SELECT sc.id, sc.name, sc.shop_id, sh.name AS shop
+                FROM sections sc JOIN shops sh ON sh.id = sc.shop_id
+               WHERE sc.active ORDER BY sh.sort, sc.sort`),
   ]);
   res.json({ roles: roles.rows, shops: shops.rows, channels: channels.rows,
-             warehouses: houses.rows, expense_groups: eg.rows });
+             warehouses: houses.rows, expense_groups: eg.rows,
+             sections: secs.rows });
 }));
 
 // Telegram ID — RAQAM, @nom emas (bazada bigint). Bot ichida /myid
@@ -125,10 +159,12 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    const st = await shtat(client, req.body);
     const w = (await client.query(
       `INSERT INTO workers (name, phone, pin, pin_hash, tg_id, can_hold_cash,
-                            cash_all_customers, can_spend_cash, sees_warehouse)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+                            cash_all_customers, can_spend_cash, sees_warehouse,
+                            staff_group, shop_id, section_id, dept, position, hired_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
        //  Standarti — YOZADI: qo'lida pul turgan odam uni hisobdan
@@ -136,7 +172,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
        can_spend_cash !== false,
        //  Standarti — KO'RADI: hech kimning ekrani o'zidan-o'zi
        //  o'zgarmaydi (izoh: sql/warehouse.sql).
-       sees_warehouse !== false])).rows[0];
+       sees_warehouse !== false,
+       st.staff_group, st.shop_id, st.section_id, st.dept, st.position,
+       st.hired_at])).rows[0];
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
@@ -172,6 +210,7 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    const st = await shtat(client, req.body);
     await client.query(
       `UPDATE workers SET
          name   = COALESCE($2, name),
@@ -189,7 +228,18 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          --  Inkassator belgisi ham shunday: yuborilmasa tegilmaydi.
          cash_all_customers = COALESCE($10, cash_all_customers),
          can_spend_cash = COALESCE($11, can_spend_cash),
-         sees_warehouse = COALESCE($12, sees_warehouse)
+         sees_warehouse = COALESCE($12, sees_warehouse),
+         --  ★ SHTAT MAYDONLARI: yuborilgani YOZILADI, yuborilmagani
+         --  tegilmaydi. Bo'sh yuborilgani «tegma» emas, «yo'q»
+         --  degani — shuning uchun maydon KELGANMI degan belgi
+         --  alohida uzatiladi (kartochka boshqa maydon uchun
+         --  saqlansa bo'lim o'chib qolmasin).
+         staff_group = CASE WHEN $13::boolean THEN $14::text ELSE staff_group END,
+         shop_id     = CASE WHEN $13::boolean THEN $15::int  ELSE shop_id     END,
+         section_id  = CASE WHEN $13::boolean THEN $16::int  ELSE section_id  END,
+         dept        = CASE WHEN $13::boolean THEN $17::text ELSE dept        END,
+         position    = CASE WHEN $13::boolean THEN $18::text ELSE position    END,
+         hired_at    = CASE WHEN $13::boolean THEN $19::date ELSE hired_at    END
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -197,7 +247,11 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        kod !== null, pinCols(kod)[1],
        typeof cash_all_customers === 'boolean' ? cash_all_customers : null,
        typeof can_spend_cash === 'boolean' ? can_spend_cash : null,
-       typeof sees_warehouse === 'boolean' ? sees_warehouse : null]);
+       typeof sees_warehouse === 'boolean' ? sees_warehouse : null,
+       'staff_group' in req.body || 'section_id' in req.body ||
+         'position' in req.body || 'dept' in req.body || 'shop_id' in req.body,
+       st.staff_group, st.shop_id, st.section_id, st.dept, st.position,
+       st.hired_at]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
