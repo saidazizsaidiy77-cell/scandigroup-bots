@@ -79,6 +79,20 @@ let canMove = false, canFixQty = false, targets = [];
 //  beradi va Excelga chiqarish ham to'la bo'ladi.
 let savdoKoz = false;
 const faqatQoldiq = () => savdoKoz && isTM();
+//  ★ «QOLDIQ» BITTA NARSANI ANGLAYDI: bronni ayirgandagi, ya'ni
+//  sotish mumkin bo'lgani. Ilgari u IKKI xil edi — savdoda bo'sh
+//  qoldiq, mudirda esa javondagi JISMONIY soni; bitta so'z ikki
+//  raqamni ataydi va ikki odam bir-biriga «qoldiq nechta» deb
+//  telefon qilganda har biri o'zinikini aytardi.
+//
+//  Mudirga jismoniy soni ham kerak (inventarizatsiyada javondagi
+//  dona shu bilan solishtiriladi), shuning uchun u YO'QOLMADI —
+//  yonidagi «Jami» ustuniga chiqdi: bronda turgani bilan birga,
+//  tepadagi «Jami» kartochkasi bilan bir xil raqam va bir xil so'z.
+//
+//  Savdoga chizilmaydi: bronda turgani boshqa mijozniki va u yerda
+//  faqat yolg'on umid berardi (izoh: `faqatQoldiq`).
+const jamiUstun = () => isTM() && !faqatQoldiq();
 //  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
 //  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
 //
@@ -385,7 +399,10 @@ function drawStock() {
       <p class="muted" style="font-size:12px;margin-top:10px">${faqatQoldiq()
         ? "Qoldiq — buyurtmaga olinganini ayirgandagi, ya'ni sotish mumkin bo'lgani"
         : 'Kirdi va chiqdi — tanlangan oraliq bo\'yicha &middot; '
-          + 'Bronda va qoldiq — hozirgi holat'}</p>
+          + 'Bronda, qoldiq va jami — hozirgi holat'}</p>
+      ${!jamiUstun() ? '' : `<p class="muted" style="font-size:12px;margin-top:4px">
+        Qoldiq — bronni ayirgandagi, ya'ni sotish mumkin bo'lgani &middot;
+        Jami — bronda turgani bilan birga, inventarizatsiya raqami</p>`}
       ${typeChips(d) ? `<div style="margin-top:14px">
         <label>Turi</label>
         <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
@@ -408,7 +425,11 @@ function drawStock() {
       <!--  T/M omborda pul emas, DONA muhim: mudir mahsulotni sanaydi va
             buyurtmaga qanchasi olinganini ko'radi. Vitrinada esa narx va
             summa qoladi \u2014 u yerda sotuv nuqtasi hisobi yuritiladi. -->
-      ${isTM() ? `<div class="card"><h2>${faqatQoldiq() ? 'Qoldiq' : "Bo'sh"}</h2>
+      <!--  ★ KARTOCHKA HAM «QOLDIQ» DEYILADI, ustundagi bilan bir xil
+            so'z va bir xil raqam. Ilgari u «Bo'sh» edi va bitta sahifada
+            bitta narsa ikki nom bilan turardi — pastdagi «Qoldiq» esa
+            o'sha paytda BOSHQA raqamni (jismoniy sonini) ko'rsatardi. -->
+      ${isTM() ? `<div class="card"><h2>Qoldiq</h2>
         <div class="kpi">${d.total.by_uom && d.total.by_uom.length
           ? d.total.by_uom.map(x => `${x.free}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
           : (d.total.free ?? 0)}</div>
@@ -430,8 +451,8 @@ function drawStock() {
     : `<div class="card" style="margin-top:16px">
       <div class="tbox">
       <!--  ★ AYLANMA. Sana ikki xil ishlaydi va buni bilib qo'yish kerak:
-            KIRDI/CHIQDI tanlangan oraliqniki, BRONDA/QOLDIQ esa hozirgi
-            holat. «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
+            KIRDI/CHIQDI tanlangan oraliqniki, BRONDA/QOLDIQ/JAMI esa
+            hozirgi holat. «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
             filtri bilan aralashtirib bo'lmaydi. -->
       <table class="stock ${faqatQoldiq() ? 'savdo' : isTM() ? 'tm' : 'shop'}">
         <thead><tr>
@@ -441,6 +462,7 @@ function drawStock() {
           <th class="s-out">Chiqdi</th>
           ${isTM() ? `<th class="s-bron">Bronda</th>` : ''}`}
           <th class="s-free">Qoldiq</th>
+          ${jamiUstun() ? `<th class="s-all">Jami</th>` : ''}
           ${isTM() ? '' : `<th class="s-price">Narx, $</th>
                            <th class="s-amount">Summa, $</th>`}
         </tr></thead>
@@ -486,8 +508,10 @@ function jamiRows(d) {
     ${faqatQoldiq() ? '' : `<td class="s-in">${son(x.kirdi)}</td>
     <td class="s-out">${son(x.chiqdi)}</td>
     ${isTM() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}`}
-    <td class="s-free"><b>${faqatQoldiq() ? x.free : x.qty}</b> <span class="muted"
+    <td class="s-free"><b>${isTM() ? x.free : x.qty}</b> <span class="muted"
       style="font-size:11px">${esc(x.uom)}</span></td>
+    ${!jamiUstun() ? '' : `<td class="s-all"><b>${x.qty}</b> <span class="muted"
+      style="font-size:11px">${esc(x.uom)}</span></td>`}
     ${isTM() ? '' : `<td class="s-price"></td>
       <td class="s-amount">${i === 0 && Number(d.total.amount)
         ? `<b>${money(d.total.amount)}</b>` : ''}</td>`}
@@ -515,13 +539,19 @@ function drawStockRow(r) {
       //  alohida ustunda turadi.
       ? `<td class="s-bron">${r.bron
             ? `<b>${r.bron}</b>` : '<span class="muted">&mdash;</span>'}</td>` : ''}`}
-      <!--  ★ SAVDODA QOLDIQ — BRONNI AYIRGANDAGISI. Mudir javondagi
-            DONANI sanaydi, ya'ni unga jismoniy soni kerak; savdo esa
-            mijozga va'da qiladi va bronda turgani boshqa mijozniki.
-            Bitta ustun, ikki xil savol — shuning uchun qiymati ham
-            ikki xil. -->
-      <td class="s-free"><b>${faqatQoldiq() ? r.free : r.qty}</b> <span class="muted"
+      <!--  ★ QOLDIQ — BRONNI AYIRGANDAGISI, va u HAMMAGA bir xil:
+            mudirga ham, savdoga ham. Ilgari bitta ustun ikki xil
+            raqamni ko'rsatardi (savdoda bo'sh, mudirda jismoniy) va
+            «qoldiq nechta» degan savolga ikki odam ikki javob berardi.
+
+            Mudirning jismoniy soni yo'qolmadi — yonidagi «Jami» ga
+            chiqdi: javondagi donani u bilan sanaydi. Vitrinada bron
+            bo'lmaydi (savdoga chiqmaydi), ya'ni u yerda ikkalasi bir
+            xil raqam va ikkinchi ustun faqat joy egallardi. -->
+      <td class="s-free"><b>${isTM() ? r.free : r.qty}</b> <span class="muted"
         style="font-size:11px">${esc(r.uom || '')}</span></td>
+      ${!jamiUstun() ? '' : `<td class="s-all"><b>${r.qty}</b> <span class="muted"
+        style="font-size:11px">${esc(r.uom || '')}</span></td>`}
       ${isTM() ? ''
       //  Vitrinada narx va summa: u yerda nuqta hisobi yuritiladi.
       //  Narxi yo'q konverning summasi 0 emas, NOMA'LUM: nol raqam
@@ -531,8 +561,7 @@ function drawStockRow(r) {
          <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
             : '<span class="muted">\u2014</span>'}</td>`}
     </tr>
-    ${!open ? '' : `<tr class="more"><td colspan="${
-      faqatQoldiq() ? 5 : isTM() ? 8 : 9}"
+    ${!open ? '' : `<tr class="more"><td colspan="${faqatQoldiq() ? 5 : 9}"
       style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? `<span class="muted">\u2014</span>`

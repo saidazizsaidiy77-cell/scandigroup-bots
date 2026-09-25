@@ -215,7 +215,13 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
     70vh — JS ishlamay qolgan holatga zaxira. */
 .tbox{overflow:auto;max-height:70vh}
 .stock .s-qty,.stock .s-price,.stock .s-amount,
-.stock .s-bron,.stock .s-free,.stock .s-in,.stock .s-out{text-align:right}
+.stock .s-bron,.stock .s-free,.stock .s-all,
+.stock .s-in,.stock .s-out{text-align:right}
+/* «Jami» — javondagi jismoniy soni: mudir uni inventarizatsiyada
+   sanaydi, kunlik savoli esa QOLDIQ (sotish mumkin bo'lgani).
+   Shuning uchun yonidagi ustun kuchsizroq — ko'z avval qoldiqqa
+   tushsin, jami esa kerak bo'lganda topilsin. */
+.stock .s-all{color:var(--muted)}
 /* Aylanma: kirdi yashil, chiqdi kulrang — ko'z qaysi tomon ekanini
    raqamni o'qimasdan oldin biladi. */
 .stock .s-in b{color:var(--ok)}
@@ -238,12 +244,15 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   /* Telefonda ustun yo'q — har qator kartochkaga aylanadi. T/M omborda
      to'rtta raqam (qoldiq, kirdi, chiqdi, bronda), vitrinada esa narx
      va summa: shuning uchun ikki xil panjara. */
-  .stock.tm   tbody tr{grid-template-areas:"name qty" "color in" "fabric out" "type bron"}
+  .stock.tm   tbody tr,.stock.tm    tfoot tr{
+    grid-template-areas:"name qty" "color in" "fabric out" "type bron" ". jami"}
   /*  Savdoda uchta ustun yo'q (kirdi, chiqdi, bronda) — qolgani
       to'rt qator emas, ikki qatorga sig'adi. */
-  .stock.savdo tbody tr{grid-template-areas:"name qty" "color type" "fabric fabric"}
-  .stock.shop tbody tr{grid-template-areas:"name qty" "color in" "fabric out"
-                                           "price amount" "type type"}
+  .stock.savdo tbody tr,.stock.savdo tfoot tr{
+    grid-template-areas:"name qty" "color type" "fabric fabric"}
+  .stock.shop tbody tr,.stock.shop  tfoot tr{
+    grid-template-areas:"name qty" "color in" "fabric out"
+                        "price amount" "type type"}
   .stock tbody tr:last-child{border-bottom:0}
   .stock .s-name  {grid-area:name;font-size:15px}
   .stock .s-qty   {grid-area:qty;font-size:15px}
@@ -257,13 +266,27 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   .stock .s-in  {grid-area:in;font-size:13px}
   .stock .s-out {grid-area:out;font-size:13px}
   .stock .s-bron{grid-area:bron;font-size:13px}
+  .stock .s-all {grid-area:jami;font-size:13px}
   .stock .s-in::before  {content:'kirdi ';color:var(--muted)}
   .stock .s-out::before {content:'chiqdi ';color:var(--muted)}
   .stock .s-bron::before{content:'bronda ';color:var(--muted)}
-  /* Telefonda katta raqam — QOLDIQ: mudirning kunlik savoli shu */
+  .stock .s-all::before {content:'jami ';color:var(--muted)}
+  /* Telefonda katta raqam — QOLDIQ, ya'ni sotish mumkin bo'lgani:
+     mudirning ham, savdoning ham kunlik savoli shu. Javondagi
+     jismoniy soni («jami») ostida, mayda yozuvda turadi — u
+     inventarizatsiya raqami va har kuni kerak bo'lmaydi. */
   .stock .s-free{grid-area:qty;font-size:15px}
+  /*  ★ JAMI QATORI HAM KARTOCHKA BO'LADI, qatorlar bilan BIR XIL
+      panjarada: yig'indi qaysi ustunniki ekani telefonda ham
+      ko'rinib tursin.
+
+      Sticky esa o'chiriladi: to'qqizta katak ham `bottom:0` bo'lib
+      BITTA nuqtada ustma-ust turardi va ko'rinadigani faqat oxirgisi
+      edi — qolgan sakkiz raqam ostida yashirinib yotardi. Qotib
+      turish USTUNLI jadvalda ma'noga ega, kartochkada emas. */
   .stock tfoot tr{display:grid;grid-template-columns:1fr auto;
     gap:3px 12px;padding:12px 0}
+  .stock tfoot td{position:static}
   /* Ochilgan qator — konver raqamlari: kartochka tarmog'iga kirmaydi */
   .stock tr.more{display:block;border:0;padding:0 0 14px}
   .stock tr.more td{display:block}
