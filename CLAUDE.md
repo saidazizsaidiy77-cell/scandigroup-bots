@@ -1070,6 +1070,30 @@ va odam ro'yxatni qaytadan ko'zdan kechirardi.
 **«Qaytarib olish»** esa `sales.manage` da qolaveradi va mudir
 chiqarmaguncha ochiq: xato bergan menejer o'zi orqaga oladi.
 
+**★ TAB YONIDA JAMI SUMMA** (`GET /api/sales/orders` javobidagi
+`jami`; zavod qarori 2026-09). Qatorda summa ilgari ham bor edi,
+lekin menejerning savoli boshqa: «bu tabda jami qancha pul turibdi» —
+o'ttizta qatorni ko'z bilan qo'shib bo'lmaydi.
+
+Raqam **SERVERDA** hisoblanadi, sahifada emas, va shu sababdan ikki
+narsa to'g'ri bo'ladi. Birinchisi: ro'yxat 500 qator bilan
+cheklangan, ya'ni klientdagi yig'indi 501-buyurtmadan keyin jimgina
+kamayib borardi. Ikkinchisi: raqam HAR tab uchun keladi, tanlangani
+uchun emas — aks holda menejer «chiqib ketganida qancha» degan
+javobni olish uchun tabni bosib ko'rishi kerak bo'lardi (ombor
+tarixidagi kirim/chiqim filtri bilan bir xil qoida).
+
+Shart ro'yxatnikiga AYNAN teng, faqat HOLAT filtri olib tashlangan —
+u yerda holat guruh bo'lib turadi. **Mijoz va menejer filtri esa
+yig'indiga TA'SIR QILADI**: «shu mijozga qancha» degan savolga javob
+kerak, butun savdo aylanmasi emas. Test raqamni RO'YXATNING o'zidan
+qayta hisoblanganiga solishtiradi — menyudagi navbat belgisi bilan
+bir xil qoida va bir xil sabab: ikki joyda yozilgan shart bir kun
+ajralib ketardi.
+
+Nol ham yoziladi: bo'sh raqam «hisoblanmadi» degan savol qoldirardi,
+nol esa javob — bu tabda buyurtma yo'q.
+
 **★ HOLAT BITTA JOYDA HISOBLANADI** (`HOLAT`, `modules/sales.js`;
 zavod qarori 2026-09). Ilgari u IKKI joyda edi: sahifa qatordagi
 yozuvni o'zi chiqarardi, tab esa serverdagi boshqa shartdan kelardi.

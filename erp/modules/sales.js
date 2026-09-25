@@ -363,7 +363,39 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
     for (const o of rows)
       o.places = joy.filter((x) => x.order_id === o.id);
   }
-  res.json({ rows });
+
+  //  ★ TAB BO'YICHA JAMI SUMMA (zavod qarori, 2026-09). Qatorda summa
+  //  ilgari ham bor edi, lekin menejerning savoli boshqa: «bu tabda
+  //  jami qancha pul turibdi» — o'ttizta qatorni ko'z bilan qo'shib
+  //  bo'lmaydi.
+  //
+  //  ★ SERVERDA hisoblanadi, sahifada emas, va shu sababdan ikki
+  //  narsa to'g'ri bo'ladi. Birinchisi: ro'yxat 500 qator bilan
+  //  cheklangan, ya'ni klientdagi yig'indi 501-buyurtmadan keyin
+  //  jimgina kamayib borardi. Ikkinchisi: raqam HAR tab uchun
+  //  kerak, tanlangani uchun emas — aks holda menejer «chiqib
+  //  ketganida qancha» degan savolga javob olish uchun tabni bosib
+  //  ko'rishi kerak bo'lardi.
+  //
+  //  Shart ro'yxatnikiga AYNAN teng, faqat HOLAT filtri olib
+  //  tashlangan — u yerda holat guruh bo'lib turadi. Ikki joyda
+  //  boshqacha yozilsa menyudagi navbat belgisi bilan bir xil dard
+  //  bo'lardi: chipda bitta raqam, ro'yxatda boshqasi.
+  const jami = (await db.query(
+    `SELECT ${HOLAT} AS holat, COUNT(*)::int AS orders,
+            COALESCE(SUM(amount), 0)::numeric(16,2) AS amount
+       FROM v_sales_orders o
+      WHERE ($1::text[] IS NULL OR channel = ANY($1))
+        AND ($2::int  IS NULL OR customer_id = $2)
+        AND ($3::int  IS NULL OR manager_id = $3)
+        AND ($4::text IS NULL OR order_no ILIKE '%' || $4 || '%'
+             OR customer_name ILIKE '%' || $4 || '%')
+        AND ($5::int IS NULL OR manager_id = $5)
+      GROUP BY 1`,
+    [chans, req.query.customer_id || null, req.query.manager_id || null,
+     req.query.q || null, ownOf(req)])).rows;
+
+  res.json({ rows, jami });
 }));
 
 // Bitta buyurtma: sarlavha, qatorlar va har qatorga biriktirilgan konverlar

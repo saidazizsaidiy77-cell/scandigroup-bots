@@ -243,10 +243,29 @@ async function boot(){
   await load();
 }
 
+//  ★ TAB YONIDA JAMI SUMMA (zavod qarori, 2026-09). Qatorda summa
+//  ilgari ham bor edi, lekin menejerning savoli boshqa: «bu tabda
+//  jami qancha pul turibdi» — o'ttizta qatorni ko'z bilan qo'shib
+//  bo'lmaydi.
+//
+//  Raqam HAR tabda turadi, faqat tanlanganida emas: aks holda
+//  «chiqib ketganida qancha» degan savolga javob olish uchun tabni
+//  bosib ko'rish kerak bo'lardi. «Hammasi» — qolganlarining
+//  yig'indisi.
+//
+//  Nol ham YOZILADI: bo'sh raqam «hisoblanmadi» degan savol
+//  qoldirardi, nol esa javob — bu tabda buyurtma yo'q.
+let jami = [];
+const tabSumma = (k) => k
+  ? Number((jami.find((x) => x.holat === k) || {}).amount || 0)
+  : jami.reduce((a, x) => a + Number(x.amount || 0), 0);
+
 function drawChips(){
   $('chips').innerHTML = FILTERS.map(([k, name]) =>
     `<button class="${k === status ? 'primary' : ''}" onclick="setStatus('${k}')"
-      >${esc(name)}</button>`).join('');
+      style="text-align:left;line-height:1.25"
+      ><div>${esc(name)}</div><div style="font-size:11px;opacity:.7"
+        >${money(tabSumma(k))} $</div></button>`).join('');
 }
 function setStatus(k){ status = k; drawChips(); load(); }
 
@@ -292,7 +311,13 @@ async function load(){
   if (status) q.set('status', status);
   if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
   if ($('fMgr') && $('fMgr').value) q.set('manager_id', $('fMgr').value);
-  rows = (await App.api('/api/sales/orders?' + q)).rows;
+  const javob = await App.api('/api/sales/orders?' + q);
+  rows = javob.rows;
+  //  Jami SERVERDAN keladi (izoh: modules/sales.js): ro'yxat 500
+  //  qator bilan cheklangan, ya'ni bu yerda qo'shilsa yig'indi
+  //  501-buyurtmadan keyin jimgina kamayib borardi.
+  jami = javob.jami || [];
+  drawChips();
 
   //  Sarlavhadagi bo'sh katak ham faqat ruxsatlida: qolganlarda u
   //  nima uchun turgani tushunarsiz bo'lardi.

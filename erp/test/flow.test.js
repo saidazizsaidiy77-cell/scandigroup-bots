@@ -6385,6 +6385,72 @@ test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
     items: [{ material_id: m.id, qty: 5, price: 20 }] })).status, 403);
 });
 
+test('buyurtmalar: tab yonidagi jami summa ro\'yxat bilan bir xil', async () => {
+  //  ★ TAB BO'YICHA JAMI SUMMA (zavod qarori, 2026-09). Qatorda summa
+  //  ilgari ham bor edi, lekin menejerning savoli boshqa: «bu tabda
+  //  jami qancha pul turibdi».
+  //
+  //  ★ RAQAM RO'YXAT BILAN BIR XIL BO'LISHI SHART — menyudagi navbat
+  //  belgisi bilan AYNAN bir xil qoida va shu sababdan test ham bir
+  //  xil: yig'indi RO'YXATNING o'zidan qayta hisoblanadi. Ikki joyda
+  //  yozilgan shart bir kun ajralib ketardi: chipda bitta raqam,
+  //  jadvalda boshqasi.
+  assert.equal((await admin('POST', '/api/units/customers',
+    { items: [{ name: 'Sinov jami mijoz' }] })).status, 200);
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Sinov jami mijoz'`)).id;
+  const prod = (await H.id(
+    `SELECT id FROM products WHERE active ORDER BY id LIMIT 1`)).id;
+
+  //  Narxi yozilgan ikkita qator: 3 × 150 + 2 × 100 = 650 $.
+  const z = await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz,
+    items: [{ product_id: prod, qty: 3, unit_price: 150 },
+            { product_id: prod, qty: 2, unit_price: 100 }] });
+  assert.equal(z.status, 200, z.text);
+
+  const javob = (await admin('GET', '/api/sales/orders')).body;
+  assert.ok(Array.isArray(javob.jami), 'jami serverdan keladi');
+
+  const yangi = javob.rows.find((o) => o.id === z.body.id);
+  assert.ok(yangi, 'buyurtma ro\'yxatda');
+  assert.equal(Number(yangi.amount), 650, 'qatordagi summa');
+
+  //  Konver biriktirilmagan, ya'ni buyurtma «Boshlanmagan» tabida.
+  assert.equal(yangi.holat, 'draft');
+
+  //  Chipdagi raqam RO'YXATDAN qayta hisoblanganiga teng bo'lishi
+  //  kerak. Ro'yxat 500 qator bilan cheklangan, shuning uchun
+  //  taqqoslash FAQAT shu holat bo'yicha va ro'yxat to'lmaganda
+  //  ma'noga ega — sinov bazasida u har doim shunday.
+  const chip = javob.jami.find((x) => x.holat === 'draft');
+  assert.ok(chip, '«Boshlanmagan» tabining yig\'indisi bor');
+  const royxatdan = javob.rows.filter((o) => o.holat === 'draft')
+    .reduce((a, o) => a + Number(o.amount || 0), 0);
+  assert.equal(Number(chip.amount), royxatdan,
+    'chipdagi summa ro\'yxatdagining yig\'indisiga teng');
+  assert.equal(chip.orders,
+    javob.rows.filter((o) => o.holat === 'draft').length);
+
+  //  ★ YIG'INDI HOLAT FILTRIDAN QAT'I NAZAR keladi: tab tanlangan
+  //  bo'lsa ham qolgan tablarning raqami turishi kerak, aks holda
+  //  menejer «chiqib ketganida qancha» degan javobni olish uchun
+  //  tabni bosib ko'rishi kerak bo'lardi (ombor tarixidagi
+  //  kirim/chiqim filtri bilan bir xil qoida).
+  const faqatDraft = (await admin('GET', '/api/sales/orders?status=draft')).body;
+  assert.ok(faqatDraft.rows.every((o) => o.holat === 'draft'), 'ro\'yxat qisqardi');
+  assert.deepEqual(
+    faqatDraft.jami.map((x) => x.holat).sort(),
+    javob.jami.map((x) => x.holat).sort(),
+    'yig\'indi esa hamma tab uchun keladi');
+
+  //  Mijoz qidiruvi esa yig'indiga TA'SIR QILADI: «shu mijozga
+  //  qancha» degan savolga javob kerak, butun savdo aylanmasi emas.
+  const bittaMijoz = (await admin(
+    'GET', '/api/sales/orders?q=Sinov jami mijoz')).body;
+  assert.equal(Number(bittaMijoz.jami.find((x) => x.holat === 'draft').amount), 650);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
