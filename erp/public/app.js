@@ -330,12 +330,19 @@ const App = (() => {
     // Savdo. "Buyurtma shakllantirish" alohida sahifa emas: buyurtma shu
     // yerdan yoziladi ham, ochiladi ham — ikki sahifa bo'lsa menejer yangi
     // buyurtmani qayerdan boshlashni har safar o'ylab o'tirardi.
-    { mod: 'sales', nav: 'Buyurtmalar arxivi',          perm: ['sales.view'] },
-    { mod: 'sales', nav: "O'chirilgan buyurtmalar",     perm: ['sales.manage'] },
+    //  ★ «Buyurtmalar arxivi» va «O'chirilgan buyurtmalar» OLIB
+    //  TASHLANDI (zavod qarori, 2026-09): ikkalasi ham alohida bo'lim
+    //  emas, buyurtmalar ro'yxatining FILTRI — «Chiqib ketdi» va
+    //  «Bekor qilingan» tablari o'sha yerda turibdi. Alohida sahifa
+    //  qilinsa bitta ro'yxat uch joyda yashardi va menejer qaysi
+    //  biridan qidirishni har safar o'ylab o'tirardi.
+    //
+    //  «Solishtirma dalolatnoma» ham olib tashlandi, lekin boshqa
+    //  sababdan: u ALLAQACHON yozilgan va o'z sahifasi bilan yuqorida
+    //  turibdi (`/dalolatnoma.html`). Bu yerda qolgani nusxa edi va
+    //  ekranda bitta bo'lim ikki marta ko'rinardi — biri ishlaydigan
+    //  havola, ikkinchisi «rejada» degan kulrang yozuv.
     { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },
-    // Dalolatnoma — mijoz bilan imzolanadigan hujjat; qarzdorlik esa
-    // hisobot va u yozilgan (yuqorida, o'z sahifasi bilan).
-    { mod: 'sales', nav: 'Solishtirma dalolatnoma',     perm: ['sales.view'] },
 
     // Ta'minot
     //  Xom ashyo

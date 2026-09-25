@@ -2961,6 +2961,20 @@ bir-biridan ajralib ketardi: hujjatda 100 list, qoldiqda 90.
 `doc_kind` qo'shildi, chunki talabnoma ham, kirim ham o'z jadvalida
 1-raqamli qatorga ega bo'ladi.
 
+**★ KIRIM FAQAT ZAVOD OMBORIGA** (zavod qarori, 2026-09): Xom ashyo,
+MDF va Furnitura — tsexga biriktirilmagan uchtasi. Mol ta'minotchidan
+ZAVODGA keladi; tsex omboriga esa u boshqa yo'ldan boradi — zavod
+omboridan TALABNOMA bilan. Ikkala yo'l ochiq qolsa bitta material
+zavod qoldig'idan UMUMAN o'tmagan holda tsexda paydo bo'lardi va
+«ombordan bugun nima chiqdi» degan savol javobsiz qolardi.
+
+Ochilmada ham o'n to'rtta ombor emas, uchtasi turadi — qolgan o'ntasi
+javobi bo'lmagan savol bo'lardi. Ro'yxat qisqarishi QULAYLIK,
+tekshiruv esa SERVERDA: id ni qo'lda yuborsa ham qabul qilinmaydi.
+Zavod ombori `shop_id` siz turgani bilan ajraladi — ombor
+kartochkalari guruhlanishi bilan AYNAN bir xil shart, aks holda bitta
+ombor bir ekranda zavodniki, boshqasida tsexniki bo'lib turardi.
+
 **★ TA'MINOTCHI MAJBURIY.** Ta'minotchisi yo'q kirim omborni
 to'ldirib, qarzni jimgina tashlab ketardi — mol keldi, qarz esa hech
 qayerda yozilmadi. Ta'minotchisiz material omborga faqat

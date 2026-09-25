@@ -6254,7 +6254,10 @@ test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
   //  dalolatnomada bilinardi.
   const { db } = require('../db');
   const xom = await xodim('Sinov kirim xodim', 'xom_ombor');
+  //  ★ KIRIM FAQAT ZAVOD OMBORIGA (zavod qarori, 2026-09) — pastda.
   const wh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const tsexWh = (await H.id(
     `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
 
   await admin('POST', '/api/purchasing/suppliers',
@@ -6288,6 +6291,17 @@ test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
   assert.equal((await xom('POST', '/api/materials/receipts', {
     supplier_id: tam, warehouse_id: wh, ccy: 'UZS',
     items: [{ material_id: m.id, qty: 10, price: 250000 }] })).status, 400);
+
+  //  ★ KIRIM FAQAT ZAVOD OMBORIGA: mol ta'minotchidan ZAVODGA keladi,
+  //  tsexga esa undan talabnoma bilan beriladi. Ikkala yo'l ochiq
+  //  qolsa material zavod qoldig'idan o'tmagan holda tsexda paydo
+  //  bo'lardi va «ombordan nima chiqdi» degan savol javobsiz qolardi.
+  //  Tekshiruv SERVERDA: ochilmani qisqartirish himoya emas.
+  const tsexga = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: tsexWh,
+    items: [{ material_id: m.id, qty: 10, price: 20 }] });
+  assert.equal(tsexga.status, 400, tsexga.text);
+  assert.match(tsexga.body.error, /tsex ombori/);
 
   //  ── Hujjat yoziladi: 100 list × 250 000 so'm, kurs 12 500 = 2 000 $
   const k = await xom('POST', '/api/materials/receipts', {
@@ -6361,7 +6375,7 @@ test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
   assert.equal((await stul('POST', '/api/materials/receipts', {
     supplier_id: tam, warehouse_id: wh,
     items: [{ material_id: m.id, qty: 5, price: 20 }] })).status, 400,
-    'korpus omboriga stul doirasidagi xodim yoza olmaydi');
+    'doirasi bor xodimga zavod ombori ko\'rinmaydi');
 
   //  Tsex boshlig'ida `materials.manage` yo'q: u sarfni yozadi, mol
   //  qabul qilishni emas.

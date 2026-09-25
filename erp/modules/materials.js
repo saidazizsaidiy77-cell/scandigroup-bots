@@ -643,15 +643,26 @@ router.post('/receipts', need(...MANAGE), wrap(async (req, res) => {
       [req.body.supplier_id])).rows[0];
     if (!sup) throw new Error("Ta'minotchi tanlanmagan");
 
-    //  Ombor doirasi CHEGARA, ro'yxatni chetlab id yuborilsa ham
-    //  qabul qilinmaydi: tugmani yashirish himoya emas.
+    //  ★ KIRIM FAQAT ZAVOD OMBORIGA (zavod qarori, 2026-09): Xom
+    //  ashyo, MDF va Furnitura — ular `shop_id` siz turadi. Mol
+    //  ta'minotchidan zavodga keladi; TSEX omboriga esa u boshqa
+    //  yo'ldan boradi — zavod omboridan TALABNOMA bilan. Ikkala yo'l
+    //  ochiq qolsa bitta material ikki marta kirim bo'lib, zavod
+    //  qoldig'idan o'tmagan holda tsexda paydo bo'lardi va
+    //  «ombordan nima chiqdi» degan savol javobsiz qolardi.
+    //
+    //  Tekshiruv SERVERDA: ro'yxatni chetlab id yuborilsa ham qabul
+    //  qilinmaydi — ochilmani qisqartirish himoya emas.
     const wh = (await client.query(
-      `SELECT w.id, w.name FROM warehouses w
+      `SELECT w.id, w.name, w.shop_id FROM warehouses w
         WHERE w.id = $1 AND w.kind = 'material' AND w.is_active
           AND ($2::int[] IS NULL
                OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))`,
       [req.body.warehouse_id, whDoira(req)])).rows[0];
     if (!wh) throw new Error('Ombor tanlanmagan');
+    if (wh.shop_id) throw new Error(
+      `«${wh.name}» — tsex ombori. Kirim zavod omboriga yoziladi, `
+      + 'tsexga esa undan talabnoma bilan beriladi');
 
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('mat_receipt_no'))`);
     const doc_no = await nextReceiptNo(client);

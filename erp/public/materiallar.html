@@ -173,7 +173,15 @@ async function boot() {
   $('kSup').innerHTML = "<option value=''>Barcha ta'minotchi</option>"
     + (ref.suppliers || []).map((x) =>
         `<option value="${x.id}">${esc(x.name)}</option>`).join('');
-  $('kWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar();
+  //  ★ KIRIM FAQAT ZAVOD OMBORIGA (zavod qarori, 2026-09): Xom ashyo,
+  //  MDF va Furnitura — ular tsexga biriktirilmagan. Mol
+  //  ta'minotchidan zavodga keladi, tsexga esa undan TALABNOMA bilan
+  //  beriladi. Shuning uchun ro'yxatda ham, yozish oynasida ham
+  //  o'n to'rtta ombor emas, uchtasi turadi — qolgan o'ntasi
+  //  javobi bo'lmagan savol bo'lardi.
+  //
+  //  Bu QULAYLIK, himoya emas: tekshiruv serverda (`modules/materials.js`).
+  $('kWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar(zavodniki);
   $('kirimTools').innerHTML = boshqara()
     ? '<button class="primary" onclick="kirimOch()">+ Kirim</button>' : '';
 
@@ -202,9 +210,16 @@ const joyi = (w) => {
     ? w.section : null;
   return [b, tsexi(w)].filter(Boolean).join(' · ');
 };
-const omborlar = () => ref.warehouses.map((w) =>
-  `<option value="${w.id}">${esc(w.name)}${
+const omborlar = (filtr) => ref.warehouses.filter(filtr || (() => true))
+  .map((w) => `<option value="${w.id}">${esc(w.name)}${
     joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('');
+
+//  Zavod ombori — tsexga biriktirilmagani (`shop_id` bo'sh): Xom ashyo,
+//  MDF, Furnitura. Ombor kartochkalari guruhlanishi bilan AYNAN bir
+//  xil shart (izoh: modules/warehouse.js) — ikki joyda boshqacha
+//  yozilsa bitta ombor bir ekranda zavodniki, boshqasida tsexniki
+//  bo'lib turardi.
+const zavodniki = (w) => !w.shop_id;
 
 async function load() {
   const q = new URLSearchParams();
@@ -487,9 +502,7 @@ function kirimOch() {
             </select></div>
           <div style="flex:1;min-width:200px"><label>Ombor</label>
             <select id="nWh"><option value="">— tanlang —</option>
-              ${ref.warehouses.map((w) =>
-                `<option value="${w.id}">${esc(w.name)}${
-                  joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}
+              ${omborlar(zavodniki)}
             </select></div>
         </div>
         <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
