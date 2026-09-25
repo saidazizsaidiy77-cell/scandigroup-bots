@@ -248,6 +248,29 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_by   INT REFERENCES workers
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_at   TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_note TEXT;
 
+--  ★ KUNLIK JO'NATMA REJASI (zavod qarori, 2026-09).
+--
+--  Savdo buyurtmani omborga yuboradi va u mudirning ro'yxatida turadi —
+--  lekin ro'yxat KUN emas: unda o'ttizta buyurtma bo'lishi mumkin,
+--  mashinaga esa oltitasi sig'adi. «Bugun nechtasi chiqdi, nechtasi
+--  chiqmadi» degan savolga javob beradigan joy yo'q edi: direktor uni
+--  mudirdan telefon qilib so'rardi.
+--
+--  Endi mudir ertalab ro'yxatdan bugun ketadiganini O'ZI oladi
+--  (`plan_on` — qaysi kunga olingani). Sana bilan avtomat qilinmadi:
+--  mashinaga nima sig'ishini, haydovchi qayerga borishini va nima
+--  ortilganini faqat u biladi — `due_on` buni aytmaydi, u mijozga
+--  aytilgan va'da.
+--
+--  Kim olgani ham yoziladi: bir tsexda ikki mudir bo'lsa «buni kim
+--  rejaga qo'ydi» degan savol paydo bo'ladi (4-qoida: kodga ism
+--  yozilmaydi).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS plan_on DATE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS plan_by INT REFERENCES workers(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS plan_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS orders_plan_on_idx ON orders(plan_on)
+  WHERE plan_on IS NOT NULL;
+
 CREATE OR REPLACE VIEW v_sales_orders AS
 SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        o.customer_id, c.name AS customer_name, c.region, c.phone,
@@ -302,7 +325,11 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        --  o'tmaydi. Ustun OXIRIDA — CREATE OR REPLACE VIEW faqat
        --  oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
        o.discount_status, o.discount_note,
-       dw.name AS discount_by_name, o.discount_at
+       dw.name AS discount_by_name, o.discount_at,
+       --  ★ KUNLIK JO'NATMA REJASI: mudir buyurtmani qaysi kunga
+       --  olgani va kim olgani. Ustun OXIRIDA — CREATE OR REPLACE VIEW
+       --  faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
+       o.plan_on, pw.name AS plan_by_name
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id
@@ -310,6 +337,7 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
   LEFT JOIN workers sw  ON sw.id = o.sent_by
   LEFT JOIN workers shw ON shw.id = o.shipped_by
   LEFT JOIN workers dw  ON dw.id  = o.discount_by
+  LEFT JOIN workers pw  ON pw.id  = o.plan_by
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::int AS lines,
            COALESCE(SUM(oi.qty), 0)::int AS qty,

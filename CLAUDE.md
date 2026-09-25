@@ -1146,6 +1146,47 @@ Bu OGOHLANTIRISH, to'siq emas: tugma ishlayveradi. Bloklash yo'l emas
 edi — mijoz erta kelib qolsa yoki mashina bir kun kechiksa mudirning
 ishi butunlay to'xtardi.
 
+**★ KUNLIK JO'NATMA REJASI — MUDIR O'ZI OLADI** (`orders.plan_on`,
+`POST /api/sales/orders/:id/plan-day`, zavod qarori 2026-09).
+
+Mudirning ro'yxatida o'ttizta buyurtma turadi, mashinaga esa oltitasi
+sig'adi — ya'ni ro'yxat KUN emas. «Bugun nechtasi chiqdi, nechtasi
+chiqmadi» degan savolga javob beradigan joy yo'q edi: direktor uni
+mudirga telefon qilib so'rardi.
+
+Endi mudir ertalab ro'yxatdan bugun ketadiganini O'ZI oladi
+(«Bugunga olish»), yuk xatlarini chiqaradi — va kun shundan quriladi.
+**Sana bilan avtomat qilinmadi**: `due_on` mijozga aytilgan VA'DA,
+mashinaga nima sig'ishini va haydovchi qayerga borishini esa faqat
+mudir biladi. Ikkinchi bosish rejadan chiqaradi; kim olgani ham
+yoziladi (`plan_by`) — ikki mudir bo'lsa «buni kim qo'ydi» degan savol
+paydo bo'ladi.
+
+**Chiqmay qolgani ro'yxatdan TUSHMAYDI**: ertangi kunda ham turadi va
+yonida qaysi kundan qolgani yoziladi. Tushib qolsa u unutilardi —
+mahsulot baribir ketishi kerak.
+
+**Savdo qaytarib olsa (`/unsend`) rejadan ham chiqadi**: buyurtma endi
+chiqarilmaydi, ya'ni mudirning bugungi hisobida turishi yolg'on
+bo'lardi. Rejaga faqat `to_ship` buyurtma olinadi — chiqib ketganini
+«bugun ketadi» deb belgilash kunning hisobini buzardi.
+
+**★ KUNNING HISOBI BITTA JOYDA** (`GET /api/sales/day`): **olindi ·
+chiqdi · qoldi**. Uni ombor sahifasi ham, BOSH SAHIFA ham shundan
+oladi — direktor, savdo va mudir bir xil raqamni ko'radi. Shart ikki
+joyda yozilsa bir kun bir-biridan ajralib ketardi (menyudagi navbat
+belgisi bilan bir xil qoida), shuning uchun test raqamni RO'YXATNING
+uzunligi bilan solishtiradi.
+
+Kunga tushadigani: o'sha kunga YOKI UNDAN OLDINGA olingan va hali
+chiqmagani, ustiga o'sha kuni chiqib ketgani. Shu sababdan
+`olindi = chiqdi + qoldi` har doim to'g'ri qoladi, kechikkani esa
+yo'qolib ketmaydi. Kechikkanini SQL sanaydi, sahifa emas: sanani matn
+qilib kesish soat mintaqasi bilan bir kun surilib ketardi.
+
+Huquqi: olish — `SHIP` (ombor mudiri), hisobni ko'rish — savdo va
+ombor huquqlari (`KUN`), ya'ni direktorga ham ochiq (`%.view`).
+
 **★ CHEGARA CHIQARISHDA, YUBORISHDA EMAS.** To'liq bo'lmagan buyurtma
 ham omborga YUBORILADI va bu ataylab: savdo mudirga OLDINDAN aytadi —
 «bu ketadi, qolganini kutyapmiz» — mudir esa kunini shunga qarab

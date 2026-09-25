@@ -2862,6 +2862,84 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await savdo('GET', '/api/sales/shipping')).status, 403);
 });
 
+//  ── KUNLIK JO'NATMA REJASI ────────────────────────────────
+//
+//  Mudir ertalab ro'yxatdan bugun ketadiganini O'ZI oladi, kun davomida
+//  esa «nechtasi chiqdi, nechtasi qoldi» ko'rinib turadi. Hisob BITTA
+//  joyda (`GET /api/sales/day`) — ombor sahifasi ham, bosh sahifa ham
+//  shundan oladi, ya'ni test raqamni RO'YXATNING uzunligi bilan
+//  solishtiradi (menyudagi navbat belgisi bilan bir xil qoida).
+test('mudir buyurtmani bugunga oladi va kun hisobi ro\'yxat bilan bir xil', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const bugun = new Date().toISOString().slice(0, 10);
+
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 3, color: 'Sut', unit_price: 100,
+      is_opening: true, fg_on: '2026-09-02' },
+  ] })).body.created[0];
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 3, color: 'Sut', unit_price: 100 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 3 });
+
+  //  Omborga yuborilmagan buyurtma rejaga OLINMAYDI: chiqarilmaydigan
+  //  narsani «bugun ketadi» deb belgilash kunning hisobini yolg'on
+  //  qilardi.
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/plan-day`,
+    { on: bugun })).status, 400);
+
+  await admin('POST', `/api/sales/orders/${z.id}/send`, {});
+  const oldin = (await mudir('GET', '/api/sales/day')).body;
+
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/plan-day`,
+    { on: bugun })).status, 200);
+  const k = (await mudir('GET', '/api/sales/day')).body;
+  assert.equal(k.olindi, oldin.olindi + 1);
+  assert.equal(k.olindi, k.rows.length, 'raqam ro\'yxat bilan bir xil');
+  assert.equal(k.chiqdi + k.qoldi, k.olindi, 'olindi = chiqdi + qoldi');
+  assert.ok(k.rows.some((r) => r.order_no === z.order_no && r.status === 'to_ship'));
+
+  //  Mudirning ro'yxatida bugunga olingani TEPADA turadi va kim
+  //  olgani yoziladi.
+  const ro = (await mudir('GET', '/api/sales/shipping')).body.rows;
+  assert.equal(ro[0].order_no, z.order_no, 'olingani tepada');
+  assert.equal(String(ro[0].plan_on).slice(0, 10), bugun);
+  assert.ok(ro[0].plan_by_name, 'kim olgani yoziladi');
+
+  //  Chiqarib yuborilgach o'sha kunning «chiqdi» siga o'tadi — olingan
+  //  soni esa o'zgarmaydi: kun shuncha reja bilan boshlangan.
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: bugun })).status, 200);
+  const k2 = (await mudir('GET', '/api/sales/day')).body;
+  assert.equal(k2.olindi, k.olindi);
+  assert.equal(k2.chiqdi, k.chiqdi + 1);
+  assert.equal(k2.qoldi, k.qoldi - 1);
+  assert.equal(k2.olindi, k2.rows.length);
+
+  //  Savdo qaytarib olsa rejadan ham chiqadi: chiqarilmaydigan buyurtma
+  //  mudirning bugungi hisobida turishi yolg'on bo'lardi.
+  const u2 = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: 'Sut', unit_price: 100,
+      is_opening: true, fg_on: '2026-09-02' },
+  ] })).body.created[0];
+  const z2 = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 1, color: 'Sut', unit_price: 100 }] })).body;
+  const qator2 = (await admin('GET', '/api/sales/orders/' + z2.id)).body.items[0];
+  await admin('POST', `/api/sales/orders/${z2.id}/assign`,
+    { item_id: qator2.id, unit_id: u2.id, qty: 1 });
+  assert.equal((await admin('POST', `/api/sales/orders/${z2.id}/send`, {})).status, 200);
+  await mudir('POST', `/api/sales/orders/${z2.id}/plan-day`, { on: bugun });
+  assert.equal((await mudir('GET', '/api/sales/day')).body.olindi, k2.olindi + 1);
+  assert.equal((await admin('POST', `/api/sales/orders/${z2.id}/unsend`, {})).status, 200);
+  assert.equal((await mudir('GET', '/api/sales/day')).body.olindi, k2.olindi);
+  assert.equal((await H.id(
+    `SELECT plan_on FROM orders WHERE id = $1`, [z2.id])).plan_on, null);
+});
+
 //  ── QARZDORLIK: oraliq hisoboti ────────────────────────────────────────
 //  Yuqoridagi test mahsulotni 2026-10-04 da chiqarib yubordi, mijozning
 //  boshlang'ich qarzi esa o'z sanasi bilan turadi. Hisobot shu ikkisini

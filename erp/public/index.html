@@ -24,6 +24,8 @@
   <div class="row" id="erpUser"></div>
 </div>
 
+<div id="kun"></div>
+
 <div id="pages"></div>
 
 <div class="card" style="margin-top:16px">
@@ -35,7 +37,37 @@
 const $ = id => document.getElementById(id);
 
 
+//  ★ KUNNING JO'NATMASI BOSH SAHIFADA (zavod qarori, 2026-09).
+//  «Bugun nechtasi chiqdi» degan savolni direktor mudirga telefon qilib
+//  so'rardi. Raqam SERVERDAN keladi va ombor sahifasidagi bilan AYNAN
+//  bir xil: shart ikki joyda yozilsa bir kun bir-biridan ajralib
+//  ketardi. Huquqi yo'q xodimda kartochka umuman chizilmaydi — xato
+//  yozuvi ham chiqmaydi, u bosh sahifada ortiqcha bo'lardi.
+async function kunHisobi() {
+  let k;
+  try { k = await App.api('/api/sales/day'); } catch (e) { return; }
+  if (!k || !k.olindi) return;
+  document.getElementById('kun').innerHTML = `
+    <div class="card" style="margin-bottom:22px">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:16px">
+        <div><h2 style="margin:0">Bugun chiqadi</h2>
+          <div class="muted" style="font-size:13px;margin-top:4px">${
+            k.qoldi ? `${k.qoldi} ta buyurtma hali chiqmadi` : 'hammasi chiqib ketdi'}${
+            k.kech ? ` · ${k.kech} tasi oldingi kundan qolgan` : ''}</div></div>
+        <div class="row" style="gap:28px">
+          <div><div class="kpi">${k.olindi}</div>
+            <div class="muted" style="font-size:12px">olindi</div></div>
+          <div><div class="kpi mny-in">${k.chiqdi}</div>
+            <div class="muted" style="font-size:12px">chiqdi</div></div>
+          <div><div class="kpi${k.qoldi ? ' mny-out' : ''}">${k.qoldi}</div>
+            <div class="muted" style="font-size:12px">qoldi</div></div>
+        </div>
+      </div>
+    </div>`;
+}
+
 App.start(async () => {
+  kunHisobi();
   // Bosh sahifa bo'limlar bo'yicha guruhlanadi — yuqoridagi qator bilan
   // bir xil tartibda, shunda xodim qayerda nima turishini bir marta eslab
   // qoladi. Faqat o'ziga ochiq bo'lim va sahifalar chiqadi.

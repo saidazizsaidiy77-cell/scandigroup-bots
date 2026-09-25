@@ -92,7 +92,7 @@ const faqatQoldiq = () => savdoKoz && isTM();
 let rows = [], tab = 'stock', canAccept = false, canLedger = false;
 //  Chiqariladigan buyurtmalar: savdo omborga yuborganlari. Mudir
 //  mashinaga ortilganini ko'zi bilan ko'rib tasdiqlaydi.
-let ship = [], canShip = false;
+let ship = [], canShip = false, kun = null;
 //  Jo'natish ro'yxatining filtri. Mudirda ertalab o'nlab buyurtma
 //  turadi va savoli aniq: «bugun nima chiqadi», «falonchining zakazi
 //  qaysi», «Z-638 qayerda». Ro'yxat kichik — filtr KLIENTDA ishlaydi,
@@ -724,8 +724,23 @@ async function loadStock() {
 //  qarzini ham noto'g'ri oshirardi.
 async function loadShip() {
   ship = (await App.api('/api/sales/shipping')).rows;
+  //  Kunning hisobi SERVERDAN keladi, shu yerda qayta sanalmaydi:
+  //  bosh sahifa ham shu raqamni ko'rsatadi va ikki joyda yozilgan
+  //  shart bir kun bir-biridan ajralib ketardi.
+  kun = await App.api('/api/sales/day');
   drawTabs();
   drawShip();
+}
+
+//  ★ BUGUNGA OLISH. Mudir ertalab mashinaga sig'adiganini tanlaydi —
+//  sana bilan avtomat emas: `due_on` mijozga aytilgan va'da, mashinaga
+//  nima sig'ishini esa faqat u biladi. Ikkinchi bosish rejadan chiqaradi.
+async function planDay(id, olingan) {
+  try {
+    await App.api(`/api/sales/orders/${id}/plan-day`, {
+      method: 'POST', body: { on: olingan ? null : isoDay(new Date()) } });
+    await loadShip();
+  } catch (e) { toast(e.message, true); }
 }
 
 //  Sana — CHIQIB KETISH sanasi bo'yicha: mudir kunini shunga qarab
@@ -774,6 +789,29 @@ function shipFilter() {
   </div>`;
 }
 
+//  Kunning hisobi: bugunga nechtasi olingan, nechtasi chiqib ketdi va
+//  nechtasi qoldi. Mudir kun bo'yi shu uchta raqamga qaraydi, direktor
+//  esa aynan shu raqamni bosh sahifada ko'radi.
+function kunCard() {
+  if (!kun || !kun.olindi) return '';
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:16px">
+      <div><h2 style="margin:0">Bugun chiqadi</h2>
+        <div class="muted" style="font-size:13px;margin-top:4px">
+          ${kun.kech ? `${kun.kech} tasi oldingi kundan qolgan` :
+            'hammasi bugunga olingan'}</div></div>
+      <div class="row" style="gap:28px">
+        <div><div class="kpi">${kun.olindi}</div>
+          <div class="muted" style="font-size:12px">olindi</div></div>
+        <div><div class="kpi mny-in">${kun.chiqdi}</div>
+          <div class="muted" style="font-size:12px">chiqdi</div></div>
+        <div><div class="kpi${kun.qoldi ? ' mny-out' : ''}">${kun.qoldi}</div>
+          <div class="muted" style="font-size:12px">qoldi</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function drawShip() {
   if (!ship.length) {
     $('body').innerHTML = `<div class="card"><h2>Chiqariladigan buyurtma yo'q</h2>
@@ -790,7 +828,7 @@ function drawShip() {
       chiqishni kutmoqda \u2014 filtrni kengaytiring.</p></div>`;
     return;
   }
-  $('body').innerHTML = shipFilter() + (list.length < ship.length
+  $('body').innerHTML = kunCard() + shipFilter() + (list.length < ship.length
     ? `<p class="muted" style="font-size:13px;margin-bottom:12px">${
         list.length} ta \u00b7 jami ${ship.length} tadan</p>` : '')
     + list.map(o => {
@@ -802,6 +840,10 @@ function drawShip() {
     //  sababini aytmasa mudir uni oddiy qator deb o'qirdi.
     const due = (o.due_on || '').slice(0, 10);
     const kech = due && due < bugun;
+    //  Kunlik rejaga olinganmi va qaysi kunga: bugungisi yashil, oldingi
+    //  kundan qolgani sariq — ikkinchisi «bu hali chiqmagan» degani.
+    const olingan = !!o.plan_on;
+    const olinganBugun = olingan && String(o.plan_on).slice(0, 10) === bugun;
     return `<div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div>
@@ -822,6 +864,9 @@ function drawShip() {
           ${kech ? `<span class="tag bad">${
             Math.round((Date.parse(bugun) - Date.parse(due)) / 864e5)
             } kun kechikdi</span>` : ''}
+          ${olingan ? `<span class="tag ${olinganBugun ? 'ok' : 'warn'}">${
+            olinganBugun ? 'bugunga olingan'
+              : `${d8(o.plan_on)} dan qolgan`}</span>` : ''}
           ${tayyor ? `<span class="tag ok">hammasi omborda</span>`
                    : `<span class="tag warn">${o.in_warehouse_qty} / ${
                         o.assigned_qty} omborda</span>`}
@@ -830,6 +875,8 @@ function drawShip() {
                 va shundan keyin «Chiqarib yubordim» bosiladi. Tasdiqdan
                 keyin chop etish kech bo'lardi — qog'oz allaqachon yo'lda.
                 Alohida oynada ochiladi: ro'yxat joyida qolsin. -->
+          ${canShip ? `<button onclick="planDay(${o.id}, ${olingan})">${
+            olingan ? 'Rejadan chiqarish' : 'Bugunga olish'}</button>` : ''}
           <button onclick="window.open('/yukxati.html?id=${o.id}',
             'yukxati' + ${o.id})">Yuk xati</button>
           <button class="primary" ${tayyor ? '' : 'disabled'}

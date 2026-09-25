@@ -1233,7 +1233,11 @@ router.patch('/orders/:id/payment', need(...WRITE), wrap(async (req, res) => {
 //  Qaytarib olish: ombor hali chiqarmagan bo'lsa savdo o'zgartira oladi.
 router.post('/orders/:id/unsend', need(...WRITE), wrap(async (req, res) => {
   const { rows } = await db.query(
-    `UPDATE orders o SET status = 'reserved', sent_to_wh_on = NULL, sent_by = NULL
+    //  Kunlik rejadan ham chiqadi: buyurtma endi chiqarilmaydi, ya'ni
+    //  mudirning bugungi ro'yxatida turishi ham, hisobida sanalishi ham
+    //  yolg'on bo'lardi.
+    `UPDATE orders o SET status = 'reserved', sent_to_wh_on = NULL, sent_by = NULL,
+            plan_on = NULL, plan_by = NULL, plan_at = NULL
        FROM customers c
       WHERE o.id = $1 AND c.id = o.customer_id AND o.status = 'to_ship'
         AND ($2::text[] IS NULL OR c.channel = ANY($2))
@@ -1256,7 +1260,10 @@ router.get('/shipping', need(...SHIP), wrap(async (req, res) => {
        FROM v_sales_orders o
        JOIN customers c ON c.id = o.customer_id
       WHERE o.status = 'to_ship'
-      ORDER BY o.due_on NULLS LAST, o.sent_to_wh_on, o.id`);
+      --  Bugunga OLINGANI tepada va eng eskisidan boshlab: mudir kunni
+      --  o'shalardan tuzadi, qolgani esa navbat bo'lib pastda turadi.
+      ORDER BY (o.plan_on IS NULL), o.plan_on,
+               o.due_on NULLS LAST, o.sent_to_wh_on, o.id`);
   if (!rows.length) return res.json({ rows: [] });
 
   //  Har buyurtmaning konverlari: qaysi omborda turibdi, tayyormi.
@@ -1278,6 +1285,70 @@ router.get('/shipping', need(...SHIP), wrap(async (req, res) => {
 
   res.json({ rows: rows.map((o) => ({
     ...o, units: units.filter((u) => u.order_id === o.id) })) });
+}));
+
+//  ★ KUNLIK JO'NATMA REJASI — MUDIR O'ZI OLADI (zavod qarori, 2026-09).
+//
+//  Sana bilan avtomat qilinmadi: `due_on` mijozga aytilgan va'da,
+//  mashinaga nima sig'ishini esa faqat mudir biladi. Ertalab ro'yxatdan
+//  bugun ketadiganini oladi, yuk xatlarini chiqaradi — va kun davomida
+//  «nechtasi chiqdi» degan savolning javobi o'sha ro'yxatdan chiqadi.
+//
+//  Bo'sh sana yuborilgani «tegma» emas, «rejadan chiqar» degani —
+//  boshqa joylardagi sana maydonlari bilan bir xil idiom.
+router.post('/orders/:id/plan-day', need(...SHIP), wrap(async (req, res) => {
+  const on = req.body.on || null;
+  const { rows } = await db.query(
+    `UPDATE orders
+        SET plan_on = $2::date,
+            plan_by = CASE WHEN $2::date IS NULL THEN NULL ELSE $3::int END,
+            plan_at = CASE WHEN $2::date IS NULL THEN NULL ELSE now() END
+      WHERE id = $1 AND status = 'to_ship'
+      RETURNING order_no, plan_on`, [req.params.id, on, req.user.id]);
+  //  Faqat CHIQARILMAGAN buyurtma rejaga olinadi: chiqib ketganini
+  //  «bugun ketadi» deb belgilash kunning hisobini yolg'on qilardi.
+  if (!rows[0]) return res.status(400).json({ error: 'Buyurtma omborda emas' });
+  await audit(req, { module: 'sales', action: on ? 'plan-day' : 'plan-day-undo',
+                     entity: 'order', entity_id: Number(req.params.id),
+                     payload: { order_no: rows[0].order_no, plan_on: rows[0].plan_on } });
+  res.json({ ok: true, plan_on: rows[0].plan_on });
+}));
+
+//  ★ KUNNING HISOBI BITTA JOYDA. Uni ombor sahifasi ham, bosh sahifa
+//  ham shundan oladi: shart ikki joyda yozilsa bir kun bir-biridan
+//  ajralib ketardi va direktor mudirnikidan boshqa raqam ko'rardi
+//  (menyudagi navbat belgisi bilan bir xil qoida).
+//
+//  Kunga TUSHADIGANI: o'sha kunga yoki undan OLDINGA olingan va hali
+//  chiqmagan buyurtma — kechikkani ro'yxatdan tushib qolsa u
+//  unutilardi — ustiga o'sha kuni chiqib ketgani.
+const KUN = [...READ, ...SHIP];
+router.get('/day', need(...KUN), wrap(async (req, res) => {
+  const on = req.query.on || null;
+  const { rows } = await db.query(
+    `SELECT o.id, o.order_no, o.customer_name, o.region, o.qty, o.lines,
+            o.due_on, o.plan_on, o.plan_by_name, o.status, o.shipped_on,
+            o.shipped_by_name, o.ship_to_name, o.address,
+            o.in_warehouse_qty, o.assigned_qty,
+            --  Kechikkani — OLDINGI kunga olingan, lekin hali chiqmagani.
+            --  Solishtirish SQL da: sanani matn qilib kesish soat
+            --  mintaqasi bilan bir kun surilib ketardi.
+            (o.plan_on < COALESCE($1::date, CURRENT_DATE)) AS kech
+       FROM v_sales_orders o
+      WHERE o.plan_on IS NOT NULL
+        AND o.plan_on <= COALESCE($1::date, CURRENT_DATE)
+        AND (o.status = 'to_ship'
+             OR (o.status = 'shipped'
+                 AND o.shipped_on = COALESCE($1::date, CURRENT_DATE)))
+      ORDER BY (o.status = 'shipped'), o.plan_on, o.order_no`, [on]);
+  res.json({
+    on,
+    rows,
+    olindi: rows.length,
+    chiqdi: rows.filter((r) => r.status === 'shipped').length,
+    qoldi:  rows.filter((r) => r.status === 'to_ship').length,
+    kech:   rows.filter((r) => r.status === 'to_ship' && r.kech).length,
+  });
 }));
 
 //  Chiqarib yuborish. Bronlarning HAMMASI omborda turgan bo'lishi kerak:
