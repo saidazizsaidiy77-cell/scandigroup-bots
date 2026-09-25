@@ -104,7 +104,9 @@ const jamiUstun = () => isTM() && !faqatQoldiq();
 //  uchun. Savdoga qoldiq yetarli: unga nima sotishga tayyor turgani
 //  kerak, o'sha mahsulot omborga qachon kirgani emas.
 let rows = [], tab = 'stock', canAccept = false, canLedger = false;
-//  Chiqariladigan buyurtmalar: savdo omborga yuborganlari. Mudir
+//  Chiqariladigan buyurtmalar: savdo «mijozga chiqarilsin» deganlari.
+//  Boshqa buyurtmalar bu yerda UMUMAN ko'rinmaydi — ular hali
+//  savdoning qo'lida va mudirning ishi emas. Mudir
 //  mashinaga ortilganini ko'zi bilan ko'rib tasdiqlaydi.
 let ship = [], canShip = false, kun = null;
 //  Jo'natish ro'yxatining filtri. Mudirda ertalab o'nlab buyurtma
@@ -836,7 +838,7 @@ async function loadStock() {
 // ═══════════════════════════════════════════════════════ JO'NATISH
 //
 //  Savdo buyurtmani yozadi va bron qo'yadi, lekin mahsulotni zavoddan
-//  chiqarmaydi: tayyor bo'lgach omborga yuboradi. Mudir bu yerda
+//  chiqarmaydi: mijoz bilan kunini kelishgach chiqarishga beradi. Mudir bu yerda
 //  ko'radi — nima, qancha, qayerga va kim kutib oladi — va mashinaga
 //  ortilganini tasdiqlaydi.
 //
@@ -940,7 +942,7 @@ function drawShip() {
   if (!ship.length) {
     $('body').innerHTML = `<div class="card"><h2>Chiqariladigan buyurtma yo'q</h2>
       <p class="muted" style="margin-top:8px">Savdo buyurtmani tayyorlab
-      «Omborga yuborish» deganda u shu yerda paydo bo'ladi.</p></div>`;
+      «Mijozga chiqarish» deganda u shu yerda paydo bo'ladi.</p></div>`;
     return;
   }
   const list = shipRows();
@@ -982,7 +984,7 @@ function drawShip() {
             Chiqib ketish: ${o.due_on
               ? `<b class="${kech ? 'late' : ''}">${d8(o.due_on)}</b>${
                   due === bugun ? ' · bugun' : ''}` : '—'} ·
-            ${esc(o.manager_name || '')} yubordi ${d8(o.sent_to_wh_on)}</div>
+            ${esc(o.manager_name || '')} chiqarishga berdi ${d8(o.sent_to_wh_on)}</div>
         </div>
         <div class="row" style="gap:8px;align-items:center">
           ${kech ? `<span class="tag bad">${

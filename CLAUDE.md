@@ -964,10 +964,39 @@ biriktirish); menejer esa buyurtma qay ahvolda ekanini o'qiydi:
     yo'lga chiqarmagan;
   · **Ishlab chiqarilmoqda** — bir qismi hali omborga kelmagan;
   · **Tayyor** — hammasi T/M omborda, chiqarishga tayyor;
-  · **Omborga yuborildi** — savdo mudirga yubordi, u chiqarishni kutmoqda;
+  · **Mijozga chiqarilsin** — savdo mijoz bilan kunini kelishdi va
+    chiqarishga ruxsat berdi; mudir chiqarishni kutmoqda;
   · **Chiqib ketdi** — mudir tasdiqladi, mahsulot zavoddan chiqdi va
     mijoz balansiga qo'shildi;
   · **Bekor qilingan**.
+
+**★ «OMBORGA YUBORILDI» EMAS, «MIJOZGA CHIQARILSIN»** (zavod qarori,
+2026-09). Nom OMBORNI emas, MIJOZNI ko'rsatishi kerak: mahsulot tayyor
+bo'lgach savdo mijoz bilan gaplashadi, chiqish kunini kelishadi va
+SHUNDAN KEYIN chiqarishga ruxsat beradi. «Omborga yuborildi» esa ichki
+ko'chirishdek o'qilardi — go'yo mahsulot boshqa javonga o'tgandek,
+holbuki bu MIJOZGA berilishi haqidagi qaror. Tugma ham shunday:
+«Omborga yuborish» → **«Mijozga chiqarish»**.
+
+Holat va mexanizm O'ZGARMADI (`orders.status = 'to_ship'`), faqat
+ekrandagi nomi: baza ustuni, `/send`, `/unsend` va mudirning ro'yxati
+o'sha holda qoladi.
+
+**T/M ombor mudiri FAQAT shu holatdagi buyurtmani ko'radi**
+(`GET /api/sales/shipping`, `WHERE o.status = 'to_ship'`) — «Tayyor»
+buyurtma unga UMUMAN chiqmaydi: u hali savdoning qo'lida va mijoz bilan
+kun kelishilmagan. Mudir uni chiqarib yuborsa mijozga aytilmagan kunda
+mashina ketardi.
+
+**Tab tartibi ham o'zgardi** — endi ISHNING ketma-ketligi bo'yicha:
+«Tayyor» menejerning qo'lida turgani, «Mijozga chiqarilsin» esa undan
+KEYIN keladi va mudirning ishi bo'lib qoladi. Ilgari teskari edi
+(«Omborga yuborildi» oldinda), chunki u ombor kunini tuzadigan ro'yxat
+edi.
+
+**Ruxsatni KIM berishi kodga yozilmaydi** (4-qoida): huquqi
+`sales.manage` — zavod uni kimga bersa, o'sha beradi. «Qaytarib olish»
+ham o'sha huquqda va mudir chiqarmaguncha ochiq qolaveradi.
 
 **★ HOLAT BITTA JOYDA HISOBLANADI** (`HOLAT`, `modules/sales.js`;
 zavod qarori 2026-09). Ilgari u IKKI joyda edi: sahifa qatordagi
@@ -981,12 +1010,11 @@ quriladi.
 
 Tartib yuqoridan pastga o'qiladi, birinchi to'g'ri kelgani javob:
 tugagan buyurtma (bekor, chiqib ketdi) → boshlanmagan → ishlab
-chiqarilmoqda → omborga yuborildi → tayyor.
+chiqarilmoqda → mijozga chiqarilsin → tayyor.
 
-**Ekrandagi tab tartibi esa boshqa** va u ISHNING joyi bo'yicha:
-«Omborga yuborildi» «Tayyor» dan OLDIN turadi — birinchisi chiqishi
-aniq bo'lganlar va mudir kunini o'shandan tuzadi, ikkinchisi esa hali
-menejerning qo'lida.
+**Ekrandagi tab tartibi ISHNING ketma-ketligi bo'yicha**: «Tayyor»
+oldinda — u hali menejerning qo'lida, mijoz bilan kun kelishilmoqda;
+«Mijozga chiqarilsin» undan keyin va u mudirning ishi.
 
 **★ «BOSHLANMAGAN» — IKKI HOL, BITTA JAVOB** (zavod qarori, 2026-09):
 konver umuman biriktirilmagan YOKI biriktirilgan-u tsex uni yo'lga
@@ -997,12 +1025,12 @@ olib tashlandi.
 
 **★ YUBORILGAN, LEKIN HALI TAYYOR EMAS — belgisi bilan.** Bunday
 buyurtma o'z joyida («Boshlanmagan» yoki «Ishlab chiqarilmoqda»)
-turadi, yonida esa **«Omborga yuborilgan»** yozuvi. Belgisiz qolsa
+turadi, yonida esa **«Mijozga chiqarilsin»** yozuvi. Belgisiz qolsa
 menejer uni yubormaganman deb o'ylardi va ikkinchi marta yuborishga
 urinardi. Bu OGOHLANTIRISH emas, oddiy yozuv: yuborish to'liq
 bo'lmaganda ham mumkin (yuqorida).
 
-**★ MAHSULOT QAYERDA TURGANI «OMBORGA YUBORILDI» DAN USTUN**, va bu
+**★ MAHSULOT QAYERDA TURGANI «MIJOZGA CHIQARILSIN» DAN USTUN**, va bu
 ataylab: o'sha tabda hali tsexda yurgan, hatto BOSHLANMAGAN buyurtmalar
 ham turardi va tab «bu yerdagilarni mudir chiqaradi» degan yolg'on
 va'dani berardi. Yuborilgani ODAMNING bosgan tugmasi, javonda turgani
@@ -1029,7 +1057,7 @@ qaytarish ham bitta oynadan** — qatordagi «Konver» tugmasi. Nomzodlar
 ro'yxatida shu qatorga allaqachon olingan konverlar eng tepada turadi va
 yonida «Qaytarish» tugmasi bo'ladi (`CANDIDATE_WHERE` da `mine`).
 
-**Yopilgan buyurtma YUK XATI bo'lib o'qiladi** (omborga yuborilgan,
+**Yopilgan buyurtma YUK XATI bo'lib o'qiladi** (chiqarishga berilgan,
 chiqib ketgan yoki bekor qilingan) — qog'ozdagi hujjat kabi:
 
     tepada    korxona nomi (`FIRMA`) va «Yuk xati № 515 · 15.09.26»
@@ -1084,7 +1112,7 @@ ikkinchisidan orqada qolardi.
 
 **«Qayerda» ustuni** (tahrir ko'rinishida, qator oxirida) — biriktirilgan
 konver hozir qayerda: «T/M ombor» yoki «Arra · Korpus tsexi», yonida
-nechtaligi. Buyurtma omborga yuborilgach ustunlar hujjatga aylanadi,
+nechtaligi. Buyurtma chiqarishga berilgach ustunlar hujjatga aylanadi,
 shuning uchun o'sha ma'lumot **«Konverlar qayerda»** kartochkasiga
 ko'chadi (`trackCard`): har konver, turgan bo'limi va tsexi, soni va
 omborga tushish sanasi. Omborga tushgach bo'lim yozilmaydi — «T/M
@@ -1149,7 +1177,7 @@ va bron qo'yadi, lekin mahsulotni zavoddan CHIQARIB YUBORMAYDI:
     yangi → tayyor/kutmoqda → **omborda** → chiqib ketdi
             (savdo biriktirdi)  (savdo yubordi) (mudir tasdiqladi)
 
-«Omborga yuborish» dan keyin buyurtma savdo uchun YOPILADI — mudir
+«Mijozga chiqarish» dan keyin buyurtma savdo uchun YOPILADI — mudir
 ko'rib turgan ro'yxat ostidan o'zgarib ketmasin. Kerak bo'lsa savdo
 qaytarib oladi (`/unsend`), mudir hali chiqarmagan bo'lsa.
 

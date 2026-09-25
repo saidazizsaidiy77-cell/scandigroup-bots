@@ -271,7 +271,7 @@ const NAVBATLAR = [
           AND ($2::int IS NULL OR o.manager_id = $2)`,
       [chanOf(req), ownOf(req)]);
     return [{ page: '/buyurtmalar.html', mod: 'sales', n,
-              izoh: `${n} ta buyurtma tayyor — omborga yuborilmagan` }];
+              izoh: `${n} ta buyurtma tayyor — chiqarishga berilmagan` }];
   },
 
   //  8. TOPSHIRILGAN, LEKIN QABUL QILINMAGAN PUL — kassirning navbati.

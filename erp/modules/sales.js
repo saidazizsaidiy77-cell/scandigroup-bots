@@ -278,10 +278,10 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 //         qolgan uchtasiga konver umuman biriktirilmagan va
 //         `/ship` uni baribir chiqarmasdi («mijoz so'ragan donaga
 //         konver biriktirilganmi»). Menejer «Tayyor» ni o'qib,
-//         «Omborga yuborish» ni bosardi va xato faqat o'sha yerda
+//         «Mijozga chiqarish» ni bosardi va xato faqat o'sha yerda
 //         bilinardi.
 //    4    bir qismi hali omborga kelmagan — ishlab chiqarilmoqda.
-//    5    savdo omborga yubordi, mudir chiqarishni kutmoqda.
+//    5    savdo mijozga chiqarishga berdi, mudir chiqarishni kutmoqda.
 //    6    qolgani — hammasi javonda, chiqarishga tayyor.
 //
 //  ★ MAHSULOT QAYERDA TURGANI «OMBORGA YUBORILDI» DAN USTUN, va bu
@@ -599,12 +599,12 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
     assertOwn(req, cur);
     if (customer_id) await assertCustomer(client, req, customer_id);
 
-    //  Omborga yuborilgan buyurtma tahrirlanmaydi: mudir ko'rib turgan
+    //  Chiqarishga berilgan buyurtma tahrirlanmaydi: mudir ko'rib turgan
     //  ro'yxat ostidan o'zgarib ketmasin. Avval qaytarib olinadi
     //  (`/unsend`). Bekor qilish ham shunday. Tekshiruv SHU YERDA:
     //  sahifada tugmani yashirish himoya emas.
     if (cur.status === 'to_ship' && status !== 'reserved')
-      throw new Error("Buyurtma omborda — avval qaytarib oling");
+      throw new Error("Chiqarishga berilgan — avval qaytarib oling");
     if (cur.status === 'shipped') throw new Error("Buyurtma jo'natilgan");
 
     //  Bekor qilishdan oldin konverlar ajratiladi: aks holda ombordagi
@@ -970,7 +970,7 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     assertOwn(req, o);
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
     if (o.status === 'shipped')   throw new Error("Buyurtma jo'natilgan");
-    if (o.status === 'to_ship')   throw new Error('Buyurtma omborda — avval qaytarib oling');
+    if (o.status === 'to_ship')   throw new Error('Chiqarishga berilgan — avval qaytarib oling');
 
     const it = (await client.query(
       `SELECT i.*, p.name AS product, g.name AS product_type,
@@ -1180,7 +1180,7 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     assertOwn(req, o);
     if (o.status === 'shipped') throw new Error('Allaqachon jo\'natilgan');
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
-    if (o.status === 'to_ship') throw new Error('Allaqachon omborga yuborilgan');
+    if (o.status === 'to_ship') throw new Error('Allaqachon chiqarishga berilgan');
     if (!o.bron) throw new Error('Avval konver biriktiring');
     //  ★ TO'LIQ BO'LMAGAN BUYURTMA HAM YUBORILADI, va bu ATAYLAB:
     //  savdo mudirga OLDINDAN aytadi — «bu ketadi, qolganini kutyapmiz».
@@ -1374,7 +1374,7 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     if (!o) throw new Error('Buyurtma topilmadi');
     if (o.status === 'shipped') throw new Error('Allaqachon jo\'natilgan');
     if (o.status !== 'to_ship')
-      throw new Error('Buyurtma omborga yuborilmagan');
+      throw new Error('Buyurtma chiqarishga berilmagan');
 
     const kutmoqda = (await client.query(
       `SELECT u.conveyor_no, u.status, s.name AS section

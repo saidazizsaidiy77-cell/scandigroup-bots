@@ -134,23 +134,37 @@ const STATUS = {
   draft:     'Boshlanmagan',
   waiting:   'Ishlab chiqarilmoqda',
   reserved:  'Tayyor',
-  to_ship:   'Omborga yuborildi',
+  //  ★ «OMBORGA YUBORILDI» EMAS, «MIJOZGA CHIQARILSIN» (zavod
+  //  qarori, 2026-09). Nom OMBORNI emas, MIJOZNI ko'rsatishi kerak:
+  //  savdo mahsulot tayyor bo'lgach mijoz bilan gaplashadi, kunini
+  //  kelishadi va shundan KEYIN chiqarishga ruxsat beradi. «Omborga
+  //  yuborildi» esa ichki ko'chirishdek o'qilardi — go'yo mahsulot
+  //  boshqa javonga o'tgandek, holbuki bu MIJOZGA berilishi haqidagi
+  //  qaror.
+  //
+  //  T/M ombor mudiri FAQAT shu holatdagi buyurtmani ko'radi
+  //  (`modules/sales.js`, `/ship-list`): qolganlari hali savdoning
+  //  qo'lida va ularni chiqarish yolg'on bo'lardi.
+  to_ship:   'Mijozga chiqarilsin',
   shipped:   'Chiqib ketdi',
   cancelled: 'Bekor qilingan',
 };
 //  Tab ro'yxati SHU nomlardan quriladi: ikkinchi ro'yxat yozilsa bir
 //  kun birinchisidan ajralib ketardi.
-//  Tartib — buyurtmaning yo'li bo'yicha emas, ISHNING joyi bo'yicha:
-//  «Omborga yuborildi» chiqishi aniq bo'lganlar va mudir kunini
-//  o'shandan tuzadi, «Tayyor» esa hali menejerning qo'lida turgani.
-const FILTERS = [['', 'Hammasi'], ...['draft', 'waiting', 'to_ship',
-  'reserved', 'shipped', 'cancelled'].map(k => [k, STATUS[k]])];
+//  Tartib — ISHNING ketma-ketligi bo'yicha: «Tayyor» buyurtma
+//  menejerning qo'lida turadi (mijoz bilan kunini kelishmoqda),
+//  «Mijozga chiqarilsin» esa undan KEYIN keladi va mudirning ishi
+//  bo'lib qoladi. Ilgari teskari edi — «Omborga yuborildi» oldinda
+//  turardi, chunki u ombor kunini tuzadigan ro'yxat edi; nom
+//  o'zgargach tartib menejer o'qiydigan yo'l bilan bir xil bo'ldi.
+const FILTERS = [['', 'Hammasi'], ...['draft', 'waiting', 'reserved',
+  'to_ship', 'shipped', 'cancelled'].map(k => [k, STATUS[k]])];
 
 const statusOf = (o) => STATUS[o.holat] || o.holat || o.status;
 
 //  ★ CHEGIRMA — HOLAT EMAS, ikkinchi savol. Buyurtma boshqa hamma
-//  jihatdan tayyor bo'lsa ham, direktor qaror qilmaguncha omborga
-//  o'tmaydi. Ilgari u holatning O'RNIGA yozilardi va qator o'zi
+//  jihatdan tayyor bo'lsa ham, direktor qaror qilmaguncha mijozga
+//  chiqarilmaydi. Ilgari u holatning O'RNIGA yozilardi va qator o'zi
 //  turgan tabdan boshqa nom bilan ko'rinardi; endi yonida alohida
 //  belgi bo'lib turadi, ya'ni ikkala javob ham bir vaqtda o'qiladi.
 const chegirmaKutmoqda = (o) => o.discount_status === 'pending'
@@ -161,7 +175,7 @@ const chegirmaKutmoqda = (o) => o.discount_status === 'pending'
 //  mudir esa kunini shunga qarab tuzadi. Mahsulot baribir chiqmaydi —
 //  to'siq `/ship` da, chiqarishda.
 //
-//  «Omborga yuborildi» tabida faqat haqiqatan javonda turganlari
+//  «Mijozga chiqarilsin» tabida faqat haqiqatan javonda turganlari
 //  qoladi (zavod qarori), ya'ni bunday buyurtma o'z joyida —
 //  «Boshlanmagan» yoki «Ishlab chiqarilmoqda» da — ko'rinadi.
 //  Belgisiz qolsa menejer uni yubormaganman deb o'ylardi va ikkinchi
@@ -292,7 +306,7 @@ async function load(){
       <td><span class="tag${o.holat === 'cancelled' ? ' warn' : ''}"
         >${esc(statusOf(o))}</span>${chegirmaKutmoqda(o)
           ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
-          yuborilgan(o) ? ` <span class="tag">Omborga yuborilgan</span>` : ''}</td>
+          yuborilgan(o) ? ` <span class="tag">Mijozga chiqarilsin</span>` : ''}</td>
       <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
             «ko'rish». Ochilganda u hujjat bo'lib chiqadi. -->
       <td class="num"><button onclick="openOrder(${o.id})"
@@ -348,7 +362,7 @@ function planTick() {
 
 //  ── YOPILGAN BUYURTMA: YUK XATI ───────────────────────────────────────
 //
-//  Omborga yuborilgan, chiqib ketgan yoki bekor qilingan buyurtma
+//  Mijozga chiqarishga berilgan, chiqib ketgan yoki bekor qilingan buyurtma
 //  TAHRIRLANMAYDI, shuning uchun uni kiritish shaklida ko'rsatish
 //  noto'g'ri: o'chirilgan ochilma ro'yxatlar «buzilgan forma» bo'lib
 //  ko'rinadi. Bu yerda u qog'ozdagi YUK XATI kabi o'qiladi.
@@ -368,7 +382,7 @@ function docHtml(o) {
 
 //  ── KONVERLAR QAYERDA (faqat EKRANDA) ─────────────────────────────────
 //
-//  Buyurtma omborga yuborilgan yoki hali kutilayotgan bo'lsa, savdo
+//  Buyurtma chiqarishga berilgan yoki hali kutilayotgan bo'lsa, savdo
 //  xodimi «mahsulotim qayerda» degan savolga shu yerdan javob beradi.
 //  Ilgari buning uchun ombor sahifasiga kirish kerak edi — u yerda esa
 //  faqat T/M omborga TUSHGANI ko'rinadi: hali tsexda yurgan konver
@@ -407,7 +421,7 @@ function chegirmaCard(o) {
         <span class="tag ${cls}">${matn}</span>
         <div class="muted" style="font-size:12px;margin-top:6px">
           ${o.discount_status === 'pending'
-            ? 'Narxdan past yozilgan — direktor tasdiqlagunicha omborga yuborilmaydi.'
+            ? 'Narxdan past yozilgan \u2014 direktor tasdiqlagunicha chiqarilmaydi.'
             : `${esc(o.discount_by_name || '')}${o.discount_note
                 ? ' · ' + esc(o.discount_note) : ''}`}</div>
       </div>
@@ -473,7 +487,7 @@ function trackCard(o) {
 
 function draw(){
   const o = cur.order, isNew = !o.id;
-  //  Omborga yuborilgandan keyin ham yopiladi: mudir ko'rib turgan
+  //  Chiqarishga berilgandan keyin ham yopiladi: mudir ko'rib turgan
   //  buyurtma ostidan o'zgarib ketmasin. Qaytarib olinsa yana ochiladi.
   const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled'
           || o.status === 'to_ship';
@@ -487,7 +501,7 @@ function draw(){
             chegirmaKutmoqda(o)
               ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
             yuborilgan(o)
-              ? ` <span class="tag">Omborga yuborilgan</span>` : ''}` : ''}
+              ? ` <span class="tag">Mijozga chiqarilsin</span>` : ''}` : ''}
         </div>
         <div class="row" style="gap:8px">
           ${ro ? `<button onclick="window.print()">Chop etish</button>`
@@ -584,7 +598,7 @@ function draw(){
       ${ro ? '' : `<div class="row" style="gap:10px;margin-top:26px">
         <button class="primary" onclick="save()">Saqlash</button>
         ${isNew ? '' : `
-          <button onclick="sendToWh()">Omborga yuborish</button>
+          <button onclick="sendToWh()">Mijozga chiqarish</button>
           <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
       </div>`}
       <!--  PUL KIRIM SANASI — savdo menejeriniki. Buyurtma olinayotganda
@@ -604,10 +618,10 @@ function draw(){
 
       ${o.status === 'to_ship' && canWrite ? `
         <div class="row no-print" style="gap:10px;margin-top:26px;align-items:center;flex-wrap:wrap">
-          <span class="tag ok">Ombor mudirida</span>
+          <span class="tag ok">Mijozga chiqarilsin</span>
           <span class="muted" style="font-size:13px">${
             (o.sent_to_wh_on || '').slice(0, 10)}${o.sent_by_name
-              ? ' · ' + esc(o.sent_by_name) : ''} yubordi</span>
+              ? ' · ' + esc(o.sent_by_name) : ''} chiqarishga berdi</span>
           <button onclick="unsendWh()">Qaytarib olish</button>
         </div>` : ''}
       ${o.status === 'shipped' ? `
