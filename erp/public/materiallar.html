@@ -26,6 +26,13 @@
         <input id="fQ" placeholder="nomi yoki kodi" oninput="deb()"></div>
       <div style="min-width:180px"><label>Turkum</label>
         <select id="fCat" onchange="load()"></select></div>
+      <!--  ★ «SHU BO'LIM QAYSI MATERIALNI ISHLATADI» (zavod qarori,
+            2026-09). Arra boshlig'iga to'qqiz yuz material kerak
+            emas — javob o'z omborining ichida. Ro'yxat E'LON
+            QILINMAYDI, o'zi to'ladi: ombor mudiri Arraga LDSP
+            berdi — o'sha zahoti shu yerda turadi. -->
+      <div style="min-width:220px"><label>Ishlatadigan ombor</label>
+        <select id="fWh" onchange="load()"></select></div>
       <label class="row" style="gap:8px;align-items:center;text-transform:none;
         font-size:14px;cursor:pointer">
         <input type="checkbox" id="fOff" style="width:auto" onchange="load()">
@@ -125,9 +132,21 @@ async function boot() {
   //  stul tsexida turadi, lekin uni LAK tsexi boshlig'i yuritadi
   //  (izoh: sql/materials.sql). Xodim o'z ro'yxatida o'zi
   //  javobgar bo'lgan omborni ko'rishi kerak.
-  $('sWh').innerHTML = '<option value="">Barcha ombor</option>'
-    + ref.warehouses.map((w) => `<option value="${w.id}">${esc(w.name)}${
-        tsexi(w) ? ' · ' + esc(tsexi(w)) : ''}</option>`).join('');
+  //  Ombor nomi yonida QAYSI BO'LIMNIKI ekani turadi — bo'sh bo'lsa
+  //  tsexi (izoh: sql/materials.sql). «Arra ombori · Arra» degan
+  //  qator ikki marta bir xil so'zni takrorlamaydi, shuning uchun
+  //  bo'lim nomi ombor nomida bo'lsa qo'shilmaydi.
+  const joyi = (w) => {
+    const b = w.section && !w.name.toLowerCase().includes(w.section.toLowerCase())
+      ? w.section : null;
+    return [b, tsexi(w)].filter(Boolean).join(' · ');
+  };
+  const omborlar = (sel) => ref.warehouses.map((w) =>
+    `<option value="${w.id}">${esc(w.name)}${
+      joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('');
+  $('sWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar();
+  //  Spravochnikdagi filtr: «Barcha material» — cheklov yo'q.
+  $('fWh').innerHTML = '<option value="">Barcha material</option>' + omborlar();
   $('stockTools').innerHTML = boshqara()
     ? `<button onclick="boshlangich()">✎ Boshlang'ich qoldiq</button>` : '';
   //  Boshlang'ich qoldiq oynasidagi ro'yxat uchun: qo'lda yozish yo'q.
@@ -141,6 +160,7 @@ async function load() {
   if (tab === 'ref') {
     if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
     if ($('fCat').value)      q.set('category', $('fCat').value);
+    if ($('fWh').value)       q.set('warehouse_id', $('fWh').value);
     if ($('fOff').checked)    q.set('all', '1');
     rows = (await App.api('/api/materials?' + q)).rows;
   } else if (tab === 'stock') {

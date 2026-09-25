@@ -2034,6 +2034,21 @@ test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
   assert.equal(mv.from_kind, 'opening');
   assert.equal(mv.to_kind, 'warehouse');
 
+  //  ★ «SHU BO'LIM QAYSI MATERIALNI ISHLATADI» — bo'lim ombori
+  //  orqali (zavod qarori, 2026-09). Ro'yxat E'LON QILINMAYDI: ombor
+  //  mudiri Arraga material berdi — o'sha zahoti Arraning
+  //  ro'yxatida turadi.
+  const arra = (await xom('GET', '/api/materials/ref')).body.warehouses
+    .find((w) => w.id === wh);
+  assert.equal(arra.section, 'Arra', 'ombor bo\'limga biriktirilgan');
+
+  assert.ok((await xom('GET', '/api/materials?warehouse_id=' + wh))
+    .body.rows.some((r) => r.id === m.id), 'Arra ro\'yxatida turadi');
+  const zbor = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-STU-ZBOR'`)).id;
+  assert.ok(!(await xom('GET', '/api/materials?warehouse_id=' + zbor))
+    .body.rows.some((r) => r.id === m.id), 'boshqa bo\'limda yo\'q');
+
   //  ★ DOIRA CHEGARA: stul tsexining boshlig'iga korpus tsexining
   //  ombori ko'rinmaydi.
   const { db } = require('../db');
@@ -2084,6 +2099,23 @@ test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
     `SELECT string_agg(code, ',' ORDER BY code) AS c FROM product_groups
       WHERE needs_hardware`);
   assert.equal(furn.c, 'KAMOD,PENAL,SP');
+
+  //  ★ SARFLANIB BO'LINGANI HAM O'SHA BO'LIMNIKI: ro'yxat
+  //  HARAKATDAN chiqadi, qoldiqdan emas. `v_material_stock` nol
+  //  qoldiqni tashlab yuboradi (`HAVING SUM <> 0`) — ro'yxat undan
+  //  olinsa bugun javonda turgani bilan cheklanib qolardi va
+  //  ertaga yana so'raladigan material yo'qolardi.
+  await db.query(
+    `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                 to_kind, to_id)
+          VALUES ($1, 250, 'warehouse', $2, 'writeoff', NULL)`,
+    [m.id, wh]);
+  assert.ok(!(await xom('GET', '/api/materials/stock')).body.rows
+    .some((r) => r.material_id === m.id && r.warehouse_id === wh),
+    'qoldiq nolga tushdi');
+  assert.ok((await xom('GET', '/api/materials?warehouse_id=' + wh))
+    .body.rows.some((r) => r.id === m.id),
+    'sarflanib bo\'lingani ham Arraning ro\'yxatida qoladi');
 });
 
 test('ta\'minotchilar ro\'yxati faylga chiqadi', async () => {

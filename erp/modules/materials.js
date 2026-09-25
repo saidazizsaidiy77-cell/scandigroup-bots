@@ -40,10 +40,14 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
     db.query(`SELECT code, name FROM material_uoms ORDER BY sort, name`),
     db.query(
       `SELECT w.id, w.code, w.name, w.shop_id, s.name AS shop, w.is_active,
-              w.owner_shop_id, o.name AS owner_shop
+              w.owner_shop_id, o.name AS owner_shop,
+              --  ★ OMBOR QAYSI BO'LIMNIKI (izoh: sql/materials.sql):
+              --  bo'sh bo'lsa butun tsexniki.
+              w.section_id, sc.name AS section
          FROM warehouses w
          LEFT JOIN shops s ON s.id = w.shop_id
          LEFT JOIN shops o ON o.id = w.owner_shop_id
+         LEFT JOIN sections sc ON sc.id = w.section_id
         WHERE w.kind = 'material'
           --  Doira CHEGARA: tsexi biriktirilgan xodimga zavod
           --  omborlari ham, boshqa tsexning ombori ham ko'rinmaydi.
@@ -89,13 +93,28 @@ router.get('/', need(...VIEW), wrap(async (req, res) => {
              OR m.name ILIKE '%' || $1 || '%'
              OR COALESCE(m.code, '') ILIKE '%' || $1 || '%')
         AND ($2::text IS NULL OR m.category = $2)
+        --  ★ «SHU BO'LIM QAYSI MATERIALNI ISHLATADI» — HARAKATDAN,
+        --  qoldiqdan EMAS. Sarflanib bo'lingani ham o'sha bo'limniki:
+        --  «v_material_stock» nol qoldiqni tashlab yuboradi va
+        --  ro'yxat bugun javonda turgani bilan cheklanib qolardi —
+        --  ertaga yana so'raladigan material esa yo'qolardi.
+        --
+        --  Ro'yxat E'LON QILINMAYDI, o'zi to'ladi: ombor mudiri
+        --  Arraga LDSP berdi — o'sha zahoti Arraning ro'yxatida
+        --  turadi (izoh: sql/materials.sql).
+        AND ($4::int IS NULL OR EXISTS (
+              SELECT 1 FROM material_moves mv
+               WHERE mv.material_id = m.id
+                 AND mv.to_kind = 'warehouse' AND mv.to_id = $4
+                 AND mv.status = 'ok'))
         --  Faolsizi YASHIRILADI, lekin o'chirilmaydi: u eski
         --  hujjatlarda turgan bo'lishi mumkin (harajat moddasi bilan
         --  bir xil qoida). all=1 bo'lsa ikkalasi ham chiqadi.
         AND ($3::boolean OR m.active)
       ORDER BY c.code NULLS LAST, m.name
       LIMIT 2000`,
-    [q, trim(req.query.category), req.query.all === '1']);
+    [q, trim(req.query.category), req.query.all === '1',
+     req.query.warehouse_id ? Number(req.query.warehouse_id) : null]);
   res.json({ rows });
 }));
 

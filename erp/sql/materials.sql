@@ -404,3 +404,54 @@ CREATE TABLE IF NOT EXISTS material_suppliers (
 --  ta'minotchi kartochkasida va kirim hujjati yozilganda.
 CREATE INDEX IF NOT EXISTS material_suppliers_sup_idx
   ON material_suppliers (supplier_id);
+
+-- ═══════════════════════════════════════════ OMBOR QAYSI BO'LIMNIKI
+--
+--  ★ ZAVOD QARORI (2026-09): «Arra bo'limi materialni konverga
+--  biriktirganda faqat O'ZI ishlatadigani chiqsin, to'qqiz yuztasi
+--  emas».
+--
+--  Ikki yo'l bor edi. Birinchisi — har MATERIALGA qaysi bo'limda
+--  ishlatilishini yozib chiqish: to'qqiz yuz qator qo'lda
+--  to'ldiriladi, mahsulot o'zgarsa ro'yxat jimgina yolg'on bo'lib
+--  qoladi va to'lmaguncha umuman ishlamaydi (bo'sh katak «hamma
+--  joyda» degani, ya'ni ro'yxat baribir to'qqiz yuztaligicha
+--  turaveradi).
+--
+--  Ikkinchisi — SHU: javob omborning O'ZIDAN chiqadi. Ombor mudiri
+--  Arraga 100 list LDSP berdi — o'sha zahoti Arraning ro'yxatida
+--  turadi; hech kim hech narsa e'lon qilmaydi va ro'yxat eskirmaydi.
+--  Zavod shuni tanladi.
+--
+--  Ustun ixtiyoriy: bo'sh bo'lsa ombor BUTUN tsexniki (Korpus tseh
+--  ombori, Lak tseh ombori, Qadoqlash ombori). To'ldirilgani esa
+--  bitta bo'limniki — zavod ularni allaqachon shunday atagan.
+ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS section_id INT REFERENCES sections(id);
+
+--  Bir martalik bog'lash: keyin saytdan o'zgartirilgani qaytarib
+--  qo'yilmasin (`migration_flags` — bir martalik ko'chirish idiomi).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'ombor-bolim') THEN
+    --  Bog'lanish BO'LIM KODI bo'yicha, nomi bo'yicha emas: nom
+    --  saytdan o'zgartiriladi (`production-seed.sql` da ham
+    --  «Zborka karkas» bir marta shunday qayta nomlangan) va
+    --  o'shanda bog'lanish jimgina bo'sh qolib ketardi.
+    UPDATE warehouses w SET section_id = s.id
+      FROM sections s
+     WHERE (w.code, s.code) IN (
+             ('TSEX-KOR-ARRA', 'KOR-ARRA'),
+             ('TSEX-STU-ZBOR', 'STU-ZBOR'),
+             ('TSEX-STU-LAK',  'STU-LAK'),
+             ('TSEX-STU-QOPL', 'STU-QOPL'));
+    INSERT INTO migration_flags (key) VALUES ('ombor-bolim');
+  END IF;
+END $$;
+
+--  «Bu bo'lim qaysi materialni ishlatadi» — QOLDIQDAN emas,
+--  HARAKATDAN. Sarflanib bo'lingan material ham o'sha bo'limniki:
+--  `v_material_stock` nol qoldiqni tashlab yuboradi
+--  (`HAVING SUM <> 0`) va ro'yxat bugun ishlatilgani bilan cheklanib
+--  qolardi — ertaga yana so'raladigan material esa yo'qolardi.
+CREATE INDEX IF NOT EXISTS material_moves_to_wh_idx
+  ON material_moves (to_id, material_id) WHERE to_kind = 'warehouse';

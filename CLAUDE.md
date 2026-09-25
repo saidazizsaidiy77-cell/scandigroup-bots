@@ -2718,12 +2718,42 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
 - Ro'yxat Excel'dan yuklanadi (qo'lda terilmaydi). Kerakli ustunlar:
   nomi · o'lchov birligi (dona, m², kg, rulon…). Ixtiyoriy:
   **ta'minotchi** · turkum · kod · izoh.
-- ✅ HAL BO'LDI: **tsex va bo'lim FAYLDAN kelmaydi** (zavod qarori,
-  2026-09) — materialni kiritgandan keyin sklad xodimlari uni saytdan
-  o'zlari to'ldiradi. Huquqi tayyor: `xom_ombor` rolida
-  `materials.manage` bor.
+- ✅ HAL BO'LDI: **tsex va bo'lim MATERIALDA umuman yozilmaydi**
+  (zavod qarori, 2026-09) — javob ombordan chiqadi, pastda.
 - Hali yo'q: **turkum** ustuni zavod faylida yo'q — material
   kiritildi, turkumi esa saytdan qo'yiladi.
+
+**★ «SHU BO'LIM QAYSI MATERIALNI ISHLATADI» — OMBORDAN, RO'YXATDAN
+EMAS** (`warehouses.section_id`, zavod qarori 2026-09). Ertaga Arra
+bo'limi materialni konverga biriktiradi va unga to'qqiz yuz qatorlik
+spravochnik emas, o'zi ishlatadigan o'ttiztasi kerak.
+
+Ikki yo'l bor edi. Birinchisi — har MATERIALGA qaysi tsex va qaysi
+bo'lim ishlatishini yozib chiqish. To'qqiz yuz qator QO'LDA
+to'ldiriladi, mahsulot o'zgarsa ro'yxat jimgina yolg'on bo'lib qoladi
+va eng yomoni — to'lmaguncha umuman ishlamaydi: bo'sh katak «hamma
+joyda» degani, ya'ni ro'yxat baribir to'qqiz yuztaligicha turaveradi.
+
+Ikkinchisi — SHU, va zavod shuni tanladi: javob omborning O'ZIDAN
+chiqadi. Ombor mudiri Arraga 100 list LDSP berdi — o'sha zahoti LDSP
+Arraning ro'yxatida turadi. Hech kim hech narsa E'LON QILMAYDI va
+ro'yxat eskirmaydi; mexanizm ham yangi emas — zavodda bo'lim
+omborlari allaqachon bor (`TSEX-KOR-ARRA`, `TSEX-STU-ZBOR`,
+`TSEX-STU-LAK`, `TSEX-STU-QOPL`).
+
+Ustun IXTIYORIY: bo'sh bo'lsa ombor butun tsexniki (Korpus tseh
+ombori, Lak tseh ombori) yoki butun zavodniki (Xom ashyo, MDF,
+Furnitura). Bog'lash bir martalik (`migration_flags`: `ombor-bolim`)
+va BO'LIM KODI bo'yicha, nomi bo'yicha emas — nom saytdan
+o'zgartiriladi (`production-seed.sql` da «Zborka karkas» bir marta
+shunday qayta nomlangan) va o'shanda bog'lanish jimgina bo'sh qolib
+ketardi.
+
+**Ro'yxat HARAKATDAN chiqadi, QOLDIQDAN emas** (`material_moves`,
+`/api/materials?warehouse_id=`). `v_material_stock` nol qoldiqni
+tashlab yuboradi (`HAVING SUM(qty) <> 0`) — ro'yxat undan olinsa
+bugun javonda turgani bilan cheklanib qolardi va sarflanib bo'lingan,
+ertaga yana so'raladigan material yo'qolardi.
 
 **★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI** (`material_suppliers`,
 zavod qarori 2026-09). Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF
