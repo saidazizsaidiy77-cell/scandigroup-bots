@@ -178,8 +178,16 @@ const chegirmaKutmoqda = (o) => o.discount_status === 'pending'
 //  «Mijozga chiqarilsin» tabida faqat haqiqatan javonda turganlari
 //  qoladi (zavod qarori), ya'ni bunday buyurtma o'z joyida —
 //  «Boshlanmagan» yoki «Ishlab chiqarilmoqda» da — ko'rinadi.
-//  Belgisiz qolsa menejer uni yubormaganman deb o'ylardi va ikkinchi
-//  marta yuborishga urinardi. Belgi OGOHLANTIRISH emas, oddiy yozuv.
+//  Belgisiz qolsa menejer uni bermaganman deb o'ylardi va ikkinchi
+//  marta berishga urinardi. Belgi OGOHLANTIRISH emas, oddiy yozuv.
+//
+//  ★ BELGI HOLAT NOMI BILAN BIR XIL ATALMAYDI (zavod qarori,
+//  2026-09). Ilgari «Mijozga chiqarilsin» deb turardi va «Ishlab
+//  chiqarilmoqda» tabidagi qatorda AYNAN holat nomi ko'rinardi —
+//  menejer uni buyurtma allaqachon o'sha holatda deb o'qirdi,
+//  holbuki mahsulotning bir qismi hali tsexda. Endi belgi ODAM
+//  bosgan tugmaning izi bo'lib turadi («Chiqarishga berilgan»),
+//  holat esa o'z ustunida qoladi — ikkala javob aralashmaydi.
 const yuborilgan = (o) => o.status === 'to_ship' && o.holat !== 'to_ship';
 
 let rows = [], customers = [], managers = [], products = [], dests = [];
@@ -306,7 +314,7 @@ async function load(){
       <td><span class="tag${o.holat === 'cancelled' ? ' warn' : ''}"
         >${esc(statusOf(o))}</span>${chegirmaKutmoqda(o)
           ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
-          yuborilgan(o) ? ` <span class="tag">Mijozga chiqarilsin</span>` : ''}</td>
+          yuborilgan(o) ? ` <span class="tag">Chiqarishga berilgan</span>` : ''}</td>
       <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
             «ko'rish». Ochilganda u hujjat bo'lib chiqadi. -->
       <td class="num"><button onclick="openOrder(${o.id})"
@@ -501,7 +509,7 @@ function draw(){
             chegirmaKutmoqda(o)
               ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
             yuborilgan(o)
-              ? ` <span class="tag">Mijozga chiqarilsin</span>` : ''}` : ''}
+              ? ` <span class="tag">Chiqarishga berilgan</span>` : ''}` : ''}
         </div>
         <div class="row" style="gap:8px">
           ${ro ? `<button onclick="window.print()">Chop etish</button>`
@@ -598,7 +606,16 @@ function draw(){
       ${ro ? '' : `<div class="row" style="gap:10px;margin-top:26px">
         <button class="primary" onclick="save()">Saqlash</button>
         ${isNew ? '' : `
-          <button onclick="sendToWh()">Mijozga chiqarish</button>
+          <!--  ★ RUXSATNI BITTA ODAM BERADI (izoh: sql/sales.sql):
+                buyurtmani har menejer yozadi, lekin chiqish kunini
+                bitta odam nazorat qiladi. Belgisi yo'q xodimda tugma
+                UMUMAN chizilmaydi va sababi yozilib turadi — tugmani
+                topolmagan odam uni qidirib yurmasin. Tekshiruv
+                baribir serverda: yashirish himoya emas. -->
+          ${App.me()?.can_release
+            ? `<button onclick="sendToWh()">Mijozga chiqarish</button>`
+            : `<span class="muted" style="font-size:13px">Mijozga
+                 chiqarishga ruxsatni boshqa xodim beradi</span>`}
           <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
       </div>`}
       <!--  PUL KIRIM SANASI — savdo menejeriniki. Buyurtma olinayotganda
@@ -618,7 +635,7 @@ function draw(){
 
       ${o.status === 'to_ship' && canWrite ? `
         <div class="row no-print" style="gap:10px;margin-top:26px;align-items:center;flex-wrap:wrap">
-          <span class="tag ok">Mijozga chiqarilsin</span>
+          <span class="tag ok">Chiqarishga berilgan</span>
           <span class="muted" style="font-size:13px">${
             (o.sent_to_wh_on || '').slice(0, 10)}${o.sent_by_name
               ? ' · ' + esc(o.sent_by_name) : ''} chiqarishga berdi</span>

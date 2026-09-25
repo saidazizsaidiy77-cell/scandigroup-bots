@@ -978,6 +978,47 @@ ko'chirishdek o'qilardi — go'yo mahsulot boshqa javonga o'tgandek,
 holbuki bu MIJOZGA berilishi haqidagi qaror. Tugma ham shunday:
 «Omborga yuborish» → **«Mijozga chiqarish»**.
 
+**★ RUXSATNI BITTA ODAM BERADI** (`workers.can_release`, zavod qarori
+2026-09). Buyurtmani har menejer yozadi, lekin CHIQISH kunini bitta
+odam nazorat qiladi: aks holda ikki menejer bir kunga ikkita mashinalik
+mahsulot chiqarib yuborardi va buni faqat ombor eshigi oldida bilinardi.
+
+**Belgi XODIMDA, rolda emas** (`can_hold_cash`, `cash_all_customers` va
+`sees_warehouse` bilan bir xil idiom). Rol buni ajrata olmaydi: ruxsat
+beradigan odam ham `sotuvchi`, qolganlari ham, va rol huquqlari KODDA
+turadi — bitta odam uchun o'zgartirib bo'lmaydi. Kodga ism ham, lavozim
+ham yozilmaydi (4-qoida): ertaga o'sha odam almashsa bitta katakcha
+ko'chadi. Qo'yiladigan joyi — **Xodimlar sahifasi**, «Savdo» bo'limida.
+
+**Standarti `false`, va bu ataylab**: `true` bo'lsa qoida BUGUN
+ishlamasdi — ertaga ishga olingan menejer ham jim turib ruxsat bera
+olardi, ya'ni «bitta odam» degan qoidaning o'zi buzilardi. Belgisi yo'q
+xodimda tugma UMUMAN chizilmaydi va SABABI ekranda yozilib turadi —
+tugmani topolmagan odam uni qidirib yurmasin. Tekshiruv **serverda**:
+yashirish himoya emas.
+
+**Administratorga belgi bir martalik qo'yiladi**
+(`migration_flags`: `chiqarish-qayta-tasdiq`): standarti `false` bo'lgani
+uchun deploy kuni u hech kimda bo'lmasdi va HECH KIM — tuzatadigan
+odamning o'zi ham — ruxsat bera olmasdi. Keyin zavod belgini kimga
+qo'yishni o'zi hal qiladi.
+
+**★ TURGAN BUYURTMALAR «TAYYOR» GA QAYTARILDI** (o'sha bayroq bilan).
+Qoida ishga tushgan kuni «Mijozga chiqarilsin» da turgan buyurtmalarni
+ESKI tartib yuborgan edi — ularni hech kim yangi qoida bo'yicha
+tasdiqlamagan. Qolib ketsa mudir ertalab ularni chiqarib yuborardi va
+ruxsat bosqichi birinchi kundanoq chetlab o'tilgan bo'lardi. Kunlik reja
+ham tozalanadi — `/unsend` bilan AYNAN bir xil yo'l. Chiqib ketganlarga
+TEGILMAYDI: mahsulot mijozda va uning qarzida.
+
+**★ BELGI HOLAT NOMI BILAN BIR XIL ATALMAYDI** (zavod qarori, 2026-09).
+To'liq bo'lmagan buyurtmaning yonidagi yozuv ilgari «Mijozga
+chiqarilsin» deb turardi va «Ishlab chiqarilmoqda» tabidagi qatorda
+AYNAN holat nomi ko'rinardi — menejer uni buyurtma allaqachon o'sha
+holatda deb o'qirdi, holbuki mahsulotning bir qismi hali tsexda. Endi
+belgi ODAM bosgan tugmaning izi bo'lib turadi (**«Chiqarishga
+berilgan»**), holat esa o'z ustunida qoladi: ikkala javob aralashmaydi.
+
 Holat va mexanizm O'ZGARMADI (`orders.status = 'to_ship'`), faqat
 ekrandagi nomi: baza ustuni, `/send`, `/unsend` va mudirning ro'yxati
 o'sha holda qoladi.
@@ -994,9 +1035,8 @@ KEYIN keladi va mudirning ishi bo'lib qoladi. Ilgari teskari edi
 («Omborga yuborildi» oldinda), chunki u ombor kunini tuzadigan ro'yxat
 edi.
 
-**Ruxsatni KIM berishi kodga yozilmaydi** (4-qoida): huquqi
-`sales.manage` — zavod uni kimga bersa, o'sha beradi. «Qaytarib olish»
-ham o'sha huquqda va mudir chiqarmaguncha ochiq qolaveradi.
+**«Qaytarib olish»** esa `sales.manage` da qolaveradi va mudir
+chiqarmaguncha ochiq: xato bergan menejer o'zi orqaga oladi.
 
 **★ HOLAT BITTA JOYDA HISOBLANADI** (`HOLAT`, `modules/sales.js`;
 zavod qarori 2026-09). Ilgari u IKKI joyda edi: sahifa qatordagi
@@ -1025,7 +1065,7 @@ olib tashlandi.
 
 **★ YUBORILGAN, LEKIN HALI TAYYOR EMAS — belgisi bilan.** Bunday
 buyurtma o'z joyida («Boshlanmagan» yoki «Ishlab chiqarilmoqda»)
-turadi, yonida esa **«Mijozga chiqarilsin»** yozuvi. Belgisiz qolsa
+turadi, yonida esa **«Chiqarishga berilgan»** yozuvi. Belgisiz qolsa
 menejer uni yubormaganman deb o'ylardi va ikkinchi marta yuborishga
 urinardi. Bu OGOHLANTIRISH emas, oddiy yozuv: yuborish to'liq
 bo'lmaganda ham mumkin (yuqorida).

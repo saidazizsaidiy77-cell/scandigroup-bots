@@ -1202,6 +1202,19 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     if (o.discount_status === 'rejected')
       throw new Error('Chegirma rad etilgan — narxni to\'g\'rilang');
 
+    //  ★ RUXSATNI BITTA ODAM BERADI (izoh: sql/sales.sql). Buyurtmani
+    //  har menejer yozadi, lekin CHIQISH kunini bitta odam nazorat
+    //  qiladi: aks holda ikki menejer bir kunga ikkita mashinalik
+    //  mahsulot chiqarib yuborardi va buni ombor eshigi oldida
+    //  bilinardi.
+    //
+    //  Tekshiruv SERVERDA: sahifada tugmani yashirish himoya emas.
+    //  Belgi XODIMDA va Xodimlar sahifasida qo'yiladi — kodga na ism,
+    //  na lavozim yoziladi (4-qoida).
+    if (!req.user.can_release) throw new Error(
+      "Mijozga chiqarishga ruxsat berish sizda yo'q — Xodimlar "
+      + "sahifasida «Mijozga chiqarishga ruxsat beradi» katagi belgilanadi");
+
     await client.query(
       `UPDATE orders SET status = 'to_ship', sent_to_wh_on = CURRENT_DATE,
               sent_by = $2 WHERE id = $1`, [o.id, req.user.id]);

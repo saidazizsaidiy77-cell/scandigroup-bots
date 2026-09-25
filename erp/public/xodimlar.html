@@ -401,6 +401,24 @@ function openForm(id){
                   «Ombor» umuman chizilmaydi — qoldiq ham, qabul qilish ham</span></span>
             </div></div>
 
+          <!--  ★ MIJOZGA CHIQARISHGA KIM RUXSAT BERADI (izoh:
+                sql/sales.sql). Buyurtmani har menejer yozadi, lekin
+                CHIQISH kunini bitta odam nazorat qiladi: aks holda
+                ikki menejer bir kunga ikkita mashinalik mahsulot
+                chiqarib yuborardi. Rol buni ajrata olmaydi —
+                ikkalasi ham «sotuvchi» va rol huquqlari KODDA
+                turadi, shu sababdan belgi XODIMDA. Standarti
+                BELGILANMAGAN: qoida yangi xodimda o'zi buzilmasin. -->
+          <div><label>Savdo</label>
+            <div class="row" style="gap:10px;align-items:center">
+              <input type="checkbox" id="wRel" style="width:auto"
+                     ${w?.can_release ? 'checked' : ''}>
+              <span style="flex:1">Mijozga chiqarishga ruxsat beradi
+                <span class="muted" style="font-size:12px">· «Tayyor» buyurtmani
+                  «Mijozga chiqarilsin» ga o'tkazadi va shundan keyin T/M ombor
+                  mudiri uni ko'radi; belgilanmagan xodimda tugma chizilmaydi</span></span>
+            </div></div>
+
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
               ${meta.roles.map(r => `
@@ -498,6 +516,7 @@ async function save(id){
     cash_all_customers: $('wInkas').checked,
     can_spend_cash: $('wSpend').checked,
     sees_warehouse: $('wWh').checked,
+    can_release: $('wRel').checked,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
     roles,

@@ -1801,6 +1801,12 @@ test('narxdan past sotilmaydi \u2014 direktor tasdiqlaydi', async () => {
 
   //  Ulgurji menejer (standart) va chakana menejer.
   const opt = await xodim('Sinov narx ulgurji', 'sotuvchi');
+  //  ★ MIJOZGA CHIQARISHGA RUXSAT — alohida belgi (izoh:
+  //  sql/sales.sql). Bu test CHEGIRMA qoidasi haqida, shuning uchun
+  //  menejerga belgi qo'yiladi: aks holda `/send` chegirmagacha
+  //  yetib bormay, boshqa sababdan rad etilardi.
+  await db.query(
+    `UPDATE workers SET can_release = true WHERE name = 'Sinov narx ulgurji'`);
   await xodim('Sinov narx chakana', 'sotuvchi');
   await db.query(
     `UPDATE worker_roles SET price_kind = 'retail'
@@ -5765,6 +5771,49 @@ test('PIN bazada ochiq matnda turmaydi va uning bilan kiriladi', async () => {
   //  Blokda to'g'ri PIN ham qabul qilinmaydi — aks holda cheklovning
   //  ma'nosi qolmasdi.
   assert.equal((await yoq('POST', '/api/auth/pin', { pin: '0000' })).status, 429);
+});
+
+test('mijozga chiqarishga ruxsatni faqat belgisi bor xodim beradi', async () => {
+  //  ★ ZAVOD QARORI (2026-09): buyurtmani har menejer yozadi, lekin
+  //  CHIQISH kunini bitta odam nazorat qiladi — aks holda ikki
+  //  menejer bir kunga ikkita mashinalik mahsulot chiqarib yuborardi.
+  const { db } = require('../db');
+  const men = await xodim('Sinov ruxsatsiz menejer', 'sotuvchi');
+  await db.query(
+    `UPDATE worker_roles SET scope_own = false
+      WHERE worker_id = (SELECT id FROM workers WHERE name = 'Sinov ruxsatsiz menejer')`);
+  const m = H.api(base, await H.sessionFor('Sinov ruxsatsiz menejer'));
+
+  const mijoz = (await admin('POST', '/api/units/customers',
+    { name: 'Sinov ruxsat mijozi', channel: 'B2B' })).body;
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz.id, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 1, color: 'Oq' }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 1 });
+
+  //  Belgisi yo'q menejer rad etiladi — tugmani yashirish himoya emas,
+  //  tekshiruv SERVERDA.
+  const yoq = await m('POST', `/api/sales/orders/${z.id}/send`);
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /ruxsat/i);
+
+  //  T/M ombor mudiriga u KO'RINMAYDI ham: hali savdoning qo'lida.
+  assert.ok(!(await admin('GET', '/api/sales/shipping')).body.rows
+    .some((r) => r.id === z.id), 'ruxsatsiz buyurtma mudirga chiqmaydi');
+
+  //  Belgi qo'yilgach o'sha odam o'tkazadi.
+  await db.query(
+    `UPDATE workers SET can_release = true WHERE name = 'Sinov ruxsatsiz menejer'`);
+  const m2 = H.api(base, await H.sessionFor('Sinov ruxsatsiz menejer'));
+  const ok = await m2('POST', `/api/sales/orders/${z.id}/send`);
+  assert.equal(ok.status, 200, ok.text);
+  assert.ok((await admin('GET', '/api/sales/shipping')).body.rows
+    .some((r) => r.id === z.id), 'endi mudir ko\'radi');
 });
 
 test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {

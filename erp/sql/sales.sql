@@ -554,3 +554,62 @@ ALTER TABLE worker_roles ADD COLUMN IF NOT EXISTS price_kind TEXT
 --  allaqachon tasdiqlangan qator qaytadan «past» bo'lib qolmasligi
 --  kerak — shuning uchun chegara qatorda qotib qoladi.
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price_floor NUMERIC(14,2);
+
+-- ═══════════════════════════════ MIJOZGA CHIQARISHGA KIM RUXSAT BERADI
+--
+--  ★ ZAVOD QARORI (2026-09): chiqarishga ruxsatni BITTA odam beradi.
+--
+--  «Mijozga chiqarilsin» — mijoz bilan kun kelishilgani haqidagi qaror
+--  va undan keyin mashina yuklanadi. Buyurtmani har menejer yozadi,
+--  lekin CHIQARISH kunini bitta odam nazorat qiladi: aks holda ikki
+--  menejer bir kunga ikkita mashinalik mahsulot chiqarib yuborardi va
+--  buni faqat ombor eshigi oldida bilinardi.
+--
+--  ★ BELGI XODIMDA, ROLDA EMAS (`can_hold_cash`, `cash_all_customers`
+--  va `sees_warehouse` bilan bir xil idiom). Rol buni ajrata olmaydi:
+--  ruxsat beradigan odam ham `sotuvchi`, qolganlari ham, va rol
+--  huquqlari KODDA turadi (`sql/core-seed.sql`) — bitta odam uchun
+--  o'zgartirib bo'lmaydi. Kodga ism ham, lavozim ham yozilmaydi
+--  (4-qoida): ertaga o'sha odam almashsa bitta katakcha ko'chadi.
+--
+--  ★ STANDARTI `false`, va bu ataylab. `true` bo'lsa qoida BUGUN
+--  ishlamasdi — ertaga ishga olingan menejer ham jim turib ruxsat
+--  bera olardi, ya'ni «bitta odam» degan qoida o'zi-o'zidan buzilardi.
+--  Belgi qo'yilmaguncha tugma hech kimda chizilmaydi va SABABI ekranda
+--  yozilib turadi: tugmani topolmagan odam uni qidirib yurmasin.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_release BOOLEAN NOT NULL DEFAULT false;
+
+--  ★ TURGAN BUYURTMALAR «TAYYOR» GA QAYTARILADI (zavod qarori,
+--  2026-09). Qoida ishga tushgan kuni «Mijozga chiqarilsin» da turgan
+--  buyurtmalarni ESKI tartib yuborgan edi — ularni hech kim yangi
+--  qoida bo'yicha tasdiqlamagan. Qolib ketsa mudir ertalab ularni
+--  chiqarib yuborardi va ruxsat bosqichi birinchi kundanoq chetlab
+--  o'tilgan bo'lardi.
+--
+--  Kunlik reja ham tozalanadi — `/unsend` bilan AYNAN bir xil yo'l:
+--  buyurtma endi chiqarilmaydi, ya'ni mudirning bugungi hisobida
+--  turishi yolg'on bo'lardi.
+--
+--  Chiqib ketganlarga TEGILMAYDI: mahsulot mijozda va uning qarzida.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'chiqarish-qayta-tasdiq') THEN
+    UPDATE orders SET status = 'reserved', sent_to_wh_on = NULL, sent_by = NULL,
+                      plan_on = NULL, plan_by = NULL, plan_at = NULL
+     WHERE status = 'to_ship';
+
+    --  ★ ADMINISTRATORGA BELGI BIR MARTA QO'YILADI. Standarti `false`,
+    --  ya'ni deploy kuni belgi hech kimda bo'lmasdi va HECH KIM —
+    --  administratorning o'zi ham — ruxsat bera olmasdi; tuzatadigan
+    --  odam esa aynan u. Bitta katakcha uchun butun savdo to'xtab
+    --  turishi kerak emas.
+    --
+    --  Bu bir martalik: keyin zavod belgini kimga qo'yishni O'ZI hal
+    --  qiladi (administratordan olib tashlasa ham qaytarilmaydi).
+    UPDATE workers w SET can_release = true
+      FROM worker_roles wr
+     WHERE wr.worker_id = w.id AND wr.role_code = 'admin';
+
+    INSERT INTO migration_flags (key) VALUES ('chiqarish-qayta-tasdiq');
+  END IF;
+END $$;

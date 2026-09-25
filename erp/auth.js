@@ -17,7 +17,8 @@ async function createSession(workerId, surface) {
 
 async function loadWorker(workerId) {
   const w = (await db.query(
-    `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse
+    `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
+            can_release
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles] = await Promise.all([
@@ -62,6 +63,11 @@ async function loadWorker(workerId) {
     //  (izoh: sql/cash.sql). Savdo bo'limi eskicha qolaveradi — aks
     //  holda unga boshqa menejerning buyurtmasi ham ochilib ketardi.
     cash_all: w.cash_all_customers === true,
+    //  ★ MIJOZGA CHIQARISHGA RUXSATNI BITTA ODAM BERADI (izoh:
+    //  sql/sales.sql). Buyurtmani har menejer yozadi, lekin chiqish
+    //  kunini bitta odam nazorat qiladi — belgi XODIMDA, rolda emas:
+    //  ruxsat beradigani ham `sotuvchi`, qolganlari ham.
+    can_release: w.can_release === true,
   };
 }
 
