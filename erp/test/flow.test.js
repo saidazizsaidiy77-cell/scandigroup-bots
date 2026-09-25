@@ -2182,6 +2182,82 @@ test('ta\'minotchilar ro\'yxati faylga chiqadi', async () => {
   assert.match(r.text, /Sinov MDF yetkazuvchi/);
 });
 
+test('tsex ekranida oy boshidan beri chiqarilgani', async () => {
+  //  ★ ZAVOD QARORI (2026-09): hisob TSEXDAN CHIQQANDA yoziladi,
+  //  bo'limdan o'tganda emas — aks holda bitta konver o'n to'qqiz
+  //  marta «ishlab chiqarilgan» bo'lib qo'shilardi.
+  const ARRA = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+  const korpus = (await H.id(`SELECT id FROM shops WHERE code='KORPUS'`)).id;
+  const oyi = async (shop) => (await admin('GET', '/api/units/board?shop_id=' + shop))
+    .body.oy;
+  const bor = async (shop, nom) => (await oyi(shop)).find((r) => r.product === nom);
+
+  const oldin = await bor(korpus, 'Milano');
+  const edi = oldin ? Number(oldin.qty) : 0;
+
+  //  Soni ataylab boshqa testlarникidan farq qiladi: baza UMUMIY va
+  //  «qty = 7 AND color = 'Oq'» bilan qator sanaydigan test bor —
+  //  bu yerda yaratilgan konver o'sha hisobga qo'shilib ketardi.
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 6, color: 'Oq chiqim', section_id: ARRA }] }))
+    .body.created[0];
+
+  //  Tsex ICHIDAGI harakat hisobga qo'shilmaydi: mahsulot hali
+  //  tsexdan chiqmagan.
+  await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  assert.equal((await bor(korpus, 'Milano'))?.qty ?? 0, edi,
+    'bo\'limdan bo\'limga o\'tish sanalmaydi');
+
+  //  Boshqa TSEXGA o'tkazilgani sanaladi — bir marta.
+  for (let i = 0; i < 30; i++) {
+    const d = (await admin('GET', '/api/units/board?shop_id=' + korpus)).body;
+    const r = d.sections.flatMap((x) => x.units).find((x) => x.id === u.id);
+    if (!r) break;
+    if (r.next_shop_id && r.next_shop_id !== korpus) {
+      await admin('POST', '/api/units/handover', { items: [u.id] });
+      await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+      break;
+    }
+    await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  }
+  assert.equal(Number((await bor(korpus, 'Milano')).qty), edi + 6,
+    'boshqa tsexga o\'tkazilgani bir marta qo\'shiladi');
+
+  //  ★ T/M OMBORGA TOPSHIRILGANI HAM SANALADI. U `unit_moves` ga
+  //  yozilmaydi (mudir qabul qilganda `fg_on` qo'yiladi, konver esa
+  //  o'z bo'limida turaveradi) — faqat birinchi yo'l sanalsa
+  //  qadoqlash tsexida raqam HAR DOIM nol bo'lib turardi.
+  const qad = (await H.id(`SELECT id FROM shops WHERE code='QADOQ'`)).id;
+  const qOld = (await bor(qad, 'Milano'))?.qty ?? 0;
+  for (let i = 0; i < 40; i++) {
+    const shops = (await admin('GET', '/api/units/board')).body.shops;
+    let topildi = false;
+    for (const sh of shops) {
+      const d = (await admin('GET', '/api/units/board?shop_id=' + sh.id)).body;
+      const r = d.sections.flatMap((x) => x.units).find((x) => x.id === u.id);
+      if (!r) continue;
+      topildi = true;
+      if (r.next_shop_id && r.next_shop_id !== sh.id) {
+        await admin('POST', '/api/units/handover', { items: [u.id] });
+        await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+      } else if (!r.next_section_id) {
+        await admin('POST', '/api/units/handover', { items: [u.id] });
+        await admin('POST', '/api/units/stock/accept', { items: [{ unit_id: u.id }] });
+      } else {
+        await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+      }
+      break;
+    }
+    if (!topildi) break;
+  }
+  assert.equal(Number((await bor(qad, 'Milano')).qty), Number(qOld) + 6,
+    'T/M omborga topshirilgani qadoqlash tsexiga yoziladi');
+
+  //  O'lchov birligi GURUHDAN: penal KOMPLEKT bilan sanaladi va uni
+  //  stulning DONASI bilan qo'shib bo'lmaydi.
+  assert.equal((await bor(qad, 'Milano')).uom, 'komplekt');
+});
+
 test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () => {
   //  ★ ZAVOD QARORI (2026-09): sarfni TSEX BOSHLIG'I yozadi, konverni
   //  keyingi bo'limga o'tkazadigan ekranning O'ZIDA. Materialni

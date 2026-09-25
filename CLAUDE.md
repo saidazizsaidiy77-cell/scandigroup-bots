@@ -430,6 +430,37 @@ tuzilib, usta kechagi tartibni topa olmasdi. Endi tartib RAQAM bo'yicha,
 qog'oz daftardagidek. Kechikish yo'qolmadi — qator yonida qizil belgi
 bo'lib turadi, faqat navbatni buzmaydi.
 
+**★ OY BOSHIDAN BERI NIMA CHIQARILGANI TSEX EKRANIDA TURADI** (zavod
+qarori, 2026-09; `/api/units/board` dagi `oy`, `oyKart()`). Boshliqning
+ikkinchi savoli — «bu oy qancha qildik». Ilgari javob faqat zavod
+ko'rinishida edi va u boshliqqa ochilmaydi (`production.reports` savdo
+va rahbariyatniki); o'zi esa kun bo'yi AYNAN shu ekranda turadi.
+
+**★ HISOB TSEXDAN CHIQQANDA YOZILADI, bo'limdan o'tganda emas.**
+Bo'lim bo'yicha sanalsa bitta konver o'n to'qqiz marta «ishlab
+chiqarilgan» bo'lib qo'shilardi — javob esa bitta: tsexdan nechta
+mahsulot CHIQDI.
+
+Ikki yo'l bilan chiqadi va **ikkalasi ham sanaladi**:
+
+  1. **boshqa TSEXGA o'tkazildi** — `unit_moves`, bo'limi begona
+     tsexga tushgan qator;
+  2. **T/M OMBORGA topshirildi** — qadoqlash tsexining yagona chiqishi,
+     va u `unit_moves` ga YOZILMAYDI: mudir qabul qilganda `fg_on`
+     qo'yiladi, konver esa o'z bo'limida turaveradi. Faqat birinchisi
+     sanalsa oxirgi tsexda raqam HAR DOIM nol bo'lib turardi.
+
+Tsex — BO'LIMNING tsexi, javobgar tsex emas: ish mahsulot JISMONAN
+turgan joyda bajariladi. Konver uch tsexdan o'tsa uchalasida ham
+sanaladi — har biri o'sha ishni qilgan.
+
+**Sarlavhada yig'indi, ostida mahsulotlar**, va yig'indi O'LCHOV
+BIRLIGI bo'yicha ajratiladi: stul DONA, penal KOMPLEKT — qo'shib
+bo'lmaydi (ombor qoldig'i bilan bir xil qoida). Ro'yxat **beshta
+bilan cheklanadi** va qolgani bosilganda ochiladi: telefonda o'nta
+mahsulot qatori butun ekranni egallab, ish — bo'limlar ro'yxati —
+pastga tushib ketardi.
+
 **Tsex boshlig'i konverni kim kutayotganini ko'radi** — bo'limlar
 ekranining O'ZIDA, alohida oyna emas. Konver yonida ikkita raqam turadi:
 soni (jismonan nechta) va ostida «N buyurtmada». Qator bosilsa ostida

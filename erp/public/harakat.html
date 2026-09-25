@@ -351,6 +351,7 @@ function drawBoard() {
     : `<h2 style="margin-bottom:12px">${esc(data.shop.name)}</h2>`;
 
   $('body').innerHTML = head
+    + oyKart()
     // Kiritilgan, lekin hali konveyerga chiqmagan konverlar. Hech bir
     // bo'limda turmagani uchun ustunlarga tushmaydi — ekranning
     // tepasida turadi, aks holda boshliq uni umuman topa olmaydi.
@@ -360,6 +361,61 @@ function drawBoard() {
         'oldingi tsex topshirishga tayyorladi', true, false)
     + data.sections.map(sc => block(sc.name, sc.units, true,
         sc.is_exit ? 'T/M omborga chiqish' : '', false, sc.is_exit)).join('');
+}
+
+//  ── OY BOSHIDAN BERI CHIQARILGAN ─────────────────────────────────────
+//
+//  Boshliqning ikkinchi savoli: «bu oy qancha qildik». Javob ish
+//  qilayotgan joyida turadi — alohida hisobot sahifasi unga
+//  ochilmaydi ham (`production.reports` savdo va rahbariyatniki).
+//
+//  Hisob TSEXDAN CHIQQANDA yoziladi (izoh: modules/units.js): bo'lim
+//  bo'yicha sanalsa bitta konver o'n to'qqiz marta qo'shilardi.
+//
+//  ★ SARLAVHADA YIG'INDI, ostida MAHSULOTLAR. Telefonda o'nta
+//  mahsulot qatori butun ekranni egallab, ish — bo'limlar ro'yxati —
+//  pastga tushib ketardi. Shuning uchun ro'yxat BESHTA bilan
+//  cheklanadi va qolgani bosilganda ochiladi: ko'p chiqargan beshta
+//  mahsulot savolning javobi, qolgani esa tafsilot.
+let oyOchiq = false;
+const oyTogg = () => { oyOchiq = !oyOchiq; drawBoard(); };
+
+function oyKart() {
+  const rows = data.oy || [];
+  const oyNomi = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul',
+    'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'][new Date().getMonth()];
+  if (!rows.length) {
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="muted" style="font-size:12px;letter-spacing:.04em;
+        text-transform:uppercase">${oyNomi} oyida chiqarilgan</div>
+      <p class="muted" style="font-size:13px;margin-top:6px">Bu oyda bu tsexdan
+        hali mahsulot chiqmagan.</p></div>`;
+  }
+  //  Yig'indi O'LCHOV BIRLIGI bo'yicha ajratiladi: stul DONA bilan,
+  //  penal KOMPLEKT bilan sanaladi va ularni qo'shib bo'lmaydi
+  //  (ombor qoldig'i bilan bir xil qoida).
+  const jami = {};
+  for (const r of rows) jami[r.uom] = (jami[r.uom] || 0) + Number(r.qty);
+  const ko = oyOchiq ? rows : rows.slice(0, 5);
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:12px">
+      <div class="muted" style="font-size:12px;letter-spacing:.04em;
+        text-transform:uppercase">${oyNomi} oyida chiqarilgan</div>
+      <div style="font-size:19px;font-weight:600">${
+        Object.entries(jami).map(([u, n]) => `${n} <span class="muted"
+          style="font-size:13px;font-weight:400">${esc(u)}</span>`).join(' · ')}</div>
+    </div>
+    <div style="margin-top:10px">${ko.map((r) => `
+      <div class="row" style="justify-content:space-between;gap:10px;
+        padding:6px 0;border-bottom:1px solid var(--line)">
+        <div>${esc(r.product)}${r.product_type
+          ? ` <span class="muted" style="font-size:12px">${esc(r.product_type)}</span>` : ''}</div>
+        <div><b>${r.qty}</b> <span class="muted"
+          style="font-size:12px">${esc(r.uom)}</span></div>
+      </div>`).join('')}</div>
+    ${rows.length > 5 ? `<button style="width:100%;margin-top:10px"
+      onclick="oyTogg()">${oyOchiq ? 'Yig\'ish'
+        : `Yana ${rows.length - 5} ta mahsulot`}</button>` : ''}</div>`;
 }
 
 function pick(id, on) { on ? picked.add(id) : picked.delete(id); drawBoard(); }

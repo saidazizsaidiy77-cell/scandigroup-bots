@@ -2881,6 +2881,60 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
       WHERE s.active AND (s.shop_id = $1 OR o.st IS NOT NULL)
       ORDER BY o.st NULLS LAST, s.sort, s.name`, [shopId])).rows;
 
+  //  ★ OY BOSHIDAN BERI NIMA CHIQARILGAN (zavod qarori, 2026-09).
+  //
+  //  Tsex boshlig'ining ikkinchi savoli — «bu oy qancha qildik». Ilgari
+  //  javob faqat zavod ko'rinishida edi va u boshliqqa ochilmaydi;
+  //  o'zi esa kun bo'yi AYNAN shu ekranda turadi.
+  //
+  //  ★ HISOB TSEXDAN CHIQQANDA YOZILADI, bo'limdan o'tganda emas
+  //  (zavod qarori). Bo'lim bo'yicha sanalsa bitta konver o'n
+  //  to'qqiz marta «ishlab chiqarilgan» bo'lib qo'shilardi —
+  //  javob esa bitta: tsexdan nechta mahsulot CHIQDI.
+  //
+  //  Ikki yo'l bilan chiqadi va ikkalasi ham sanaladi:
+  //
+  //    1. boshqa TSEXGA o'tkazildi   — `unit_moves`, bo'limi begona
+  //       tsexga tushgan qator;
+  //    2. T/M OMBORGA topshirildi    — qadoqlash tsexining yagona
+  //       chiqishi, va u `unit_moves` ga YOZILMAYDI (mudir qabul
+  //       qilganda `fg_on` qo'yiladi, konver esa o'z bo'limida
+  //       turaveradi). Faqat birinchisi sanalsa oxirgi tsexda raqam
+  //       HAR DOIM nol bo'lib turardi.
+  //
+  //  Tsex — bo'limning tsexi, javobgar tsex emas: ish mahsulot
+  //  JISMONAN turgan joyda bajariladi.
+  const oy = (await db.query(
+    `WITH chiqdi AS (
+       SELECT u.product_id, SUM(mv.qty)::int AS qty
+         FROM unit_moves mv
+         JOIN sections f ON f.id = mv.from_section_id
+         JOIN sections t ON t.id = mv.section_id
+         JOIN production_units u ON u.id = mv.unit_id
+        WHERE f.shop_id = $1 AND t.shop_id <> $1
+          AND mv.moved_on >= date_trunc('month', CURRENT_DATE)::date
+          AND u.status <> 'cancelled'
+        GROUP BY u.product_id
+       UNION ALL
+       SELECT u.product_id, SUM(u.qty)::int
+         FROM production_units u
+         JOIN sections s ON s.id = u.current_section_id
+        WHERE s.shop_id = $1
+          AND u.fg_on >= date_trunc('month', CURRENT_DATE)::date
+          AND u.status <> 'cancelled'
+        GROUP BY u.product_id)
+     SELECT p.name AS product, g.name AS product_type,
+            --  O'lchov birligi GURUHDA: stul DONA, penal KOMPLEKT.
+            --  Ikkalasini qo'shib bo'lmaydi, shuning uchun yig'indi
+            --  ham birlik bo'yicha ajratiladi (ombor bilan bir xil).
+            COALESCE(g.uom, 'dona') AS uom,
+            SUM(c.qty)::int AS qty
+       FROM chiqdi c
+       JOIN products p        ON p.id = c.product_id
+       LEFT JOIN product_groups g ON g.id = p.group_id
+      GROUP BY p.name, g.name, g.uom
+      ORDER BY SUM(c.qty) DESC, p.name`, [shopId])).rows;
+
   const mine = rows.filter((r) => r.owner_shop_id === shopId);
   // Kiritilgan, lekin hali konveyerga chiqmagan konverlar. Ular hech bir
   // bo'limda turmaydi, shuning uchun bo'lim ustunlariga tushmaydi —
@@ -2889,6 +2943,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
   res.json({
     shops,
     shop: shops.find((s) => s.id === shopId),
+    oy,
     unstarted: fresh,
     sections: sections.map((sc) => ({
       ...sc, units: mine.filter((u) => u.section_id === sc.id) })),
