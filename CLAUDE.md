@@ -2303,6 +2303,41 @@ Eng ostida **JAMI** qatori, o'lchov birligi bo'yicha ajratilgan: dona
 bilan komplektni qo'shib bo'lmaydi. Alohida kartochka qilinmadi — ko'z
 jadvaldan chiqib, qaysi raqam qaysi ustunniki ekanini qidirib qolardi.
 
+**★ SARLAVHA BOSILSA SARALANADI, va saralash KLIENTDA** (zavod
+qarori, 2026-09). Qoldiq so'rovida LIMIT yo'q — sahifada qatorlarning
+HAMMASI turadi, ya'ni bosilgan zahoti javob beradi va serverga
+ikkinchi marta borilmaydi. **Jurnalda teskari** va sababi ham
+teskari: u 500 qator bilan cheklangan, ya'ni faqat ko'rinib turganini
+saralash noto'g'ri javob berardi va u yerda saralash SERVERDA qoladi.
+
+Yo'nalishni USTUNNING turi hal qiladi: **raqamda birinchi bosish
+ko'pdan kichikka** — savol «qaysi mahsulot ko'p turibdi» va eng kichik
+qatorni tepaga chiqarish javobni ikkinchi bosishga surardi; **matnda
+A→Z**. Ikkinchi bosish teskariga o'giradi.
+
+Standarti — SERVERNIKI (mahsulot · turi · rang · mato) va sahifa
+ochilganda hech narsa saralanmaydi: mudir kechagi tartibni o'sha
+joyidan topadi. Teng qiymatlar ham SERVER tartibida qoladi
+(`Array.sort` barqaror), shuning uchun ikkinchi darajali kalit
+yozilmadi va qatorlar har bosishda joyini almashtirmaydi.
+
+**★ BO'SH KATAK HAR DOIM OXIRIDA**, yo'nalishdan qat'i nazar
+(xodimlar ro'yxati bilan bir xil qoida): rangi yozilmagan o'nta qator
+tepaga chiqsa javob ko'rinmasdi, bo'shni qidirayotgan odam esa ularni
+oxirida birga topadi.
+
+**Nol esa bo'sh EMAS, va ekrandagi «—» ikki xil narsani anglaydi.**
+Aylanma ustunlarida («kirdi», «bronda») nol HAQIQIY javob — «bron
+qo'yilmagan» — va o'z joyida turadi. Vitrinadagi **summada** esa u
+NOMA'LUM: narxi yozilmagan konverning summasi nol emas va ekranda
+ham «—» bo'lib turadi. Nol deb saralansa o'sishiga bosganda u eng
+arzon bo'lib tepaga chiqardi, shuning uchun u bo'sh katak qoidasiga
+tushadi.
+
+Narxning RAQAMI alohida funksiyada (`narx()`) va uni ekran ham,
+saralash ham shundan oladi: ikki nusxada bo'lsa «narx bo'yicha»
+saralangan ro'yxat o'z ustuniga mos kelmay qolardi.
+
 **★ OMBOR MUDIRI BIR QISMINI QABUL QILADI** (zavod qarori, 2026-09).
 Qadoqlash «10 ta jo'natdim» deydi, mudir esa javonga 2 tasini qo'yadi:
 qolgani hali kelmagan yoki sanoqda chiqmagan. Ilgari tugma faqat

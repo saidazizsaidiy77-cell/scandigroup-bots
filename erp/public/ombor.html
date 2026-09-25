@@ -372,6 +372,91 @@ function toggleType(t) {
   loadStock();
 }
 
+//  ★ SARALASH KLIENTDA (zavod qarori, 2026-09). Qoldiq so'rovida
+//  LIMIT yo'q — sahifada qatorlarning HAMMASI turadi, ya'ni sarlavha
+//  bosilgan zahoti javob beradi va serverga ikkinchi marta borilmaydi.
+//  JURNALDA teskari va sababi ham teskari: u 500 qator bilan
+//  cheklangan, ya'ni faqat ko'rinib turganini saralash noto'g'ri
+//  javob berardi va saralash u yerda SERVERDA qoladi.
+//
+//  Ustunlar: matnniki nomi bilan, raqamniki qiymati bilan. Aylanma
+//  ustunlari («kirdi») tanlangan ORALIQNIKI — saralash ham o'sha
+//  raqam bo'yicha bo'ladi va boshqa savolga javob bermaydi.
+const SORT = {
+  product: r => r.product,
+  type:    r => r.product_type,
+  color:   r => r.color,
+  fabric:  r => r.fabric,
+  kirdi:   r => +r.kirdi,
+  chiqdi:  r => +r.chiqdi,
+  bron:    r => +r.bron,
+  //  «Qoldiq» T/M da bronni ayirgandagi, vitrinada esa bron
+  //  bo'lmaydi — ekranda nima tursa, saralash ham o'shanikidir.
+  free:    r => (isTM() ? +r.free : +r.qty),
+  jami:    r => +r.qty,
+  narx:    r => narx(r),
+  //  ★ IKKI XIL «—», ikki xil saralash. Aylanma ustunlarida nol
+  //  HAQIQIY javob («bron qo'yilmagan») va o'z joyida turadi.
+  //  Summada esa u NOMA'LUM: narxi yozilmagan konverning summasi
+  //  nol emas — ekranda ham «—» bo'lib turadi (izoh: `drawStockRow`).
+  //  Nol deb saralansa o'sishiga bosganda u eng arzon bo'lib tepaga
+  //  chiqardi va yolg'on javob berardi, shuning uchun bo'sh katak
+  //  qoidasiga tushadi: har doim oxirida.
+  summa:   r => Number(r.amount) || null,
+};
+//  Raqamli ustunda birinchi bosish KO'PDAN kichikka: savol «qaysi
+//  mahsulot ko'p turibdi» va eng kichik qatorni tepaga chiqarish
+//  javobni ikkinchi bosishga surardi. Matnda esa A→Z.
+const RAQAM = new Set(['kirdi', 'chiqdi', 'bron', 'free', 'jami', 'narx', 'summa']);
+
+//  Standarti — SERVERNIKI (mahsulot · turi · rang · mato). Sahifa
+//  ochilganda hech narsa saralanmaydi: mudir kechagi tartibni
+//  o'sha joyidan topadi (xodimlar ro'yxati bilan bir xil qoida).
+let sortK = null, sortAsc = true;
+
+function sortSet(k) {
+  if (sortK === k) sortAsc = !sortAsc;
+  else { sortK = k; sortAsc = !RAQAM.has(k); }
+  //  Terilgan, lekin hali yuborilmagan qidiruv yo'qolmasin: sahifa
+  //  butunlay qayta chiziladi va katak `stock.q` dan to'ladi.
+  if ($('sQ')) stock.q = $('sQ').value;
+  drawStock();
+}
+
+function saralangan(rows) {
+  if (!sortK || !SORT[sortK]) return rows;
+  const qiy = SORT[sortK], yon = sortAsc ? 1 : -1;
+  //  Nusxa olinadi: `sort` massivning O'ZINI o'zgartiradi va server
+  //  bergan tartib yo'qolardi — u esa standart tartib, ya'ni qaytib
+  //  kelishi kerak.
+  //
+  //  Teng qiymatlar SERVER tartibida qoladi (`Array.sort` barqaror),
+  //  shuning uchun ikkinchi darajali kalit yozilmadi: «Turi» bo'yicha
+  //  saralanganda ichidagilar mahsulot nomi bo'yicha turaveradi va
+  //  qatorlar har bosishda joyini almashtirmaydi.
+  return rows.slice().sort((a, b) => {
+    const x = qiy(a), y = qiy(b);
+    //  ★ BO'SH KATAK HAR DOIM OXIRIDA, yo'nalishdan qat'i nazar
+    //  (xodimlar ro'yxati bilan bir xil qoida): rangi yozilmagan
+    //  o'nta qator tepaga chiqsa javob ko'rinmasdi, bo'shni
+    //  qidirayotgan odam esa ularni oxirida birga topadi.
+    //
+    //  NOL bo'sh EMAS: «bronda 0» — haqiqiy javob va o'z joyida
+    //  turadi, aks holda bron qo'yilmagan mahsulot ro'yxat
+    //  oxiriga tushib ketardi.
+    const bx = x == null || x === '', by = y == null || y === '';
+    if (bx !== by) return bx ? 1 : -1;
+    if (bx) return 0;
+    return (typeof x === 'number' ? x - y
+      : String(x).localeCompare(String(y), 'uz')) * yon;
+  });
+}
+
+//  Sarlavha katagi: nomi, saralash o'qi va bosilganda yo'nalishi.
+const th = (k, cls, nom) => `<th class="${cls}" onclick="sortSet('${k}')">${
+  nom}<span style="opacity:.45">${
+  sortK === k ? (sortAsc ? ' \u25b2' : ' \u25bc') : ''}</span></th>`;
+
 function drawStock() {
   const d = stock;
   $('body').innerHTML = `
@@ -456,17 +541,17 @@ function drawStock() {
             filtri bilan aralashtirib bo'lmaydi. -->
       <table class="stock ${faqatQoldiq() ? 'savdo' : isTM() ? 'tm' : 'shop'}">
         <thead><tr>
-          <th class="s-name">Mahsulot</th><th class="s-type">Turi</th>
-          <th class="s-color">Rang</th><th class="s-fabric">Mato</th>
-          ${faqatQoldiq() ? '' : `<th class="s-in">Kirdi</th>
-          <th class="s-out">Chiqdi</th>
-          ${isTM() ? `<th class="s-bron">Bronda</th>` : ''}`}
-          <th class="s-free">Qoldiq</th>
-          ${jamiUstun() ? `<th class="s-all">Jami</th>` : ''}
-          ${isTM() ? '' : `<th class="s-price">Narx, $</th>
-                           <th class="s-amount">Summa, $</th>`}
+          ${th('product', 's-name', 'Mahsulot')}${th('type', 's-type', 'Turi')}
+          ${th('color', 's-color', 'Rang')}${th('fabric', 's-fabric', 'Mato')}
+          ${faqatQoldiq() ? '' : `${th('kirdi', 's-in', 'Kirdi')}
+          ${th('chiqdi', 's-out', 'Chiqdi')}
+          ${isTM() ? th('bron', 's-bron', 'Bronda') : ''}`}
+          ${th('free', 's-free', 'Qoldiq')}
+          ${jamiUstun() ? th('jami', 's-all', 'Jami') : ''}
+          ${isTM() ? '' : `${th('narx', 's-price', 'Narx, $')}
+                           ${th('summa', 's-amount', 'Summa, $')}`}
         </tr></thead>
-        <tbody>${d.rows.map(r => drawStockRow(r)).join('')}</tbody>
+        <tbody>${saralangan(d.rows).map(r => drawStockRow(r)).join('')}</tbody>
         <!--  JAMI eng ostida, ustunlar bilan bir chiziqda: alohida
               kartochka qilinsa ko'z jadvaldan chiqib, qaysi raqam qaysi
               ustunniki ekanini qidirib qolardi. O'lchov birligi bo'yicha
@@ -482,11 +567,18 @@ function drawStock() {
 //  «to'g'ri» raqam yo'q — shunda o'rtacha ko'rsatiladi va «o'rt.» deb
 //  belgilanadi. Narxsiz konverlar bo'lsa summa ham to'liq emas, shuning
 //  uchun chiziqcha: bo'sh katak savol berdiradi, yolg'on raqam bermaydi.
+//  Raqamning O'ZI alohida: uni saralash ham o'qiydi va ekranda
+//  turgan bilan BIR XIL bo'lishi kerak — ikki nusxada bo'lsa
+//  «narx bo'yicha» saralangan ro'yxat o'z ustuniga mos kelmasdi.
+function narx(r) {
+  if (r.price_min == null) return null;
+  return Number(r.price_min) === Number(r.price_max)
+    ? Number(r.price_min) : (Number(r.amount) / (Number(r.qty) || 1));
+}
 function price(r) {
-  if (r.price_min == null) return '<span class="muted">\u2014</span>';
-  const one = Number(r.price_min) === Number(r.price_max);
-  const v = one ? Number(r.price_min) : (Number(r.amount) / (Number(r.qty) || 1));
-  return money(v) + (one ? ''
+  const v = narx(r);
+  if (v == null) return '<span class="muted">\u2014</span>';
+  return money(v) + (Number(r.price_min) === Number(r.price_max) ? ''
     : ` <span class="muted" style="font-size:11px">o'rt.</span>`);
 }
 
