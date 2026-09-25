@@ -32,10 +32,16 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);
   font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased;padding:24px;max-width:1280px;margin:0 auto}
-/* Ko'p ustunli jadval sahifasi ekranni to'liq ishlatsin — 1280px da jurnal
-   gorizontal aylantirishsiz sig'maydi. */
-body.wide{max-width:1720px}
+  -webkit-font-smoothing:antialiased;padding:24px;max-width:1720px;margin:0 auto}
+/*  ★ KENGLIK BITTA (zavod qarori, 2026-09). Ilgari ikkita edi: 1280px
+    standart va `body.wide` bilan 1720px — ustuni ko'p jadval sahifalariga.
+    Natijada bitta modulning ichida sahifa sahifadan kengroq bo'lib,
+    menyu ham har bosishda siljib turardi: Xodimlar keng, Bank va kassa
+    esa tor. Kenglik SAHIFANING xususiyati emas — u butun tizimniki.
+
+    Tor kerak bo'lgan joy o'ZI cheklaydi: yuk xati `.doc-page` (900px),
+    kirim orderi va buyurtma ekrani `.order-in` (1180px) — hujjat
+    qog'ozdek o'qilishi kerak, jadval esa ekranni to'liq ishlatsin. */
 h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
 h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
   color:var(--muted);margin-bottom:12px}

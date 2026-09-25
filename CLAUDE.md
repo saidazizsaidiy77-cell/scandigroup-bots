@@ -2417,6 +2417,24 @@ siljiydi va sarlavha qatorlarga yopishib qolardi.
 Qog'ozda quti ochiladi (`@media print`: `.sheet,.tbox`) — jadval
 to'liq chiqib, sahifalarga o'zi bo'linadi.
 
+**★ SAHIFA KENGLIGI HAM BITTA** (zavod qarori, 2026-09). Ilgari
+ikkita edi: 1280px standart va `body.wide` bilan 1720px — ustuni ko'p
+jadval sahifalariga (jurnal, xodimlar, katalog, foyda-zarar…).
+Natijada bitta modulning ichida sahifa sahifadan kengroq bo'lib
+turardi: «Xodimlar va ish haqi» butun ekranni olar, «Bank va kassa»
+esa o'rtada tor ustun bo'lib qolardi — va menyu ham har bosishda
+siljib turardi. Kenglik SAHIFANING xususiyati emas, u butun
+tizimniki.
+
+Endi **1720px hammasida** va `body.wide` klassi umuman yo'q: qolgan
+bo'lsa ertaga qo'shilgan sahifada uni yozish unutilardi va farq
+qaytib kelardi.
+
+Tor kerak bo'lgan joy O'ZI cheklaydi va bu to'g'ri: yuk xati
+`.doc-page` (900px), kirim orderi (640px) va buyurtma ekrani
+`.order-in` (1180px) — hujjat qog'ozdek o'qilishi kerak, jadval esa
+ekranni to'liq ishlatsin.
+
 ---
 
 ## Fayllar
