@@ -6246,6 +6246,131 @@ test('jurnalda boshlanmagan konverlar filtri', async () => {
   assert.ok(xls.text.includes(bosh.conveyor_no));
 });
 
+test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
+  //  ★ MOL TA'MINOTCHIDAN KELDI (zavod qarori). Kirim IKKITA ishni
+  //  birga qiladi: omborni to'ldiradi va ta'minotchining oldidagi
+  //  qarzni oshiradi. Ikkalasi ham SHU testda tekshiriladi — biri
+  //  ishlab, ikkinchisi jim qolsa farq faqat oy oxirida, solishtirma
+  //  dalolatnomada bilinardi.
+  const { db } = require('../db');
+  const xom = await xodim('Sinov kirim xodim', 'xom_ombor');
+  const wh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
+
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Kirim Mdf', category: 'MDF' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Sinov Kirim Mdf'`)).id;
+  const qarz = async () => Number((await H.id(
+    `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance);
+  assert.equal(await qarz(), 0, 'yangi ta\'minotchida qarz yo\'q');
+
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Sinov Kirim LDSP', uom: 'list', category: 'LDSP' })).body;
+
+  //  ★ NARX MAJBURIY — aynan shu yeri boshlang'ich qoldiqdan FARQ
+  //  qiladi: kirimda narx QARZNING O'ZI. Narxsiz qator omborni
+  //  to'ldirib, qarzni oshirmasdi.
+  const narxsiz = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh,
+    items: [{ material_id: m.id, qty: 10 }] });
+  assert.equal(narxsiz.status, 400, narxsiz.text);
+  assert.match(narxsiz.body.error, /narx/i);
+
+  //  Ta'minotchisiz kirim ham yo'q: mol keldi-yu, qarz hech qayerda
+  //  yozilmasdi.
+  assert.equal((await xom('POST', '/api/materials/receipts', {
+    warehouse_id: wh,
+    items: [{ material_id: m.id, qty: 10, price: 20 }] })).status, 400);
+
+  //  So'mdagi hujjatga kurs SHART: kursi yo'q so'm dollarga
+  //  aylanmaydi va hujjat qiymatsiz qolardi.
+  assert.equal((await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh, ccy: 'UZS',
+    items: [{ material_id: m.id, qty: 10, price: 250000 }] })).status, 400);
+
+  //  ── Hujjat yoziladi: 100 list × 250 000 so'm, kurs 12 500 = 2 000 $
+  const k = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh, doc_on: '2026-09-10',
+    supplier_doc: 'NK-77', ccy: 'UZS', rate: 12500,
+    items: [{ material_id: m.id, qty: 100, price: 250000 }] });
+  assert.equal(k.status, 200, k.text);
+  assert.match(k.body.doc_no, /^M\d\d-\d{4}$/, 'raqam M26-0001 shaklida');
+  assert.equal(k.body.lines, 1);
+
+  //  1. OMBOR to'ldi.
+  const st = (await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id);
+  assert.equal(Number(st.qty), 100, 'qoldiq oshdi');
+  assert.equal(Number(st.price), 20, '250 000 / 12 500 = 20 $');
+  assert.equal(Number(st.amount), 2000);
+
+  //  2. TA'MINOTCHINING QARZI oshdi — aynan o'sha summaga.
+  assert.equal(await qarz(), 2000, 'kelgan mol qarzga tushdi');
+
+  //  Lentada ham turadi va HAQDOR tomonda: ta'minotchi passiv hisob,
+  //  bizning qarzimiz oshdi. Qatorda hujjatning o'zi yoziladi.
+  const lenta = (await admin('GET',
+    '/api/purchasing/debts/' + tam + '?from=2026-09-01&to=2026-09-30')).body;
+  const qator = lenta.rows.find((r) => r.kind === 'receipt');
+  assert.ok(qator, 'kirim lentada turadi');
+  assert.equal(Number(qator.credit), 2000, 'haqdor tomonda');
+  assert.equal(Number(qator.debit), 0);
+  assert.equal(qator.doc_no, k.body.doc_no);
+  assert.match(qator.note, /NK-77/, 'ta\'minotchining hujjat raqami ham');
+
+  //  Hujjat ICHIDA nima borligi ro'yxatda turadi — ochib ko'rmasdan.
+  const ro = (await xom('GET', '/api/materials/receipts')).body.rows
+    .find((r) => r.id === k.body.id);
+  assert.equal(ro.lines, 1);
+  assert.equal(Number(ro.amount), 2000);
+  assert.equal(ro.items[0].material, 'Sinov Kirim LDSP');
+  assert.equal(Number(ro.items[0].qty), 100);
+
+  //  ── Bekor qilish: qoldiqdan HAM, qarzdan HAM chiqadi. Ikkinchisi
+  //  qolib ketsa hujjat qarzdan chiqar, material esa omborda
+  //  turaverardi.
+  const b = await xom('POST',
+    '/api/materials/receipts/' + k.body.id + '/cancel', { note: 'adashib' });
+  assert.equal(b.status, 200, b.text);
+  assert.ok(!(await xom('GET', '/api/materials/stock')).body.rows
+    .some((r) => r.material_id === m.id), 'qoldiqdan chiqdi');
+  assert.equal(await qarz(), 0, 'qarzdan ham chiqdi');
+
+  //  Tarixda QOLADI: pulga tegadigan o'chirilgan qator savol
+  //  qoldirardi — «men yozgan edim-ku».
+  const bekor = (await xom('GET', '/api/materials/receipts')).body.rows
+    .find((r) => r.id === k.body.id);
+  assert.equal(bekor.status, 'cancelled');
+  assert.equal(bekor.cancel_note, 'adashib');
+  //  Ikkinchi marta bekor qilib bo'lmaydi — u allaqachon hech qaysi
+  //  hisobda yo'q.
+  assert.equal((await xom('POST',
+    '/api/materials/receipts/' + k.body.id + '/cancel', {})).status, 400);
+
+  //  ★ DOIRA CHEGARA, ro'yxatni yashirish emas: boshqa tsexning
+  //  omboriga id ni qo'lda yuborib ham kirim yozib bo'lmaydi.
+  const stulShop = (await H.id(`SELECT id FROM shops WHERE code = 'STUL'`)).id;
+  await xodim('Sinov kirim stul', 'xom_ombor');
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = $1
+      WHERE role_code = 'xom_ombor'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov kirim stul')`,
+    [stulShop]);
+  const stul = H.api(base, await H.sessionFor('Sinov kirim stul'));
+  assert.equal((await stul('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh,
+    items: [{ material_id: m.id, qty: 5, price: 20 }] })).status, 400,
+    'korpus omboriga stul doirasidagi xodim yoza olmaydi');
+
+  //  Tsex boshlig'ida `materials.manage` yo'q: u sarfni yozadi, mol
+  //  qabul qilishni emas.
+  const usta = await xodim('Sinov kirim usta', 'tsex_usta');
+  assert.equal((await usta('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh,
+    items: [{ material_id: m.id, qty: 5, price: 20 }] })).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

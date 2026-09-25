@@ -91,8 +91,10 @@ async function load(){
   const d = await App.api('/api/purchasing/suppliers');
   suppliers = d.suppliers; categories = d.categories; managers = d.managers;
 
-  // Kesimlar ro'yxatning o'zidan hisoblanadi — hozircha kirim hujjati yo'q,
-  // shuning uchun summa emas, ta'minotchi soni ko'rsatiladi.
+  // Kesimlar ro'yxatning o'zidan hisoblanadi: summa emas, ta'minotchi
+  // SONI. Kirim hujjati endi bor, lekin «qaysi yo'nalishda nechta
+  // ta'minotchi» degan savol summa haqida emas — kimga qancha
+  // qarzdorligimiz alohida sahifada, aylanma-saldo bo'lib turadi.
   const count = (key, label) => {
     const m = new Map();
     for (const s of suppliers) {

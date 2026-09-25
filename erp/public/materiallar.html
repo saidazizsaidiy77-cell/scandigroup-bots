@@ -52,6 +52,25 @@
   </div>
 </div>
 
+<!--  ★ KIRIM HUJJATI: mol ta'minotchidan keldi. Filtrlar SERVERDA —
+      oraliq katta bo'lsa qatorlar chegarasiga yetib, klientda yarmi
+      yo'qolardi (ombor tarixi bilan bir xil sabab). -->
+<div class="card" id="cardKirim" hidden>
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="min-width:190px"><label>Ta'minotchi</label>
+      <select id="kSup" onchange="load()"></select></div>
+    <div style="min-width:190px"><label>Ombor</label>
+      <select id="kWh" onchange="load()"></select></div>
+    <div><label>Sana (dan)</label>
+      <input id="kFrom" type="date" onchange="load()"></div>
+    <div><label>gacha</label>
+      <input id="kTo" type="date" onchange="load()"></div>
+    <div style="min-width:180px"><label>Qidiruv</label>
+      <input id="kQ" placeholder="hujjat yoki ta'minotchi" oninput="deb()"></div>
+    <div class="row" style="gap:8px" id="kirimTools"></div>
+  </div>
+</div>
+
 <div class="card" style="margin-top:16px">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <h2 style="margin:0" id="h2">Materiallar</h2>
@@ -91,7 +110,8 @@ const boshqara = () => App.can('materials.manage', 'production.manage');
 //  Ikki savol, ikki tab: «qanday materiallar bor» (spravochnik) va
 //  «qaysi omborda nechta turibdi» (qoldiq). Alohida sahifa qilinmadi —
 //  ikkalasi bitta narsa haqida va xodim ular orasida kun bo'yi yuradi.
-const TABS = [['ref', 'Spravochnik'], ['stock', 'Qoldiq'], ['moves', 'Harakat']];
+const TABS = [['ref', 'Spravochnik'], ['stock', 'Qoldiq'],
+              ['kirim', 'Kirim'], ['moves', 'Harakat']];
 
 function drawTabs() {
   $('tabs').innerHTML = TABS.map(([k, t]) =>
@@ -99,8 +119,10 @@ function drawTabs() {
       >${t}</button>`).join('');
   $('cardRef').hidden   = tab !== 'ref';
   $('cardStock').hidden = tab !== 'stock';
+  $('cardKirim').hidden = tab !== 'kirim';
   $('h2').textContent = tab === 'ref' ? 'Materiallar'
-    : tab === 'stock' ? 'Ombor qoldig\'i' : 'Harakat';
+    : tab === 'stock' ? 'Ombor qoldig\'i'
+    : tab === 'kirim' ? 'Kirim hujjatlari' : 'Harakat';
 }
 
 function go(k) {
@@ -148,6 +170,13 @@ async function boot() {
   const kirdi = kod && ref.warehouses.find((w) => w.code === kod);
   if (kirdi) { tab = 'stock'; $('sWh').value = kirdi.id; }
 
+  $('kSup').innerHTML = "<option value=''>Barcha ta'minotchi</option>"
+    + (ref.suppliers || []).map((x) =>
+        `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('kWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar();
+  $('kirimTools').innerHTML = boshqara()
+    ? '<button class="primary" onclick="kirimOch()">+ Kirim</button>' : '';
+
   $('stockTools').innerHTML = boshqara()
     ? `<button onclick="boshlangich(${kirdi ? kirdi.id : 'null'})">
          ✎ Boshlang'ich qoldiq</button>` : '';
@@ -189,6 +218,13 @@ async function load() {
     if ($('sWh').value)       q.set('warehouse_id', $('sWh').value);
     if ($('sQ').value.trim()) q.set('q', $('sQ').value.trim());
     rows = (await App.api('/api/materials/stock?' + q)).rows;
+  } else if (tab === 'kirim') {
+    if ($('kSup').value)      q.set('supplier_id', $('kSup').value);
+    if ($('kWh').value)       q.set('warehouse_id', $('kWh').value);
+    if ($('kFrom').value)     q.set('from', $('kFrom').value);
+    if ($('kTo').value)       q.set('to', $('kTo').value);
+    if ($('kQ').value.trim()) q.set('q', $('kQ').value.trim());
+    rows = (await App.api('/api/materials/receipts?' + q)).rows;
   } else {
     rows = (await App.api('/api/materials/moves')).rows;
   }
@@ -206,6 +242,7 @@ const tomon = (kind, nom) => nom ? esc(nom) : (TOMON[kind] || kind);
 function draw() {
   $('cnt').textContent = rows.length ? `${rows.length} ta` : '';
   if (tab === 'stock') return drawStock();
+  if (tab === 'kirim') return drawKirim();
   if (tab === 'moves') return drawMoves();
   if (!rows.length) {
     $('body').innerHTML = `<p class="muted">Material yo'q.${
@@ -309,6 +346,292 @@ function drawMoves() {
 }
 
 const yop = () => { $('modalRoot').innerHTML = ''; };
+
+// ─────────────────────────────────────────────────────── KIRIM HUJJATI
+//
+//  ★ MOL TA'MINOTCHIDAN KELDI. Boshlang'ich qoldiq bir martalik ish va
+//  u bajarilib bo'ladi; kundalik hayotda material omborga HUJJAT bilan
+//  kiradi va u ikkita ishni BIRGA qiladi: omborni to'ldiradi va
+//  ta'minotchining oldidagi qarzni oshiradi (izoh: sql/materials.sql).
+//
+//  ★ NARX BU YERDA MAJBURIY — boshlang'ich qoldiqdan aynan shu yeri
+//  farq qiladi: kirimda narx QARZNING O'ZI. Tekshiruv serverda.
+const kun = (d) => String(d).slice(0, 10).split('-').reverse().join('.');
+
+function drawKirim() {
+  if (!rows.length) {
+    $('body').innerHTML = '<p class="muted">Kirim hujjati yo\'q.'
+      + (boshqara() ? ' «+ Kirim» bilan yozing.' : '') + '</p>';
+    return;
+  }
+  $('body').innerHTML = '<div style="overflow-x:auto"><table>'
+    + '<thead><tr><th>Hujjat</th><th>Sana</th><th>Ta\'minotchi</th>'
+    + '<th>Ombor</th><th>Nima keldi</th>'
+    + '<th class="num">Summa, $</th></tr></thead><tbody>'
+    + rows.map((r) => {
+        const bekor = r.status !== 'ok';
+        //  ICHIDA NIMA BORLIGI RO'YXATDA TURADI — vitrinadan qaytarish
+        //  hujjati bilan bir xil qoida: nimani solishtirish kerakligini
+        //  bilish uchun hujjatni ochib ko'rishdan boshqa yo'l
+        //  qolmasligi kerak. Ikkitadan ko'pi «+N» bo'lib qisqaradi.
+        const it = r.items || [];
+        const nima = it.slice(0, 2).map((x) =>
+          esc(x.material) + ' <span class="muted">' + son(x.qty) + ' '
+          + esc(x.uom) + '</span>').join('<br>')
+          + (it.length > 2
+             ? '<br><span class="muted">+' + (it.length - 2) + ' ta</span>' : '');
+        return '<tr style="cursor:pointer' + (bekor ? ';opacity:.5' : '')
+          + '" onclick="kirimKor(' + r.id + ')">'
+          + '<td><b>' + esc(r.doc_no) + '</b>'
+          + (r.supplier_doc
+             ? '<div class="muted" style="font-size:12px">'
+               + esc(r.supplier_doc) + '</div>' : '')
+          + (bekor ? '<div class="tag bad">bekor qilingan</div>' : '')
+          + '</td>'
+          + '<td class="muted">' + kun(r.doc_on) + '</td>'
+          + '<td>' + esc(r.supplier) + '</td>'
+          + '<td class="muted">' + esc(r.warehouse) + '</td>'
+          + '<td style="font-size:13px">' + (nima || '—') + '</td>'
+          + '<td class="num"><b>' + pul(r.amount) + '</b></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+//  Hujjatni ko'rish: qatorlari narxi bilan. Bekor qilish shu yerda —
+//  hujjat ochilmasdan turib bekor qilinsa qaysi biri ekani
+//  ko'rinmasdi.
+async function kirimKor(id) {
+  let r;
+  try { r = await App.api('/api/materials/receipts/' + id); }
+  catch (e) { return toast(e.message, true); }
+  const it = r.items || [];
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:720px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Kirim ${esc(r.doc_no)}</h1>
+          <button onclick="yop()">Yopish</button></div>
+        ${r.status === 'ok' ? ''
+          : `<p class="tag bad" style="margin-bottom:12px">Bekor qilingan${
+              r.cancelled_by_name ? ' — ' + esc(r.cancelled_by_name) : ''}${
+              r.cancel_note ? ' · ' + esc(r.cancel_note) : ''}</p>`}
+        <div class="row" style="gap:20px;flex-wrap:wrap;margin-bottom:14px">
+          <div><div class="muted" style="font-size:12px">Ta'minotchi</div>
+            <b>${esc(r.supplier)}</b></div>
+          <div><div class="muted" style="font-size:12px">Ombor</div>
+            <b>${esc(r.warehouse)}</b></div>
+          <div><div class="muted" style="font-size:12px">Sana</div>
+            <b>${kun(r.doc_on)}</b></div>
+          ${r.supplier_doc ? `<div><div class="muted" style="font-size:12px"
+            >Ta'minotchi hujjati</div><b>${esc(r.supplier_doc)}</b></div>` : ''}
+          ${r.ccy === 'UZS' ? `<div><div class="muted" style="font-size:12px"
+            >Kurs</div><b>${pul(r.rate)}</b></div>` : ''}
+        </div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Material</th><th class="num">Soni</th>
+            <th class="num">Narx, ${r.ccy === 'UZS' ? "so'm" : '$'}</th>
+            <th class="num">Summa, $</th></tr></thead>
+          <tbody>${it.map((x) => `<tr>
+            <td><b>${esc(x.material)}</b>
+              <span class="muted" style="font-size:12px"> ${esc(x.uom)}</span></td>
+            <td class="num">${son(x.qty)}</td>
+            <td class="num muted">${pul(x.price)}</td>
+            <td class="num">${pul(x.amount)}</td></tr>`).join('')}
+          </tbody>
+          <tfoot><tr><th colspan="3">Jami</th>
+            <th class="num">$${pul(r.amount)}</th></tr></tfoot></table></div>
+        ${r.note ? `<p class="muted" style="margin-top:10px">${esc(r.note)}</p>` : ''}
+        <p class="muted" style="margin-top:10px;font-size:12px">
+          ${r.created_by_name ? esc(r.created_by_name) + ' yozdi' : ''}</p>
+        ${r.status === 'ok' && boshqara()
+          ? `<button style="margin-top:12px"
+               onclick="kirimBekor(${r.id})">Hujjatni bekor qilish</button>` : ''}
+      </div></div>`;
+}
+
+//  O'CHIRILMAYDI, bekor qilinadi: qoldiqdan ham, ta'minotchining
+//  qarzidan ham chiqadi, tarixda esa qoladi. Sabab so'raladi —
+//  konver so'rovi va kassadagi operatsiya bilan bir xil idiom.
+async function kirimBekor(id) {
+  const sabab = prompt('Nega bekor qilinmoqda?');
+  if (sabab === null) return;
+  try {
+    await App.api('/api/materials/receipts/' + id + '/cancel',
+      { method: 'POST', body: JSON.stringify({ note: sabab }) });
+    yop(); toast('Hujjat bekor qilindi'); await load();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ───────────────────────────────────────────────── KIRIM — YOZISH
+//
+//  ★ OCHILMA EMAS, QIDIRUV: zavodda to'qqiz yuz material bor va
+//  telefondagi ochilmada ularni aylantirib topib bo'lmaydi (konverga
+//  xom ashyo biriktirish oynasi bilan bir xil qoida). Qidiruv
+//  yozilmaguncha ro'yxat chiqarilmaydi.
+let kQator = [];
+
+function kirimOch() {
+  kQator = [];
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:760px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Kirim hujjati</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
+          margin-bottom:12px">
+          <div style="flex:1;min-width:200px"><label>Ta'minotchi</label>
+            <select id="nSup"><option value="">— tanlang —</option>
+              ${(ref.suppliers || []).map((x) =>
+                `<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+            </select></div>
+          <div style="flex:1;min-width:200px"><label>Ombor</label>
+            <select id="nWh"><option value="">— tanlang —</option>
+              ${ref.warehouses.map((w) =>
+                `<option value="${w.id}">${esc(w.name)}${
+                  joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}
+            </select></div>
+        </div>
+        <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
+          margin-bottom:12px">
+          <div><label>Sana</label>
+            <input id="nOn" type="date"
+              value="${new Date().toISOString().slice(0, 10)}"></div>
+          <div style="flex:1;min-width:170px"><label>Ta'minotchi hujjati</label>
+            <input id="nDoc" placeholder="ixtiyoriy"></div>
+          <div style="width:130px"><label>Valyuta</label>
+            <select id="nCcy" onchange="kirimKurs()">
+              <option value="USD">$ — dollar</option>
+              <option value="UZS">so'm</option></select></div>
+          <div style="width:160px" id="nRateBox" hidden><label>Kurs (1$)</label>
+            <input id="nRate" type="number" min="0" step="0.01"
+              value="${ref.rate || ''}" oninput="kirimJami()"></div>
+        </div>
+        <!--  Narx MAJBURIY: u ta'minotchining qarzini yozadi. Narxsiz
+              qator omborni to'ldirib, qarzni oshirmasdi va farqi faqat
+              oy oxirida, solishtirma dalolatnomada bilinardi. -->
+        <p class="muted" style="margin-bottom:10px">Har qatorda narx
+          <b>majburiy</b> — u ta'minotchining qarzini yozadi.</p>
+        <input id="nQ" placeholder="material nomini yozing" autocomplete="off"
+          oninput="kirimTop()" style="margin-bottom:8px">
+        <div id="nList" style="max-height:190px;overflow:auto;
+          margin-bottom:12px"></div>
+        <div id="nRows"></div>
+        <div class="row" style="justify-content:space-between;
+          align-items:flex-end;margin-top:12px">
+          <div id="nJami"></div>
+          <button class="primary" id="nSave" onclick="kirimSaqla()" hidden
+            >Saqlash</button>
+        </div>
+      </div></div>`;
+  kirimKurs(); kirimTop(); kirimRows();
+}
+
+//  So'm tanlanganda kurs katagi ochiladi: dollarda u kerak emas va
+//  bo'sh katak bo'lib turgani «to'ldirilmagan» degan savol berardi.
+function kirimKurs() {
+  $('nRateBox').hidden = $('nCcy').value !== 'UZS';
+  for (const el of document.querySelectorAll('.nPfx'))
+    el.textContent = $('nCcy').value === 'UZS' ? "so'm" : '$';
+  kirimJami();
+}
+
+function kirimTop() {
+  const q = ($('nQ')?.value || '').trim().toLowerCase();
+  if (!$('nList')) return;
+  const olingan = new Set(kQator.map((r) => r.id));
+  const mos = q
+    ? barcha.filter((m) => !olingan.has(m.id)
+        && String(m.name).toLowerCase().includes(q)).slice(0, 30)
+    : [];
+  $('nList').innerHTML = q
+    ? (mos.length
+        ? mos.map((m) => `
+            <button style="width:100%;text-align:left;margin-bottom:4px;
+              display:flex;justify-content:space-between;gap:10px"
+              onclick="kirimQosh(${m.id})">
+              <span>${esc(m.name)}</span>
+              <span class="muted" style="font-size:12px">${
+                esc(m.uom_name || m.uom)}</span></button>`).join('')
+        : '<p class="muted" style="font-size:13px">Topilmadi</p>')
+    : '';
+}
+
+function kirimQosh(id) {
+  const m = barcha.find((x) => x.id === id);
+  if (!m) return;
+  kQator.push({ id, name: m.name, uom: m.uom_name || m.uom, qty: '', price: '' });
+  $('nQ').value = '';
+  kirimTop(); kirimRows();
+}
+
+function kirimRows() {
+  if (!$('nRows')) return;
+  $('nRows').innerHTML = kQator.map((r, i) => `
+    <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+      <div style="flex:1"><b>${esc(r.name)}</b>
+        <span class="muted" style="font-size:12px"> ${esc(r.uom)}</span></div>
+      <input type="number" min="0" step="0.001" value="${r.qty}"
+        style="width:100px;text-align:right" placeholder="soni"
+        oninput="kirimQty(${i}, this.value)">
+      <input type="number" min="0" step="0.0001" value="${r.price}"
+        style="width:120px;text-align:right" placeholder="narx"
+        oninput="kirimNarx(${i}, this.value)">
+      <span class="muted nPfx" style="width:34px;font-size:12px">$</span>
+      <button class="ic" onclick="kirimOchir(${i})">&times;</button>
+    </div>`).join('');
+  $('nSave').hidden = !kQator.length;
+  kirimKurs();
+}
+
+const kirimQty  = (i, v) => { kQator[i].qty = v; kirimJami(); };
+const kirimNarx = (i, v) => { kQator[i].price = v; kirimJami(); };
+const kirimOchir = (i) => { kQator.splice(i, 1); kirimTop(); kirimRows(); };
+
+//  ★ JAMI SAQLASHDAN OLDIN KO'RINADI (boshlang'ich qoldiq va kassadagi
+//  order bilan bir xil sabab): bir nol ortiqcha yozilgani aynan shu
+//  yerda bilinadi, ta'minotchining qarzida emas.
+function kirimJami() {
+  if (!$('nJami')) return;
+  const kurs = Number($('nRate')?.value) || 0;
+  const uzs  = $('nCcy').value === 'UZS';
+  let jami = 0, yoq = 0;
+  for (const r of kQator) {
+    const q = Number(r.qty) || 0, p = Number(r.price) || 0;
+    if (!q) continue;
+    if (!p) { yoq++; continue; }
+    jami += q * (uzs ? (kurs ? p / kurs : 0) : p);
+  }
+  $('nJami').innerHTML = kQator.length
+    ? `<div class="muted" style="font-size:12px">Jami</div>
+       <div style="font-size:22px;font-weight:600">$${pul(jami)}</div>${
+       yoq ? `<div class="tag bad">${yoq} qatorda narx yo'q</div>` : ''}`
+    : '';
+}
+
+async function kirimSaqla() {
+  const items = kQator.map((r) => ({
+    material_id: r.id,
+    qty: Number(r.qty) || 0,
+    price: Number(r.price) || 0,
+  })).filter((x) => x.qty > 0);
+  if (!items.length) return toast('Birorta ham qator to\'ldirilmadi', true);
+  if (!$('nSup').value) return toast('Ta\'minotchi tanlanmadi', true);
+  if (!$('nWh').value)  return toast('Ombor tanlanmadi', true);
+  try {
+    const r = await App.api('/api/materials/receipts', { method: 'POST',
+      body: JSON.stringify({
+        supplier_id: Number($('nSup').value),
+        warehouse_id: Number($('nWh').value),
+        doc_on: $('nOn').value || null,
+        supplier_doc: $('nDoc').value.trim() || null,
+        ccy: $('nCcy').value,
+        rate: Number($('nRate').value) || null,
+        items }) });
+    yop(); toast(r.doc_no + ' yozildi');
+    tab = 'kirim'; drawTabs(); await load();
+  } catch (e) { toast(e.message, true); }
+}
 
 // ─────────────────────────────────────────────── BOSHLANG'ICH QOLDIQ
 //

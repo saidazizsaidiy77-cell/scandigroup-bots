@@ -2695,10 +2695,17 @@ erp/
 
 `sql/` tartibi: core → core-seed → production → production-seed →
 catalog-groups → production-sku → units → register → catalog → purchasing →
-routes → sales → warehouse → **cash**. Yangi fayl qo'shsangiz `migrate.js` ga
-ham yozing. Ombor savdodan keyin: uning view'i savdo qo'shadigan ustunni ham
-o'qiydi. Kassa eng oxirida: mijoz balansi va qarzdorlik lentasi endi
-to'lovlarni ham o'qiydi.
+routes → sales → warehouse → cash → **materials**. Yangi fayl qo'shsangiz
+`migrate.js` ga ham yozing. Ombor savdodan keyin: uning view'i savdo
+qo'shadigan ustunni ham o'qiydi. Kassa undan keyin: MIJOZ balansi va
+qarzdorlik lentasi to'lovlarni ham o'qiydi.
+
+**Xom ashyo ENG OXIRIDA**, va shu sababdan **TA'MINOTCHINING qarzi ham
+o'sha yerda**: `v_supplier_debt` va `v_supplier_ledger` endi kirim
+hujjatini (`v_mat_receipts`) ham o'qiydi. Ular `cash.sql` da yozilgan
+edi va o'sha joyda qolsa toza bazada hali yo'q jadvalni izlab yiqilardi,
+ya'ni sayt umuman ko'tarilmasdi. Nusxasi qoldirilmadi — bitta view,
+bitta fayl (2-qoida).
 
 **Menyuning yagona manbai** — `public/app.js` dagi `MODULES` va `PAGES`.
 Yangi sahifa faqat shu ro'yxatga qo'shiladi.
@@ -2823,12 +2830,12 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    ko'z bu yerda tomonni teskari o'qib qo'yardi.
 
       **Qarzi ro'yxatda turadi** (`v_supplier_debt.balance` =
-   `boshlang'ich qarz − to'langani`): «kimga qancha qarzmiz»
-   ta'minotchilar sahifasidagi birinchi savol. View `sql/cash.sql` da,
-   `purchasing.sql` da EMAS — u `cash_ops` ni o'qiydi va u migratsiyada
-   eng oxirida yaratiladi (mijoz balansi bilan bir xil sabab). Kirim
-   hujjati yozilganda shu yerga bitta qo'shiluvchi qo'shiladi, sahifa
-   ham, so'rov ham o'zgarmaydi.
+   `boshlang'ich qarz + KELGAN MOL − to'langani`): «kimga qancha
+   qarzmiz» ta'minotchilar sahifasidagi birinchi savol. View
+   `sql/materials.sql` da, `cash.sql` da ham, `purchasing.sql` da ham
+   EMAS: u `cash_ops` ni ham, kirim hujjatini ham o'qiydi va ikkinchisi
+   migratsiyada eng oxirida yaratiladi (mijoz balansining `cash.sql` ga
+   ko'chgani bilan bir xil sabab).
 
       **Yo'nalish nomlari zavodnikidek** (`supplier_categories`): MDF,
    Furnitura, Mato, Lak, Qadoqlash materiali, Oyna, Yarim tayyor
@@ -2929,6 +2936,67 @@ narx) / SUM(qty)`, faqat KIRGAN qatorlar bo'yicha. Oxirgi kirimning
 narxini olish yo'l emas edi: omborda ikki xil narxda kelgan bitta
 material turadi va oxirgisi butun qoldiqning bahosini o'zgartirib
 yuborardi.
+
+**★ MOL HUJJAT BILAN KIRADI** (`mat_receipts`, `M26-0001`, xom ashyo
+sahifasidagi **«Kirim»** tabi; zavod qarori 2026-09). Boshlang'ich
+qoldiq bir martalik ish va u bajarilib bo'ladi; kundalik hayotda
+material omborga ta'minotchidan keladi. Ilgari buning yo'li yo'q edi:
+qoldiq bir marta kiritilib, keyin faqat KAMAYARDI — tsex boshlig'i
+sarfni yozgani sayin raqam minusga tushib borardi va ekrandagi qizil
+raqam «kirim hujjati yozilmagan» degan belgidan boshqa narsa
+aytmasdi.
+
+Kirim IKKI ishni BIRGA qiladi va shu sababdan alohida modul emas:
+**omborni to'ldiradi** va **ta'minotchining oldidagi qarzni
+oshiradi**. Biri ishlab, ikkinchisi jim qolsa farq faqat oy oxirida,
+solishtirma dalolatnomada bilinardi.
+
+**Alohida qator jadvali yozilmadi.** Qatorlar `material_moves` ning
+O'ZIDA turadi (`doc_kind = 'receipt'`, `doc_id` — hujjat). Sabab
+qoldiq bilan bir xil: «omborda qancha bor» degan savol BITTA manbadan
+hisoblanishi kerak — qatorlar ikkinchi jadvalda tursa har kirimni
+harakatga ko'chirish kerak bo'lardi va ikki ro'yxat bir kun
+bir-biridan ajralib ketardi: hujjatda 100 list, qoldiqda 90.
+`doc_id` ustuni boshidanoq hujjat uchun ajratilgan edi; yoniga
+`doc_kind` qo'shildi, chunki talabnoma ham, kirim ham o'z jadvalida
+1-raqamli qatorga ega bo'ladi.
+
+**★ TA'MINOTCHI MAJBURIY.** Ta'minotchisi yo'q kirim omborni
+to'ldirib, qarzni jimgina tashlab ketardi — mol keldi, qarz esa hech
+qayerda yozilmadi. Ta'minotchisiz material omborga faqat
+BOSHLANG'ICH QOLDIQ bo'lib kiradi (uning «qayerdan» i yo'q).
+
+**★ NARX HAM MAJBURIY, va aynan shu yeri boshlang'ich qoldiqdan FARQ
+qiladi.** Qoldiqda narx ixtiyoriy: javonda turgan materialning bahosi
+hali ma'lum bo'lmasligi mumkin va bu qatorni kiritishga to'siq
+bo'lmasligi kerak. Kirimda esa narx — QARZNING O'ZI. Valyuta va kurs
+HUJJAT bo'yicha bitta (boshlang'ich qoldiq va kassadagi order bilan
+bir xil idiom), kurs qator bilan QOTADI. Jami saqlashdan OLDIN
+ko'rinadi: bir nol ortiqcha yozilgani aynan shu yerda bilinadi,
+ta'minotchining qarzida emas.
+
+**Material OCHILMADAN emas, QIDIRUVDAN tanlanadi** — zavodda to'qqiz
+yuz material bor va telefondagi ochilmada ularni aylantirib topib
+bo'lmaydi (konverga xom ashyo biriktirish oynasi bilan bir xil
+qoida).
+
+**O'CHIRILMAYDI, bekor qilinadi**: hujjat ham, uning qatorlari ham
+BIRGA — ikkinchisi qolib ketsa hujjat qarzdan chiqar, material esa
+omborda turaverardi. Sabab so'raladi. Qoldiqdan ham, qarzdan ham
+chiqadi; tarixda esa qoladi, chunki pulga tegadigan o'chirilgan qator
+savol qoldirardi.
+
+Huquqi **`materials.manage`** — xom ashyo ombori xodimi va
+administrator. Tsex boshlig'ida u yo'q: u sarfni yozadi, mol qabul
+qilishni emas. Ombor doirasi bu yerda ham CHEGARA: id ni qo'lda
+yuborib boshqa tsexning omboriga kirim yozib bo'lmaydi.
+
+Ta'minotchi qarzdorligi lentasida kirim HAQDOR tomonda turadi va
+qatorda hujjat raqami yoziladi — «bu 3 400 dollar qayerdan chiqdi»
+degan savolga jadvaldagi raqamning o'zi javob bermaydi (dalolatnomadagi
+yuk xati bilan bir xil sabab). To'lov raqami bosilsa kirim orderi
+ochiladi, kirim raqami esa faqat yoziladi: hujjatning alohida sahifasi
+yo'q, u xom ashyo modulining ichida ochiladi.
 
 **★ XOM ASHYO OMBORI RO'YXATDA OCHIQ** (zavod qarori, 2026-09).
 Boshlang'ich qoldiq omborning ICHIDA kiritiladi — mudir «Arra ombori»
@@ -3229,5 +3297,13 @@ sozlamasi qo'shiladi; skript buni xato xabarida ham aytadi.
 
 ## Hali yo'q
 
-Ombor (xom ashyo), ishbay oylik, sifat nazorati (brakda
-aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline rejim.
+Talabnoma (ombordan tsexga berish — `mat_requests` jadvali bor, kodi
+yo'q), omborlar aro material ko'chirish, norma (bitta mahsulotga
+qancha material ketadi), **ishbay oylik**, **tannarx**, sifat nazorati
+(brakda aybdor bo'lim va «tuzatishga qaytarildi» holati yo'q), offline
+rejim.
+
+Xom ashyo ombori endi TO'LIQ emas, lekin YOPIQ halqa: spravochnik →
+boshlang'ich qoldiq → **kirim** → konverga sarf. Ya'ni «bu konverga
+qancha material, qancha pulga ketdi» degan savolga javob bor —
+tannarxning material qismi shundan chiqadi.

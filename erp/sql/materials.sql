@@ -186,6 +186,21 @@ CREATE INDEX IF NOT EXISTS material_moves_from_idx
 CREATE INDEX IF NOT EXISTS material_moves_to_idx
   ON material_moves (to_kind, to_id);
 
+--  ★ QAYSI HUJJAT — `doc_id` YONIDA `doc_kind`. Ustun boshidanoq
+--  hujjat uchun ajratilgan edi («talabnoma, furnitura yig'imi yoki
+--  kirim»), lekin qaysi JADVALNIKI ekani yozilmagan: talabnoma ham,
+--  kirim ham o'z jadvalida 1-raqamli qatorga ega bo'ladi va ikkisi
+--  bir-biridan ajralmasdi. Tomonlar bo'yicha taxmin qilish
+--  (`from_kind = 'supplier'` bo'lsa kirim) bugun ishlardi, ertaga
+--  ta'minotchiga QAYTARISH yozilganda buzilardi.
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS doc_kind TEXT;
+ALTER TABLE material_moves DROP CONSTRAINT IF EXISTS material_moves_doc_check;
+ALTER TABLE material_moves ADD CONSTRAINT material_moves_doc_check
+  CHECK (doc_kind IS NULL OR doc_kind IN ('receipt', 'request'));
+CREATE INDEX IF NOT EXISTS material_moves_doc_idx
+  ON material_moves (doc_kind, doc_id) WHERE doc_id IS NOT NULL;
+
+
 --  Har harakat IKKI QATOR bo'lib ochiladi: beruvchida minus,
 --  oluvchida plyus (`v_cash_flow` bilan bir xil). Shundan keyin har
 --  qanday qoldiq bitta yig'indi bo'lib qoladi — omborniki ham, tsex
@@ -193,12 +208,14 @@ CREATE INDEX IF NOT EXISTS material_moves_to_idx
 DROP VIEW IF EXISTS v_material_stock;
 DROP VIEW IF EXISTS v_material_flow;
 CREATE VIEW v_material_flow AS
-SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id,
+       m.doc_id, m.doc_kind,
        m.from_kind AS kind, m.from_id AS place_id, -m.qty AS qty,
        m.to_kind   AS other_kind, m.to_id   AS other_id, m.created_at
   FROM material_moves m WHERE m.status = 'ok'
 UNION ALL
-SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id,
+       m.doc_id, m.doc_kind,
        m.to_kind, m.to_id, m.qty,
        m.from_kind, m.from_id, m.created_at
   FROM material_moves m WHERE m.status = 'ok';
@@ -509,13 +526,15 @@ ALTER TABLE material_moves ADD CONSTRAINT material_moves_rate_check
 DROP VIEW IF EXISTS v_material_stock;
 DROP VIEW IF EXISTS v_material_flow;
 CREATE VIEW v_material_flow AS
-SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id,
+       m.doc_id, m.doc_kind,
        m.from_kind AS kind, m.from_id AS place_id, -m.qty AS qty,
        m.to_kind   AS other_kind, m.to_id   AS other_id, m.created_at,
        m.ccy, m.rate, m.price, m.price_usd
   FROM material_moves m WHERE m.status = 'ok'
 UNION ALL
-SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id,
+       m.doc_id, m.doc_kind,
        m.to_kind, m.to_id, m.qty,
        m.from_kind, m.from_id, m.created_at,
        m.ccy, m.rate, m.price, m.price_usd
@@ -578,3 +597,224 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('xom-ombor-ochiq');
   END IF;
 END $$;
+
+-- ═══════════════════════════════════════════════ KIRIM HUJJATI
+--
+--  ★ MOL TA'MINOTCHIDAN KELDI. Boshlang'ich qoldiq bir martalik
+--  ish va u bajarilib bo'ladi; kundalik hayotda material omborga
+--  HUJJAT bilan kiradi: kim keltirdi, qaysi kuni, qancha va qanday
+--  narxda.
+--
+--  ★ ALOHIDA QATOR JADVALI YOZILMADI (`mat_receipt_items` yo'q).
+--  Qatorlar `material_moves` ning O'ZIDA turadi — `doc_kind =
+--  'receipt'`, `doc_id` esa shu hujjat. Sabab qoldiq bilan bir xil:
+--  «omborda qancha bor» degan savol BITTA manbadan hisoblanishi
+--  kerak. Qatorlar ikkinchi jadvalda tursa har kirimni harakatga
+--  ko'chirish kerak bo'lardi va ikki ro'yxat bir kun bir-biridan
+--  ajralib ketardi — hujjatda 100 list, qoldiqda 90.
+--
+--  ★ TA'MINOTCHI MAJBURIY. Kirim ikkita ishni BIRGA qiladi: omborni
+--  to'ldiradi va ta'minotchining oldidagi qarzni oshiradi. Ta'minotchisi
+--  yo'q kirim birinchisini qilib, ikkinchisini jimgina tashlab
+--  ketardi — mol keldi, qarz esa hech qayerda yozilmadi. Ta'minotchisiz
+--  material omborga faqat BOSHLANG'ICH QOLDIQ bo'lib kiradi (uning
+--  «qayerdan» i yo'q) yoki boshqa ombordan ko'chib keladi.
+--
+--  ★ NARX HAM MAJBURIY — va aynan shu yeri boshlang'ich qoldiqdan
+--  FARQ qiladi. Qoldiqda narx ixtiyoriy: javonda turgan materialning
+--  bahosi hali ma'lum bo'lmasligi mumkin va bu qatorni kiritishga
+--  to'siq bo'lmasligi kerak. Kirimda esa narx — QARZNING O'ZI: narxsiz
+--  qator omborni to'ldirib, ta'minotchining qarzini oshirmasdi va
+--  farqi faqat oy oxirida, solishtirma dalolatnomada bilinardi.
+--  Tekshiruv serverda (`modules/materials.js`).
+--
+--  Valyuta va kurs HUJJAT bo'yicha bitta (boshlang'ich qoldiq va
+--  kassadagi order bilan bir xil idiom): o'sha kunning kursi baribir
+--  bitta va uni har qatorda qayta terish bitta xato raqam uchun
+--  o'nta imkoniyat berardi. Kurs qator bilan QOTADI — ertaga kurs
+--  o'zgarsa kechagi kirim qayta hisoblanmaydi.
+--
+--  Hujjat raqami `M26-0001` — «mol». Konver `K`, zakaz `Z`, pul `P`,
+--  vitrinadan qaytarish `V`, omborlar aro `H`.
+CREATE TABLE IF NOT EXISTS mat_receipts (
+  id           SERIAL PRIMARY KEY,
+  doc_no       TEXT UNIQUE,
+  supplier_id  INT  NOT NULL REFERENCES suppliers(id),
+  warehouse_id INT  NOT NULL REFERENCES warehouses(id),
+  doc_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  --  Ta'minotchining O'Z hujjat raqami (nakladnoy): zavod uni
+  --  qog'ozda yuritadi va solishtirishda aynan shu raqam so'raladi.
+  --  Ixtiyoriy — qog'ozsiz kelgan mol ham bor.
+  supplier_doc TEXT,
+  ccy          TEXT NOT NULL DEFAULT 'USD' CHECK (ccy IN ('USD', 'UZS')),
+  rate         NUMERIC(14,4),
+  note         TEXT,
+  --  O'CHIRILMAYDI, bekor qilinadi: qoldiqdan ham, ta'minotchining
+  --  qarzidan ham chiqadi, tarixda esa qoladi (kassadagi operatsiya
+  --  va material harakati bilan bir xil qoida). Pulga tegadigan
+  --  o'chirilgan qator savol qoldirardi — «men yozgan edim-ku».
+  status       TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'cancelled')),
+  created_by   INT REFERENCES workers(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  cancelled_by INT REFERENCES workers(id),
+  cancelled_at TIMESTAMPTZ,
+  cancel_note  TEXT
+);
+
+--  So'mdagi narx uchun kurs SHART: kursi yo'q so'm dollarga
+--  aylanmaydi va butun hujjat qiymatsiz qolardi, ta'minotchining
+--  qarzi esa buni aytmasdi — shunchaki oshmasdi
+--  (`material_moves_rate_check` bilan bir xil sabab).
+ALTER TABLE mat_receipts DROP CONSTRAINT IF EXISTS mat_receipts_rate_check;
+ALTER TABLE mat_receipts ADD CONSTRAINT mat_receipts_rate_check
+  CHECK (ccy <> 'UZS' OR rate IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS mat_receipts_sup_idx
+  ON mat_receipts (supplier_id, doc_on);
+CREATE INDEX IF NOT EXISTS mat_receipts_wh_idx
+  ON mat_receipts (warehouse_id, doc_on);
+
+--  Hujjat ro'yxati ICHIDA NIMA borligi bilan — vitrinadan qaytarish
+--  hujjati bilan bir xil qoida: qabul qiladigan odam javondagi
+--  materialni AYNAN shu ro'yxat bilan solishtiradi va uni ko'rish
+--  uchun hujjatni ochib o'tirmaydi.
+--
+--  Qatorlar `status` bo'yicha filtrlanmaydi: ular hujjat bilan BIRGA
+--  bekor qilinadi, ya'ni ikkinchi shart bir xil javobni ikki marta
+--  aytardi. Qarzga va qoldiqqa chiqmasligini hujjatning O'Z holati
+--  hal qiladi (pastda).
+DROP VIEW IF EXISTS v_mat_receipts CASCADE;
+CREATE VIEW v_mat_receipts AS
+SELECT r.*,
+       s.name  AS supplier,
+       s.phone AS supplier_phone,
+       w.name  AS warehouse,
+       w.code  AS warehouse_code,
+       w.shop_id,
+       cw.name AS created_by_name,
+       xw.name AS cancelled_by_name,
+       COALESCE(i.lines, 0)::int            AS lines,
+       COALESCE(i.amount, 0)::numeric(16,2) AS amount,
+       COALESCE(i.items, '[]'::json)        AS items
+  FROM mat_receipts r
+  JOIN suppliers  s ON s.id = r.supplier_id
+  JOIN warehouses w ON w.id = r.warehouse_id
+  LEFT JOIN workers cw ON cw.id = r.created_by
+  LEFT JOIN workers xw ON xw.id = r.cancelled_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines,
+           SUM(mm.qty * mm.price_usd) AS amount,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'move_id', mm.id, 'material_id', mm.material_id,
+             'material', mt.name, 'uom', mt.uom,
+             'qty', mm.qty, 'price', mm.price,
+             'price_usd', mm.price_usd,
+             'amount', ROUND(mm.qty * mm.price_usd, 2)) ORDER BY mt.name) AS items
+      FROM material_moves mm
+      JOIN materials mt ON mt.id = mm.material_id
+     WHERE mm.doc_kind = 'receipt' AND mm.doc_id = r.id) i ON true;
+
+-- ══════════════════════════════════════════ TA'MINOTCHINING QARZI
+--
+--  ★ IKKALA VIEW HAM `sql/cash.sql` DAN SHU YERGA KO'CHDI. Sabab —
+--  mijoz balansining `cash.sql` ga ko'chgani bilan AYNAN bir xil:
+--  qarz endi KIRIM HUJJATINI ham o'qiydi va u shu faylda yaratiladi.
+--  Eski joyida qolsa toza bazada yo'q jadvalni izlab yiqilardi, ya'ni
+--  sayt umuman ko'tarilmasdi (1-qoida).
+--
+--  `cash.sql` dan O'CHIRILDI, nusxasi qoldirilmadi: view ikki faylda
+--  bo'lsa ikkinchi deployда «cannot drop columns from view» bilan
+--  yiqilardi (2-qoida).
+--
+--  Formula to'ldi:
+--      boshlang'ich qarz + KELGAN MOL − to'langani
+--
+--  Mijoznikiga teskari tomon: ta'minotchida MUSBAT raqam korxona unga
+--  qarzdorligini anglatadi — mol olindi, puli hali berilmadi.
+DROP VIEW IF EXISTS v_supplier_debt CASCADE;
+CREATE VIEW v_supplier_debt AS
+SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
+       --  Ta'minotchi OLUVCHI tomon: `v_cash_flow` da unga ketgan pul
+       --  musbat bo'lib turadi.
+       pay.paid,
+       got.received,
+       (COALESCE(s.opening_debt, 0) + got.received - pay.paid)::numeric(16,2)
+         AS balance
+  FROM suppliers s
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(f.amount_usd), 0)::numeric(16,2) AS paid
+      FROM v_cash_flow f
+     WHERE f.side_kind = 'supplier' AND f.side_id = s.id) pay ON true
+  --  Bekor qilingan hujjat qarzga chiqmaydi: `r.status = 'ok'`.
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(r.amount), 0)::numeric(16,2) AS received
+      FROM v_mat_receipts r
+     WHERE r.supplier_id = s.id AND r.status = 'ok') got ON true
+ WHERE s.active;
+
+-- ══════════════════════════ TA'MINOTCHI QARZI — HARAKATLAR LENTASI
+--
+--  `v_supplier_debt.balance` — bugungi qarz, bitta raqam. Zavodga esa
+--  ORALIQ kerak: «1-sentabrda qancha edi, oy ichida qancha qo'shildi,
+--  30-sentabrda qancha bo'ldi» — ya'ni AYLANMA-SALDO qaydnomasi.
+--  Buning uchun balansni emas, uni hosil qiladigan HARAKATLARNI sanasi
+--  bilan berish kerak; mijozniki bilan bir xil shakl.
+--
+--  ★ TOMONI MIJOZNIKIGA TESKARI. Ta'minotchi — passiv hisob:
+--
+--    HAQDOR (kredit)  — bizning qarzimiz OSHADI: boshlang'ich qarz,
+--                       KELGAN MOL (kirim hujjati)
+--    QARZDOR (debet)  — qarzimiz KAMAYADI: to'lov; oldindan to'lov
+--                       ham shu tomonda
+--
+--  Saldo = kredit − debet, ya'ni musbat bo'lsa BIZ qarzdormiz —
+--  `v_supplier_debt.balance` bilan bir xil raqam.
+DROP VIEW IF EXISTS v_supplier_ledger CASCADE;
+CREATE VIEW v_supplier_ledger AS
+SELECT s.id                                           AS supplier_id,
+       COALESCE(s.opening_debt_on, DATE '1900-01-01') AS on_date,
+       'opening'::text                                AS kind,
+       'Boshlang''ich qarz'::text                     AS note,
+       --  Manfiy boshlang'ich qarz — haqdor ustunidagi minus emas,
+       --  QARZDOR yozuvi: ta'minotchi bizga qarzdor (oldindan to'lov).
+       GREATEST(-s.opening_debt, 0)::numeric(16,2)    AS debit,
+       GREATEST(s.opening_debt, 0)::numeric(16,2)     AS credit,
+       NULL::text AS doc_no,
+       NULL::int  AS op_id,
+       NULL::int  AS receipt_id
+  FROM suppliers s
+ WHERE COALESCE(s.opening_debt, 0) <> 0
+UNION ALL
+--  ★ TO'LOVLAR. Ta'minotchi OLUVCHI tomon: unga ketgan pul
+--  `v_cash_flow` da musbat bo'lib turadi va qarzimizni kamaytiradi.
+SELECT f.side_id,
+       f.op_date,
+       'payment'::text,
+       ('To''lov — ' || f.doc_no
+         || CASE WHEN f.currency = 'UZS'
+                 --  Ajratuvchi PROBEL: baza lokali vergul qo'yardi va
+                 --  «12,500,000.00» degan raqam zavodda o'qilmaydi.
+                 THEN ' · ' || REPLACE(TRIM(TO_CHAR(ABS(f.amount),
+                        'FM999G999G999G990D00')), ',', ' ') || ' so''m'
+                 ELSE '' END)::text,
+       GREATEST(f.amount_usd, 0)::numeric(16,2),
+       GREATEST(-f.amount_usd, 0)::numeric(16,2),
+       f.doc_no, f.op_id, NULL::int
+  FROM v_cash_flow f
+ WHERE f.side_kind = 'supplier'
+UNION ALL
+--  ★ KELGAN MOL. Qarzimiz oshadi, ya'ni HAQDOR tomon. Qatorda
+--  hujjatning O'ZI turadi: «bu 3 400 dollar qayerdan chiqdi» degan
+--  savolga jadvaldagi raqamning o'zi javob bermaydi — solishtirma
+--  dalolatnomadagi yuk xati bilan bir xil sabab.
+SELECT r.supplier_id,
+       r.doc_on,
+       'receipt'::text,
+       ('Mol keldi — ' || r.doc_no || ' · ' || r.warehouse
+         || CASE WHEN r.supplier_doc IS NOT NULL AND r.supplier_doc <> ''
+                 THEN ' · ' || r.supplier_doc ELSE '' END)::text,
+       0::numeric(16,2),
+       r.amount,
+       r.doc_no, NULL::int, r.id
+  FROM v_mat_receipts r
+ WHERE r.status = 'ok' AND r.amount <> 0;

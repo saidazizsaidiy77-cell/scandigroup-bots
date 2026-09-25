@@ -43,7 +43,7 @@
   <div class="card"><h2>Qarzdor aylanma</h2><div class="kpi" id="kDeb">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Davr ichida to'langani</p></div>
   <div class="card"><h2>Haqdor aylanma</h2><div class="kpi" id="kCre">—<small> $</small></div>
-    <p class="muted" style="margin-top:6px;font-size:12px">Qarzimiz oshgani — kirim hujjati yozilgach to'ladi</p></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Qarzimiz oshgani: kelgan mol va boshlang'ich qarz</p></div>
   <div class="card"><h2>Davr oxiriga</h2><div class="kpi" id="kClo">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px" id="kCloB"></p></div>
 </div>
@@ -204,9 +204,15 @@ function drawRows(id) {
       <td style="padding-left:24px" class="muted">${d8(r.on_date)} \u00b7 ${esc(r.note)}</td>
       <!--  To'lov qatori HUJJATGA bog'langan: raqam bosilsa o'sha
             kassa orderi alohida oynada ochiladi. -->
+      <!--  To'lovda hujjat OCHILADI (kirim orderi), kelgan molda esa
+            faqat raqami turadi: kirim hujjatining o'z sahifasi yo'q,
+            u xom ashyo modulining ichida ochiladi. Raqamni umuman
+            chizmaslik yo'l emas edi — «bu 3 400 dollar qayerdan
+            chiqdi» degan savolga qator javob bermay qolardi. -->
       <td>${r.op_id
         ? `<a class="tag" href="/kirim-orderi.html?id=${r.op_id}" target="_blank"
-             onclick="event.stopPropagation()">${esc(r.doc_no)}</a>` : ''}</td>
+             onclick="event.stopPropagation()">${esc(r.doc_no)}</a>`
+        : (r.doc_no ? `<span class="tag">${esc(r.doc_no)}</span>` : '')}</td>
       <td></td><td></td>
       <td class="num">${sum(r.debit)}</td>
       <td class="num">${sum(r.credit)}</td>

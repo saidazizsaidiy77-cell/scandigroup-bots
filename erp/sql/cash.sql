@@ -696,81 +696,16 @@ SELECT date_trunc('month', o.op_date)::date AS mon,
 --  ishi (pul menejerning qo'lida) va mijozning qarziga aloqasi yo'q.
 -- ══════════════════════════════════════════ TA'MINOTCHINING QARZI
 --
---  `boshlang'ich qarz − to'langani`. Mijoznikiga teskari tomon:
---  ta'minotchida MUSBAT raqam korxona unga qarzdorligini anglatadi —
---  mol olindi, puli hali berilmadi.
+--  ★ `v_supplier_debt` va `v_supplier_ledger` BU YERDA EMAS —
+--  `sql/materials.sql` da. Ular KIRIM HUJJATINI ham o'qiydi
+--  (`v_mat_receipts`) va u migratsiyada shu fayldan KEYIN
+--  yaratiladi: bu yerda qolsa toza bazada yo'q jadvalni izlab
+--  yiqilardi (1-qoida).
 --
---  Kirim hujjati (`purchasing`) hali yozilmagan, shuning uchun qarz
---  hozircha faqat boshlang'ichdan va to'lovlardan iborat. U yozilganda
---  shu yerga bitta qo'shiluvchi qo'shiladi — sahifa ham, so'rov ham
---  o'zgarmaydi.
---
---  `sql/cash.sql` da, `purchasing.sql` da EMAS: view `cash_ops` ni
---  o'qiydi va u migratsiyada eng oxirida yaratiladi (mijoz balansi
---  bilan bir xil sabab).
-DROP VIEW IF EXISTS v_supplier_debt CASCADE;
-CREATE VIEW v_supplier_debt AS
-SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
-       --  Ta'minotchi OLUVCHI tomon: `v_cash_flow` da unga ketgan pul
-       --  musbat bo'lib turadi (izoh: yuqorida).
-       pay.paid,
-       (COALESCE(s.opening_debt, 0) - pay.paid)::numeric(16,2) AS balance
-  FROM suppliers s
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(f.amount_usd), 0)::numeric(16,2) AS paid
-      FROM v_cash_flow f
-     WHERE f.side_kind = 'supplier' AND f.side_id = s.id) pay ON true
- WHERE s.active;
-
--- ══════════════════════════ TA'MINOTCHI QARZI — HARAKATLAR LENTASI
---
---  `v_supplier_debt.balance` — bugungi qarz, bitta raqam. Zavodga esa
---  ORALIQ kerak: «1-sentabrda qancha edi, oy ichida qancha qo'shildi,
---  30-sentabrda qancha bo'ldi» — ya'ni AYLANMA-SALDO qaydnomasi.
---  Buning uchun balansni emas, uni hosil qiladigan HARAKATLARNI sanasi
---  bilan berish kerak; mijozniki bilan bir xil shakl.
---
---  ★ TOMONI MIJOZNIKIGA TESKARI. Ta'minotchi — passiv hisob:
---
---    HAQDOR (kredit)  — bizning qarzimiz OSHADI: boshlang'ich qarz,
---                       kelgan mol (kirim hujjati yozilganda)
---    QARZDOR (debet)  — qarzimiz KAMAYADI: to'lov; oldindan to'lov
---                       ham shu tomonda
---
---  Saldo = kredit − debet, ya'ni musbat bo'lsa BIZ qarzdormiz —
---  `v_supplier_debt.balance` bilan bir xil raqam.
-DROP VIEW IF EXISTS v_supplier_ledger CASCADE;
-CREATE VIEW v_supplier_ledger AS
-SELECT s.id                                           AS supplier_id,
-       COALESCE(s.opening_debt_on, DATE '1900-01-01') AS on_date,
-       'opening'::text                                AS kind,
-       'Boshlang''ich qarz'::text                     AS note,
-       --  Manfiy boshlang'ich qarz — haqdor ustunidagi minus emas,
-       --  QARZDOR yozuvi: ta'minotchi bizga qarzdor (oldindan to'lov).
-       GREATEST(-s.opening_debt, 0)::numeric(16,2)    AS debit,
-       GREATEST(s.opening_debt, 0)::numeric(16,2)     AS credit,
-       NULL::text AS doc_no,
-       NULL::int  AS op_id
-  FROM suppliers s
- WHERE COALESCE(s.opening_debt, 0) <> 0
-UNION ALL
---  ★ TO'LOVLAR. Ta'minotchi OLUVCHI tomon: unga ketgan pul
---  `v_cash_flow` da musbat bo'lib turadi va qarzimizni kamaytiradi.
-SELECT f.side_id,
-       f.op_date,
-       'payment'::text,
-       ('To''lov — ' || f.doc_no
-         || CASE WHEN f.currency = 'UZS'
-                 --  Ajratuvchi PROBEL: baza lokali vergul qo'yardi va
-                 --  «12,500,000.00» degan raqam zavodda o'qilmaydi.
-                 THEN ' · ' || REPLACE(TRIM(TO_CHAR(ABS(f.amount),
-                        'FM999G999G999G990D00')), ',', ' ') || ' so''m'
-                 ELSE '' END)::text,
-       GREATEST(f.amount_usd, 0)::numeric(16,2),
-       GREATEST(-f.amount_usd, 0)::numeric(16,2),
-       f.doc_no, f.op_id
-  FROM v_cash_flow f
- WHERE f.side_kind = 'supplier';
+--  Nusxasi qoldirilmadi: bitta view — bitta fayl, aks holda ikkinchi
+--  deployда «cannot drop columns from view» bilan yiqilardi
+--  (2-qoida). Mijoz balansi esa shu faylda qolaveradi — u
+--  `cash_ops` dan boshqa hech narsani o'qimaydi.
 
 DROP VIEW IF EXISTS v_customer_sales CASCADE;
 CREATE VIEW v_customer_sales AS

@@ -547,4 +547,198 @@ router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
   res.json({ ok: true });
 }));
 
+// ════════════════════════════════════════════════════ KIRIM HUJJATI
+//
+//  ★ MOL TA'MINOTCHIDAN KELDI (izoh: sql/materials.sql). Boshlang'ich
+//  qoldiq bir martalik ish; kundalik hayotda material omborga HUJJAT
+//  bilan kiradi va u ikkita ishni BIRGA qiladi: omborni to'ldiradi va
+//  ta'minotchining oldidagi qarzni oshiradi.
+//
+//  Qatorlar alohida jadvalda emas, `material_moves` ning O'ZIDA:
+//  «omborda qancha bor» degan savol bitta manbadan hisoblanishi kerak.
+
+//  Hujjat raqami: M26-0001 — «mol». Konver `K`, zakaz `Z`, pul `P`,
+//  vitrinadan qaytarish `V`, omborlar aro `H`. Qulf bilan: ikki xodim
+//  bir vaqtda yozsa ham raqam takrorlanmaydi.
+async function nextReceiptNo(client) {
+  const prefix = `M${String(new Date().getFullYear()).slice(-2)}-`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
+       FROM mat_receipts WHERE doc_no LIKE $1`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(4, '0');
+}
+
+//  Ombor doirasi — `/ref` dagi bilan AYNAN bir xil shart: ro'yxatda
+//  ko'rinmaydigan omborning hujjati ham ko'rinmasligi kerak, aks
+//  holda tsex boshlig'i o'z ekranida begona kirimni o'qirdi.
+const whDoira = (req) => {
+  const d = req.user.scope_shop_ids || [];
+  return d.length ? d : null;
+};
+
+const SANA = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? v : null);
+
+//  Ro'yxat. Filtrlar SERVERDA: oraliq katta bo'lsa qatorlar
+//  chegarasiga yetib, klientda yarmi yo'qolardi (ombor tarixi bilan
+//  bir xil sabab).
+router.get('/receipts', need(...VIEW), wrap(async (req, res) => {
+  const from = SANA(req.query.from), to = SANA(req.query.to);
+  const { rows } = await db.query(
+    `SELECT r.id, r.doc_no, r.doc_on, r.supplier_id, r.supplier, r.supplier_doc,
+            r.warehouse_id, r.warehouse, r.warehouse_code, r.ccy, r.rate,
+            r.note, r.status, r.lines, r.amount, r.items,
+            r.created_by_name, r.cancelled_by_name, r.cancel_note
+       FROM v_mat_receipts r
+       JOIN warehouses w ON w.id = r.warehouse_id
+      WHERE ($1::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
+        AND ($2::int  IS NULL OR r.supplier_id  = $2)
+        AND ($3::int  IS NULL OR r.warehouse_id = $3)
+        AND ($4::date IS NULL OR r.doc_on >= $4)
+        AND ($5::date IS NULL OR r.doc_on <= $5)
+        AND ($6::text IS NULL OR r.doc_no ILIKE '%' || $6 || '%'
+             OR r.supplier ILIKE '%' || $6 || '%'
+             OR r.supplier_doc ILIKE '%' || $6 || '%')
+      ORDER BY r.doc_on DESC, r.id DESC
+      LIMIT 300`,
+    [whDoira(req), Number(req.query.supplier_id) || null,
+     Number(req.query.warehouse_id) || null, from, to,
+     String(req.query.q || '').trim() || null]);
+  res.json({ rows });
+}));
+
+router.get('/receipts/:id', need(...VIEW), wrap(async (req, res) => {
+  const r = (await db.query(
+    `SELECT r.* FROM v_mat_receipts r
+       JOIN warehouses w ON w.id = r.warehouse_id
+      WHERE r.id = $1
+        AND ($2::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))`,
+    [req.params.id, whDoira(req)])).rows[0];
+  if (!r) return res.status(404).json({ error: 'Kirim hujjati topilmadi' });
+  res.json(r);
+}));
+
+//  ★ NARX MAJBURIY — va aynan shu yeri boshlang'ich qoldiqdan FARQ
+//  qiladi (izoh: sql/materials.sql). Qoldiqda narx ixtiyoriy: javonda
+//  turgan materialning bahosi hali ma'lum bo'lmasligi mumkin. Kirimda
+//  esa narx — QARZNING O'ZI: narxsiz qator omborni to'ldirib,
+//  ta'minotchining qarzini oshirmasdi va farqi faqat oy oxirida,
+//  solishtirma dalolatnomada bilinardi.
+router.post('/receipts', need(...MANAGE), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+
+  const ccy  = req.body.ccy === 'UZS' ? 'UZS' : 'USD';
+  const rate = Number(req.body.rate) || null;
+  if (ccy === 'UZS' && !rate)
+    return res.status(400).json({ error: "So'mdagi hujjat uchun kurs kerak" });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const sup = (await client.query(
+      `SELECT id, name FROM suppliers WHERE id = $1 AND active`,
+      [req.body.supplier_id])).rows[0];
+    if (!sup) throw new Error("Ta'minotchi tanlanmagan");
+
+    //  Ombor doirasi CHEGARA, ro'yxatni chetlab id yuborilsa ham
+    //  qabul qilinmaydi: tugmani yashirish himoya emas.
+    const wh = (await client.query(
+      `SELECT w.id, w.name FROM warehouses w
+        WHERE w.id = $1 AND w.kind = 'material' AND w.is_active
+          AND ($2::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))`,
+      [req.body.warehouse_id, whDoira(req)])).rows[0];
+    if (!wh) throw new Error('Ombor tanlanmagan');
+
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('mat_receipt_no'))`);
+    const doc_no = await nextReceiptNo(client);
+
+    const r = (await client.query(
+      `INSERT INTO mat_receipts (doc_no, supplier_id, warehouse_id, doc_on,
+                                 supplier_doc, ccy, rate, note, created_by)
+       VALUES ($1,$2,$3,COALESCE($4::date, CURRENT_DATE),$5,$6,$7,$8,$9)
+       RETURNING id`,
+      [doc_no, sup.id, wh.id, SANA(req.body.doc_on), trim(req.body.supplier_doc),
+       ccy, ccy === 'UZS' ? rate : null, trim(req.body.note),
+       req.user.id])).rows[0];
+
+    let n = 0;
+    for (const it of items) {
+      const qty   = Number(it.qty);
+      const price = Number(it.price);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const mt = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1`, [it.material_id])).rows[0];
+      if (!mt) throw new Error('Material topilmadi');
+      if (!Number.isFinite(price) || price <= 0)
+        throw new Error(`«${mt.name}» — narx yozilmagan`);
+
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                     to_kind, to_id, moved_on, note,
+                                     doc_kind, doc_id, worker_id,
+                                     price, ccy, rate)
+         VALUES ($1,$2,'supplier',$3,'warehouse',$4,
+                 COALESCE($5::date, CURRENT_DATE), $6, 'receipt', $7, $8,
+                 $9, $10, $11)`,
+        [mt.id, qty, sup.id, wh.id, SANA(req.body.doc_on), trim(it.note),
+         r.id, req.user.id, price, ccy, ccy === 'UZS' ? rate : null]);
+      n++;
+    }
+    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+
+    await audit(req, { module: 'materials', action: 'receipt',
+                       entity: 'mat_receipts', entity_id: r.id,
+                       payload: { doc_no, supplier: sup.name,
+                                  warehouse: wh.name, lines: n } }, client);
+    await client.query('COMMIT');
+    res.json({ id: r.id, doc_no, lines: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  Adashib yozilgani O'CHIRILMAYDI, bekor qilinadi: qoldiqdan ham,
+//  ta'minotchining qarzidan ham chiqadi, tarixda esa qoladi. Hujjat
+//  va uning qatorlari BIRGA bekor qilinadi — ikkinchisi qolib ketsa
+//  hujjat qarzdan chiqar, material esa omborda turaverardi.
+router.post('/receipts/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const r = (await client.query(
+      `SELECT r.id, r.doc_no FROM mat_receipts r
+         JOIN warehouses w ON w.id = r.warehouse_id
+        WHERE r.id = $1 AND r.status = 'ok'
+          AND ($2::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))
+        FOR UPDATE OF r`,
+      [req.params.id, whDoira(req)])).rows[0];
+    if (!r) throw new Error('Kirim hujjati topilmadi');
+
+    await client.query(
+      `UPDATE material_moves SET status = 'cancelled'
+        WHERE doc_kind = 'receipt' AND doc_id = $1`, [r.id]);
+    await client.query(
+      `UPDATE mat_receipts
+          SET status = 'cancelled', cancelled_by = $2,
+              cancelled_at = NOW(), cancel_note = $3
+        WHERE id = $1`, [r.id, req.user.id, trim(req.body.note)]);
+
+    await audit(req, { module: 'materials', action: 'receipt-cancel',
+                       entity: 'mat_receipts', entity_id: r.id,
+                       payload: { doc_no: r.doc_no,
+                                  note: trim(req.body.note) } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 module.exports = router;
