@@ -1921,6 +1921,74 @@ test('narxdan past sotilmaydi \u2014 direktor tasdiqlaydi', async () => {
     await opt('PATCH', '/api/sales/orders/' + id, { status: 'cancelled' });
 });
 
+test("xom ashyo importi: ta'minotchi biriktiriladi, takror birlashadi", async () => {
+  //  ★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI (zavod qarori,
+  //  2026-09): zavod ro'yxatida bitta MDF to'rtta odamdan keladi.
+  //
+  //  ★ TAKROR QATOR — XATO EMAS: ro'yxat ilgari har ishlatiladigan
+  //  bo'lim uchun alohida qatorda yuritilgan edi va o'sha ustun olib
+  //  tashlangach bir xil qatorlar qolib ketdi. Ilgari bitta takror
+  //  butun faylni saqlanmay qoldirardi.
+  const t1 = (await H.id(`INSERT INTO suppliers (name) VALUES ('Sinov Mdf Bir')
+                          RETURNING id`)).id;
+  const t2 = (await H.id(`INSERT INTO suppliers (name) VALUES ('Sinov Mdf Ikki')
+                          RETURNING id`)).id;
+
+  const csv = [
+    "Mahsulot nomi;Birligi;Ta'minotchi",
+    //  Bir xil nom IKKI qatorda, ta'minotchisi har xil — birlashadi
+    'Sinov faner 10mm;list;Sinov Mdf Bir',
+    'Sinov faner 10mm;list;Sinov Mdf Ikki',
+    //  Katakda ikkitasi: vergul ham, «/» ham ajratadi
+    'Sinov faner 15mm;list;Sinov Mdf Bir / Sinov Mdf Ikki',
+    //  Ro'yxatda YO'Q ta'minotchi — material baribir saqlanadi
+    'Sinov yelim;kg;Sinov Yo\'q Odam',
+  ];
+
+  const pre = await (await post('/api/import/materials', csv)).json();
+  assert.equal(pre.bad, 0, JSON.stringify(pre.rows));
+  assert.equal(pre.total, 3, 'ikkita bir xil nom bitta materialga birlashadi');
+  assert.equal(pre.merged, 1);
+  assert.equal(pre.links, 4, 'ikkitasida 2 tadan, uchinchisida yo\'q');
+  //  Topilmagani XATO emas, lekin JIM ham emas
+  assert.deepEqual(pre.supplier_missing, [{ name: "Sinov Yo'q Odam", n: 1 }]);
+
+  const saved = await (await post('/api/import/materials?save=1', csv)).json();
+  assert.equal(saved.saved, 3);
+  assert.equal(saved.links, 4);
+
+  const list = (await admin('GET', '/api/materials?q=Sinov faner')).body.rows;
+  const m10 = list.find((r) => r.name === 'Sinov faner 10mm');
+  const m15 = list.find((r) => r.name === 'Sinov faner 15mm');
+  assert.deepEqual(m10.suppliers.map((x) => x.name).sort(),
+    ['Sinov Mdf Bir', 'Sinov Mdf Ikki'], 'ikki qatordagi ta\'minotchi qo\'shildi');
+  assert.deepEqual(m15.suppliers.map((x) => x.name).sort(),
+    ['Sinov Mdf Bir', 'Sinov Mdf Ikki'], '«/» ham ajratadi');
+  const yelim = (await admin('GET', '/api/materials?q=Sinov yelim')).body.rows[0];
+  assert.deepEqual(yelim.suppliers, [], 'topilmagan ta\'minotchi biriktirilmaydi');
+
+  //  ★ QAYTA YUKLASH bog'lanishni IKKILANTIRMAYDI va o'chirmaydi.
+  const qayta = await (await post('/api/import/materials?save=1', csv)).json();
+  assert.equal(qayta.saved, 3);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS id FROM material_suppliers ms
+       JOIN materials m ON m.id = ms.material_id
+      WHERE m.name LIKE 'Sinov faner%'`)).id, 4, 'takrorlanmaydi');
+
+  //  ★ KARTOCHKADAN to'liq ro'yxat yuboriladi, ayirmani SERVER chiqaradi.
+  assert.equal((await admin('PATCH', '/api/materials/' + m10.id,
+    { suppliers: [t2] })).status, 200);
+  const keyin = (await admin('GET', '/api/materials?q=Sinov faner 10mm')).body.rows[0];
+  assert.deepEqual(keyin.suppliers.map((x) => x.id), [t2],
+    'belgilanmagani olib tashlanadi');
+  //  Bo'shatish ham mumkin: «tegma» emas, «yo'q» degani
+  assert.equal((await admin('PATCH', '/api/materials/' + m10.id,
+    { suppliers: [] })).status, 200);
+  assert.deepEqual((await admin('GET', '/api/materials?q=Sinov faner 10mm'))
+    .body.rows[0].suppliers, []);
+  assert.ok(t1);
+});
+
 test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
   //  ★ Qoldiq HARAKATdan yig'iladi, alohida ustun yo'q: ustun bo'lsa
   //  u harakat bilan ajralib ketardi — bitta unutilgan UPDATE va

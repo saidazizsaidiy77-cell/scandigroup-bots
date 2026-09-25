@@ -35,7 +35,7 @@ const trim = (v) => {
 //  ombori ko'rinadi (4-qoida: ism ham, tsex ham kodga yozilmaydi).
 router.get('/ref', need(...VIEW), wrap(async (req, res) => {
   const doira = req.user.scope_shop_ids || [];
-  const [cats, uoms, whs] = await Promise.all([
+  const [cats, uoms, whs, sups] = await Promise.all([
     db.query(`SELECT code, name FROM material_categories WHERE active ORDER BY sort, name`),
     db.query(`SELECT code, name FROM material_uoms ORDER BY sort, name`),
     db.query(
@@ -57,8 +57,13 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
                OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
         ORDER BY w.sort, w.name`,
       [doira.length ? doira : null]),
+    //  Ta'minotchilar SPRAVOCHNIK: unda na qarz bor, na to'lov —
+    //  shuning uchun doira qo'yilmaydi, material bog'laydigan har
+    //  kimga ochiq (kassadagi `/refs` bilan bir xil qoida).
+    db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`),
   ]);
-  res.json({ categories: cats.rows, uoms: uoms.rows, warehouses: whs.rows });
+  res.json({ categories: cats.rows, uoms: uoms.rows, warehouses: whs.rows,
+             suppliers: sups.rows });
 }));
 
 //  Ro'yxat. Qidiruv nomi va kodi bo'yicha: zavodda bitta material
@@ -67,7 +72,16 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
 router.get('/', need(...VIEW), wrap(async (req, res) => {
   const q = trim(req.query.q);
   const { rows } = await db.query(
-    `SELECT m.*, c.name AS category_name, u.name AS uom_name
+    `SELECT m.*, c.name AS category_name, u.name AS uom_name,
+            --  ★ TA'MINOTCHI RO'YXATDA TURADI, alohida so'rovda emas:
+            --  «kimdan olamiz» degan savol material tanlanganda emas,
+            --  RO'YXATNI ko'zdan kechirayotganda beriladi — ta'minotchi
+            --  tugatganda o'sha ustundan qolganini topadi.
+            COALESCE((SELECT json_agg(json_build_object('id', sp.id, 'name', sp.name)
+                                      ORDER BY sp.name)
+                        FROM material_suppliers ms
+                        JOIN suppliers sp ON sp.id = ms.supplier_id
+                       WHERE ms.material_id = m.id), '[]') AS suppliers
        FROM materials m
        LEFT JOIN material_categories c ON c.code = m.category
        LEFT JOIN material_uoms u       ON u.code = m.uom
@@ -121,21 +135,58 @@ router.patch('/:id', need(...MANAGE), wrap(async (req, res) => {
     val.push(req.body.active === true);
     set.push(`active = $${val.length}`);
   }
-  if (!set.length) return res.status(400).json({ error: "O'zgarish yo'q" });
+  //  ★ TA'MINOTCHI RO'YXATI TO'LIQ KELADI, qo'shimcha emas: oyna
+  //  qaysilar belgilanganini yuboradi va server ayirmani o'zi
+  //  chiqaradi. «Qo'sh» va «olib tashla» degan ikkita yo'l yozilsa
+  //  ekrandagi belgi bilan bazadagi ro'yxat bir kun ajralib ketardi.
+  //
+  //  IMPORT esa teskari: u faqat QO'SHADI (izoh: `modules/import.js`) —
+  //  fayl saytdan qo'yilgan bog'lanishni bilmaydi va uni o'chirib
+  //  yuborishga haqqi yo'q.
+  const sup = Array.isArray(req.body.suppliers)
+    ? [...new Set(req.body.suppliers.map(Number).filter(Number.isInteger))] : null;
+  if (!set.length && !sup) return res.status(400).json({ error: "O'zgarish yo'q" });
+
+  const client = await db.connect();
   try {
-    const { rows } = await db.query(
-      `UPDATE materials SET ${set.join(', ')} WHERE id = $1 RETURNING id, name`, val);
-    if (!rows[0]) return res.status(404).json({ error: 'Material topilmadi' });
+    await client.query('BEGIN');
+    let row;
+    if (set.length) {
+      row = (await client.query(
+        `UPDATE materials SET ${set.join(', ')} WHERE id = $1 RETURNING id, name`,
+        val)).rows[0];
+    } else {
+      row = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1`, [req.params.id])).rows[0];
+    }
+    if (!row) { await client.query('ROLLBACK'); client.release();
+                return res.status(404).json({ error: 'Material topilmadi' }); }
+
+    if (sup) {
+      await client.query(
+        `DELETE FROM material_suppliers
+          WHERE material_id = $1 AND NOT (supplier_id = ANY($2::int[]))`,
+        [row.id, sup]);
+      for (const sid of sup)
+        await client.query(
+          `INSERT INTO material_suppliers (material_id, supplier_id, created_by)
+           VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [row.id, sid, req.user.id]);
+    }
+    //  3-qoida: tranzaksiya ichida hovuzdan yangi ulanish so'ralmaydi.
     await audit(req, { module: 'materials', action: 'update', entity: 'materials',
-                       entity_id: rows[0].id, payload: req.body });
+                       entity_id: row.id, payload: req.body }, client);
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {
+    await client.query('ROLLBACK');
+    if (e.code === '23503' && /material_suppliers/.test(e.constraint || ''))
+      return res.status(400).json({ error: "Bunday ta'minotchi ro'yxatda yo'q" });
     if (e.code === '23505') return res.status(400).json({
       error: 'Bunday nom yoki kod allaqachon bor' });
     if (e.code === '23503') return res.status(400).json({
       error: "Turkum yoki o'lchov birligi ro'yxatda yo'q" });
     throw e;
-  }
+  } finally { client.release(); }
 }));
 
 // ═══════════════════════════════════════════════ QOLDIQ VA HARAKAT

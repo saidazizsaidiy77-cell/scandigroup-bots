@@ -2716,7 +2716,72 @@ qo'yilgan qoida keyin jimgina noto'g'ri ishlaydi.
   Tayyor mahsulotdagi `color` bilan adashtirmaslik kerak — u yerda rang
   konverning xususiyati, bu yerda esa materialning O'ZI boshqa.
 - Ro'yxat Excel'dan yuklanadi (qo'lda terilmaydi). Kerakli ustunlar:
-  nomi · o'lchov birligi (dona, m², kg, rulon…) · turkumi.
+  nomi · o'lchov birligi (dona, m², kg, rulon…). Ixtiyoriy:
+  **ta'minotchi** · turkum · kod · izoh.
+- ✅ HAL BO'LDI: **tsex va bo'lim FAYLDAN kelmaydi** (zavod qarori,
+  2026-09) — materialni kiritgandan keyin sklad xodimlari uni saytdan
+  o'zlari to'ldiradi. Huquqi tayyor: `xom_ombor` rolida
+  `materials.manage` bor.
+- Hali yo'q: **turkum** ustuni zavod faylida yo'q — material
+  kiritildi, turkumi esa saytdan qo'yiladi.
+
+**★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI** (`material_suppliers`,
+zavod qarori 2026-09). Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF
+materiali to'rtta odamdan keladi («Mdf Eman · Mdf Dilmurod aka · Mdf
+Kharddecor · Mdf O'tkir»), oyna esa ikkitasidan. Materialning O'ZIDA
+ustun bo'lsa («supplier_id») faqat bittasi sig'ardi va qolgani
+yo'qolardi — ta'minotchi tugatganda «yana kimdan olamiz» degan savolga
+javob qolmasdi.
+
+**Narx bu yerda YO'Q**: u kirim hujjatidan chiqadi va har kelganda
+boshqacha bo'ladi. Jadval faqat «kimdan olamiz» degan savolga javob
+beradi.
+
+**Ro'yxatda ustun bo'lib turadi**, kartochkada emas: savol material
+tanlanganda emas, RO'YXATNI ko'zdan kechirayotganda beriladi —
+bittasi tugatsa qolgani o'sha yerda ko'rinadi.
+
+**Katakda vergul bilan yoziladi** («Mdf Eman , Mdf O'tkir»). Zavod
+faylida «/» ham uchraydi («Oyna Abdulhamid / Oyna Farhod»), shuning
+uchun ikkala belgi ham ajratadi.
+
+**★ TAKROR QATOR — XATO EMAS, BIRLASHTIRILADI** (zavod qarori,
+2026-09). Ro'yxat ilgari har ishlatiladigan BO'LIM uchun alohida
+qatorda yuritilardi («Shpaklefka Oq» — uch bo'limda, uch qator), o'sha
+ustun olib tashlangach esa bir xil qatorlar qolib ketdi. Ilgari bitta
+takror BUTUN faylni saqlanmay qoldirardi.
+
+Ta'minotchisi har xil bo'lsa ikkalasi ham biriktiriladi — «Ip» aynan
+shunday. **O'lchov birligi** esa har xil bo'lsa XATO: bitta material
+ham kg, ham dona bo'lib turolmaydi va qaysi biri to'g'riligini tizim
+taxmin qilmaydi.
+
+Kalit `norm()` — bo'shliq va tinish belgisi hisobga olinmaydi:
+«Material Milano SP» va «Material (Milano sp)» bitta material. Baza
+kaliti yumshoqroq (`lower(name)`), ya'ni import undan QAT'IYROQ
+tozalaydi. Lekin JIM birlashtirilmaydi: qaysi nom qaysisiga
+qo'shilgani ro'yxat bo'lib chiqadi (`merged_names`) — aks holda ikkita
+boshqa-boshqa material bitta bo'lib qolgani faqat qoldiq noto'g'ri
+chiqqanda bilinardi.
+
+**★ TOPILMAGAN TA'MINOTCHI — OGOHLANTIRISH, XATO EMAS.** Material
+baribir saqlanadi, faqat bog'lanishsiz: bitta noto'g'ri yozilgan nom
+to'qqiz yuz materialni tizimdan tashqarida qoldirardi (bo'lim
+topilmagan xodim bilan bir xil qoida). Lekin JIM ham qolmaydi —
+preview'da ro'yxat bo'lib chiqadi, aks holda bog'lanmagani faqat
+oylar o'tib, «kimdan olamiz» degan savolda bilinardi.
+
+**Import faqat QO'SHADI, o'chirmaydi**: qayta yuklashda fayldan
+tushmagan ta'minotchi joyida qoladi — uni saytdan qo'ygan odam bor va
+fayl uni bilmaydi (mijoz va ta'minotchi importidagi «yozilgani
+o'chmaydi» bilan bir xil). **Kartochka esa teskari**: u to'liq ro'yxat
+yuboradi va ayirmani SERVER chiqaradi — «qo'sh» va «olib tashla»
+degan ikkita yo'l yozilsa ekrandagi belgi bilan bazadagi ro'yxat bir
+kun ajralib ketardi. Bo'sh yuborilgani «tegma» emas, «yo'q» degani.
+
+Kartochkada ochilma EMAS, belgilanadigan ro'yxat: ochilmada bittasi
+tanlanib, qolgani yo'qolardi. Ustida qidiruv katagi — ro'yxat
+o'ttizta.
 
 **Jo'natma**
 - Mashina raqami, haydovchi va hujjat raqami yoziladimi? Hozir buyurtmada

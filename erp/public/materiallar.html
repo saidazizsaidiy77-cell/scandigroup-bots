@@ -171,13 +171,21 @@ function draw() {
     return;
   }
   $('body').innerHTML = `<div style="overflow-x:auto"><table>
-    <thead><tr><th>Nomi</th><th>Turkum</th><th>O'lchov</th><th>Kod</th>
+    <thead><tr><th>Nomi</th><th>Turkum</th><th>O'lchov</th>
+      <th>Ta'minotchi</th><th>Kod</th>
       <th>Izoh</th>${boshqara() ? '<th></th>' : ''}</tr></thead>
     <tbody>${rows.map((r) => `<tr${r.active ? '' : ' style="opacity:.5"'}>
       <td><b>${esc(r.name)}</b>${r.active ? ''
         : ' <span class="tag">faolsiz</span>'}</td>
       <td class="muted">${esc(r.category_name || '—')}</td>
       <td class="muted">${esc(r.uom_name || r.uom)}</td>
+      <!--  ★ TA'MINOTCHI RO'YXATDA TURADI: «kimdan olamiz» degan
+            savol material tanlanganda emas, ro'yxatni ko'zdan
+            kechirayotganda beriladi. Bittasi tugatsa qolgani shu
+            yerda ko'rinadi — kartochkani ochish shart emas. -->
+      <td class="muted" style="font-size:12px">${(r.suppliers || []).length
+        ? r.suppliers.map((x) => esc(x.name)).join(' · ')
+        : '<span class="tag warn">biriktirilmagan</span>'}</td>
       <td class="muted">${esc(r.code || '')}</td>
       <td class="muted" style="font-size:12px">${esc(r.note || '')}</td>
       ${boshqara() ? `<td class="num"><button onclick="tahrir(${r.id})">✎</button></td>` : ''}
@@ -332,6 +340,25 @@ function oyna(r) {
             <span>Faol — ro'yxatlarda turadi</span></label>
             <div class="hint">Material O'CHIRILMAYDI: u eski hujjatlarda
               turgan bo'lishi mumkin. Keraksizi faolsizlantiriladi.</div></div>` : ''}
+          <!--  ★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI: zavodda
+                bitta MDF to'rtta odamdan keladi. Shuning uchun
+                ochilma emas, BELGILANADIGAN ro'yxat — ochilmada
+                bittasi tanlanib, qolgani yo'qolardi.  -->
+          <div class="wide"><label>Ta'minotchi</label>
+            <input id="mSupQ" placeholder="qidiruv" oninput="supFilter()"
+              style="margin-bottom:8px">
+            <div id="mSupList" style="max-height:200px;overflow:auto;
+              border:1px solid var(--line);border-radius:10px;padding:8px">
+              ${(ref.suppliers || []).map((sp) => `<label class="row"
+                data-nom="${esc(sp.name.toLowerCase())}"
+                style="gap:8px;align-items:center;text-transform:none;
+                       font-size:14px;cursor:pointer;padding:3px 0">
+                <input type="checkbox" value="${sp.id}" style="width:auto"${
+                  (r?.suppliers || []).some((x) => x.id === sp.id) ? ' checked' : ''}>
+                <span>${esc(sp.name)}</span></label>`).join('')}
+            </div>
+            <div class="hint">Bittadan ko'p bo'lishi mumkin — bitta MDF
+              to'rtta ta'minotchidan keladi.</div></div>
         </div>
         <p class="muted" style="font-size:12px;margin-top:12px">
           ★ Har rang alohida material: «LDSP 16mm oq» va «LDSP 16mm venge» —
@@ -339,6 +366,14 @@ function oyna(r) {
         <button class="primary" style="margin-top:14px"
           onclick="saqla(${r ? r.id : 'null'})">Saqlash</button>
       </div></div>`;
+}
+
+//  Ro'yxat o'ttizta — qidiruv katagi ko'z bilan izlashdan qutqaradi.
+function supFilter() {
+  const q = ($('mSupQ').value || '').trim().toLowerCase();
+  $('mSupList').querySelectorAll('label').forEach((el) => {
+    el.style.display = !q || el.dataset.nom.includes(q) ? '' : 'none';
+  });
 }
 
 const yangi  = () => oyna(null);
@@ -349,6 +384,11 @@ async function saqla(id) {
     name: $('mName').value.trim(), uom: $('mUom').value || null,
     category: $('mCat').value || null, code: $('mCode').value.trim() || null,
     note: $('mNote').value.trim() || null,
+    //  To'liq ro'yxat yuboriladi, ayirmani SERVER chiqaradi (izoh:
+    //  `modules/materials.js`) — ekrandagi belgi bilan bazadagi
+    //  ro'yxat ikki yo'ldan yurmasin.
+    suppliers: [...$('mSupList').querySelectorAll('input:checked')]
+      .map((el) => Number(el.value)),
   };
   if (!it.name) return toast('Nomi kiritilmagan', true);
   if (!it.uom)  return toast("O'lchov birligi tanlanmagan", true);
@@ -376,7 +416,9 @@ function yuklash() {
         <p class="muted" style="margin-bottom:12px">Excel (.xlsx) yoki CSV.
           Ustunlar SARLAVHADAN topiladi, tartibi muhim emas.<br>
           Kerakli: <b>Nomi</b> va <b>O'lchov birligi</b>.
-          Ixtiyoriy: Turkum · Kod · Izoh.</p>
+          Ixtiyoriy: <b>Ta'minotchi</b> · Turkum · Kod · Izoh.<br>
+          Ta'minotchi katagida bittadan ko'p bo'lsa vergul bilan
+          yoziladi: «Mdf Eman , Mdf O'tkir».</p>
         <input type="file" accept=".xlsx,.csv,.txt" onchange="tanla(this)">
         <div id="impOut" style="margin-top:14px"></div>
       </div></div>`;
@@ -402,6 +444,23 @@ function korsat(r, nom) {
         r.updates ? ` · ${r.updates} tasi mavjud` : ''}</span></div>
     ${r.unknown.length ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
       Tanilmagan ustunlar (o'qilmaydi): ${esc(r.unknown.join(', '))}</p>` : ''}
+    <!--  ★ BIRLASHTIRISH VA TOPILMAGAN TA'MINOTCHI — ikkalasi ham
+          XATO EMAS, lekin JIM ham qolmaydi. Odam faylda 938 qator
+          ko'rib, ekranda 930 ni ko'radi: farqi yozilmasa «sakkiztasi
+          yo'qoldi» deb o'qilardi. -->
+    ${r.merged ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
+      <b>${r.merged}</b> ta takror qator birlashtirildi — ta'minotchisi
+      qo'shildi.${(r.merged_names || []).length ? ' Nomi boshqacha yozilgani: '
+        + r.merged_names.map((x) => `«${esc(x.kept)}» ← «${esc(x.dropped.join('», «'))}»`)
+            .join(' · ') : ''}</p>` : ''}
+    ${(r.supplier_missing || []).length ? `<p class="tag warn"
+      style="display:block;margin-bottom:10px;font-size:12px;white-space:normal">
+      Bu ta'minotchilar ro'yxatda topilmadi — material saqlanadi, lekin
+      <b>biriktirilmaydi</b>: ${r.supplier_missing.map((x) =>
+        `${esc(x.name)} (${x.n})`).join(' · ')}.
+      Ta'minotchilar sahifasidan qo'shib, faylni qaytadan yuklang.</p>` : ''}
+    ${r.links ? `<p class="muted" style="font-size:12px;margin-bottom:10px">
+      <b>${r.links}</b> ta material–ta'minotchi bog'lanishi yoziladi.</p>` : ''}
     ${bad.length ? `
       <div style="max-height:30vh;overflow:auto;margin-bottom:10px">
         <table><tbody>${bad.map((x) => `
@@ -422,7 +481,8 @@ async function saqlaFayl() {
     const r = await App.upload('/api/import/materials?save=1', picked);
     yop(); await load();
     toast(`${r.saved} ta material kiritildi`
-      + (r.updated ? ` · ${r.updated} tasi yangilandi` : ''));
+      + (r.updated ? ` · ${r.updated} tasi yangilandi` : '')
+      + (r.links ? ` · ${r.links} ta ta'minotchi bog'landi` : ''));
   } catch (e) {
     toast(e.message, true);
     const b = $('impSave'); if (b) b.disabled = false;

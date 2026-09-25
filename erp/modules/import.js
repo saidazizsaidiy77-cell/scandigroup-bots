@@ -794,8 +794,11 @@ router.post('/suppliers', need('purchasing.manage'),
 //  ikkita qator bo'ladi. Ustun bo'lsa qoldiq material bo'yicha
 //  yig'ilib, «oq LDSP tugadi» degan savolga javob bo'lmasdi.
 const MFIELDS = {
-  name:     ['material', 'materialnomi', 'nomi', 'nom', 'nomlanishi',
-             'наименование', 'материал'],
+  //  Zavod faylida ustun «Mahsulot nomi» deb ataladi — xom ashyo
+  //  ham ular uchun mahsulot. Bu yerda chalkashlik yo'q: material
+  //  importi alohida yo'l (`/materials`), konver importi boshqa.
+  name:     ['material', 'materialnomi', 'mahsulotnomi', 'mahsulot',
+             'nomi', 'nom', 'nomlanishi', 'наименование', 'материал'],
   code:     ['kod', 'kodi', 'artikul', 'код', 'артикул'],
   //  Zavod faylida ustun «O'lchov birligi» yoki qisqa «birlik» bo'ladi.
   uom:      ['olchovbirligi', 'olchov', 'birlik', 'birligi', 'olchambirligi',
@@ -803,6 +806,12 @@ const MFIELDS = {
   category: ['turkum', 'turkumi', 'turi', 'tur', 'guruh', 'guruhi',
              'kategoriya', 'категория', 'группа'],
   note:     ['izoh', 'izohi', 'примечание', 'комментарий'],
+  //  ★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI (zavod qarori,
+  //  2026-09): katakda vergul bilan yoziladi — «Mdf Eman , Mdf
+  //  O'tkir». Zavod faylida «/» ham uchraydi («Oyna Abdulhamid /
+  //  Oyna Farhod»), shuning uchun ikkala belgi ham ajratadi.
+  supplier: ['taminotchi', 'taminotchisi', 'yetkazibberuvchi',
+             'yetkazuvchi', 'поставщик', 'поставщики'],
 };
 
 router.post('/materials', need('materials.manage', 'production.manage'),
@@ -843,11 +852,14 @@ router.post('/materials', need('materials.manage', 'production.manage'),
       e.status = 400; throw e;
     }
 
-    const [cat, uom, cur] = await Promise.all([
+    const [cat, uom, cur, sup] = await Promise.all([
       db.query(`SELECT code, name FROM material_categories ORDER BY sort`),
       db.query(`SELECT code, name FROM material_uoms ORDER BY sort`),
       db.query(`SELECT name FROM materials`),
+      db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`),
     ]);
+    const bySup = new Map();
+    for (const s of sup.rows) bySup.set(norm(s.name), s.id);
     //  Kodi bilan ham, nomi bilan ham topiladi: zavod faylida «MDF»
     //  deb turishi ham, «Qadoqlash materiali» deb turishi ham mumkin.
     const byCat = new Map();
@@ -862,8 +874,27 @@ router.post('/materials', need('materials.manage', 'production.manage'),
       if (!byUom.has(a) && byUom.has(b)) byUom.set(a, b);
     const existing = new Set(cur.rows.map((c) => norm(c.name)));
 
-    const seen = new Set();
+    //  ★ BIR XIL NOM IKKI MARTA KELSA — BIRLASHTIRILADI, xato EMAS
+    //  (zavod qarori, 2026-09). Zavod ro'yxatida material har
+    //  ishlatiladigan bo'lim uchun alohida qatorda turgan edi
+    //  («Shpaklefka Oq» — uch bo'limda, uch qator), o'sha ustun olib
+    //  tashlangach esa bir xil qatorlar qolib ketdi. Ilgari bu XATO
+    //  bo'lardi va bitta takror butun faylni saqlanmay qoldirardi.
+    //
+    //  Ta'minotchisi har xil bo'lsa IKKALASI ham biriktiriladi —
+    //  «Ip» aynan shunday: bir qatorda «Bozor», ikkinchisida
+    //  «Material Bozor Stul».
+    //
+    //  O'LCHOV BIRLIGI esa har xil bo'lsa XATO: bitta material ham
+    //  kg, ham dona bo'lib turolmaydi va qaysi biri to'g'riligini
+    //  tizim taxmin qilmaydi.
     const rows = [];
+    const byName = new Map();
+    //  Topilmagan ta'minotchi — OGOHLANTIRISH, xato emas (izoh:
+    //  saqlash blokida). Nomi bo'yicha yig'iladi: ro'yxatda o'ttizta
+    //  nom bor va ularni qator-qator o'qib chiqish mumkin emas.
+    const supYoq = new Map();
+
     for (let i = headIdx + 1; i < table.length; i++) {
       const cells = table[i];
       if (!cells.some((c) => String(c).trim())) continue;
@@ -873,8 +904,6 @@ router.post('/materials', need('materials.manage', 'production.manage'),
 
       const name = at('name');
       if (!name) errors.push('Material nomi bo\'sh');
-      else if (seen.has(norm(name))) errors.push(`Faylda takrorlangan: «${name}»`);
-      else seen.add(norm(name));
       it.name = name;
 
       const birlik = at('uom');
@@ -896,7 +925,63 @@ router.post('/materials', need('materials.manage', 'production.manage'),
 
       it.code = at('code') || null;
       it.note = at('note') || null;
-      rows.push({ line: i + 1, it, errors, exists: existing.has(norm(name)) });
+
+      //  Vergul ham, «/» ham ajratadi: zavod faylida ikkalasi ham
+      //  uchraydi. Topilmagani ro'yxatga yoziladi va material
+      //  baribir saqlanadi — bog'lanishsiz.
+      it.suppliers = [];
+      it.supplier_names = [];
+      for (const raw of at('supplier').split(/[,/]/)) {
+        const nom = raw.trim();
+        if (!nom) continue;
+        const id = bySup.get(norm(nom));
+        if (id == null) { supYoq.set(nom, (supYoq.get(nom) || 0) + 1); continue; }
+        if (!it.suppliers.includes(id)) {
+          it.suppliers.push(id);
+          it.supplier_names.push(nom);
+        }
+      }
+
+      //  Kalit `norm()` — bo'shliq va tinish belgisi hisobga
+      //  olinmaydi: «Material Milano SP» va «Material (Milano sp)»
+      //  bitta material, ikki xil yozilgan. Baza kaliti yumshoqroq
+      //  (`lower(name)`), ya'ni import undan QAT'IYROQ tozalaydi.
+      //
+      //  Lekin JIM birlashtirilmaydi: qaysi nom qaysisiga qo'shilgani
+      //  ro'yxat bo'lib chiqadi (`merged_names`) — aks holda ikkita
+      //  boshqa-boshqa material bitta bo'lib qolgani faqat qoldiq
+      //  noto'g'ri chiqqanda bilinardi.
+      const oldRow = name ? byName.get(norm(name)) : null;
+      if (!oldRow) {
+        const r = { line: i + 1, it, errors, exists: existing.has(norm(name)) };
+        if (name) byName.set(norm(name), r);
+        rows.push(r);
+        continue;
+      }
+      //  Takror: birligi bir xil bo'lishi SHART, ta'minotchisi esa
+      //  qo'shiladi.
+      if (it.uom && oldRow.it.uom && it.uom !== oldRow.it.uom) {
+        oldRow.errors.push(
+          `«${name}» faylda ikki xil o'lchov birligi bilan turibdi: `
+          + `«${oldRow.it.uom}» va «${it.uom}»`);
+        continue;
+      }
+      for (let k = 0; k < it.suppliers.length; k++)
+        if (!oldRow.it.suppliers.includes(it.suppliers[k])) {
+          oldRow.it.suppliers.push(it.suppliers[k]);
+          oldRow.it.supplier_names.push(it.supplier_names[k]);
+        }
+      //  Bo'sh katak to'ldiriladi: birinchi qatorda izoh yo'q,
+      //  ikkinchisida bor bo'lishi mumkin.
+      for (const f of ['code', 'category', 'note'])
+        if (oldRow.it[f] == null && it[f] != null) oldRow.it[f] = it[f];
+      oldRow.merged = (oldRow.merged || 1) + 1;
+      //  Nomi BOSHQACHA yozilgan bo'lsa yozib qo'yiladi: bir xil
+      //  qator («Shpaklefka Oq» uch marta) tushuntirishni talab
+      //  qilmaydi, boshqacha yozilgani esa qiladi.
+      if (name !== oldRow.it.name) {
+        (oldRow.other_names = oldRow.other_names || []).push(name);
+      }
     }
     if (!rows.length) { const e = new Error('Faylda qator yo\'q'); e.status = 400; throw e; }
 
@@ -907,6 +992,19 @@ router.post('/materials', need('materials.manage', 'production.manage'),
         preview: true, columns: Object.keys(map), unknown,
         total: rows.length, bad: bad.length,
         updates: rows.filter((r) => r.exists).length,
+        //  Nechta qator birlashtirildi: odam faylda 938 qator ko'rib,
+        //  ekranda 933 ni ko'radi — farqi tushuntirilmasa «beshtasi
+        //  yo'qoldi» deb o'qilardi.
+        merged: rows.reduce((a, r) => a + ((r.merged || 1) - 1), 0),
+        merged_names: rows.filter((r) => r.other_names)
+          .map((r) => ({ kept: r.it.name, dropped: r.other_names })),
+        links: rows.reduce((a, r) => a + (r.it.suppliers || []).length, 0),
+        //  Topilmagan ta'minotchi XATO emas: material baribir
+        //  saqlanadi. Lekin JIM ham qolmaydi — ro'yxat bo'lib
+        //  chiqadi, aks holda bog'lanmagani faqat oylar o'tib,
+        //  «kimdan olamiz» degan savolda bilinardi.
+        supplier_missing: [...supYoq].map(([name, n]) => ({ name, n }))
+          .sort((a, b) => b.n - a.n),
         rows: rows.slice(0, 200),
       });
     }
@@ -922,21 +1020,35 @@ router.post('/materials', need('materials.manage', 'production.manage'),
         //  Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh maydon
         //  to'ladi. O'lchov birligi esa YANGILANADI: u materialning
         //  o'zi haqida va faylda tuzatilgan bo'lishi mumkin.
-        await client.query(
+        const m = (await client.query(
           `INSERT INTO materials (code, name, uom, category, note, created_by)
            VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT (lower(name)) DO UPDATE SET
              code     = COALESCE(EXCLUDED.code,     materials.code),
              uom      = EXCLUDED.uom,
              category = COALESCE(EXCLUDED.category, materials.category),
-             note     = COALESCE(EXCLUDED.note,     materials.note)`,
+             note     = COALESCE(EXCLUDED.note,     materials.note)
+           RETURNING id`,
           [r.it.code, r.it.name, r.it.uom, r.it.category || null, r.it.note,
-           req.user.id]);
+           req.user.id])).rows[0];
+
+        //  ★ BOG'LANISH QO'SHILADI, O'CHMAYDI. Qayta yuklashda
+        //  fayldan tushmagan ta'minotchi joyida qoladi: uni saytdan
+        //  qo'shgan odam bor va fayl uni bilmaydi — mijoz va
+        //  ta'minotchi importidagi «yozilgani o'chmaydi» bilan bir
+        //  xil qoida. Olib tashlash material kartochkasidan.
+        for (const sid of r.it.suppliers || [])
+          await client.query(
+            `INSERT INTO material_suppliers (material_id, supplier_id, created_by)
+             VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [m.id, sid, req.user.id]);
       }
       await audit(req, { module: 'materials', action: 'import', entity: 'materials',
                          entity_id: rows.length, payload: { count: rows.length } }, client);
       await client.query('COMMIT');
-      res.json({ saved: rows.length, updated: rows.filter((r) => r.exists).length });
+      res.json({ saved: rows.length,
+                 updated: rows.filter((r) => r.exists).length,
+                 links: rows.reduce((a, r) => a + (r.it.suppliers || []).length, 0),
+                 supplier_missing: [...supYoq].map(([name, n]) => ({ name, n })) });
     } catch (e) {
       await client.query('ROLLBACK');
       if (!e.status) e.status = 400;

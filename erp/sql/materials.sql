@@ -377,3 +377,30 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('lak-karkas-javobgar');
   END IF;
 END $$;
+
+-- ═══════════════════════════════════════════ MATERIAL → TA'MINOTCHI
+--
+--  ★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI (zavod qarori, 2026-09).
+--
+--  Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF materiali to'rtta
+--  ta'minotchidan keladi («Mdf Eman , Mdf Dilmurod aka , Mdf
+--  Kharddecor , Mdf O'tkir»), oyna esa ikkitasidan. Ustun bo'lsa
+--  («supplier_id» materialning o'zida) faqat bittasi sig'ardi va
+--  qolgani yo'qolardi — ta'minotchi tugatganda «yana kimdan olamiz»
+--  degan savolga javob qolmasdi.
+--
+--  Narx bu yerda YO'Q: u kirim hujjatidan chiqadi va har kelganda
+--  boshqacha bo'ladi. Bu jadval faqat «kimdan olamiz» degan savolga
+--  javob beradi.
+CREATE TABLE IF NOT EXISTS material_suppliers (
+  material_id INT NOT NULL REFERENCES materials(id)  ON DELETE CASCADE,
+  supplier_id INT NOT NULL REFERENCES suppliers(id)  ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by  INT REFERENCES workers(id),
+  PRIMARY KEY (material_id, supplier_id)
+);
+
+--  Teskari savol ham beriladi: «bu ta'minotchi nima yetkazadi» —
+--  ta'minotchi kartochkasida va kirim hujjati yozilganda.
+CREATE INDEX IF NOT EXISTS material_suppliers_sup_idx
+  ON material_suppliers (supplier_id);
