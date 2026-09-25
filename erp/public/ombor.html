@@ -738,7 +738,10 @@ async function loadShip() {
 async function planDay(id, olingan) {
   try {
     await App.api(`/api/sales/orders/${id}/plan-day`, {
-      method: 'POST', body: { on: olingan ? null : isoDay(new Date()) } });
+      method: 'POST',
+      //  `body` MATN bo'lishi shart: obyekt yuborilsa `fetch` uni
+      //  «[object Object]» qilib jo'natadi va server JSON ni o'qiy olmaydi.
+      body: JSON.stringify({ on: olingan ? null : isoDay(new Date()) }) });
     await loadShip();
   } catch (e) { toast(e.message, true); }
 }

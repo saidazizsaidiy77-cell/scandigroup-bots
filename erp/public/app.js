@@ -7,9 +7,23 @@ const App = (() => {
   const token    = () => localStorage.getItem(KEY);
   const setToken = (t) => t ? localStorage.setItem(KEY, t) : localStorage.removeItem(KEY);
 
+  //  `body` obyekt bo'lib kelsa MATNGA aylantiriladi. `fetch` uni o'zi
+  //  qilmaydi — «[object Object]» deb jo'natadi va server JSON ni o'qiy
+  //  olmay xato qaytaradi. Xato EKRANDA ko'rinadi, lekin sababi
+  //  ko'rinmaydi: tugma bosiladi, «Xato» chiqadi va hammasi shu. Testlar
+  //  ham tutmaydi — ular API ga to'g'ridan-to'g'ri murojaat qiladi,
+  //  sahifa orqali emas. Shuning uchun qoida BITTA joyda: chaqiruvchi
+  //  `JSON.stringify` ni unutsa ham ishlaydi.
+  //
+  //  FormData va matn tegilmaydi: birinchisini brauzerning o'zi
+  //  chegarasi bilan yuboradi, ikkinchisi allaqachon tayyor.
+  const tana = (b) => (b && typeof b === 'object' && !(b instanceof FormData)
+    && !(b instanceof Blob) && !(b instanceof ArrayBuffer)) ? JSON.stringify(b) : b;
+
   async function api(path, opts = {}) {
     const r = await fetch(path, {
       ...opts,
+      ...(opts.body !== undefined ? { body: tana(opts.body) } : {}),
       headers: {
         'Content-Type': 'application/json',
         ...(token() ? { Authorization: 'Bearer ' + token() } : {}),
