@@ -270,6 +270,16 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 //         konverning boshlangan kunidan sanaladi, ya'ni menejer
 //         mijozga sana aytib qo'ymasligi kerak. Zavod qarori
 //         (2026-09): alohida «Yangi» tab qilinmadi — savol bitta.
+//
+//         ★ QISMAN biriktirilgani ham SHU YERDA (`assigned_qty <
+//         qty`). Ilgari u «Tayyor» bo'lib chiqardi: biriktirilgan
+//         ikkitasi javonga kelgach boshqa shart qolmasdi va
+//         buyurtma chiqarishga tayyordek ko'rinardi — holbuki
+//         qolgan uchtasiga konver umuman biriktirilmagan va
+//         `/ship` uni baribir chiqarmasdi («mijoz so'ragan donaga
+//         konver biriktirilganmi»). Menejer «Tayyor» ni o'qib,
+//         «Omborga yuborish» ni bosardi va xato faqat o'sha yerda
+//         bilinardi.
 //    4    bir qismi hali omborga kelmagan — ishlab chiqarilmoqda.
 //    5    savdo omborga yubordi, mudir chiqarishni kutmoqda.
 //    6    qolgani — hammasi javonda, chiqarishga tayyor.
@@ -288,7 +298,8 @@ router.get('/stock', need(...READ), wrap(async (_req, res) => {
 const HOLAT = `CASE
         WHEN o.status = 'cancelled' THEN 'cancelled'
         WHEN o.status = 'shipped'   THEN 'shipped'
-        WHEN o.status = 'new' OR o.not_started_qty > 0 THEN 'draft'
+        WHEN o.status = 'new' OR o.not_started_qty > 0
+             OR o.assigned_qty < o.qty THEN 'draft'
         WHEN o.assigned_qty > o.in_warehouse_qty THEN 'waiting'
         WHEN o.status = 'to_ship'   THEN 'to_ship'
         ELSE 'reserved' END`;
@@ -1623,3 +1634,12 @@ router.get('/payment/:id', need(...READ), wrap(async (req, res) => {
 }));
 
 module.exports = router;
+//  ★ HOLAT NAVBATGA HAM BERILADI (zavod qarori, 2026-09).
+//
+//  Menyudagi raqam ro'yxatning SHARTINI takrorlaydi — ilgari u
+//  qaytadan yozilgan edi (`status IN ('new','reserved') AND
+//  in_warehouse_qty >= qty`) va ikkalasi ajralib ketgandi: raqam «2»
+//  turardi, «Tayyor» tabi esa bo'sh chiqardi va o'sha ikki buyurtma
+//  «Boshlanmagan» da yotardi. Endi ikkalasi ham SHU ifodadan o'qiydi,
+//  ya'ni ajralishi mumkin emas.
+module.exports.HOLAT = HOLAT;

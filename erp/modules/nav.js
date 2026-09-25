@@ -251,12 +251,24 @@ const NAVBATLAR = [
   //  o'z buyurtmasi (`ownOf`).
   async (req) => {
     if (!bor(req, 'sales.manage')) return [];
+    //  ★ SHART RO'YXATNIKI, QAYTA YOZILMAYDI (zavod qarori, 2026-09).
+    //
+    //  Ilgari bu yerda o'z sharti turardi — `status IN ('new',
+    //  'reserved') AND in_warehouse_qty >= qty` — va u «Tayyor»
+    //  tabining shartidan ajralib ketgandi: menyuda «2» turar,
+    //  tabni ochgan odam esa bo'sh ro'yxat ko'rardi, o'sha ikki
+    //  buyurtma «Boshlanmagan» va «Ishlab chiqarilmoqda» da
+    //  yotardi. Sabab bitta savolga ikkita javob yozilgani edi:
+    //  `HOLAT` qatorga konver biriktirilmaganini ham, tsex uni
+    //  yo'lga chiqarmaganini ham hisobga oladi, bu yerdagi shart
+    //  esa faqat omborga kelgan donani sanardi.
+    //
+    //  Endi ikkalasi ham AYNAN bitta ifodadan o'qiydi.
     const n = await son(
-      `SELECT COUNT(*)::int AS n FROM v_sales_orders
-        WHERE status IN ('new', 'reserved')
-          AND qty > 0 AND in_warehouse_qty >= qty
-          AND ($1::text[] IS NULL OR channel = ANY($1))
-          AND ($2::int IS NULL OR manager_id = $2)`,
+      `SELECT COUNT(*)::int AS n FROM v_sales_orders o
+        WHERE ${require('./sales').HOLAT} = 'reserved'
+          AND ($1::text[] IS NULL OR o.channel = ANY($1))
+          AND ($2::int IS NULL OR o.manager_id = $2)`,
       [chanOf(req), ownOf(req)]);
     return [{ page: '/buyurtmalar.html', mod: 'sales', n,
               izoh: `${n} ta buyurtma tayyor — omborga yuborilmagan` }];

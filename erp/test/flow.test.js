@@ -5563,10 +5563,24 @@ test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
   //  Savdo: bronning hammasi omborga yetib kelgan, lekin hali
   //  yuborilmagan buyurtma. Yetib kelmaganida tugma baribir
   //  ishlamaydi — uni navbat deb ko'rsatish yolg'on bo'lardi.
-  const tayyor = (await admin('GET', '/api/sales/orders')).body.rows
-    .filter((o) => ['new', 'reserved'].includes(o.status)
-                && o.qty > 0 && o.in_warehouse_qty >= o.qty).length;
-  assert.equal(sonOf(nav, '/buyurtmalar.html'), tayyor);
+  //
+  //  ★ RAQAM «TAYYOR» TABINING O'ZI BILAN solishtiriladi — shartni
+  //  test QAYTA YOZMAYDI. Ilgari shu yerda navbatning sharti
+  //  ko'chirilgan edi va aynan shuning uchun farq tutilmagan:
+  //  menyuda «2» turar, tabni ochgan odam esa bo'sh ro'yxat
+  //  ko'rardi. Test ro'yxatning O'ZINI so'rasa bunday ajralish
+  //  birinchi ishga tushirishdayoq qizil bo'ladi.
+  const tayyor = (await admin('GET', '/api/sales/orders?status=reserved'))
+    .body.rows;
+  assert.equal(sonOf(nav, '/buyurtmalar.html'), tayyor.length,
+    'menyudagi raqam «Tayyor» tabidagi qatorlar soni bilan bir xil');
+  //  Tabdagi har qator haqiqatan ham chiqarishga tayyor: hammasi
+  //  javonda va hali yuborilmagan.
+  for (const o of tayyor) {
+    assert.equal(o.holat, 'reserved');
+    assert.ok(o.qty > 0 && o.in_warehouse_qty >= o.qty,
+      `${o.order_no}: hammasi omborda emas`);
+  }
 
   //  ★ NAVBAT EGASINIKI. Kirituvchida tasdiq huquqi ham, ombor
   //  harakati ham yo'q: unga bu raqamlar umuman chizilmaydi.
