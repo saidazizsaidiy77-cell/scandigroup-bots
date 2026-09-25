@@ -52,7 +52,7 @@ const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate()
 const d8 = v => !v ? '\u2014'
   : (x => `${x.slice(8,10)}.${x.slice(5,7)}.${x.slice(2,4)}`)(String(v).slice(0,10));
 
-let tab = 'board', canMove = false, canPlan = false;
+let tab = 'board', canMove = false, canPlan = false, canXom = false;
 let data = null, shopId = null;
 const picked = new Set();
 //  Qaysi konverning buyurtmalari ochilgan. Qiymat `undefined` — so'rov
@@ -209,6 +209,22 @@ function row(u, mine, isExit) {
       ? `<span class="muted" style="font-size:12px">marshrut tugadi</span>`
       : `<button class="primary" onclick="move(${u.id})">${
           mine ? '→ ' : 'Qabul qildim → '}${esc(u.next_section)}</button>`;
+  //  ★ XOM ASHYO — O'TKAZISH TUGMASINING YONIDA (zavod qarori,
+  //  2026-09). Boshliq materialni konverga shu yerda biriktiradi:
+  //  sarfni faqat tsexda turgan odam biladi va u kun bo'yi AYNAN shu
+  //  ekranda turadi. Alohida sahifa qilinsa u ikki ekran orasida
+  //  yurardi va ko'pincha umuman yozmasdi — yozilmagan sarf esa
+  //  tannarxni butunlay yo'qotadi.
+  //
+  //  Kichik tugma (`.ic`), o'tkazish esa katta bo'lib qolaveradi:
+  //  boshliq kuniga o'nlab marta o'tkazadi va bir-ikki marta material
+  //  biriktiradi — ikkinchi katta tugma birinchisining joyini
+  //  torraytirardi (jo'natishni qaytarish tugmasi bilan bir xil sabab).
+  //  FAQAT O'Z bo'limidagi konverda: kelayotgan konver hali qabul
+  //  qilinmagan va unga material sarflanmaydi.
+  const xom = canXom && mine
+    ? `<button class="ic" title="Xom ashyo biriktirish"
+         onclick="xomOch(${u.id}, event)">&#9635;</button>` : '';
   const sel = canMove && u.on_route && (u.next_section_id || (mine && leaves))
     && !(mine && leaves && u.sent)
     ? `<input type="checkbox" style="width:auto" ${picked.has(u.id) ? 'checked' : ''}
@@ -237,7 +253,7 @@ function row(u, mine, isExit) {
       style="font-size:11.5px">${u.booked_qty} buyurtmada</div>` : ''}</td>
     <td class="c-due">${due(u)}${mine ? '' :
       `<div class="muted" style="font-size:12px">${esc(u.shop)} · ${esc(u.section)}</div>`}</td>
-    <td class="c-act">${act}</td></tr>${openBron.has(u.id) ? bronRow(u) : ''}`;
+    <td class="c-act">${act}${xom}</td></tr>${openBron.has(u.id) ? bronRow(u) : ''}`;
 }
 
 //  ── KONVERNI KIM KUTMOQDA ─────────────────────────────────────────────
@@ -519,6 +535,205 @@ function okQty(id, max) {
   apply([id], n === max ? null : n);
 }
 
+// ═══════════════════════════════════ KONVERGA XOM ASHYO BIRIKTIRISH
+//
+//  Boshliqning savoli bitta: «shu konverga qaysi materialdan qancha
+//  ketdi». Oyna shuning uchun UCH bo'lakdan iborat — qayerdan
+//  (ombor), nima biriktirilgan (bekor qilish bilan) va nima
+//  qo'shiladi.
+//
+//  ★ OCHILMA EMAS, QIDIRUV. Zavodda to'qqiz yuz material bor va
+//  telefondagi ochilmada ularni aylantirib topib bo'lmaydi. Qidiruv
+//  ikki ro'yxat ustida ishlaydi va tartib JAVOBNI oldinga chiqaradi:
+//  avval SHU OMBORDA turgani (qoldig'i bilan), keyin spravochnikning
+//  qolgani. Omborda turgani odatda o'ntacha bo'ladi — boshliq
+//  ko'pincha birinchi ro'yxatdan topadi va hech narsa yozmaydi ham.
+let xomUnit = null, xomWh = null, xomStock = [], xomAll = [], xomQator = [];
+
+async function xomOch(id, ev) {
+  if (ev) ev.stopPropagation();
+  const u = unitById(id);
+  if (!u) return;
+  xomUnit = id; xomQator = [];
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="xomBox" onclick="if(event.target===this)xomYop()">
+      <div class="modal" style="max-width:520px">
+        <h2 style="margin-bottom:4px">${esc(u.conveyor_no)}</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:14px">${esc(u.product)}
+          · ${u.qty} dona · ${esc(u.section || '')}</p>
+        <div id="xomBody" class="muted">Yuklanmoqda…</div>
+        <button style="width:100%;margin-top:14px" onclick="xomYop()">Yopish</button>
+      </div>
+    </div>`);
+  try {
+    const d = await App.api('/api/materials/unit/' + id);
+    if (!$('xomBox')) return;
+    xomWh = d.warehouses[0] ? d.warehouses[0].id : null;
+    //  Spravochnik bir marta o'qiladi va oyna qayta ochilganda
+    //  ikkinchi marta so'ralmaydi: ro'yxat kun davomida o'zgarmaydi.
+    if (!xomAll.length) xomAll = (await App.api('/api/materials')).rows;
+    await xomQoldiq();
+    xomChiz(d);
+  } catch (e) {
+    if ($('xomBody')) $('xomBody').innerHTML =
+      `<span class="tag bad">${esc(e.message)}</span>`;
+  }
+}
+
+const xomYop = () => { $('xomBox')?.remove(); };
+
+//  Qoldiq OMBOR bo'yicha: ombor almashsa raqamlar ham almashadi —
+//  «Arra omborida 40 list» degan javob lak omborida boshqa.
+async function xomQoldiq() {
+  xomStock = xomWh
+    ? (await App.api('/api/materials/stock?warehouse_id=' + xomWh)).rows : [];
+}
+
+function xomChiz(d) {
+  if (!$('xomBody')) return;
+  const w = d.warehouses;
+  //  Ombor ro'yxati SERVER tartibida: eng to'g'risi — konver turgan
+  //  bo'limning ombori — birinchi turadi (izoh: modules/materials.js).
+  //  Bitta bo'lsa ochilma chizilmaydi: tanlov yo'q joyda tanlov
+  //  ko'rsatilmaydi.
+  const joy = (x) => [x.section, x.shop].filter(Boolean).join(' · ');
+  $('xomBody').innerHTML = `
+    ${w.length === 0
+      ? `<p class="tag bad">Sizga biriktirilgan xom ashyo ombori yo'q</p>`
+      : w.length === 1
+        ? `<p class="muted" style="font-size:13px">Ombor: <b>${esc(w[0].name)}</b>${
+            joy(w[0]) ? ' · ' + esc(joy(w[0])) : ''}</p>`
+        : `<label>Ombor</label>
+           <select id="xomWh" onchange="xomWhChange()">${w.map((x) =>
+             `<option value="${x.id}"${x.id === xomWh ? ' selected' : ''}>${
+               esc(x.name)}${joy(x) ? ' · ' + esc(joy(x)) : ''}</option>`).join('')}</select>`}
+
+    ${d.rows.length ? `
+      <div style="margin-top:14px;font-size:12px;letter-spacing:.04em;
+        text-transform:uppercase;color:var(--muted)">Biriktirilgan</div>
+      <div style="margin-top:6px">${d.rows.map((r) => `
+        <div class="row" style="justify-content:space-between;gap:10px;
+          padding:7px 0;border-bottom:1px solid var(--line)${
+          r.status === 'ok' ? '' : ';opacity:.45;text-decoration:line-through'}">
+          <div><b>${esc(r.material)}</b>
+            <div class="muted" style="font-size:11.5px">${esc(r.warehouse || '')}${
+              r.worker ? ' · ' + esc(r.worker) : ''}</div></div>
+          <div class="row" style="gap:8px;align-items:center">
+            <span>${son(r.qty)} <span class="muted">${esc(r.uom)}</span></span>
+            ${r.status === 'ok'
+              ? `<button class="ic" title="Bekor qilish"
+                   onclick="xomBekor(${r.id})">&times;</button>` : ''}
+          </div></div>`).join('')}</div>` : ''}
+
+    <div style="margin-top:16px">
+      <label>Material qo'shish</label>
+      <input id="xomQ" placeholder="nomi bo'yicha qidiring"
+        oninput="xomTop()" autocomplete="off">
+      <div id="xomList" style="margin-top:6px"></div>
+    </div>
+    <div id="xomRows" style="margin-top:10px"></div>
+    <button class="primary" id="xomSave" style="width:100%;margin-top:12px"
+      onclick="xomSaqla()" hidden>Saqlash</button>`;
+  xomTop(); xomRowsChiz();
+}
+
+async function xomWhChange() {
+  xomWh = Number($('xomWh').value) || null;
+  await xomQoldiq();
+  xomTop();
+}
+
+const son = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : String(n).replace(/\.?0+$/, '');
+};
+
+//  Qidiruv: avval omborda turgani (qoldig'i bilan), keyin
+//  spravochnikning qolgani. Ro'yxat o'ttizta bilan cheklanadi —
+//  telefonda undan uzuni baribir o'qilmaydi va qidiruvni
+//  aniqlashtirish kerak.
+function xomTop() {
+  const q = ($('xomQ')?.value || '').trim().toLowerCase();
+  const bor = new Map(xomStock.map((r) => [r.material_id, r]));
+  const mos = (nom) => !q || String(nom).toLowerCase().includes(q);
+  const tanlangan = new Set(xomQator.map((r) => r.id));
+
+  const birinchi = xomStock.filter((r) => mos(r.material) && !tanlangan.has(r.material_id))
+    .map((r) => ({ id: r.material_id, name: r.material, uom: r.uom_name || r.uom,
+                   qoldiq: r.qty }));
+  const qolgan = xomAll.filter((m) => mos(m.name) && !bor.has(m.id) && !tanlangan.has(m.id))
+    .map((m) => ({ id: m.id, name: m.name, uom: m.uom_name || m.uom, qoldiq: null }));
+
+  //  Qidiruv yozilmaguncha butun spravochnik chiqarilmaydi: omborda
+  //  turgani odatda o'ntacha va javob ko'pincha o'sha yerda.
+  const royxat = q ? [...birinchi, ...qolgan].slice(0, 30) : birinchi.slice(0, 30);
+  if (!$('xomList')) return;
+  $('xomList').innerHTML = royxat.length
+    ? royxat.map((m) => `
+        <button style="width:100%;text-align:left;margin-bottom:4px;
+          display:flex;justify-content:space-between;gap:10px"
+          onclick="xomQosh(${m.id})">
+          <span>${esc(m.name)}</span>
+          <span class="${Number(m.qoldiq) < 0 ? 'tag bad' : 'muted'}"
+            style="font-size:12px">${
+            m.qoldiq == null ? esc(m.uom)
+              : `${son(m.qoldiq)} ${esc(m.uom)}`}</span></button>`).join('')
+    : `<p class="muted" style="font-size:13px">${q
+        ? 'Topilmadi' : 'Bu omborda material yo\'q — nomini yozib qidiring'}</p>`;
+}
+
+function xomQosh(id) {
+  const st = xomStock.find((r) => r.material_id === id);
+  const m = st || xomAll.find((x) => x.id === id);
+  if (!m) return;
+  xomQator.push({ id, name: st ? st.material : m.name,
+                  uom: m.uom_name || m.uom, qty: '' });
+  $('xomQ').value = '';
+  xomTop(); xomRowsChiz();
+}
+
+function xomRowsChiz() {
+  if (!$('xomRows')) return;
+  $('xomRows').innerHTML = xomQator.map((r, i) => `
+    <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+      <div style="flex:1"><b>${esc(r.name)}</b>
+        <span class="muted" style="font-size:12px"> ${esc(r.uom)}</span></div>
+      <input type="number" min="0" step="0.001" value="${r.qty}"
+        style="width:110px;text-align:right;font-size:17px"
+        oninput="xomQty(${i}, this.value)" placeholder="soni">
+      <button class="ic" onclick="xomOchir(${i})">&times;</button>
+    </div>`).join('');
+  $('xomSave').hidden = !xomQator.length;
+}
+
+const xomQty = (i, v) => { xomQator[i].qty = v; };
+const xomOchir = (i) => { xomQator.splice(i, 1); xomTop(); xomRowsChiz(); };
+
+async function xomSaqla() {
+  const items = xomQator
+    .map((r) => ({ material_id: r.id, qty: Number(r.qty) || 0 }))
+    .filter((x) => x.qty > 0);
+  if (!items.length) return toast('Soni yozilmadi', true);
+  try {
+    const r = await App.api('/api/materials/unit/' + xomUnit + '/consume', {
+      method: 'POST', body: JSON.stringify({ warehouse_id: xomWh, items }) });
+    toast(`${r.saved} ta material biriktirildi`);
+    const id = xomUnit;
+    xomYop();
+    xomOch(id);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function xomBekor(id) {
+  try {
+    await App.api('/api/materials/consume/' + id + '/cancel', { method: 'POST' });
+    toast('Bekor qilindi');
+    const u = xomUnit;
+    xomYop();
+    xomOch(u);
+  } catch (e) { toast(e.message, true); }
+}
+
 async function unsend(id) {
   try {
     await App.api('/api/units/handover', {
@@ -694,6 +909,10 @@ App.start(async () => {
   //  Korpusda muddatni BOSHLIQ qo'yadi (izoh: sql/register.sql) —
   //  shuning uchun sana katagi bosiladigan bo'ladi.
   canPlan = App.can('production.plan', 'production.units', 'production.manage');
+  //  Sarfni yozish huquqi — `materials.request` («talabnoma yozish va
+  //  sarfni yozish»). Tsex boshlig'ida u allaqachon bor; huquqi
+  //  yo'q xodimda tugma umuman chizilmaydi.
+  canXom = App.can('materials.request', 'materials.manage', 'production.manage');
   drawTabs();
   await loadBoard();
 }, 'production.entry', 'production.reports');

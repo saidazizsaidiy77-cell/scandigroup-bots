@@ -362,4 +362,189 @@ router.post('/opening', need(...MANAGE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+// ═══════════════════════════════════ KONVERGA XOM ASHYO BIRIKTIRISH
+//
+//  ★ ZAVOD QARORI (2026-09): sarfni TSEX BOSHLIG'I yozadi, o'z
+//  telefonidan, konverni keyingi bo'limga o'tkazadigan ekranning
+//  O'ZIDA.
+//
+//  Sarf ombor xodimining ishi emas: materialni konverga kim
+//  sarflaganini faqat tsexda turgan odam biladi va u o'sha yerda —
+//  bo'limlar ekranida — turadi. Alohida sahifa qilinsa boshliq kun
+//  bo'yi ikki ekran orasida yurardi va ko'pincha umuman yozmasdi;
+//  yozilmagan sarf esa tannarxni butunlay yo'q qiladi.
+//
+//  Harakat `material_moves` da, boshqa hech qayerda: ombor → KONVER
+//  (`to_kind = 'unit'`). Ombor qoldig'i shu bilan kamayadi va ikkinchi
+//  jadval yozilmadi — «qancha bor» va «qancha ketdi» bitta manbadan
+//  hisoblanadi.
+//
+//  Huquqi `materials.request` — nomi shuni aytadi: «talabnoma yozish
+//  va SARFNI yozish». Tsex boshlig'ida u allaqachon bor.
+
+//  Konverning doirasi — ishlab chiqarishdagi bilan AYNAN bir xil
+//  qoida (`/:id/bron`, `modules/units.js`): javobgar tsex, u bo'sh
+//  bo'lsa marshrutning birinchi qadami. Ikki xil yozilsa boshliq o'z
+//  konverini bir ekranda ko'rib, ikkinchisida ko'rmay qolardi.
+async function konverDoira(req, id) {
+  const doira = req.user.scope_shop_ids || [];
+  if (!doira.length) return;
+  const ok = (await db.query(
+    `SELECT 1 FROM v_unit_register WHERE id = $1
+      AND COALESCE(owner_shop_id, (
+            SELECT s2.shop_id FROM v_product_route pr
+              JOIN sections s2 ON s2.id = pr.section_id
+             WHERE pr.product_id = v_unit_register.product_id
+             ORDER BY pr.step_no LIMIT 1)) = ANY($2)`,
+    [id, doira])).rowCount;
+  if (!ok) throw Object.assign(
+    new Error('Bu konver sizning doirangizda emas'), { status: 403 });
+}
+
+//  ★ OMBOR RO'YXATI TARTIBLANADI, TANLAB QO'YILMAYDI. Eng to'g'risi
+//  birinchi turadi — konver turgan BO'LIMNING ombori, keyin o'sha
+//  bo'lim TSEXining ombori — va sahifa birinchisini oladi.
+//
+//  Qattiq tanlab qo'yilmasligining sababi: har bo'limda ham, har
+//  tsexda ham ombor bo'lishi SHART emas (stul tsexida bo'limsiz ombor
+//  yo'q). Topilmasa oyna umuman ochilmasdi va boshliq nega
+//  ishlamayotganini bilmasdi. Endi ro'yxat qisqarmaydi — faqat
+//  tartibi javob beradi.
+const OMBOR = `
+  SELECT w.id, w.code, w.name, w.section_id, sc.name AS section,
+         COALESCE(o.name, sh.name) AS shop
+    FROM warehouses w
+    LEFT JOIN sections sc ON sc.id = w.section_id
+    LEFT JOIN shops    sh ON sh.id = w.shop_id
+    LEFT JOIN shops    o  ON o.id  = w.owner_shop_id
+   WHERE w.kind = 'material' AND w.is_active
+     AND ($1::int[] IS NULL
+          OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
+   ORDER BY (w.section_id IS NOT DISTINCT FROM $2::int) DESC,
+            (w.shop_id IS NOT DISTINCT FROM $3::int
+             AND w.section_id IS NULL) DESC,
+            w.sort, w.name`;
+
+//  Konverga nima biriktirilgani va qayerdan olinishi mumkinligi —
+//  BITTA so'rovda: telefonda oyna ochilganda ikkinchi so'rovni kutib
+//  turish sezilarli.
+router.get('/unit/:id', need(...VIEW, 'materials.request'),
+  wrap(async (req, res) => {
+  await konverDoira(req, req.params.id);
+  const doira = req.user.scope_shop_ids || [];
+  const u = (await db.query(
+    `SELECT u.id, u.conveyor_no, u.qty, u.current_section_id AS section_id,
+            p.name AS product, s.name AS section, s.shop_id
+       FROM production_units u
+       LEFT JOIN products p ON p.id = u.product_id
+       LEFT JOIN sections s ON s.id = u.current_section_id
+      WHERE u.id = $1`, [req.params.id])).rows[0];
+  if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
+
+  const [whs, rows] = await Promise.all([
+    db.query(OMBOR, [doira.length ? doira : null, u.section_id, u.shop_id]),
+    //  Bekor qilingani ham chiqadi, lekin o'chirilgan holida: sarf
+    //  PULGA tegadi va yo'qolgan qator savol qoldirardi («men yozgan
+    //  edim-ku»). Ombor qoldig'iga esa qo'shilmaydi (`status = 'ok'`).
+    db.query(
+      `SELECT mv.id, mv.qty, mv.moved_on, mv.status, mv.price_usd,
+              m.name AS material, m.uom, w.name AS warehouse,
+              wk.name AS worker
+         FROM material_moves mv
+         JOIN materials m ON m.id = mv.material_id
+         LEFT JOIN warehouses w ON w.id = mv.from_id AND mv.from_kind = 'warehouse'
+         LEFT JOIN workers wk   ON wk.id = mv.worker_id
+        WHERE mv.to_kind = 'unit' AND mv.to_id = $1
+        ORDER BY mv.id DESC`, [req.params.id]),
+  ]);
+  res.json({ unit: u, warehouses: whs.rows, rows: rows.rows });
+}));
+
+//  ★ QOLDIQDAN KO'P SARFLASH TO'XTATILMAYDI, lekin AYTILADI (zavod
+//  qarori, 2026-09). Material allaqachon kesilgan — yozuvni rad etish
+//  taxtani qaytarmaydi, faqat yozuvni yo'qotadi. Ombor qoldig'i
+//  minusga tushsa bu kirim hujjati yozilmaganining BELGISI bo'ladi va
+//  ekranda qizil bo'lib turadi.
+//
+//  To'siq qo'yilsa modul birinchi kundanoq ishlamasdi: tsex omborlari
+//  hozircha bo'sh va talabnoma moduli hali yozilmagan.
+router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
+  await konverDoira(req, req.params.id);
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+  const doira = req.user.scope_shop_ids || [];
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const u = (await client.query(
+      `SELECT u.id, u.current_section_id AS section_id, s.shop_id
+         FROM production_units u
+         LEFT JOIN sections s ON s.id = u.current_section_id
+        WHERE u.id = $1 AND u.status <> 'cancelled'`,
+      [req.params.id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+
+    //  Ombor RO'YXATDAN tanlanadi va ro'yxat doira bilan chegaralangan:
+    //  id ni qo'lda yuborib boshqa tsexning omboridan yozib bo'lmaydi
+    //  (tugmani yashirish himoya emas).
+    const whs = (await client.query(
+      OMBOR, [doira.length ? doira : null, u.section_id, u.shop_id])).rows;
+    const wh = req.body.warehouse_id
+      ? whs.find((w) => w.id === Number(req.body.warehouse_id))
+      : whs[0];
+    if (!wh) throw new Error('Ombor topilmadi');
+
+    let n = 0;
+    for (const it of items) {
+      const qty = Number(it.qty);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const m = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1 AND active`,
+        [it.material_id])).rows[0];
+      if (!m) throw new Error('Material topilmadi');
+      //  Narx yozilmaydi: sarflangan materialning bahosi KIRIMLARDAN
+      //  hisoblanadi (o'rtacha narx, izoh: sql/materials.sql). Boshliq
+      //  har qatorda narx terib o'tirsa bitta xato raqam butun
+      //  tannarxni buzardi.
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                     to_kind, to_id, moved_on, note, worker_id)
+         VALUES ($1,$2,'warehouse',$3,'unit',$4,
+                 COALESCE($5::date, CURRENT_DATE), $6, $7)`,
+        [m.id, qty, wh.id, u.id, trim(req.body.on), trim(it.note), req.user.id]);
+      n++;
+    }
+    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+    await audit(req, { module: 'materials', action: 'consume',
+                       entity: 'production_units', entity_id: Number(u.id),
+                       payload: { warehouse_id: wh.id, count: n } }, client);
+    await client.query('COMMIT');
+    res.json({ saved: n, warehouse: wh.name });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  Adashib yozilgani O'CHIRILMAYDI, bekor qilinadi: qoldiqdan chiqadi,
+//  tarixda qoladi (kassadagi operatsiya va material harakati bilan bir
+//  xil qoida). Bekor qilingan qatorni ikkinchi marta bekor qilib
+//  bo'lmaydi — u allaqachon hech qaysi hisobda yo'q.
+router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
+  const mv = (await db.query(
+    `SELECT id, to_id FROM material_moves
+      WHERE id = $1 AND to_kind = 'unit' AND status = 'ok'`,
+    [req.params.id])).rows[0];
+  if (!mv) return res.status(404).json({ error: 'Sarf topilmadi' });
+  await konverDoira(req, mv.to_id);
+  await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`,
+                 [mv.id]);
+  await audit(req, { module: 'materials', action: 'consume-cancel',
+                     entity: 'material_moves', entity_id: mv.id });
+  res.json({ ok: true });
+}));
+
 module.exports = router;

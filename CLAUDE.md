@@ -2845,6 +2845,60 @@ kirgan zahoti T/M ombor kartochkasini ko'rardi — bosganda esa
 `/ombor.html` uni ichkariga kiritmasdi: ekranda ochilmaydigan havola
 turardi.
 
+**★ KONVERGA XOM ASHYONI TSEX BOSHLIG'I BIRIKTIRADI** (zavod qarori,
+2026-09; `POST /api/materials/unit/:id/consume`, `/harakat.html` dagi
+▣ tugmasi). Sarf ombor xodimining ishi emas: materialni konverga kim
+sarflaganini faqat tsexda turgan odam biladi va u kun bo'yi AYNAN shu
+ekranda — bo'limlar ro'yxatida — turadi. Alohida sahifa qilinsa
+boshliq ikki ekran orasida yurardi va ko'pincha umuman yozmasdi;
+yozilmagan sarf esa tannarxni butunlay yo'qotadi.
+
+**Tugma o'tkazish tugmasining YONIDA va KICHIK** (`.ic`): boshliq
+kuniga o'nlab marta o'tkazadi va bir-ikki marta material biriktiradi —
+ikkinchi katta tugma birinchisining joyini torraytirardi (jo'natishni
+qaytarish tugmasi bilan bir xil sabab). **Faqat O'Z bo'limidagi
+konverda**: kelayotgani hali qabul qilinmagan va unga material
+sarflanmaydi.
+
+Harakat `material_moves` da, boshqa hech qayerda: ombor → KONVER
+(`to_kind = 'unit'`). Ombor qoldig'i shu bilan kamayadi va ikkinchi
+jadval yozilmadi — «qancha bor» va «qancha ketdi» bitta manbadan
+hisoblanadi. **Narx yozilmaydi**: sarflangan materialning bahosi
+kirimlardan chiqadi (o'rtacha narx).
+
+**Ombor RO'YXATI tartiblanadi, tanlab qo'yilmaydi**: konver turgan
+BO'LIMNING ombori birinchi turadi, keyin o'sha bo'lim TSEXining
+ombori — sahifa birinchisini oladi. Qattiq tanlab qo'yilmasligining
+sababi: har bo'limda ham, har tsexda ham ombor bo'lishi SHART emas
+(stul tsexida bo'limsiz ombor yo'q) va topilmasa oyna umuman
+ochilmasdi. Ro'yxat DOIRA bilan chegaralangan — id ni qo'lda yuborib
+boshqa tsexning omboridan yozib bo'lmaydi.
+
+**★ OCHILMA EMAS, QIDIRUV.** Zavodda to'qqiz yuz material bor va
+telefondagi ochilmada ularni aylantirib topib bo'lmaydi. Tartib
+JAVOBNI oldinga chiqaradi: avval SHU OMBORDA turgani qoldig'i bilan,
+keyin spravochnikning qolgani. Qidiruv yozilmaguncha butun
+spravochnik chiqarilmaydi — omborda turgani odatda o'ntacha va javob
+ko'pincha o'sha yerda.
+
+**★ QOLDIQDAN KO'P SARFLASH TO'XTATILMAYDI, lekin AYTILADI** (zavod
+qarori). Material allaqachon kesilgan — yozuvni rad etish taxtani
+qaytarmaydi, faqat yozuvni yo'qotadi. To'siq qo'yilsa modul birinchi
+kundanoq ishlamasdi: tsex omborlari hozircha bo'sh va talabnoma
+moduli hali yozilmagan. Minusga tushgan qoldiq esa **kirim hujjati
+yozilmaganining BELGISI** bo'ladi va ekranda QIZIL bo'lib turadi —
+ham oynadagi ro'yxatda, ham ombor qoldig'ida. Nolga qisish yolg'on
+bo'lardi, yashirish esa xatoni ko'rinmas qilardi.
+
+**Adashib yozilgani O'CHIRILMAYDI, bekor qilinadi**: qoldiqdan
+chiqadi, tarixda o'chirilgan holida qoladi (kassadagi operatsiya
+bilan bir xil qoida). Sarf PULGA tegadi va yo'qolgan qator savol
+qoldirardi — «men yozgan edim-ku».
+
+Huquqi **`materials.request`** — nomi shuni aytadi: «talabnoma yozish
+va SARFNI yozish». Tsex boshlig'ida u allaqachon bor; huquqi yo'q
+xodimda tugma umuman chizilmaydi va tekshiruv serverda.
+
 **★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI** (`material_suppliers`,
 zavod qarori 2026-09). Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF
 materiali to'rtta odamdan keladi («Mdf Eman · Mdf Dilmurod aka · Mdf

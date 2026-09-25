@@ -271,7 +271,12 @@ function drawStock() {
       <tbody>${g.items.map((r) => `<tr>
         <td><b>${esc(r.material)}</b></td>
         <td class="muted">${esc(r.category_name || '—')}</td>
-        <td class="num"><b>${son(r.qty)}</b></td>
+        <!--  ★ MANFIY QOLDIQ QIZIL: material omborga kirmasdan
+              sarflangan degani — kirim hujjati yozilmagan. Raqamni
+              nolga qisish yolg'on bo'lardi, yashirish esa xatoni
+              ko'rinmas qilardi. -->
+        <td class="num"><b${Number(r.qty) < 0 ? ' class="late"' : ''}>${
+          son(r.qty)}</b></td>
         <td class="muted">${esc(r.uom_name || r.uom)}</td>
         <td class="num muted">${r.price == null ? '—' : pul(r.price)}</td>
         <td class="num">${r.amount == null ? '—' : pul(r.amount)}</td>

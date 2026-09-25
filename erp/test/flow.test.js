@@ -2182,6 +2182,99 @@ test('ta\'minotchilar ro\'yxati faylga chiqadi', async () => {
   assert.match(r.text, /Sinov MDF yetkazuvchi/);
 });
 
+test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () => {
+  //  ★ ZAVOD QARORI (2026-09): sarfni TSEX BOSHLIG'I yozadi, konverni
+  //  keyingi bo'limga o'tkazadigan ekranning O'ZIDA. Materialni
+  //  konverga kim sarflaganini faqat tsexda turgan odam biladi.
+  const { db } = require('../db');
+  const ARRA = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 8, color: 'Oq', section_id: ARRA }] })).body.created[0];
+
+  const xom = await xodim('Sinov sarf ombori', 'xom_ombor');
+  const wh  = (await H.id(
+    `SELECT id FROM warehouses WHERE code='TSEX-KOR-ARRA'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Sinov sarf LDSP', uom: 'list', category: 'LDSP' })).body;
+  await xom('POST', '/api/materials/opening', {
+    on: '2026-09-01', ccy: 'USD',
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 50, price: 20 }] });
+
+  //  Huquqi `materials.request` — tsex boshlig'ida u allaqachon bor.
+  const boss = await xodim('Sinov sarf boshlig\'i', 'tsex_usta');
+  const korpus = (await H.id(`SELECT id FROM shops WHERE code='KORPUS'`)).id;
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = $1
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov sarf boshlig''i')`,
+    [korpus]);
+  const usta = H.api(base, await H.sessionFor('Sinov sarf boshlig\'i'));
+
+  //  ★ OMBOR RO'YXATI TARTIBLANADI: konver turgan BO'LIMNING ombori
+  //  birinchi turadi va sahifa o'shani oladi. Qattiq tanlab
+  //  qo'yilmaydi — har bo'limda ham ombor bo'lishi shart emas.
+  const d = (await usta('GET', '/api/materials/unit/' + u.id)).body;
+  assert.equal(d.warehouses[0].id, wh, 'bo\'lim ombori birinchi turadi');
+  assert.equal(d.rows.length, 0);
+
+  const ok = await usta('POST', '/api/materials/unit/' + u.id + '/consume',
+    { items: [{ material_id: m.id, qty: 12 }] });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.saved, 1);
+
+  //  Qoldiq SHU BILAN kamayadi — ikkinchi jadval yozilmadi.
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id && r.warehouse_id === wh).qty), 38);
+
+  const keyin = (await usta('GET', '/api/materials/unit/' + u.id)).body;
+  assert.equal(keyin.rows.length, 1);
+  assert.equal(Number(keyin.rows[0].qty), 12);
+  assert.equal(keyin.rows[0].status, 'ok');
+
+  //  ★ QOLDIQDAN KO'P SARFLASH TO'XTATILMAYDI: material allaqachon
+  //  kesilgan va yozuvni rad etish taxtani qaytarmaydi. Minusga
+  //  tushgan qoldiq kirim hujjati yozilmaganining BELGISI bo'ladi.
+  const kop = await usta('POST', '/api/materials/unit/' + u.id + '/consume',
+    { items: [{ material_id: m.id, qty: 100 }] });
+  assert.equal(kop.status, 200, kop.text);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id && r.warehouse_id === wh).qty), -62);
+
+  //  O'CHIRILMAYDI, bekor qilinadi: qoldiqdan chiqadi, tarixda qoladi.
+  const oxirgi = (await usta('GET', '/api/materials/unit/' + u.id)).body.rows[0];
+  assert.equal((await usta('POST', '/api/materials/consume/' + oxirgi.id + '/cancel'))
+    .status, 200);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id && r.warehouse_id === wh).qty), 38,
+    'bekor qilingani qoldiqqa qaytdi');
+  assert.equal((await usta('GET', '/api/materials/unit/' + u.id)).body.rows
+    .find((r) => r.id === oxirgi.id).status, 'cancelled', 'tarixda qoladi');
+  //  Ikkinchi marta bekor qilib bo'lmaydi — u allaqachon hech qaysi
+  //  hisobda yo'q.
+  assert.equal((await usta('POST', '/api/materials/consume/' + oxirgi.id + '/cancel'))
+    .status, 404);
+
+  //  ★ DOIRA CHEGARA: stul tsexining boshlig'i korpus konveriga
+  //  material yoza olmaydi — ro'yxatni chetlab id yuborsa ham.
+  const stul = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;
+  await xodim('Sinov sarf stul', 'tsex_usta');
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = $1
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov sarf stul')`,
+    [stul]);
+  const begona = H.api(base, await H.sessionFor('Sinov sarf stul'));
+  assert.equal((await begona('GET', '/api/materials/unit/' + u.id)).status, 403);
+  assert.equal((await begona('POST', '/api/materials/unit/' + u.id + '/consume',
+    { items: [{ material_id: m.id, qty: 1 }] })).status, 403);
+  //  Boshqa tsexning ombori ham tanlanmaydi: ro'yxat doira bilan
+  //  chegaralangan va id qo'lda yuborilsa ham qabul qilinmaydi.
+  assert.equal((await usta('POST', '/api/materials/unit/' + u.id + '/consume',
+    { warehouse_id: (await H.id(
+        `SELECT id FROM warehouses WHERE code='TSEX-STU-ZBOR'`)).id,
+      items: [{ material_id: m.id, qty: 1 }] })).status, 400);
+});
+
 test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {
   //  ★ HAR RANG ALOHIDA MATERIAL (zavod qarori): «LDSP 16mm oq» va
   //  «LDSP 16mm venge» — ikkita qator, har birining o'z qoldig'i.
