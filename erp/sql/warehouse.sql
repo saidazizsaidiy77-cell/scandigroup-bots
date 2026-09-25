@@ -73,9 +73,23 @@ CREATE TABLE IF NOT EXISTS warehouses (
 --   NULL               — warehouse.view yetarli: T/M ombor va vitrinalar.
 --                        Ikkalasida ham tayyor mahsulot turadi, ikkalasini
 --                        ham ombor mudiri ham, savdo ham ko'radi.
---   warehouse.material — xom ashyo, MDF, furnitura: ombor mudiri va
---                        ta'minot. Savdoga ular ko'rinmaydi — u tayyor
---                        mahsulot bilan ishlaydi.
+--   materials.view     — xom ashyo, MDF, furnitura va TSEX omborlari:
+--                        xom ashyo ombori xodimi, ta'minot va ishlab
+--                        chiqarish boshlig'i. Savdoga ular ko'rinmaydi —
+--                        u tayyor mahsulot bilan ishlaydi.
+--
+--  ★ XOM ASHYO OMBORLARIDA `warehouse.material` EMAS, `materials.view`
+--  (zavod qarori, 2026-09). Eski huquq xom ashyo MODULIDAN oldin
+--  yozilgan edi va modul kelgach ikki ro'yxat ajralib qoldi: o'sha
+--  omborni xom ashyo xodimi modul ichida ko'rar, Omborlar ro'yxatida
+--  esa ko'rmasdi — bitta ombor ikki ekranda ikki xil javob berardi.
+--  T/M ombor mudiridan olinadi: u konver sanaydi, xom ashyo uning
+--  ishi emas. Endi materialning HAMMA ombori bitta huquqda —
+--  tsexnikilari ham shunda (`sql/materials.sql`).
+--
+--  Bu DOIMIY QOIDA, bir martalik ko'chirish emas: huquq kodda turadi
+--  va saytdan tahrirlanmaydi, shuning uchun `migration_flags` bilan
+--  emas, har migratsiyada qo'yiladi (PIN izi bilan bir xil idiom).
 ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS perm TEXT;
 
 -- Zavod aytgan omborlar. Faqat tayyor mahsulot ombori ishlayapti,
@@ -105,7 +119,7 @@ ON CONFLICT (code) DO NOTHING;
 
 -- Kim ko'rishi — kodda, chunki bu huquq masalasi. ON CONFLICT DO NOTHING
 -- eski qatorlarni yangilamaydi, shuning uchun alohida yoziladi.
-UPDATE warehouses SET perm = 'warehouse.material'
+UPDATE warehouses SET perm = 'materials.view'
  WHERE code IN ('XOM', 'MDF', 'FURN');
 UPDATE warehouses SET perm = NULL
  WHERE code IN ('TM', 'VITR-ABU', 'VITR-PALMA', 'VITR-ARCA');

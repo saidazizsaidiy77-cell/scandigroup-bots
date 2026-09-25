@@ -2027,6 +2027,52 @@ test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
     { items: [{ warehouse_id: tm, material_id: m.id, qty: 5 }] });
   assert.equal(yoq.status, 400, yoq.text);
 
+  //  ★ NARX HARAKAT QATORIDA, materialda emas (izoh: sql/materials.sql).
+  //  So'mda yozilgani hujjatning kursi bilan dollarga aylanadi va
+  //  o'sha qator bilan qotib qoladi.
+  const m2 = (await xom('POST', '/api/materials',
+    { name: 'Sinov LDSP narx', uom: 'list', category: 'LDSP' })).body;
+  const n1 = await xom('POST', '/api/materials/opening', {
+    on: '2026-09-01', ccy: 'UZS', rate: 12500,
+    items: [{ warehouse_id: wh, material_id: m2.id, qty: 100, price: 250000 }] });
+  assert.equal(n1.status, 200, n1.text);
+  const sn = (await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m2.id);
+  //  250 000 / 12 500 = 20 $ · 100 list = 2 000 $
+  assert.equal(Number(sn.price), 20);
+  assert.equal(Number(sn.amount), 2000);
+
+  //  Narxsiz qator QOLDIQDA turadi, lekin summaga qo'shilmaydi: nol
+  //  deb hisoblansa omborning qiymati jimgina pasayib borardi.
+  assert.equal(st.price, null, 'narxsiz qator narxsiz qoladi');
+  assert.equal(st.amount, null);
+
+  //  Kursi yo'q so'm QABUL QILINMAYDI: dollarga aylanmaydigan narx
+  //  qatorni qiymatsiz qoldirardi va buni hech narsa aytmasdi.
+  const m3 = (await xom('POST', '/api/materials',
+    { name: 'Sinov kurssiz', uom: 'kg' })).body;
+  const kz = await xom('POST', '/api/materials/opening', {
+    ccy: 'UZS', items: [{ warehouse_id: wh, material_id: m3.id, qty: 5, price: 100 }] });
+  assert.equal(kz.status, 400, kz.text);
+  assert.match(kz.body.error, /[Kk]urs/);
+
+  //  ★ XOM ASHYO OMBORI RO'YXATDA OCHIQ va MATERIAL sanaydi, konver
+  //  emas: ikkalasini bitta raqamga qo'shib bo'lmaydi. Boshlang'ich
+  //  qoldiq omborning ICHIDA kiritiladi, ya'ni yopiq kartochka ishni
+  //  to'xtatardi.
+  const kart = (await xom('GET', '/api/warehouse/list')).body.rows
+    .find((r) => r.code === 'TSEX-KOR-ARRA');
+  assert.ok(kart, 'xom ashyo ombori mudirning ro\'yxatida turadi');
+  assert.equal(kart.unit, 'nom');
+  assert.equal(kart.href, '/materiallar.html?w=TSEX-KOR-ARRA');
+  assert.equal(kart.units, 2, 'ikki nomdagi material');
+  assert.equal(Number(kart.amount), 2000);
+  //  T/M ombor esa unga ochilmaydi: `perm IS NULL` — «warehouse.view
+  //  yetarli» degani va u ham HUQUQ. Bo'sh katak har kimga ochiq deb
+  //  o'qilsa ekranda ochilmaydigan kartochka turardi.
+  assert.ok(!(await xom('GET', '/api/warehouse/list')).body.rows
+    .some((r) => r.code === 'TM'), 'T/M ombor xom ashyo xodimiga yo\'q');
+
   //  Harakat tarixida «qayerdan» ochiq aytiladi: boshlang'ich qoldiq.
   const mv = (await xom('GET', '/api/materials/moves')).body.rows
     .find((r) => r.material === 'Petlya Blum 110');

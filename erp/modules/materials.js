@@ -35,7 +35,7 @@ const trim = (v) => {
 //  ombori ko'rinadi (4-qoida: ism ham, tsex ham kodga yozilmaydi).
 router.get('/ref', need(...VIEW), wrap(async (req, res) => {
   const doira = req.user.scope_shop_ids || [];
-  const [cats, uoms, whs, sups] = await Promise.all([
+  const [cats, uoms, whs, sups, kurs] = await Promise.all([
     db.query(`SELECT code, name FROM material_categories WHERE active ORDER BY sort, name`),
     db.query(`SELECT code, name FROM material_uoms ORDER BY sort, name`),
     db.query(
@@ -65,9 +65,23 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
     //  shuning uchun doira qo'yilmaydi, material bog'laydigan har
     //  kimga ochiq (kassadagi `/refs` bilan bir xil qoida).
     db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`),
+    //  ★ KURS OLDINDAN TO'LDIRILADI — oxirgi ishlatilgani (kassadagi
+    //  `/refs` bilan bir xil). Kursni baribir ODAM yozadi, lekin uni
+    //  har safar noldan terib o'tirish shart emas: kurs kunda bir
+    //  marta o'zgaradi. Ikki manba bitta savolga javob beradi —
+    //  kassaning kursi ham, omborniki ham o'sha kunniki, shuning
+    //  uchun ikkalasidan YANGIROG'I olinadi.
+    db.query(`SELECT rate FROM (
+                SELECT rate, op_date AS d, id FROM cash_ops
+                 WHERE rate IS NOT NULL AND status = 'ok'
+                UNION ALL
+                SELECT rate, moved_on, id FROM material_moves
+                 WHERE rate IS NOT NULL AND status = 'ok') x
+               ORDER BY d DESC, id DESC LIMIT 1`),
   ]);
   res.json({ categories: cats.rows, uoms: uoms.rows, warehouses: whs.rows,
-             suppliers: sups.rows });
+             suppliers: sups.rows,
+             rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null });
 }));
 
 //  Ro'yxat. Qidiruv nomi va kodi bo'yicha: zavodda bitta material
@@ -280,6 +294,14 @@ router.post('/opening', need(...MANAGE), wrap(async (req, res) => {
   if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
   const on = trim(req.body.on);
 
+  //  ★ NARX HUJJATNING VALYUTASIDA (izoh: sql/materials.sql). Kurs
+  //  hujjat bo'yicha bitta: bitta javonni bir qatorda dollarda,
+  //  ikkinchisida so'mda baholash mumkin, lekin o'sha kunning kursi
+  //  baribir bitta — uni har qatorda qayta terish bitta xato raqam
+  //  uchun o'nta imkoniyat berardi (kassadagi order bilan bir xil).
+  const ccy  = req.body.ccy === 'UZS' ? 'UZS' : 'USD';
+  const rate = Number(req.body.rate) || null;
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -308,12 +330,24 @@ router.post('/opening', need(...MANAGE), wrap(async (req, res) => {
       if (bor) throw new Error(
         `«${mt.name}» uchun «${wh.name}» da boshlang'ich qoldiq allaqachon yozilgan`);
 
+      //  Narx IXTIYORIY: javonda turgan materialning bahosi hali
+      //  ma'lum bo'lmasligi mumkin va bu qatorni kiritishga to'siq
+      //  bo'lmasligi kerak — omborning qiymati esa BOR narxlardan
+      //  hisoblanadi va sahifa buni o'zi aytib turadi. Nol yozish
+      //  yo'l emas edi: u «bepul» degani bo'lib qolardi.
+      const price = Number(it.price) > 0 ? Number(it.price) : null;
+      if (price && ccy === 'UZS' && !rate)
+        throw new Error("So'mdagi narx uchun kurs kerak");
+
+      //  Narxi yo'q qatorda valyuta ham, kurs ham yozilmaydi: ular
+      //  narxning tafsiloti va narxsiz qatorda hech narsa anglatmaydi.
       await client.query(
         `INSERT INTO material_moves (material_id, qty, from_kind, to_kind, to_id,
-                                     moved_on, note, worker_id)
+                                     moved_on, note, worker_id, price, ccy, rate)
          VALUES ($1,$2,'opening','warehouse',$3,
-                 COALESCE($4::date, CURRENT_DATE), $5, $6)`,
-        [mt.id, qty, wh.id, on, trim(it.note), req.user.id]);
+                 COALESCE($4::date, CURRENT_DATE), $5, $6, $7, $8, $9)`,
+        [mt.id, qty, wh.id, on, trim(it.note), req.user.id,
+         price, price ? ccy : null, price && ccy === 'UZS' ? rate : null]);
       n++;
     }
     if (!n) throw new Error('Birorta ham qator kiritilmadi');

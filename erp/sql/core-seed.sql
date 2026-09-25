@@ -179,6 +179,13 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   -- shart bo'lmasin.
   ('omborchi',     'warehouse.view'), ('omborchi', 'warehouse.move'),
   ('omborchi',     'warehouse.manage'), ('omborchi', 'warehouse.material'),
+  --  ★ XOM ASHYO OMBORLARI `materials.view` GA O'TDI (izoh:
+  --  sql/warehouse.sql), shuning uchun huquq shu yerga ham
+  --  qo'shiladi: zavod qarori «ombor mudiri zavodning HAMMA omborini
+  --  ko'radi» degan edi va uni refaktoring jimgina bekor qila
+  --  olmaydi. Faqat KO'RISH: `materials.manage` unda yo'q — material
+  --  kiritish va tsexga berish xom ashyo xodimining ishi.
+  ('omborchi',     'materials.view'),
 
   ('taminotchi',   'purchasing.view'), ('taminotchi', 'purchasing.manage'),
   ('taminotchi',   'warehouse.view'), ('taminotchi', 'warehouse.material'),

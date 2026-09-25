@@ -136,24 +136,46 @@ async function boot() {
   //  tsexi (izoh: sql/materials.sql). «Arra ombori · Arra» degan
   //  qator ikki marta bir xil so'zni takrorlamaydi, shuning uchun
   //  bo'lim nomi ombor nomida bo'lsa qo'shilmaydi.
-  const joyi = (w) => {
-    const b = w.section && !w.name.toLowerCase().includes(w.section.toLowerCase())
-      ? w.section : null;
-    return [b, tsexi(w)].filter(Boolean).join(' · ');
-  };
-  const omborlar = (sel) => ref.warehouses.map((w) =>
-    `<option value="${w.id}">${esc(w.name)}${
-      joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('');
   $('sWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar();
   //  Spravochnikdagi filtr: «Barcha material» — cheklov yo'q.
   $('fWh').innerHTML = '<option value="">Barcha material</option>' + omborlar();
+
+  //  ★ OMBORLAR RO'YXATIDAN KIRIB KELINADI (`?w=KOD`): boshlang'ich
+  //  qoldiq omborning ICHIDA kiritiladi — mudir «Arra ombori»
+  //  kartochkasini bosadi va o'sha zahoti o'sha omborning qoldig'ida
+  //  turadi. Ombor tanlash uchun ikkinchi bosish so'ralmaydi.
+  const kod = new URLSearchParams(location.search).get('w');
+  const kirdi = kod && ref.warehouses.find((w) => w.code === kod);
+  if (kirdi) { tab = 'stock'; $('sWh').value = kirdi.id; }
+
   $('stockTools').innerHTML = boshqara()
-    ? `<button onclick="boshlangich()">✎ Boshlang'ich qoldiq</button>` : '';
+    ? `<button onclick="boshlangich(${kirdi ? kirdi.id : 'null'})">
+         ✎ Boshlang'ich qoldiq</button>` : '';
   //  Boshlang'ich qoldiq oynasidagi ro'yxat uchun: qo'lda yozish yo'q.
   if (boshqara()) barcha = (await App.api('/api/materials')).rows;
   drawTabs();
   await load();
 }
+
+//  Ombor nomi yonida QAYSI BO'LIMNIKI ekani turadi — bo'sh bo'lsa
+//  tsexi (izoh: sql/materials.sql). «Arra ombori · Arra» degan qator
+//  ikki marta bir xil so'zni takrorlamaydi, shuning uchun bo'lim nomi
+//  ombor nomida bo'lsa qo'shilmaydi.
+//
+//  ★ JAVOBGAR TSEX yoziladi, turgan joyi emas: «Lak karkas ombori»
+//  stul tsexida turadi, lekin uni LAK tsexi boshlig'i yuritadi. Xodim
+//  o'z ro'yxatida o'zi javobgar bo'lgan omborni ko'rishi kerak.
+//
+//  Ikkalasi ham `boot()` dan TASHQARIDA: boshlang'ich qoldiq oynasi
+//  ham shu ro'yxatni chizadi va ichkarida qolsa nom ikki xil yozilardi.
+const joyi = (w) => {
+  const b = w.section && !w.name.toLowerCase().includes(w.section.toLowerCase())
+    ? w.section : null;
+  return [b, tsexi(w)].filter(Boolean).join(' · ');
+};
+const omborlar = () => ref.warehouses.map((w) =>
+  `<option value="${w.id}">${esc(w.name)}${
+    joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('');
 
 async function load() {
   const q = new URLSearchParams();
@@ -226,18 +248,42 @@ function drawStock() {
     if (!g) gr.push(g = { id: r.warehouse_id, name: r.warehouse, items: [] });
     g.items.push(r);
   }
-  $('body').innerHTML = gr.map((g) => `
-    <h3 style="margin:18px 0 8px">${esc(g.name)}</h3>
+  //  ★ NARX O'RTACHA KIRIM NARXI, $ (izoh: sql/materials.sql). Summa
+  //  faqat narxi BOR qatorlardan yig'iladi — narxsizi nol deb
+  //  qo'shilsa omborning qiymati jimgina pasayib borardi. Shuning
+  //  uchun narxsiz qatorlar SONI ombor sarlavhasida yoziladi:
+  //  raqamning o'zi yolg'on emas, tushuntirilmagani yolg'on bo'lardi.
+  $('body').innerHTML = gr.map((g) => {
+    const jami = g.items.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const yoq  = g.items.filter((r) => r.price == null).length;
+    return `
+    <div class="row" style="justify-content:space-between;align-items:baseline;
+      margin:18px 0 8px;gap:12px">
+      <h3 style="margin:0">${esc(g.name)}</h3>
+      <div class="muted" style="font-size:13px">${g.items.length} nom${
+        jami ? ` · $${pul(jami)}` : ''}${
+        yoq ? ` · <span class="tag warn">${yoq} tasida narx yo'q</span>` : ''}</div>
+    </div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Material</th><th>Turkum</th>
-        <th class="num">Qoldiq</th><th>O'lchov</th></tr></thead>
+        <th class="num">Qoldiq</th><th>O'lchov</th>
+        <th class="num">Narx, $</th><th class="num">Summa, $</th></tr></thead>
       <tbody>${g.items.map((r) => `<tr>
         <td><b>${esc(r.material)}</b></td>
         <td class="muted">${esc(r.category_name || '—')}</td>
         <td class="num"><b>${son(r.qty)}</b></td>
-        <td class="muted">${esc(r.uom_name || r.uom)}</td></tr>`).join('')}
-      </tbody></table></div>`).join('');
+        <td class="muted">${esc(r.uom_name || r.uom)}</td>
+        <td class="num muted">${r.price == null ? '—' : pul(r.price)}</td>
+        <td class="num">${r.amount == null ? '—' : pul(r.amount)}</td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
+  }).join('');
 }
+
+//  Pul — ikki kasr xonasi bilan, ajratuvchisi PROBEL: «12 500.00».
+//  Soni (`son`) esa kasrsiz turaveradi — ular boshqa raqam.
+const pul = (v) => Number(v).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function drawMoves() {
   if (!rows.length) {
@@ -266,7 +312,7 @@ const yop = () => { $('modalRoot').innerHTML = ''; };
 //  jimgina ikki barobar bo'lib ketardi (tekshiruv serverda).
 let boshQator = 0;
 
-function boshlangich() {
+function boshlangich(whId) {
   boshQator = 0;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
@@ -280,18 +326,65 @@ function boshlangich() {
               value="${new Date().toISOString().slice(0, 10)}"></div>
           <div style="flex:1;min-width:200px"><label>Ombor</label>
             <select id="oWh">${ref.warehouses.map((w) =>
-              `<option value="${w.id}">${esc(w.name)}${
-                tsexi(w) ? ' · ' + esc(tsexi(w)) : ''}</option>`).join('')}</select></div>
+              `<option value="${w.id}"${w.id === whId ? ' selected' : ''}>${
+                esc(w.name)}${joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}</select></div>
+        </div>
+        <!--  ★ NARX HUJJATNING VALYUTASIDA (izoh: sql/materials.sql):
+              MDF dollarda olinadi, mahalliy yelim so'mda. Kurs hujjat
+              bo'yicha BITTA — o'sha kunning kursi baribir bitta va uni
+              har qatorda qayta terish bitta xato raqam uchun o'nta
+              imkoniyat berardi (kassadagi order bilan bir xil idiom). -->
+        <div class="row" style="gap:12px;align-items:flex-end;margin-bottom:12px">
+          <div style="width:140px"><label>Valyuta</label>
+            <select id="oCcy" onchange="oKurs()">
+              <option value="USD">$ — dollar</option>
+              <option value="UZS">so'm</option></select></div>
+          <div style="width:170px" id="oRateBox" hidden><label>Kurs (1$)</label>
+            <input id="oRate" type="number" min="0" step="0.01"
+              value="${ref.rate || ''}" oninput="boshJami()"></div>
+          <div style="flex:1;text-align:right" id="oJami"></div>
         </div>
         <p class="muted" style="margin-bottom:12px">Tizim ishga tushgan
           kundagi holat. Bir martalik ish: bir xil material ikkinchi
-          marta yozilmaydi.</p>
+          marta yozilmaydi. <b>Narx ixtiyoriy</b> — yozilmagan qator
+          omborning qiymatiga qo'shilmaydi, lekin qoldiqda turaveradi.</p>
         <div id="oRows"></div>
         <button onclick="boshQosh()" style="margin-top:8px">+ Qator</button>
         <button class="primary" style="margin-top:14px;margin-left:8px"
           onclick="boshSaqla()">Saqlash</button>
       </div></div>`;
+  oKurs();
   boshQosh();
+}
+
+//  So'm tanlanganda kurs katagi ochiladi: dollarda u kerak emas va
+//  bo'sh katak bo'lib turgani «to'ldirilmagan» degan savol berardi.
+function oKurs() {
+  $('oRateBox').hidden = $('oCcy').value !== 'UZS';
+  for (const el of document.querySelectorAll('.oPfx'))
+    el.textContent = $('oCcy').value === 'UZS' ? "so'm" : '$';
+  boshJami();
+}
+
+//  ★ JAMI SAQLASHDAN OLDIN KO'RINADI — kassaning boshlang'ich qoldiq
+//  oynasi bilan bir xil sabab: bir nol ortiqcha yozilgani aynan shu
+//  yerda bilinadi, qoldiq jadvalida emas.
+function boshJami() {
+  const kurs = Number($('oRate')?.value) || 0;
+  const uzs  = $('oCcy').value === 'UZS';
+  let jami = 0, yoq = 0;
+  for (const d of document.querySelectorAll('#oRows > div')) {
+    const q = Number(d.querySelector('.oQty').value) || 0;
+    const p = Number(d.querySelector('.oPrice').value) || 0;
+    if (!q) continue;
+    if (!p) { yoq++; continue; }
+    jami += q * (uzs ? (kurs ? p / kurs : 0) : p);
+  }
+  $('oJami').innerHTML = jami || yoq
+    ? `<div class="muted" style="font-size:12px">Jami</div>
+       <div style="font-size:20px;font-weight:600">$${pul(jami)}</div>${
+       yoq ? `<div class="muted" style="font-size:12px">${yoq} qatorda narx yo'q</div>` : ''}`
+    : '';
 }
 
 function boshQosh() {
@@ -302,10 +395,14 @@ function boshQosh() {
         <option value="">— material —</option>
         ${rows2opts()}</select>
       <input type="number" class="oQty" min="0" step="0.001" placeholder="soni"
-        style="width:120px;text-align:right">
-      <button onclick="this.parentElement.remove()">×</button>
+        style="width:110px;text-align:right" oninput="boshJami()">
+      <input type="number" class="oPrice" min="0" step="0.0001" placeholder="narx"
+        style="width:130px;text-align:right" oninput="boshJami()">
+      <span class="muted oPfx" style="width:34px;font-size:12px">$</span>
+      <button onclick="this.parentElement.remove();boshJami()">×</button>
     </div>`);
   void i;
+  oKurs();
 }
 
 //  Ro'yxat spravochnikdan: qo'lda yozish yo'q, aks holda bitta
@@ -318,12 +415,14 @@ async function boshSaqla() {
   const items = [...document.querySelectorAll('#oRows > div')].map((d) => ({
     material_id: Number(d.querySelector('.oMat').value) || null,
     qty: Number(d.querySelector('.oQty').value) || 0,
+    price: Number(d.querySelector('.oPrice').value) || null,
     warehouse_id: Number($('oWh').value) || null,
   })).filter((x) => x.material_id && x.qty > 0);
   if (!items.length) return toast('Birorta ham qator to\'ldirilmadi', true);
   try {
     const r = await App.api('/api/materials/opening', { method: 'POST',
-      body: JSON.stringify({ on: $('oOn').value || null, items }) });
+      body: JSON.stringify({ on: $('oOn').value || null,
+        ccy: $('oCcy').value, rate: Number($('oRate').value) || null, items }) });
     yop(); toast(`${r.saved} ta qator yozildi`);
     tab = 'stock'; drawTabs(); await load();
   } catch (e) { toast(e.message, true); }

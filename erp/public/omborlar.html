@@ -53,9 +53,16 @@ function draw(rows) {
           <h2 style="margin:0">${esc(w.name)}</h2>
           <span class="tag ok">ochiq</span>
         </div>
-        <div class="kpi" style="margin-top:10px">${w.units}<small> konver</small></div>
+        <div class="kpi" style="margin-top:10px">${w.units}<small> ${
+          esc(w.unit || 'konver')}</small></div>
+        <!--  Xom ashyo omborida «dona» YO'Q: bittasi kg, bittasi list,
+              bittasi rulon va ularni qo'shib bo'lmaydi (tayyor
+              mahsulotdagi dona/komplekt bilan bir xil sabab). Qiymati
+              esa bor — o'rtacha kirim narxidan. -->
         <div class="muted" style="font-size:13px;margin-top:2px">
-          ${w.qty} dona${w.amount ? ` \u00b7 $${money(w.amount)}` : ''}</div>
+          ${[w.qty == null ? '' : `${w.qty} dona`,
+             w.amount ? `$${money(w.amount)}` : ''].filter(Boolean).join(' \u00b7 ')
+            || '\u2014'}</div>
         ${w.note ? `<p class="muted" style="font-size:13px;margin-top:10px">${esc(w.note)}</p>` : ''}
       </a>` : `
       <div class="card" style="opacity:.62">

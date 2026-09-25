@@ -2081,7 +2081,8 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi, muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi |
 | `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»**, va belgisi qo'yilgan bo'lsa **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi (`sees_warehouse`, xodim bo'yicha). Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
-| `omborchi` | `warehouse.*` | faqat «Ombor» bo'limi — barcha omborlar |
+| `omborchi` | `warehouse.*`, `materials.view` | faqat «Ombor» bo'limi — barcha omborlar, xom ashyonikini ham (faqat KO'RISH) |
+| `xom_ombor` | `materials.view`, `materials.manage`, `purchasing.view` | xom ashyo spravochnigi, material omborlari va ularning boshlang'ich qoldig'i — narx bilan. T/M ombor unga ochilmaydi |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
 | `savdo_boshliq` | `sotuvchi` bilan AYNAN bir xil | savdo bo'lim boshlig'i: farqi faqat **doirasida** — yo'nalish ham, «Faqat o'zinikini» ham bo'sh qoladi, ya'ni butun savdoni ko'radi |
 | `admin` | barchasi | hammasi |
@@ -2098,9 +2099,12 @@ chegaralanilmaydi.
 
 **Qaysi omborni kim ko'rishi — `warehouses.perm` ustunida**, kodda emas.
 `NULL` — `warehouse.view` yetarli (T/M ombor va vitrinalar: ikkalasida ham
-tayyor mahsulot turadi); `warehouse.material` — xom ashyo, MDF, furnitura
-(ombor mudiri va ta'minot; savdoga ko'rinmaydi). Yangi ombor qo'shilganda
-huquq shu qatorga yoziladi, modulga tegilmaydi. Ko'rinadigan ombor bitta
+tayyor mahsulot turadi); `materials.view` — xom ashyo, MDF, furnitura va
+TSEX omborlari (xom ashyo xodimi, ta'minot, ishlab chiqarish boshlig'i va
+ombor mudiri; savdoga ko'rinmaydi). Yangi ombor qo'shilganda huquq shu
+qatorga yoziladi, modulga tegilmaydi. `NULL` ning O'ZI ham tekshiriladi —
+u «tekshirilmaydi» degani emas (izoh: «Xom ashyo ombori ro'yxatda
+ochiq»). Ko'rinadigan ombor bitta
 bo'lsa, «Omborlar» sahifasi to'g'ridan-to'g'ri o'shanga o'tkazadi.
 
 **★ TSEX DOIRASI OMBOR QOLDIG'IDA HAM** (zavod qarori, 2026-09).
@@ -2754,6 +2758,92 @@ ketardi.
 tashlab yuboradi (`HAVING SUM(qty) <> 0`) — ro'yxat undan olinsa
 bugun javonda turgani bilan cheklanib qolardi va sarflanib bo'lingan,
 ertaga yana so'raladigan material yo'qolardi.
+
+**★ NARX HARAKAT QATORIDA, MATERIALDA EMAS** (`material_moves.price`,
+zavod qarori 2026-09). Materialning O'ZIDA narx ustuni bo'lishi mumkin
+emas: bugun LDSP 250 000 so'm, ertaga 270 000 — ustun bo'lsa keyingi
+kirim eski qoldiqning bahosini ham jimgina o'zgartirib yuborardi va
+omborning kechagi qiymati bugun boshqacha chiqardi. Shuning uchun narx
+KIRIM qatorida turadi va o'sha qator bilan qotib qoladi;
+`material_suppliers` da narx yo'qligining sababi ham shu.
+
+Narx faqat KIRIMDA ma'noga ega: boshlang'ich qoldiqda (javon qancha
+turadi) va ta'minotchidan kelganda (qancha to'landi). **Chiqimda
+yozilmaydi** — sarflangan materialning bahosi kirimlardan hisoblanadi,
+aks holda ombordan chiqarayotgan odam har safar narx terib o'tirardi va
+bitta xato raqam butun tannarxni buzardi.
+
+**Valyuta va kurs — kassadagi idiom** (`cash_ops`): MDF dollarda
+olinadi, mahalliy yelim so'mda. Hisob-kitob baribir dollarda
+(`price_usd`, generated), lekin kiritayotgan odam O'ZI ko'rgan raqamni
+yozadi. Kurs **hujjat bo'yicha bitta**: o'sha kunning kursi baribir
+bitta va uni har qatorda qayta terish bitta xato raqam uchun o'nta
+imkoniyat berardi. Kurs qator bilan qotadi — ertaga kurs o'zgarsa
+kechagi kirim qayta hisoblanmaydi. So'mdagi narxning kursi **shart**
+(`material_moves_rate_check`): kursi yo'q so'm dollarga aylanmaydi va
+qator qiymatsiz qolardi, omborning jami summasi esa buni aytmasdi —
+shunchaki kamayib turardi. Kurs oldindan to'ldiriladi: kassa va ombor
+kursining YANGIROG'I (`/api/materials/ref` dagi `rate`).
+
+**Narx IXTIYORIY**: javonda turgan materialning bahosi hali ma'lum
+bo'lmasligi mumkin va bu qatorni kiritishga to'siq bo'lmasligi kerak.
+Nol yozish yo'l emas edi — u «bepul» degani bo'lib qolardi. Narxsiz
+qator **o'rtachaga umuman qo'shilmaydi**: na surat, na maxraj. Shuning
+uchun narxsiz qatorlar SONI ombor sarlavhasida yoziladi («3 tasida narx
+yo'q») — raqamning o'zi yolg'on emas, tushuntirilmagani yolg'on
+bo'lardi.
+
+`v_material_stock` dagi **narx — O'RTACHA kirim narxi**: `SUM(qty ×
+narx) / SUM(qty)`, faqat KIRGAN qatorlar bo'yicha. Oxirgi kirimning
+narxini olish yo'l emas edi: omborda ikki xil narxda kelgan bitta
+material turadi va oxirgisi butun qoldiqning bahosini o'zgartirib
+yuborardi.
+
+**★ XOM ASHYO OMBORI RO'YXATDA OCHIQ** (zavod qarori, 2026-09).
+Boshlang'ich qoldiq omborning ICHIDA kiritiladi — mudir «Arra ombori»
+kartochkasini bosadi va o'sha zahoti o'sha omborning qoldig'ida turadi
+(`/materiallar.html?w=TSEX-KOR-ARRA`). Ilgari material ombori KODDA
+«rejada» bo'lib turardi (`kind === 'fg'`) va yopiq kartochka ishni
+to'xtatardi.
+
+**Ikki xil ombor — ikki xil hisob**: tayyor mahsulot ombori KONVER
+sanaydi, xom ashyo ombori esa MATERIAL. Kartochkadagi raqam shu sababdan
+boshqa jadvaldan olinadi va havolasi ham boshqa sahifaga olib boradi.
+Materialda «nechta dona» degan savol YO'Q — bittasi kg, bittasi list,
+bittasi rulon va qo'shib bo'lmaydi (dona/komplekt bilan bir xil sabab),
+shuning uchun kartochkada NOMLAR soni turadi: «12 nom · $4 300».
+
+**Doira ham ikki xil**: tayyor mahsulotda VITRINA bo'yicha (tsex doirasi
+borga faqat T/M ombor), materialda esa TSEX bo'yicha — tsex boshlig'ining
+ombori o'z tsexida turadi va u uni ko'rishi kerak. Shart xom ashyo
+modulidagi bilan AYNAN bir xil (`/api/materials/ref`), aks holda bitta
+ombor ikki ekranda ikki xil javob berardi.
+
+**Huquqi `materials.view`** — TSEX omborlariniki bilan bir xil, va u
+`sql/warehouse.sql` da, DOIMIY qoida bo'lib turadi. Ilgari
+`warehouse.material` edi: u xom ashyo MODULIDAN oldin yozilgan va modul
+kelgach ikki ro'yxat ajralib qoldi — o'sha omborni xom ashyo xodimi
+modul ichida ko'rar, Omborlar ro'yxatida esa ko'rmasdi. T/M ombor
+mudiriga esa `materials.view` ALOHIDA berildi: zavod qarori «ombor
+mudiri zavodning HAMMA omborini ko'radi» degan edi va uni refaktoring
+jimgina bekor qila olmaydi — faqat KO'RISH, chunki `materials.manage`
+unda yo'q.
+
+**Bu bir martalik ko'chirish EMAS, doimiy qoida.** Birinchi urinishda
+huquq `migration_flags` bilan qo'yilgan edi va ikkinchi migratsiyada
+`warehouse.sql` uni qaytarib eskisiga o'zgartirib qo'ydi — bayroq esa
+allaqachon qo'yilgani uchun tuzata olmadi. Bayroq O'TMISHDAGI
+ma'lumotni tuzatadi, kodda turadigan qoidani emas (PIN izi va oylik
+doirasi bilan bir xil idiom). Omborning OCHILISHI esa bayroq bilan
+(`xom-ombor-ochiq`): zavod ertaga birontasini yopsa keyingi deploy uni
+qaytarib ochmasin.
+
+**`perm IS NULL` ham HUQUQ** (`COALESCE(w.perm, 'warehouse.view')`): u
+«`warehouse.view` yetarli» degani va tekshirilishi kerak. Ilgari bo'sh
+katak har kimga ochiq deb o'qilardi va xom ashyo xodimi ro'yxatga
+kirgan zahoti T/M ombor kartochkasini ko'rardi — bosganda esa
+`/ombor.html` uni ichkariga kiritmasdi: ekranda ochilmaydigan havola
+turardi.
 
 **★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI** (`material_suppliers`,
 zavod qarori 2026-09). Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF

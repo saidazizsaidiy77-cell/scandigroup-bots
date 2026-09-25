@@ -455,3 +455,126 @@ END $$;
 --  qolardi — ertaga yana so'raladigan material esa yo'qolardi.
 CREATE INDEX IF NOT EXISTS material_moves_to_wh_idx
   ON material_moves (to_id, material_id) WHERE to_kind = 'warehouse';
+
+-- ═══════════════════════════════════════════════════ MATERIALNING NARXI
+--
+--  ★ NARX HARAKAT QATORIDA, MATERIALDA EMAS (zavod qarori, 2026-09).
+--
+--  Materialning O'ZIDA narx ustuni bo'lishi mumkin emas: bugun LDSP
+--  250 000 so'm, ertaga 270 000 — ustun bo'lsa keyingi kirim eski
+--  qoldiqning bahosini ham jimgina o'zgartirib yuborardi va
+--  omborning kechagi qiymati bugun boshqacha chiqardi.
+--
+--  Shuning uchun narx KIRIM qatorida turadi va o'sha qator bilan
+--  qotib qoladi — `material_suppliers` da narx yo'qligining sababi
+--  ham shu (izoh: yuqorida).
+--
+--  Narx faqat KIRIMDA ma'noga ega: boshlang'ich qoldiqda (javon
+--  qancha turadi) va ta'minotchidan kelganda (qancha to'landi).
+--  Chiqimda u YOZILMAYDI — sarflangan materialning bahosi kirimlardan
+--  hisoblanadi (o'rtacha narx), aks holda ombordan chiqarayotgan odam
+--  har safar narx terib o'tirardi va bitta xato raqam butun tannarxni
+--  buzardi.
+--
+--  ★ VALYUTA VA KURS — KASSADAGI IDIOM (`cash_ops`). MDF dollarda
+--  olinadi, mahalliy yelim so'mda: hisob-kitob baribir dollarda, lekin
+--  kiritayotgan odam O'ZI ko'rgan raqamni yozadi. Aylantirishni odam
+--  qilsa bitta xato bo'lingan raqam omborning qiymatini buzardi.
+--  Kurs qator bilan birga qotadi: ertaga kurs o'zgarsa kechagi kirim
+--  qayta hisoblanmaydi.
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS ccy TEXT;
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS rate NUMERIC(14,4);
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS price NUMERIC(16,4);
+--  Hisob-kitob DOLLARDA — mijoz va ta'minotchi qarzi bilan bir xil o'q.
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS price_usd NUMERIC(16,4)
+  GENERATED ALWAYS AS (
+    CASE WHEN price IS NULL THEN NULL
+         WHEN ccy = 'UZS'   THEN ROUND(price / NULLIF(rate, 0), 4)
+         ELSE price END) STORED;
+
+ALTER TABLE material_moves DROP CONSTRAINT IF EXISTS material_moves_ccy_check;
+ALTER TABLE material_moves ADD CONSTRAINT material_moves_ccy_check
+  CHECK (ccy IS NULL OR ccy IN ('UZS', 'USD'));
+--  So'mda yozilgan narxning kursi bo'lishi SHART: kursi yo'q so'm
+--  dollarga aylanmaydi va qator qiymatsiz qolardi — omborning
+--  jami summasi esa buni aytmasdi, shunchaki kamayib turardi.
+ALTER TABLE material_moves DROP CONSTRAINT IF EXISTS material_moves_rate_check;
+ALTER TABLE material_moves ADD CONSTRAINT material_moves_rate_check
+  CHECK (price IS NULL OR ccy <> 'UZS' OR rate IS NOT NULL);
+
+--  View'lar narxni ham olib yuradi, shuning uchun ikkalasi ham
+--  DROP+CREATE: `CREATE OR REPLACE` ustunni faqat oxiriga qo'sha
+--  oladi va `v_material_stock` o'rtasiga `price` qo'yilmoqda
+--  (2-qoida). Tartib muhim — stock flow'dan o'qiydi.
+DROP VIEW IF EXISTS v_material_stock;
+DROP VIEW IF EXISTS v_material_flow;
+CREATE VIEW v_material_flow AS
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+       m.from_kind AS kind, m.from_id AS place_id, -m.qty AS qty,
+       m.to_kind   AS other_kind, m.to_id   AS other_id, m.created_at,
+       m.ccy, m.rate, m.price, m.price_usd
+  FROM material_moves m WHERE m.status = 'ok'
+UNION ALL
+SELECT m.id, m.material_id, m.moved_on, m.note, m.worker_id, m.doc_id,
+       m.to_kind, m.to_id, m.qty,
+       m.from_kind, m.from_id, m.created_at,
+       m.ccy, m.rate, m.price, m.price_usd
+  FROM material_moves m WHERE m.status = 'ok';
+
+--  Ombor qoldig'i: FAQAT ombor tomoni. Ta'minotchi, buyurtma va
+--  konver tomonlari bu yerda sanalmaydi — ular omborda turgan narsa
+--  emas, undan chiqib ketgani.
+--
+--  ★ NARX — O'RTACHA KIRIM NARXI: `SUM(qty × narx) / SUM(qty)`, faqat
+--  KIRGAN qatorlar bo'yicha (`qty > 0`). Oxirgi kirimning narxini
+--  olish yo'l emas edi: omborda ikki xil narxda kelgan bitta material
+--  turadi va oxirgisi butun qoldiqning bahosini o'zgartirib yuborardi.
+--
+--  Narxi yozilmagan kirim o'rtachaga UMUMAN qo'shilmaydi — na surat,
+--  na maxraj. Nol deb hisoblansa o'rtacha narx jimgina pasayib
+--  borardi va omborning qiymati haqiqatdan uzilib ketardi;
+--  `amount` esa BOR narxga tayanadi, ya'ni u yuqori chegara —
+--  sahifa buni o'zi yozib turadi (tayyor mahsulotdagi tannarx
+--  bilan bir xil idiom).
+CREATE VIEW v_material_stock AS
+SELECT f.place_id AS warehouse_id, w.code AS warehouse_code, w.name AS warehouse,
+       w.shop_id, f.material_id, mt.name AS material, mt.uom, mt.category,
+       SUM(f.qty)::NUMERIC(14,3) AS qty,
+       (SUM(f.qty * f.price_usd) FILTER (WHERE f.qty > 0 AND f.price_usd IS NOT NULL)
+        / NULLIF(SUM(f.qty) FILTER (WHERE f.qty > 0 AND f.price_usd IS NOT NULL), 0)
+       )::NUMERIC(16,4) AS price,
+       (SUM(f.qty) * (
+          SUM(f.qty * f.price_usd) FILTER (WHERE f.qty > 0 AND f.price_usd IS NOT NULL)
+          / NULLIF(SUM(f.qty) FILTER (WHERE f.qty > 0 AND f.price_usd IS NOT NULL), 0))
+       )::NUMERIC(16,2) AS amount
+  FROM v_material_flow f
+  JOIN warehouses w  ON w.id  = f.place_id
+  JOIN materials  mt ON mt.id = f.material_id
+ WHERE f.kind = 'warehouse'
+ GROUP BY f.place_id, w.code, w.name, w.shop_id, f.material_id,
+          mt.name, mt.uom, mt.category
+HAVING SUM(f.qty) <> 0;
+
+-- ═══════════════════════════════════ XOM ASHYO OMBORLARI — OCHILADI
+--
+--  ★ ZAVOD QARORI (2026-09): boshlang'ich qoldiq omborlarning ICHIGA
+--  kirib kiritiladi, ya'ni ular ro'yxatda «rejada» bo'lib turolmaydi.
+--
+--  Huquqi TSEX omborlariniki bilan bir xil bo'ldi — lekin u SHU
+--  YERDA emas, `sql/warehouse.sql` da: huquq kodda turadigan DOIMIY
+--  qoida va har migratsiyada qo'yiladi. Bu yerda bayroq bilan
+--  yozilgan edi va ikkinchi migratsiyada `warehouse.sql` uni qaytarib
+--  eskisiga o'zgartirib qo'ydi — bayroq esa allaqachon qo'yilgani
+--  uchun tuzata olmadi. Bir martalik ko'chirish O'TMISHDAGI
+--  ma'lumotni tuzatadi, kodda turadigan qoidani emas.
+--
+--  Ochilishi esa bayroq bilan: zavod ertaga birontasini yopsa
+--  keyingi deploy uni qaytarib ochmasin.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'xom-ombor-ochiq') THEN
+    UPDATE warehouses SET is_active = TRUE
+     WHERE code IN ('XOM', 'MDF', 'FURN');
+    INSERT INTO migration_flags (key) VALUES ('xom-ombor-ochiq');
+  END IF;
+END $$;

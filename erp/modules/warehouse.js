@@ -19,7 +19,13 @@ const { need } = require('../auth');
 const { clonePart, scopeOf } = require('./units');
 
 const router = express.Router();
-const READ = ['warehouse.view', 'production.view'];
+//  ★ XOM ASHYO XODIMI HAM RO'YXATGA KIRADI (zavod qarori, 2026-09).
+//  Boshlang'ich qoldiq omborning ICHIDA kiritiladi, ya'ni yo'l shu
+//  sahifadan o'tadi — `materials.*` bo'lmasa modulning o'z xodimi
+//  o'zi yuritadigan omborga yetib bora olmasdi. Qaysi ombor unga
+//  ko'rinishini baribir `warehouses.perm` hal qiladi, bu ro'yxat emas.
+const READ = ['warehouse.view', 'production.view',
+              'materials.view', 'materials.manage'];
 const MOVE = ['warehouse.move', 'warehouse.manage', 'production.manage'];
 
 //  Qaysi ombor so'ralyapti. Kodi bilan keladi (`?w=VITR-ABU`), chunki
@@ -46,7 +52,13 @@ const bad = (msg) => Object.assign(new Error(msg), { status: 400 });
 //
 //  Ikkinchi chegara `warehouses.perm` da: xom ashyo omborlari savdoga
 //  baribir ko'rinmaydi. Ikkalasi ham bajarilishi kerak.
-const SCOPE = `(w.perm IS NULL OR w.perm = ANY($1::text[]))
+//  ★ `perm IS NULL` — «`warehouse.view` yetarli» degani (izoh:
+//  sql/warehouse.sql), ya'ni u ham HUQUQ va tekshirilishi kerak.
+//  Ilgari bo'sh katak har kimga ochiq deb o'qilardi va xom ashyo
+//  xodimi ro'yxatga kirgan zahoti T/M ombor kartochkasini ko'rardi —
+//  bosganda esa `/ombor.html` uni ichkariga kiritmasdi: ekranda
+//  ochilmaydigan havola turardi.
+const SCOPE = `(COALESCE(w.perm, 'warehouse.view') = ANY($1::text[]))
            AND ($2::int[] IS NULL OR w.id = ANY($2) OR w.code = 'TM')`;
 
 //  ★ TSEX DOIRASI BOR XODIMGA FAQAT T/M OMBOR (zavod qarori, 2026-09).
@@ -84,20 +96,43 @@ async function whOf(req, code) {
 // ──────────────────────────────────────────────────────── OMBORLAR RO'YXATI
 //
 //  Har ombor yonida qoldig'i turadi — mudir ro'yxatdan o'tayotganda
-//  qaysi biriga kirish kerakligini shundan ko'radi. Hozircha faqat
-//  tayyor mahsulot ombori sanaladi; `material` omborlar ochilganda
-//  o'sha yerda o'z hisobi qo'shiladi.
+//  qaysi biriga kirish kerakligini shundan ko'radi.
 //  Har kim o'ziga tegishli omborlarni ko'radi: ombor mudiri — tayyor
-//  mahsulotni, savdo — tayyor mahsulot bilan vitrinalarni, ta'minot —
-//  xom ashyoni. Qoida ombor qatorida (`warehouses.perm`), shu yerda emas:
-//  yangi ombor qo'shilganda bu kod o'zgarmaydi.
+//  mahsulotni, savdo — tayyor mahsulot bilan vitrinalarni, xom ashyo
+//  xodimi — material omborlarini. Qoida ombor qatorida
+//  (`warehouses.perm`), shu yerda emas: yangi ombor qo'shilganda bu
+//  kod o'zgarmaydi.
+//
+//  ★ IKKI XIL OMBOR, IKKI XIL HISOB (zavod qarori, 2026-09). Tayyor
+//  mahsulot ombori KONVER sanaydi, xom ashyo ombori esa MATERIAL —
+//  ikkalasini bitta raqamga qo'shib bo'lmaydi. Shuning uchun
+//  kartochkadagi raqam `kind` ga qarab boshqa jadvaldan olinadi va
+//  havolasi ham boshqa sahifaga olib boradi: konver `/ombor.html`,
+//  material esa xom ashyo modulining qoldiq tabiga.
+//
+//  Ilgari material ombori KODDA «rejada» bo'lib turardi
+//  (`kind === 'fg'`) — boshlang'ich qoldiqni kiritish uchun uning
+//  ICHIGA kirish kerak, ya'ni yopiq kartochka ishni to'xtatardi.
 router.get('/list', need(...READ), wrap(async (req, res) => {
-  const [houses, fg] = await Promise.all([
+  const [houses, fg, mat] = await Promise.all([
+    //  ★ IKKI XIL OMBOR — IKKI XIL DOIRA. Tayyor mahsulotda doira
+    //  VITRINA bo'yicha (tsex doirasi borga faqat T/M ombor),
+    //  materialda esa TSEX bo'yicha: tsex boshlig'ining ombori o'z
+    //  tsexida turadi va u uni ko'rishi kerak. Shart xom ashyo
+    //  modulidagi bilan AYNAN bir xil (`/api/materials/ref`) — aks
+    //  holda bitta ombor ikki ekranda ikki xil javob berardi.
     db.query(`SELECT w.id, w.code, w.name, w.kind, w.note, w.is_active, s.name AS shop_name
                 FROM warehouses w
                 LEFT JOIN shops s ON s.id = w.shop_id
-               WHERE ${SCOPE}
-               ORDER BY w.is_active DESC, w.sort, w.name`, whScope(req)),
+               WHERE COALESCE(w.perm, 'warehouse.view') = ANY($1::text[])
+                 AND (CASE WHEN w.kind = 'material'
+                           THEN ($3::int[] IS NULL
+                                 OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($3))
+                           ELSE ($2::int[] IS NULL OR w.id = ANY($2)
+                                 OR w.code = 'TM') END)
+               ORDER BY w.is_active DESC, w.sort, w.name`,
+      [...whScope(req), (req.user.scope_shop_ids || []).length
+        ? req.user.scope_shop_ids : null]),
     // Qoldiq har ombor bo'yicha alohida: vitrina ochilgandan keyin
     // umumiy raqam noto'g'ri bo'lardi — uchta kartochka bir xil sonni
     // ko'rsatib turardi.
@@ -105,15 +140,36 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
                      COALESCE(SUM(qty), 0)::int AS qty,
                      COALESCE(SUM(total_amount), 0) AS amount
                 FROM v_fg_units GROUP BY warehouse_id`),
+    //  Materialda «nechta dona» degan savol yo'q: bittasi kg, bittasi
+    //  list, bittasi rulon — qo'shib bo'lmaydi (tayyor mahsulotdagi
+    //  dona/komplekt bilan bir xil sabab). Shuning uchun kartochkada
+    //  NOMLAR soni turadi: «nechta xil material bor».
+    db.query(`SELECT warehouse_id, COUNT(*)::int AS units,
+                     COALESCE(SUM(amount), 0) AS amount
+                FROM v_material_stock GROUP BY warehouse_id`),
   ]);
-  const byWh = Object.fromEntries(fg.rows.map((r) => [r.warehouse_id, r]));
+  const byWh  = Object.fromEntries(fg.rows.map((r) => [r.warehouse_id, r]));
+  const byMat = Object.fromEntries(mat.rows.map((r) => [r.warehouse_id, r]));
   res.json({
     rows: houses.rows.map((w) => {
+      const open = w.is_active;
+      if (w.kind === 'material') {
+        const t = byMat[w.id];
+        return {
+          ...w,
+          href: open ? `/materiallar.html?w=${encodeURIComponent(w.code)}` : null,
+          //  Birlik NOM: «83 konver» emas, «12 nomdagi material».
+          unit: 'nom',
+          units: open ? (t?.units || 0) : null,
+          qty: null,
+          amount: open ? Number(t?.amount || 0) : null,
+        };
+      }
       const t = byWh[w.id];
-      const open = w.kind === 'fg' && w.is_active;
       return {
         ...w,
         href: open ? `/ombor.html?w=${encodeURIComponent(w.code)}` : null,
+        unit: 'konver',
         units: open ? (t?.units || 0) : null,
         qty: open ? (t?.qty || 0) : null,
         amount: open ? (t?.amount || 0) : null,
