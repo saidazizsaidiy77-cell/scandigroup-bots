@@ -1035,6 +1035,38 @@ KEYIN keladi va mudirning ishi bo'lib qoladi. Ilgari teskari edi
 («Omborga yuborildi» oldinda), chunki u ombor kunini tuzadigan ro'yxat
 edi.
 
+**★ TUGMA IKKI JOYDA: QATORDA VA TO'DALAB** (zavod qarori, 2026-09).
+Ilgari u faqat buyurtma ICHIDA edi — ruxsat beradigan odam ertalab
+o'nta «Tayyor» buyurtmani har birini ochib, tugmani bosib, yopib
+chiqardi: o'ttiz bosish. Endi:
+
+  · **qatorda** «Chiqarishga» tugmasi — kun davomida bitta buyurtma
+    uchun («mijoz qo'ng'iroq qildi, ertaga olib ketadi»);
+  · **katakcha + tepadagi bitta tugma** — ertalabki to'da uchun.
+
+Ikkalasi ham «Tayyor» qatorda va faqat BELGISI bor xodimda chiziladi.
+Tugma **belgilanganda** chiqadi: doim turgan «0 tasini chiqarishga
+berish» savol qoldirardi.
+
+**Sana bu yerda SO'RALMAYDI.** «Chiqib ketish sanasi» buyurtmada
+allaqachon turadi — menejer uni mijoz bilan kelishib qo'ygan — va u
+uchta joyda ishlaydi: bron tekshiruvida (`assertMuddat`), mudirning
+saralashida va kechikish belgisida. Ruxsat berayotganda uni ikkinchi
+marta so'rash o'sha maydonni ikki joydan tahrirlash bo'lardi (muddat
+masalasida zavod buni allaqachon rad etgan: «bitta ishni ikki marta
+qildirardi»). Kun o'zgarsa buyurtma ochiladi va sana O'SHA YERDA
+to'g'rilanadi.
+
+**Qoida BITTA joyda** — `sendOne()` (`modules/sales.js`): chegirma,
+«qayerga» va ruxsat tekshiruvlari ikki nusxada bo'lsa to'dalab
+yuborilgani bitta-bitta yuborilganidan boshqa qoidaga bo'ysunardi.
+
+**★ BITTASI YIQILSA QOLGANI O'TAVERADI**, va bu ataylab: o'nta
+buyurtmadan birida chegirma tasdiqlanmagan bo'lsa, qolgan to'qqiztasini
+ham rad etish kunni to'xtatardi. Yiqilgani **NOMI va SABABI** bilan
+qaytariladi — «bittasi o'tmadi» degan xabar qaysi biri ekanini aytmasdi
+va odam ro'yxatni qaytadan ko'zdan kechirardi.
+
 **«Qaytarib olish»** esa `sales.manage` da qolaveradi va mudir
 chiqarmaguncha ochiq: xato bergan menejer o'zi orqaga oladi.
 

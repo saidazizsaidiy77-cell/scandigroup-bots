@@ -1162,7 +1162,12 @@ router.post('/orders/:id/discount', need('sales.discount'), wrap(async (req, res
   res.json({ ok: true, status: rows[0].discount_status });
 }));
 
-router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
+//  ★ QOIDA BITTA JOYDA: bitta buyurtmani chiqarishga berish ham,
+//  ertalabki TO'DANI belgilab yuborish ham shu funksiyadan o'tadi.
+//  Ikki nusxada bo'lsa chegirma, «qayerga» va ruxsat tekshiruvlari
+//  bir kun bir-biridan ajralib ketardi — to'dalab yuborilgan buyurtma
+//  bitta-bitta yuborilganidan boshqa qoidaga bo'ysunardi.
+async function sendOne(req, id) {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -1172,7 +1177,7 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
                           JOIN order_items i ON i.id = r.order_item_id
                          WHERE i.order_id = o.id), 0)::int AS bron
          FROM orders o JOIN customers c ON c.id = o.customer_id
-        WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
+        WHERE o.id = $1 FOR UPDATE OF o`, [id])).rows[0];
     if (!o) throw new Error('Buyurtma topilmadi');
     const chans = channelsOf(req);
     if (chans && !chans.includes(o.channel))
@@ -1221,11 +1226,44 @@ router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
     await audit(req, { module: 'sales', action: 'send-to-wh', entity: 'order',
                        entity_id: o.id, payload: { order_no: o.order_no } }, client);
     await client.query('COMMIT');
-    res.json({ ok: true });
+    return o.order_no;
   } catch (e) {
     await client.query('ROLLBACK');
-    return res.status(400).json({ error: e.message });
+    throw e;
   } finally { client.release(); }
+}
+
+router.post('/orders/:id/send', need(...WRITE), wrap(async (req, res) => {
+  try {
+    await sendOne(req, req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+
+//  ★ ERTALABKI TO'DA BITTA BOSISHDA (zavod qarori, 2026-09). Ruxsat
+//  beradigan odam ertalab kelib o'nta «Tayyor» buyurtmani ko'zdan
+//  kechiradi — har birini ochib, tugmani bosib, yopib chiqish o'ttiz
+//  bosish bo'lardi.
+//
+//  ★ BITTASI YIQILSA QOLGANI O'TAVERADI, va bu ataylab: o'nta
+//  buyurtmadan birida chegirma tasdiqlanmagan bo'lsa, qolgan
+//  to'qqiztasini ham rad etish kunni to'xtatardi. Yiqilgani NOMI va
+//  SABABI bilan qaytariladi — «bitta o'tmadi» degan xabar qaysi biri
+//  ekanini aytmasdi va odam ro'yxatni qaytadan ko'zdan kechirardi.
+router.post('/orders/send', need(...WRITE), wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+  if (!ids.length) return res.status(400).json({ error: 'Buyurtma tanlanmadi' });
+  const done = [], xato = [];
+  for (const id of ids) {
+    try { done.push(await sendOne(req, id)); }
+    catch (e) {
+      //  Raqami xabarda tursin: id ekranda hech qayerda ko'rinmaydi.
+      const no = (await db.query(`SELECT order_no FROM orders WHERE id = $1`, [id]))
+        .rows[0]?.order_no || String(id);
+      xato.push({ order_no: no, error: e.message });
+    }
+  }
+  res.json({ saved: done.length, done, errors: xato });
 }));
 
 //  ─────────────────────────────────────────────── PUL KIRIM SANASI

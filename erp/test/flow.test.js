@@ -5818,6 +5818,19 @@ test('mijozga chiqarishga ruxsatni faqat belgisi bor xodim beradi', async () => 
   assert.ok(!(await admin('GET', '/api/sales/shipping')).body.rows
     .some((r) => r.id === z.id), 'ruxsatsiz buyurtma mudirga chiqmaydi');
 
+  //  ★ TO'DALAB BERISHDA BITTASI YIQILSA QOLGANI O'TAVERADI (izoh:
+  //  modules/sales.js): o'nta buyurtmadan birida chegirma
+  //  tasdiqlanmagan bo'lsa, qolgan to'qqiztasini ham rad etish kunni
+  //  to'xtatardi. Yiqilgani NOMI bilan qaytariladi.
+  //
+  //  Ruxsat BU YERDA ham tekshiriladi — ikki yo'l bitta funksiyadan
+  //  o'tadi, ya'ni belgisiz odam to'dalab ham yubora olmaydi.
+  const toda = await m('POST', '/api/sales/orders/send', { ids: [z.id] });
+  assert.equal(toda.status, 200, toda.text);
+  assert.equal(toda.body.saved, 0, 'ruxsatsiz odamda bittasi ham o\'tmaydi');
+  assert.match(toda.body.errors[0].error, /ruxsat/i);
+  assert.equal(toda.body.errors[0].order_no, z.order_no, 'qaysi biri \u2014 nomi bilan');
+
   //  Belgi qo'yilgach o'sha odam o'tkazadi.
   await db.query(
     `UPDATE workers SET can_release = true WHERE name = 'Sinov ruxsatsiz menejer'`);
@@ -5826,6 +5839,12 @@ test('mijozga chiqarishga ruxsatni faqat belgisi bor xodim beradi', async () => 
   assert.equal(ok.status, 200, ok.text);
   assert.ok((await admin('GET', '/api/sales/shipping')).body.rows
     .some((r) => r.id === z.id), 'endi mudir ko\'radi');
+
+  //  To'dalab berish ham o'sha funksiyadan o'tadi: ikkinchi marta
+  //  yuborilgan buyurtma rad etiladi va sababi nomi bilan yoziladi.
+  const qayta = await m2('POST', '/api/sales/orders/send', { ids: [z.id] });
+  assert.equal(qayta.body.saved, 0);
+  assert.match(qayta.body.errors[0].error, /[Aa]llaqachon/);
 });
 
 test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {

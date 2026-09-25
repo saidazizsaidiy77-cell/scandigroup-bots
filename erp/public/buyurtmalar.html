@@ -75,6 +75,11 @@
             u yerda baribir bitta ism turardi (izoh: `ownOf`). -->
       <select id="fMgr" onchange="load()" style="max-width:200px" hidden></select>
       <input id="fQ" placeholder="Z№ yoki mijoz" style="max-width:240px" oninput="load()">
+      <!--  ★ TO'DALAB CHIQARISHGA BERISH. Tugma faqat qator
+            BELGILANGANDA chiqadi: doim turgan «0 tasini chiqarishga
+            berish» savol qoldirardi. Joyi — belgilash qilinadigan
+            jadvalning ustida, ya'ni javob ko'z tushadigan yerda. -->
+      <span id="relBar" class="row" style="gap:8px"></span>
     </div>
   </div>
   <!--  Jadval O'Z qutisida aylanadi (`max-height`): sticky faqat SCROLL
@@ -85,7 +90,11 @@
     <!--  «Bron» ustuni yo'q: u qator sonini takrorlardi va «bron» degan
           ichki tushunchani ro'yxatga olib chiqardi. Buyurtma qay ahvolda
           ekani HOLAT ustunida turadi. -->
-    <thead><tr><th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
+    <!--  ★ BELGILASH USTUNI faqat ruxsat beradigan odamga chiziladi
+          (izoh: sql/sales.sql). Qolganlarda u bo'sh katak bo'lib
+          turardi va nima uchun ekanini hech narsa aytmasdi. -->
+    <thead><tr><th id="thSel"></th>
+      <th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
       <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
       <th class="num">Summa, $</th>
       <!--  «Qayerda» — biriktirilgan konverlar hozir turgan joyi.
@@ -285,6 +294,9 @@ async function load(){
   if ($('fMgr') && $('fMgr').value) q.set('manager_id', $('fMgr').value);
   rows = (await App.api('/api/sales/orders?' + q)).rows;
 
+  //  Sarlavhadagi bo'sh katak ham faqat ruxsatlida: qolganlarda u
+  //  nima uchun turgani tushunarsiz bo'lardi.
+  if ($('thSel')) $('thSel').hidden = !relOk();
   $('tB').innerHTML = rows.length ? rows.map(o => {
     // Muddat o'tgan va hali yopilmagan buyurtma qizarib turadi.
     const late = o.days_left != null && o.days_left < 0
@@ -293,7 +305,20 @@ async function load(){
     //  qalamchani nishonga olish shart emas.
     const yopiq = o.status === 'shipped' || o.status === 'cancelled'
                || o.status === 'to_ship' || !canWrite;
+    //  ★ ERTALABKI TO'DA: «Tayyor» buyurtmani ochmasdan chiqarishga
+    //  berish. Ruxsat beradigan odam ertalab o'nta buyurtmani ko'zdan
+    //  kechiradi — har birini ochib, tugmani bosib, yopib chiqish
+    //  o'ttiz bosish bo'lardi.
+    //
+    //  Katakcha ham, tugma ham FAQAT «Tayyor» qatorda: boshqa
+    //  holatdagi buyurtmani chiqarishga berib bo'lmaydi va bo'sh
+    //  tugma nima uchun ishlamasligini aytmasdi.
+    const berish = relOk() && o.holat === 'reserved';
     return `<tr onclick="openOrder(${o.id})" style="cursor:pointer">
+      <td class="c-sel" onclick="event.stopPropagation()">${berish
+        ? `<input type="checkbox" style="width:auto" ${
+            tanlangan.has(o.id) ? 'checked' : ''}
+           onchange="tanla(${o.id}, this.checked)">` : ''}</td>
       <td><strong>${esc(o.order_no)}</strong></td>
       <td>${esc(o.customer_name)}${o.region
         ? `<div class="muted" style="font-size:12px">${esc(o.region)}</div>` : ''}</td>
@@ -317,10 +342,71 @@ async function load(){
           yuborilgan(o) ? ` <span class="tag">Chiqarishga berilgan</span>` : ''}</td>
       <!--  Yopilgan buyurtma tahrirlanmaydi — tugmasi ham boshqa:
             «ko'rish». Ochilganda u hujjat bo'lib chiqadi. -->
-      <td class="num"><button onclick="openOrder(${o.id})"
+      <td class="num" onclick="event.stopPropagation()">${berish
+        ? `<button class="primary" style="padding:6px 10px;font-size:12px"
+             onclick="berQator(${o.id})">Chiqarishga</button> ` : ''}<button
+        onclick="openOrder(${o.id})"
         title="${yopiq ? 'Ko\'rish' : 'Tahrirlash'}">${yopiq ? '👁' : '✎'}</button></td>
     </tr>`;
-  }).join('') : '<tr><td class="muted" colspan="11">Buyurtma yo\'q</td></tr>';
+  }).join('') : '<tr><td class="muted" colspan="12">Buyurtma yo\'q</td></tr>';
+  chizTanlov();
+}
+
+//  ─── CHIQARISHGA BERISH: BITTA VA TO'DALAB ────────────────────────────
+//
+//  Ikki yo'l ham BITTA server funksiyasidan o'tadi (`sendOne`,
+//  modules/sales.js): chegirma, «qayerga» va ruxsat tekshiruvlari ikki
+//  nusxada bo'lsa to'dalab yuborilgani bitta-bitta yuborilganidan
+//  boshqa qoidaga bo'ysunardi.
+const relOk = () => !!App.me()?.can_release;
+const tanlangan = new Set();
+
+function tanla(id, on) {
+  on ? tanlangan.add(id) : tanlangan.delete(id);
+  chizTanlov();
+}
+
+//  Tugma faqat BELGILANGANDA chiqadi: doim turgan «0 tasini
+//  chiqarishga berish» tugmasi savol qoldirardi.
+function chizTanlov() {
+  const el = $('relBar');
+  if (!el) return;
+  //  Ro'yxat yangilanganda ko'rinmay qolgan qatorning belgisi ham
+  //  tushadi: ekranda yo'q buyurtmani yuborib qo'yish yolg'on bo'lardi.
+  for (const id of [...tanlangan]) if (!rows.some(r => r.id === id)) tanlangan.delete(id);
+  el.innerHTML = tanlangan.size
+    ? `<button class="primary" onclick="berTanlangan()">${
+        tanlangan.size} tasini mijozga chiqarish</button>
+       <button onclick="tanlovniTozala()">Bekor qilish</button>` : '';
+}
+
+function tanlovniTozala() { tanlangan.clear(); load(); }
+
+async function berQator(id) {
+  try {
+    await App.api(`/api/sales/orders/${id}/send`, { method: 'POST' });
+    await load();
+  } catch (e) { alert(e.message); }
+}
+
+//  ★ BITTASI YIQILSA QOLGANI O'TAVERADI (izoh: modules/sales.js), va
+//  yiqilgani NOMI bilan aytiladi: «bittasi o'tmadi» degan xabar qaysi
+//  biri ekanini aytmasdi va odam ro'yxatni qaytadan ko'zdan kechirardi.
+async function berTanlangan() {
+  const ids = [...tanlangan];
+  try {
+    const r = await App.api('/api/sales/orders/send', {
+      method: 'POST', body: JSON.stringify({ ids }) });
+    tanlangan.clear();
+    //  Yiqilgani NOMI va SABABI bilan aytiladi: «bittasi o'tmadi»
+    //  degan xabar qaysi biri ekanini aytmasdi va odam ro'yxatni
+    //  qaytadan ko'zdan kechirardi.
+    if (r.errors?.length) {
+      alert(`${r.saved} ta berildi.\n\nO'tmadi:\n`
+        + r.errors.map(x => `${x.order_no} — ${x.error}`).join('\n'));
+    }
+    await load();
+  } catch (e) { alert(e.message); }
 }
 
 // ─────────────────────────────────────────────────────── BUYURTMA TAHRIRI
