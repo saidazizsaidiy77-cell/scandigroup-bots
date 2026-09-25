@@ -2066,6 +2066,18 @@ test('xom ashyo qoldig\'i: boshlang\'ich qoldiq va harakat', async () => {
   //  emas: ikkalasini bitta raqamga qo'shib bo'lmaydi. Boshlang'ich
   //  qoldiq omborning ICHIDA kiritiladi, ya'ni yopiq kartochka ishni
   //  to'xtatardi.
+  //  ★ KARTOCHKALAR TURI BO'YICHA GURUHLANADI (izoh:
+  //  modules/warehouse.js): uchta savol — nima SOTILADI, zavodga nima
+  //  KELADI va tsexda nima TURIBDI. Guruh SERVERDA hal qilinadi:
+  //  sahifada ikkinchi marta yozilsa ertaga qo'shilgan ombor bir
+  //  ekranda bir guruhda, boshqasida boshqasida turardi.
+  const wl = (await admin('GET', '/api/warehouse/list')).body.rows;
+  const gr = (kod) => wl.find((r) => r.code === kod).guruh;
+  assert.equal(gr('TM'), 'fg');
+  assert.equal(gr('VITR-ABU'), 'fg', 'vitrina ham tayyor mahsulot');
+  assert.equal(gr('XOM'), 'zavod');
+  assert.equal(gr('TSEX-KOR-ARRA'), 'tsex', 'tsexi bor ombor \u2014 tsexniki');
+
   const kart = (await xom('GET', '/api/warehouse/list')).body.rows
     .find((r) => r.code === 'TSEX-KOR-ARRA');
   assert.ok(kart, 'xom ashyo ombori mudirning ro\'yxatida turadi');

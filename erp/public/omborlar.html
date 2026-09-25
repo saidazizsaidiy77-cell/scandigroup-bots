@@ -45,8 +45,36 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money = v => v == null ? '' : Number(v).toLocaleString('ru-RU');
 
+//  ★ TURI BO'YICHA GURUHLAR, SARLAVHASI BILAN (zavod qarori,
+//  2026-09). Ro'yxat o'n to'rtta kartochkaga yetdi va aralash turardi:
+//  T/M ombor, keyin xom ashyo, keyin vitrinalar, keyin tsexnikilar —
+//  mudir o'z javonini har safar ko'z bilan terib olardi.
+//
+//  Guruh SERVERDAN keladi (`guruh`, `guruh_nom`): qoida ikki joyda
+//  yozilsa ertaga qo'shilgan ombor bir ekranda bir guruhda, boshqa
+//  ekranda boshqasida turardi.
+//
+//  ★ TARTIB QOTIB TURADI (zavod qarori): qoldig'i bor ombor tepaga
+//  CHIQARILMAYDI. Mudir kechagi kartochkani o'sha joyidan topsin —
+//  ombor to'lgani sayin joyi o'zgaradigan ro'yxatda har safar
+//  qidirishga to'g'ri kelardi. Bo'sh ombor ham o'z o'rnida qoladi.
 function draw(rows) {
-  $('body').innerHTML = `
+  //  Guruhlar SERVER tartibida ochiladi, oldindan sanab qo'yilmaydi:
+  //  yangi tur qo'shilsa u o'zi paydo bo'ladi va bu kod o'zgarmaydi.
+  const gr = [];
+  for (const w of rows) {
+    let g = gr.find(x => x.kod === w.guruh);
+    if (!g) gr.push(g = { kod: w.guruh, nom: w.guruh_nom, rows: [] });
+    g.rows.push(w);
+  }
+  $('body').innerHTML = gr.map(g => `
+    <div class="muted" style="font-size:12px;letter-spacing:.06em;
+      text-transform:uppercase;margin:26px 0 10px">${esc(g.nom || '')}</div>
+    ${kartochkalar(g.rows)}`).join('');
+}
+
+function kartochkalar(rows) {
+  return `
     <div class="grid g3" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${rows.map(w => w.href ? `
       <a class="card" href="${w.href}" style="text-decoration:none;color:inherit;display:block">
         <div class="row" style="justify-content:space-between;align-items:flex-start">

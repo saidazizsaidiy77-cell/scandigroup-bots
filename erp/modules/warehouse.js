@@ -121,7 +121,8 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
     //  tsexida turadi va u uni ko'rishi kerak. Shart xom ashyo
     //  modulidagi bilan AYNAN bir xil (`/api/materials/ref`) — aks
     //  holda bitta ombor ikki ekranda ikki xil javob berardi.
-    db.query(`SELECT w.id, w.code, w.name, w.kind, w.note, w.is_active, s.name AS shop_name
+    db.query(`SELECT w.id, w.code, w.name, w.kind, w.note, w.is_active,
+                     w.shop_id, s.name AS shop_name
                 FROM warehouses w
                 LEFT JOIN shops s ON s.id = w.shop_id
                WHERE COALESCE(w.perm, 'warehouse.view') = ANY($1::text[])
@@ -148,6 +149,21 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
                      COALESCE(SUM(amount), 0) AS amount
                 FROM v_material_stock GROUP BY warehouse_id`),
   ]);
+  //  ★ KARTOCHKALAR TURI BO'YICHA GURUHLANADI (zavod qarori, 2026-09).
+  //  Ro'yxat o'n to'rtta kartochkaga yetdi va ular ARALASH turardi:
+  //  T/M ombor → xom ashyo → vitrinalar → tsex omborlari. Mudir o'z
+  //  javonini har safar ko'z bilan terib olardi.
+  //
+  //  Guruh SERVERDA hal qilinadi, sahifada emas: qoida ikki joyda
+  //  yozilsa ertaga qo'shilgan ombor bir ekranda bir guruhda, boshqa
+  //  ekranda boshqasida turardi (navbat belgisi bilan bir xil qoida).
+  //
+  //  Uchta savol, uchta guruh: nima SOTILADI, zavodga nima KELADI va
+  //  tsexda nima TURIBDI.
+  const guruh = (w) => w.kind === 'fg' ? { kod: 'fg', nom: 'Tayyor mahsulot' }
+    : w.shop_id ? { kod: 'tsex', nom: 'Tsex omborlari' }
+                : { kod: 'zavod', nom: 'Zavod omborlari' };
+
   const byWh  = Object.fromEntries(fg.rows.map((r) => [r.warehouse_id, r]));
   const byMat = Object.fromEntries(mat.rows.map((r) => [r.warehouse_id, r]));
   res.json({
@@ -156,7 +172,7 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
       if (w.kind === 'material') {
         const t = byMat[w.id];
         return {
-          ...w,
+          ...w, guruh: guruh(w).kod, guruh_nom: guruh(w).nom,
           href: open ? `/materiallar.html?w=${encodeURIComponent(w.code)}` : null,
           //  Birlik NOM: «83 konver» emas, «12 nomdagi material».
           unit: 'nom',
@@ -167,7 +183,7 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
       }
       const t = byWh[w.id];
       return {
-        ...w,
+        ...w, guruh: guruh(w).kod, guruh_nom: guruh(w).nom,
         href: open ? `/ombor.html?w=${encodeURIComponent(w.code)}` : null,
         unit: 'konver',
         units: open ? (t?.units || 0) : null,

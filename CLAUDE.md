@@ -2905,6 +2905,27 @@ kartochkasini bosadi va o'sha zahoti o'sha omborning qoldig'ida turadi
 «rejada» bo'lib turardi (`kind === 'fg'`) va yopiq kartochka ishni
 to'xtatardi.
 
+**★ KARTOCHKALAR TURI BO'YICHA GURUHLANADI** (zavod qarori, 2026-09).
+Ro'yxat o'n to'rtta kartochkaga yetdi va ular ARALASH turardi: T/M
+ombor → xom ashyo → vitrinalar → tsex omborlari. Mudir o'z javonini har
+safar ko'z bilan terib olardi. Uchta savol, uchta guruh:
+
+    TAYYOR MAHSULOT    T/M ombor va vitrinalar — nima SOTILADI
+    ZAVOD OMBORLARI    Xom ashyo · MDF · Furnitura — zavodga nima KELADI
+    TSEX OMBORLARI     tsexi biriktirilganlari — tsexda nima TURIBDI
+
+Guruh **SERVERDA** hal qilinadi (`kind` va `shop_id` dan), sahifada
+emas: qoida ikki joyda yozilsa ertaga qo'shilgan ombor bir ekranda bir
+guruhda, boshqa ekranda boshqasida turardi (navbat belgisi bilan bir
+xil qoida). Sahifa guruhlarni SERVER tartibida ochadi va oldindan sanab
+qo'ymaydi — yangi tur qo'shilsa u o'zi paydo bo'ladi.
+
+**★ TARTIB QOTIB TURADI** (zavod qarori): qoldig'i bor ombor tepaga
+CHIQARILMAYDI. Mudir kechagi kartochkani o'sha joyidan topsin — ombor
+to'lgani sayin joyi o'zgaradigan ro'yxatda har safar qidirishga to'g'ri
+kelardi (tsex ekranidagi «faqat ketma-ketlik bo'yicha» bilan bir xil
+sabab). Bo'sh ombor ham o'z o'rnida qoladi.
+
 **Ikki xil ombor — ikki xil hisob**: tayyor mahsulot ombori KONVER
 sanaydi, xom ashyo ombori esa MATERIAL. Kartochkadagi raqam shu sababdan
 boshqa jadvaldan olinadi va havolasi ham boshqa sahifaga olib boradi.
