@@ -1094,6 +1094,22 @@ ajralib ketardi.
 Nol ham yoziladi: bo'sh raqam «hisoblanmadi» degan savol qoldirardi,
 nol esa javob — bu tabda buyurtma yo'q.
 
+**★ «HAMMASI» DAGI SUMMA — FAQAT ZAVODDA TURGANI** (zavod qarori,
+2026-09): boshlanmagan + ishlab chiqarilmoqda + tayyor + mijozga
+chiqarilsin. Ilgari u HAMMA holatni qo'shardi va javob ma'nosini
+yo'qotardi: chiqib ketgani o'tgan savdo (uning puli allaqachon
+mijozning qarzida va foyda-zararda), bekor qilingani esa umuman
+yo'q. Ikkalasi qo'shilgach raqam har oy o'sib borardi va «hozir
+qancha pullik buyurtma turibdi» degan savolga hech qachon javob
+bermasdi.
+
+Ikkala tab ham o'z summasi bilan JOYIDA qoladi — «chiqib ketganida
+qancha» ham savol, faqat boshqa savol. Shu sababdan chipda raqam nima
+ekani yozilib turadi (**«· zavodda»**): qolgan oltitasini qo'shgan
+odam boshqa raqam olardi va sababini bilmasdi. Server har holatni
+ALOHIDA beradi, qo'shishni sahifa qiladi — qaysi holat «faol»
+ekani EKRANNING savoli, serverniki emas.
+
 **★ HOLAT BITTA JOYDA HISOBLANADI** (`HOLAT`, `modules/sales.js`;
 zavod qarori 2026-09). Ilgari u IKKI joyda edi: sahifa qatordagi
 yozuvni o'zi chiqarardi, tab esa serverdagi boshqa shartdan kelardi.

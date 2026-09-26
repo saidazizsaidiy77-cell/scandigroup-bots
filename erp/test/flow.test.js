@@ -6449,6 +6449,24 @@ test('buyurtmalar: tab yonidagi jami summa ro\'yxat bilan bir xil', async () => 
   const bittaMijoz = (await admin(
     'GET', '/api/sales/orders?q=Sinov jami mijoz')).body;
   assert.equal(Number(bittaMijoz.jami.find((x) => x.holat === 'draft').amount), 650);
+
+  //  ★ «HAMMASI» DAGI SUMMA — FAQAT ZAVODDA TURGANI (zavod qarori,
+  //  2026-09). Server har holatni ALOHIDA beradi, sahifa esa to'rttasini
+  //  qo'shadi: boshlanmagan + ishlab chiqarilmoqda + tayyor + mijozga
+  //  chiqarilsin. Chiqib ketgani o'tgan savdo (puli allaqachon
+  //  mijozning qarzida), bekor qilingani esa umuman yo'q — ikkalasi
+  //  qo'shilsa raqam har oy o'sib borardi va «hozir qancha pullik
+  //  buyurtma turibdi» degan savolga hech qachon javob bermasdi.
+  //
+  //  Ikkala holat ham javobda O'Z qatori bilan qolishi shart: sahifa
+  //  ularni chipda alohida ko'rsatadi va server ularni tashlab yuborsa
+  //  «chiqib ketganida qancha» degan javob yo'qolardi.
+  const holatlar = javob.jami.map((x) => x.holat);
+  for (const h of ['draft', 'waiting', 'reserved', 'to_ship',
+                   'shipped', 'cancelled']) {
+    const bor = javob.rows.some((o) => o.holat === h);
+    if (bor) assert.ok(holatlar.includes(h), h + ' yig\'indisi keladi');
+  }
 });
 
 test('yakun', async () => {

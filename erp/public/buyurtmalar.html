@@ -255,17 +255,28 @@ async function boot(){
 //
 //  Nol ham YOZILADI: bo'sh raqam «hisoblanmadi» degan savol
 //  qoldirardi, nol esa javob — bu tabda buyurtma yo'q.
+//  ★ «HAMMASI» DAGI SUMMA — FAQAT ZAVODDA TURGANI (zavod qarori,
+//  2026-09): boshlanmagan + ishlab chiqarilmoqda + tayyor + mijozga
+//  chiqarilsin. Ilgari u HAMMA holatni qo'shardi va javob ma'nosini
+//  yo'qotardi — chiqib ketgani o'tgan savdo (uning puli allaqachon
+//  mijozning qarzida), bekor qilingani esa umuman yo'q. Ikkalasi
+//  qo'shilgach raqam har oy o'sib borardi va «hozir qancha pullik
+//  buyurtma turibdi» degan savolga hech qachon javob bermasdi.
+//
+//  Ikkala tab ham o'z summasi bilan JOYIDA qoladi: «chiqib ketganida
+//  qancha» ham savol, faqat boshqa savol.
+const FAOL = ['draft', 'waiting', 'reserved', 'to_ship'];
 let jami = [];
-const tabSumma = (k) => k
-  ? Number((jami.find((x) => x.holat === k) || {}).amount || 0)
-  : jami.reduce((a, x) => a + Number(x.amount || 0), 0);
+const tabSumma = (k) => (k ? [k] : FAOL)
+  .reduce((a, x) => a + Number((jami.find((j) => j.holat === x) || {}).amount || 0), 0);
 
 function drawChips(){
   $('chips').innerHTML = FILTERS.map(([k, name]) =>
     `<button class="${k === status ? 'primary' : ''}" onclick="setStatus('${k}')"
       style="text-align:left;line-height:1.25"
       ><div>${esc(name)}</div><div style="font-size:11px;opacity:.7"
-        >${money(tabSumma(k))} $</div></button>`).join('');
+        >${money(tabSumma(k))} $${k ? '' : ' · zavodda'}</div></button>`)
+    .join('');
 }
 function setStatus(k){ status = k; drawChips(); load(); }
 
