@@ -1227,6 +1227,22 @@ qurollari, hujjatning o'zi emas. Ism ham, telefon ham BAZADAN keladi
 tushadi (ro'yxat ham, tugmalar ham chiqmaydi). Korxona nomi kodda bitta
 qator (`FIRMA`) — u mijoz ma'lumoti emas, zavodning o'z nomi.
 
+**★ CHIQQAN KUN — FAKT, raqamning CHAP tarafida** (zavod qarori,
+2026-09). Ro'yxatda ikkita sana bor edi va ikkalasi ham VA'DA:
+«Yozilgan» buyurtma qachon olingani, «Muddat» esa mijozga aytilgan
+kun. Mahsulot HAQIQATDA qachon chiqqani (`orders.shipped_on`) faqat
+buyurtmani ochib ko'rilardi — «Chiqib ketdi» tabi esa aynan shu savol
+bilan ochiladi.
+
+Eng chapda turadi, chunki o'sha tab KUNLAR bo'yicha o'qiladi: qog'oz
+daftardagidek, avval sana, keyin nima chiqqani. Chiqmagan buyurtmada
+katak BO'SH qoladi — «Holat» buni allaqachon aytadi va yolg'on sana
+yozilmaydi. Ko'rinishi yonidagi ikki sana bilan BIR XIL: bitta qatorda
+uchta sana turadi va biri boshqacha yozilsa u xato bo'lib o'qilardi.
+
+Server tomonida hech narsa qo'shilmadi — `shipped_on` allaqachon
+`v_sales_orders` da va `/orders` uni `o.*` bilan beradi.
+
 Ro'yxatda ham tugmasi boshqa: tahrirlanadiganda ✎, yopilganda 👁 —
 qatorning o'zi ham bosiladi.
 

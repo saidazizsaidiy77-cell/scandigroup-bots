@@ -93,7 +93,23 @@
     <!--  ★ BELGILASH USTUNI faqat ruxsat beradigan odamga chiziladi
           (izoh: sql/sales.sql). Qolganlarda u bo'sh katak bo'lib
           turardi va nima uchun ekanini hech narsa aytmasdi. -->
+    <!--  ★ CHIQQAN KUN — FAKT, raqamning CHAP tarafida (zavod qarori,
+          2026-09). Ro'yxatda ikkita sana bor edi va ikkalasi ham
+          VA'DA: «Yozilgan» buyurtma qachon olingani, «Muddat» esa
+          mijozga aytilgan kun. Mahsulot HAQIQATDA qachon chiqqani
+          faqat buyurtmani ochib ko'rilardi — «Chiqib ketdi» tabi esa
+          aynan shu savol bilan ochiladi.
+
+          Eng chapda turadi, chunki o'sha tab kunlar bo'yicha
+          o'qiladi: qog'oz daftardagidek, avval sana, keyin nima
+          chiqqani. Chiqmagan buyurtmada katak BO'SH qoladi —
+          «Holat» buni allaqachon aytadi va yolg'on sana yozilmaydi.
+
+          Ko'rinishi yonidagi ikki sana bilan BIR XIL: bitta qatorda
+          uchta sana turadi va biri boshqacha yozilsa u xato bo'lib
+          o'qilardi. -->
     <thead><tr><th id="thSel"></th>
+      <th>Chiqqan</th>
       <th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
       <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
       <th class="num">Summa, $</th>
@@ -355,6 +371,7 @@ async function load(){
         ? `<input type="checkbox" style="width:auto" ${
             tanlangan.has(o.id) ? 'checked' : ''}
            onchange="tanla(${o.id}, this.checked)">` : ''}</td>
+      <td class="muted">${(o.shipped_on || '').slice(0, 10)}</td>
       <td><strong>${esc(o.order_no)}</strong></td>
       <td>${esc(o.customer_name)}${o.region
         ? `<div class="muted" style="font-size:12px">${esc(o.region)}</div>` : ''}</td>
