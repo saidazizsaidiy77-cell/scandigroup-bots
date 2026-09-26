@@ -566,7 +566,12 @@ async function saveItems(client, req, orderId, items) {
 
   const narx = await floorMap(client, req, items.map((i) => i.product_id).filter(Boolean));
 
+  //  Xabar uchun: chegaradan past tushgan qatorlar nomi va raqami
+  //  bilan yig'iladi. «Chegirma kutmoqda» degan xabarning o'zi
+  //  direktorning savoliga javob bermaydi — u QAYSI mahsulot, qancha
+  //  va qanchaga tushgani haqida so'raydi.
   let sort = 0, past = false;
+  const pastlar = [];
   for (const it of items) {
     if (!it.product_id) throw new Error('Qatorda mahsulot tanlanmagan');
     const qty = Number(it.qty) || 1;
@@ -577,7 +582,10 @@ async function saveItems(client, req, orderId, items) {
     //  qolmasligi kerak.
     const p = narx.get(Number(it.product_id));
     const floor = p?.floor == null ? null : Number(p.floor);
-    if (floor != null && price != null && price < floor) past = true;
+    if (floor != null && price != null && price < floor) {
+      past = true;
+      pastlar.push(`${p.name} · ${price} $ (chegara ${floor} $)`);
+    }
     if (it.id) {
       await client.query(
         `UPDATE order_items SET product_id=$2, qty=$3, color=$4, fabric=$5,
@@ -603,6 +611,16 @@ async function saveItems(client, req, orderId, items) {
   //  tasdiqlangan bo'ladi: u baribir o'zi tasdiqlaydigan qarorni
   //  ikkinchi marta bosib o'tirmasin.
   const ruxsat = req.user.permissions.includes('sales.discount');
+
+  //  Xabar navbatga faqat holat `pending` GA O'TGANDA qo'yiladi,
+  //  shuning uchun eskisi shu yerda o'qiladi: buyurtma tahrirlanganda
+  //  qatorlar qayta yoziladi va shart har saqlashda qaytadan
+  //  hisoblanadi — menejer qatorni uch marta tuzatsa direktorga uchta
+  //  bir xil xabar ketardi va to'rtinchisiga u qaramay qo'yardi.
+  const eski = (await client.query(
+    `SELECT discount_status FROM orders WHERE id = $1`, [orderId]
+  )).rows[0]?.discount_status;
+
   await client.query(
     `UPDATE orders SET
        discount_status = CASE WHEN $2::boolean
@@ -613,6 +631,33 @@ async function saveItems(client, req, orderId, items) {
        discount_note = CASE WHEN $2::boolean AND $3::boolean
                             THEN 'Chegirmani o''zi yozdi'::text END
      WHERE id = $1`, [orderId, past, ruxsat, req.user.id]);
+
+  //  ★ CHEGIRMA TASDIQ KUTAYOTGANI AYTILADI (zavod qarori, 2026-09).
+  //  Ilgari hech narsa aytmasdi: menejer narxni tushirib saqlardi,
+  //  buyurtma «Chegirma kutmoqda» bo'lib turardi va direktor buni
+  //  faqat buyurtmalar ro'yxatini o'zi ochib ko'rganda bilardi —
+  //  ertalab yozilgan chegirma kechgacha javobsiz qolardi va menejer
+  //  mijozga narx ayta olmasdi.
+  //
+  //  Konver so'rovi bilan BIR XIL idiom va bir xil sabab
+  //  (`modules/units.js`): xabar NAVBATGA qo'yiladi va tranzaksiyaning
+  //  `client` i uzatiladi (3-qoida) — hovuzdan yangi ulanish bu
+  //  tranzaksiyani ko'rmasdi va buyurtma qaytarilsa bo'lmagan chegirma
+  //  haqida xabar ketardi.
+  if (past && !ruxsat && eski !== 'pending') {
+    const o = (await client.query(
+      `SELECT o.order_no, c.name AS customer
+         FROM orders o JOIN customers c ON c.id = o.customer_id
+        WHERE o.id = $1`, [orderId])).rows[0];
+    await notify.queue({
+      permission_code: 'sales.discount',
+      module: 'sales',
+      title: 'Chegirma tasdiq kutmoqda',
+      body: `${o.order_no} · ${o.customer}\n`
+            + pastlar.join('\n')
+            + `\n\nKim yozdi: ${req.user.name}`,
+    }, client);
+  }
 }
 
 router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {

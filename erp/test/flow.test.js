@@ -5397,6 +5397,75 @@ test('navbatdagi so\'rov tasdiqlovchiga XABAR bo\'lib tushadi', async () => {
   assert.equal(Number((await admin('GET', '/api/units/requests/pending')).body.n), oldin);
 });
 
+test('chegirma tasdiq kutayotgani XABAR bo\'lib tushadi', async () => {
+  //  ★ ZAVOD QARORI (2026-09). Ilgari hech narsa aytmasdi: menejer
+  //  narxni tushirib saqlardi, buyurtma «Chegirma kutmoqda» bo'lib
+  //  turardi va direktor buni faqat buyurtmalar ro'yxatini o'zi ochib
+  //  ko'rganda bilardi. Menyudagi raqam bor edi, lekin u sayt ochiq
+  //  bo'lgandagina ko'rinadi — konver so'rovi bilan bir xil sabab.
+  const { db } = require('../db');
+  await db.query(`UPDATE products SET price_opt = 100 WHERE id = $1`, [PENAL]);
+  await db.query(`INSERT INTO customers (name) VALUES ('Sinov chegirma mijozi')
+                   ON CONFLICT (lower(name)) DO NOTHING`);
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Sinov chegirma mijozi'`)).id;
+
+  const men = await xodim('Sinov chegirmachi', 'sotuvchi');
+  const son = async () => Number((await H.id(
+    `SELECT COUNT(*)::int AS n FROM notifications
+      WHERE permission_code = 'sales.discount'`)).n);
+
+  //  Chegaradan YUQORI narx — xabar YO'Q: tasdiq ham so'ralmaydi.
+  const oldin = await son();
+  const yaxshi = await men('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2, unit_price: 120 }] });
+  assert.equal(yaxshi.status, 200, yaxshi.text);
+  assert.equal(await son(), oldin, 'chegara ustida xabar yozilmaydi');
+
+  //  Chegaradan PAST — xabar navbatga tushadi.
+  const z = await men('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 2, unit_price: 90 }] });
+  assert.equal(z.status, 200, z.text);
+  assert.equal(await son(), oldin + 1, 'xabar navbatga tushdi');
+
+  const x = await H.id(
+    `SELECT permission_code, module, title, body FROM notifications
+      WHERE permission_code = 'sales.discount' ORDER BY id DESC LIMIT 1`);
+  assert.equal(x.module, 'sales');
+  assert.match(x.title, /Chegirma tasdiq kutmoqda/);
+  const no = (await men('GET', '/api/sales/orders/' + z.body.id)).body.order.order_no;
+  assert.match(x.body, new RegExp(no), 'xabarda zakaz raqami turadi');
+  assert.match(x.body, /Sinov chegirma mijozi/, 'mijozi ham');
+  //  «Chegirma kutmoqda» ning o'zi direktorning savoliga javob
+  //  bermaydi: QAYSI mahsulot, qanchaga va chegarasi qancha edi.
+  assert.match(x.body, /90/, 'yozilgan narx');
+  assert.match(x.body, /100/, 'chegara narxi');
+  assert.match(x.body, /Sinov chegirmachi/, 'kim yozgani');
+
+  //  ★ TAKROR SAQLASH XABARNI TAKRORLAMAYDI: buyurtma tahrirlanganda
+  //  shart qaytadan hisoblanadi va menejer qatorni uch marta tuzatsa
+  //  direktorga uchta bir xil xabar ketardi.
+  const q = (await men('GET', '/api/sales/orders/' + z.body.id)).body.items[0];
+  assert.equal((await men('PATCH', '/api/sales/orders/' + z.body.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 3, unit_price: 90 }] })).status, 200);
+  assert.equal(await son(), oldin + 1, 'ikkinchi xabar yozilmaydi');
+
+  //  Tasdiqlangandan KEYIN yana tushirilsa — bu yangi savol, yangi
+  //  xabar (narx o'zgarsa tasdiq qayta so'raladi degan qoida).
+  assert.equal((await admin('POST', `/api/sales/orders/${z.body.id}/discount`,
+    { approve: true })).status, 200);
+  assert.equal((await men('PATCH', '/api/sales/orders/' + z.body.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 3, unit_price: 80 }] })).status, 200);
+  assert.equal(await son(), oldin + 2, 'qayta tushirilgani yangi xabar');
+
+  //  Chegirmaga RUXSATI BOR odam yozsa tasdiq ham, xabar ham yo'q:
+  //  u baribir o'zi tasdiqlaydigan qarorni ikki marta bosmaydi.
+  const d = await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    items: [{ product_id: PENAL, qty: 1, unit_price: 70 }] });
+  assert.equal(d.status, 200, d.text);
+  assert.equal(await son(), oldin + 2, 'direktornikiga xabar yozilmaydi');
+});
+
 test('so\'rov ro\'yxati sana AVTOMATMI deb aytadi', async () => {
   //  ★ FORMULA HAMMA TSEXDA ISHLAMAYDI (`shops.plan_auto`). Stulda
   //  T/M ombor sanasi marshrutdan o'zi chiqadi, korpusda esa katak
@@ -5897,10 +5966,27 @@ test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
   //  menyuda «2» turar, tabni ochgan odam esa bo'sh ro'yxat
   //  ko'rardi. Test ro'yxatning O'ZINI so'rasa bunday ajralish
   //  birinchi ishga tushirishdayoq qizil bo'ladi.
+  //  ★ SAHIFADA IKKITA NAVBAT BOR (tayyor buyurtma va chegirma
+  //  tasdig'i), shuning uchun har biri O'Z ro'yxati bilan alohida
+  //  solishtiriladi. Yig'indi bilan solishtirilsa ikkala shart ham
+  //  jimgina tekshirilmay qolardi: biri ko'payib, ikkinchisi
+  //  kamayganda raqam baribir to'g'ri chiqardi.
+  const navda = (izoh) => nav.find(
+    (q) => q.page === '/buyurtmalar.html' && izoh.test(q.izoh))?.n;
+
   const tayyor = (await admin('GET', '/api/sales/orders?status=reserved'))
     .body.rows;
-  assert.equal(sonOf(nav, '/buyurtmalar.html'), tayyor.length,
+  assert.equal(navda(/chiqarishga berilmagan/), tayyor.length,
     'menyudagi raqam «Tayyor» tabidagi qatorlar soni bilan bir xil');
+
+  //  Chegirma navbatining o'z ro'yxati yo'q — u holat emas, qatorning
+  //  ustidagi belgi — shuning uchun buyurtmalar ro'yxatining O'ZIDAN
+  //  sanaladi (`discount_status`, `v_sales_orders` da bor).
+  const kutayotgan = (await admin('GET', '/api/sales/orders')).body.rows
+    .filter((o) => o.discount_status === 'pending'
+                && !['shipped', 'cancelled'].includes(o.status)).length;
+  assert.equal(navda(/chegirma tasdig'ini kutmoqda/), kutayotgan,
+    'chegirma navbati ro\'yxatdagi bilan bir xil');
   //  Tabdagi har qator haqiqatan ham chiqarishga tayyor: hammasi
   //  javonda va hali yuborilmagan.
   for (const o of tayyor) {
