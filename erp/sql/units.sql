@@ -581,3 +581,24 @@ LEFT JOIN sections sc  ON sc.id = q.section_id
 LEFT JOIN workers w    ON w.id = q.created_by
 LEFT JOIN workers d    ON d.id = q.decided_by
 LEFT JOIN production_units u ON u.id = q.unit_id;
+
+-- ═══════════════════════════════ KONVER SO'ROVINI KIM YOZADI
+--
+--  ★ BELGI XODIMDA, ROLDA EMAS (zavod qarori, 2026-09;
+--  `can_hold_cash`, `sees_warehouse`, `can_release` bilan bir xil
+--  idiom). Stol va stul so'rovini endi SAVDO yozadi, ya'ni o'sha
+--  tsexning boshlig'iga «Konver qo'shish» sahifasi ortiqcha bo'lib
+--  qoldi — lekin korpus boshlig'iga u kerak.
+--
+--  Rol buni ajrata olmaydi: ikkalasi ham `tsex_usta` va rol huquqlari
+--  KODDA turadi (`sql/core-seed.sql`), ya'ni bitta odam uchun
+--  o'zgartirib bo'lmaydi. Kodga na ism, na lavozim yozilmaydi
+--  (4-qoida): ertaga o'sha odam almashsa bitta katakcha ko'chadi.
+--
+--  Standarti `true` — hech kimning ekrani o'zidan-o'zi o'zgarmaydi
+--  (`sees_warehouse` bilan bir xil sabab). `false` bo'lsa so'rov
+--  yozadigan odam qolmay, ish birinchi kundanoq to'xtardi; ortiqcha
+--  so'rovchi esa zararsiz — so'rov baribir rahbariyat tasdig'idan
+--  o'tadi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS
+  can_request_unit BOOLEAN NOT NULL DEFAULT true;

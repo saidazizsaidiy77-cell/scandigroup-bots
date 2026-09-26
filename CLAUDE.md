@@ -592,6 +592,33 @@ solishtiradi. **Bu QULAYLIK, himoya emas**: chegara baribir serverda
 (`shopOfProduct`) — ro'yxatni chetlab, id ni qo'lda yuborsa ham qabul
 qilinmaydi.
 
+**★ SO'ROVNI KIM YOZISHI XODIMDA BELGILANADI**
+(`workers.can_request_unit`, zavod qarori 2026-09). Stol va stul
+so'rovini endi SAVDO yozadi, ya'ni o'sha tsexning boshlig'iga «Konver
+qo'shish» sahifasi ortiqcha bo'lib qoldi — korpus boshlig'iga esa u
+kerak.
+
+**Rol buni ajrata olmaydi**: ikkalasi ham `tsex_usta` va rol huquqlari
+KODDA turadi (`sql/core-seed.sql`), ya'ni bitta odam uchun
+o'zgartirib bo'lmaydi. Shuning uchun belgi XODIMDA —
+`can_hold_cash`, `sees_warehouse`, `can_release` bilan bir xil idiom
+va bir xil sabab. Kodga na ism, na lavozim yoziladi (4-qoida):
+ertaga o'sha odam almashsa bitta katakcha ko'chadi.
+
+**Standarti `true`** — hech kimning ekrani o'zidan-o'zi o'zgarmaydi
+(`sees_warehouse` bilan bir xil sabab). `false` bo'lsa deploy kuni
+so'rov yozadigan odam qolmay, ish birinchi kundanoq to'xtardi;
+ortiqcha so'rovchi esa zararsiz — so'rov baribir rahbariyat
+tasdig'idan o'tadi.
+
+Belgi olib tashlansa **`production.request` UMUMAN o'qilmaydi**
+(`erp/auth.js`, `loadWorker`): menyudagi havola ham, sahifa ham, API
+ham BIR VAQTDA yopiladi. Har sahifaga alohida tekshiruv yozilsa
+ertaga qo'shilgani unutilardi. **Faqat SHU huquq** olib tashlanadi:
+`production.approve` yoki `sales.manage` bor odamda sahifa o'sha
+huquqlar bilan ochiq qolaveradi — aks holda direktorning katagi
+belgilanmagani uchun TASDIQLASH ham yopilib qolardi.
+
 Doira **Xodimlar sahifasida** qo'yiladi: rol yonidagi «Barcha tsex»
 ro'yxatidan tsex tanlanadi. Kodga ism ham, tsex ham yozilmaydi
 (4-qoida). Bo'lim so'ralmaydi: konver
@@ -2249,7 +2276,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 
 | Rol | Huquq | Ko'radi |
 |---|---|---|
-| `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; konver so'raydi, muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi |
+| `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi. **Konver so'rovi xodim belgisida** (`can_request_unit`): stol va stulni savdo so'raydi, ya'ni o'sha tsex boshlig'ida sahifa yopiladi |
 | `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»**, va belgisi qo'yilgan bo'lsa **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi (`sees_warehouse`, xodim bo'yicha). Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*`, `materials.view` | faqat «Ombor» bo'limi — barcha omborlar, xom ashyonikini ham (faqat KO'RISH) |

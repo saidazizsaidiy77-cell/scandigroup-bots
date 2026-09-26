@@ -18,7 +18,7 @@ async function createSession(workerId, surface) {
 async function loadWorker(workerId) {
   const w = (await db.query(
     `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
-            can_release
+            can_release, can_request_unit
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles] = await Promise.all([
@@ -37,8 +37,18 @@ async function loadWorker(workerId) {
     //  ortiqcha bo'lim. Belgi olib tashlansa `warehouse.*` huquqlari
     //  UMUMAN o'qilmaydi — menyudagi bo'lim ham, sahifalar ham, API
     //  ham bir vaqtda yopiladi va ertaga qo'shilgan sahifa unutilmaydi.
+    //  ★ KONVER SO'ROVI HAM XODIM BELGISIDA (izoh: sql/units.sql):
+    //  stol va stul so'rovini savdo yozadi, ya'ni o'sha tsexning
+    //  boshlig'iga sahifa ortiqcha. Belgi olib tashlansa
+    //  `production.request` UMUMAN o'qilmaydi — menyudagi havola ham,
+    //  sahifa ham, API ham bir vaqtda yopiladi.
+    //
+    //  Faqat SHU huquq olib tashlanadi: `production.approve` va
+    //  `sales.manage` bor odamda sahifa o'sha huquqlar bilan ochiq
+    //  qolaveradi va belgi ularga tegmaydi.
     permissions: perms.rows.map((r) => r.permission_code)
-      .filter((p) => w.sees_warehouse !== false || !p.startsWith('warehouse.')),
+      .filter((p) => w.sees_warehouse !== false || !p.startsWith('warehouse.'))
+      .filter((p) => w.can_request_unit !== false || p !== 'production.request'),
     roles: roles.rows,
     // Usta faqat o'z tsexini ko'rishi uchun: rollardagi eng tor doira
     scope_shop_ids: roles.rows.map((r) => r.scope_shop_id).filter(Boolean),
@@ -68,6 +78,7 @@ async function loadWorker(workerId) {
     //  kunini bitta odam nazorat qiladi — belgi XODIMDA, rolda emas:
     //  ruxsat beradigani ham `sotuvchi`, qolganlari ham.
     can_release: w.can_release === true,
+    can_request_unit: w.can_request_unit !== false,
   };
 }
 

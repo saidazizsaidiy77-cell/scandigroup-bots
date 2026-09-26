@@ -419,6 +419,24 @@ function openForm(id){
                   mudiri uni ko'radi; belgilanmagan xodimda tugma chizilmaydi</span></span>
             </div></div>
 
+          <!--  ★ KONVER SO'ROVINI KIM YOZADI (izoh: sql/units.sql).
+                Stol va stul so'rovini endi SAVDO yozadi, ya'ni o'sha
+                tsexning boshlig'iga «Konver qo'shish» sahifasi
+                ortiqcha bo'lib qoldi — korpus boshlig'iga esa kerak.
+                Rol buni ajrata olmaydi: ikkalasi ham «tsex_usta».
+                Standarti BELGILANGAN: belgi olib tashlansa so'rov
+                yozadigan odam qolmay, ish birinchi kundanoq
+                to'xtardi. -->
+          <div><label>Ishlab chiqarish</label>
+            <div class="row" style="gap:10px;align-items:center">
+              <input type="checkbox" id="wReq" style="width:auto"
+                     ${w?.can_request_unit !== false ? 'checked' : ''}>
+              <span style="flex:1">Konver so'rovini yozadi
+                <span class="muted" style="font-size:12px">· belgilanmasa
+                  menyuda «Konver qo'shish» umuman chizilmaydi. Stol va
+                  stulni baribir savdo so'raydi</span></span>
+            </div></div>
+
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
               ${meta.roles.map(r => `
@@ -517,6 +535,7 @@ async function save(id){
     can_spend_cash: $('wSpend').checked,
     sees_warehouse: $('wWh').checked,
     can_release: $('wRel').checked,
+    can_request_unit: $('wReq').checked,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
     roles,

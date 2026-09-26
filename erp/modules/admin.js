@@ -51,7 +51,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  faqat «qo'yilganmi yoki yo'q» ko'rinadi. Unutilgan PIN topilmaydi,
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
-            w.can_release,
+            w.can_release, w.can_request_unit,
             --  Inkassator: pulni hamma mijozdan u yig'adi
             --  (izoh: sql/cash.sql).
             w.cash_all_customers,
@@ -174,7 +174,8 @@ async function saveCashGroups(client, workerId, codes) {
 
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, can_hold_cash, cash_all_customers,
-          can_spend_cash, sees_warehouse, can_release, roles = [] } = req.body;
+          can_spend_cash, sees_warehouse, can_release,
+          can_request_unit, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   const kod = req.body.pin ? String(req.body.pin) : null;
@@ -189,9 +190,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
     const w = (await client.query(
       `INSERT INTO workers (name, phone, pin, pin_hash, tg_id, can_hold_cash,
                             cash_all_customers, can_spend_cash, sees_warehouse,
-                            can_release,
+                            can_release, can_request_unit,
                             staff_group, shop_id, section_id, dept, position, hired_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
        //  Standarti — YOZADI: qo'lida pul turgan odam uni hisobdan
@@ -203,6 +204,10 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
        //  Standarti — BERMAYDI: «bitta odam ruxsat beradi» degan qoida
        //  yangi xodimda ham o'zi buzilmasin (izoh: sql/sales.sql).
        can_release === true,
+       //  Standarti — YOZADI: belgi olib tashlansa so'rov yozadigan
+       //  odam qolmay, ish birinchi kundanoq to'xtardi (izoh:
+       //  sql/units.sql).
+       can_request_unit !== false,
        st.staff_group, st.shop_id, st.section_id, st.dept, st.position,
        st.hired_at])).rows[0];
     for (const r of roles) {
@@ -231,7 +236,8 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
 router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
   const { name, phone, tg_id, active, can_hold_cash, cash_all_customers,
-          can_spend_cash, sees_warehouse, can_release, roles } = req.body;
+          can_spend_cash, sees_warehouse, can_release,
+          can_request_unit, roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -272,7 +278,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          hired_at    = CASE WHEN $13::boolean THEN $19::date ELSE hired_at    END,
          --  Mijozga chiqarishga ruxsat beradigan odam (izoh:
          --  sql/sales.sql) — yuborilmasa tegilmaydi.
-         can_release = COALESCE($20, can_release)
+         can_release = COALESCE($20, can_release),
+         --  Konver so'rovini yozadigan odam (izoh: sql/units.sql) —
+         --  yuborilmasa tegilmaydi.
+         can_request_unit = COALESCE($21, can_request_unit)
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -285,7 +294,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          'position' in req.body || 'dept' in req.body || 'shop_id' in req.body,
        st.staff_group, st.shop_id, st.section_id, st.dept, st.position,
        st.hired_at,
-       typeof can_release === 'boolean' ? can_release : null]);
+       typeof can_release === 'boolean' ? can_release : null,
+       typeof can_request_unit === 'boolean' ? can_request_unit : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {

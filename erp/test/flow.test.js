@@ -6469,6 +6469,61 @@ test('buyurtmalar: tab yonidagi jami summa ro\'yxat bilan bir xil', async () => 
   }
 });
 
+test("konver so'rovini kim yozishi XODIMDA belgilanadi", async () => {
+  //  ★ BELGI XODIMDA, ROLDA EMAS (zavod qarori, 2026-09). Stol va
+  //  stul so'rovini endi SAVDO yozadi, ya'ni o'sha tsexning
+  //  boshlig'iga «Konver qo'shish» sahifasi ortiqcha bo'lib qoldi —
+  //  korpus boshlig'iga esa kerak. Rol buni ajrata olmaydi: ikkalasi
+  //  ham `tsex_usta` va rol huquqlari KODDA turadi.
+  const { db } = require('../db');
+  const yozadi = await xodim('Sinov sorov yozadi', 'tsex_usta');
+  const yozmaydi = await xodim('Sinov sorov yozmaydi', 'tsex_usta');
+
+  //  Standarti — YOZADI: hech kimning ekrani o'zidan-o'zi
+  //  o'zgarmaydi va so'rov yozadigan odam qolmay ish to'xtamaydi.
+  assert.ok((await yozadi('GET', '/api/auth/me')).body.permissions
+    .includes('production.request'), 'standarti — yozadi');
+
+  const id = (await H.id(
+    `SELECT id FROM workers WHERE name = 'Sinov sorov yozmaydi'`)).id;
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + id,
+    { can_request_unit: false })).status, 200);
+
+  //  Belgi olib tashlansa `production.request` UMUMAN o'qilmaydi:
+  //  menyudagi havola ham, sahifa ham, API ham BIR VAQTDA yopiladi.
+  //  Har sahifaga alohida tekshiruv yozilsa ertaga qo'shilgani
+  //  unutilardi (`sees_warehouse` bilan bir xil qoida).
+  const yoq = H.api(base, await H.sessionFor('Sinov sorov yozmaydi'));
+  const sess = (await yoq('GET', '/api/auth/me')).body;
+  assert.ok(!sess.permissions.includes('production.request'),
+    'huquq umuman o\'qilmaydi');
+  assert.equal(sess.can_request_unit, false);
+
+  //  Tekshiruv SERVERDA: sahifani chetlab so'rov yuborsa ham 403.
+  const prod = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE p.active AND NOT COALESCE(g.sales_can_request, false)
+      ORDER BY p.id LIMIT 1`)).id;
+  assert.equal((await yoq('POST', '/api/units/requests',
+    { items: [{ product_id: prod, qty: 2 }] })).status, 403);
+
+  //  Belgisi turgan boshliqda esa yo'l ochiq qolaveradi.
+  assert.ok((await yozadi('GET', '/api/units/requests')).status === 200);
+
+  //  ★ FAQAT SHU HUQUQ olib tashlanadi: `production.approve` yoki
+  //  `sales.manage` bor odamda sahifa o'sha huquqlar bilan ochiq
+  //  qolaveradi — belgi ularga tegmaydi. Aks holda direktorning
+  //  katagi belgilanmagani uchun tasdiqlash ham yopilib qolardi.
+  await db.query(
+    `UPDATE workers SET can_request_unit = false WHERE name = 'Administrator'`);
+  const a = (await admin('GET', '/api/auth/me')).body;
+  assert.ok(!a.permissions.includes('production.request'));
+  assert.ok(a.permissions.includes('production.approve'),
+    'tasdiqlash huquqiga tegilmaydi');
+  await db.query(
+    `UPDATE workers SET can_request_unit = true WHERE name = 'Administrator'`);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
