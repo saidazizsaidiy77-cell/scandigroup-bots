@@ -5397,6 +5397,103 @@ test('navbatdagi so\'rov tasdiqlovchiga XABAR bo\'lib tushadi', async () => {
   assert.equal(Number((await admin('GET', '/api/units/requests/pending')).body.n), oldin);
 });
 
+test('navbat xabarlari Telegram navbatiga ham tushadi', async () => {
+  //  ★ ZAVOD QARORI (2026-09). Menyudagi raqam faqat sayt ochiq
+  //  bo'lganda ko'rinadi: ertalab jo'natilgan konver tsex boshlig'i
+  //  ekranni ochmaguncha kechgacha qabul qilinmay turardi. Endi har
+  //  navbat Telegramga ham yoziladi.
+  //
+  //  ★ KIMGA BORISHI NAVBAT BILAN BIR XIL — shart ikki joyda yozilsa
+  //  bir kun ajralib ketardi: menyuda bir odam ko'radi, xabar esa
+  //  boshqasiga borardi va buni hech narsa aytmasdi.
+  const { db } = require('../db');
+  //  Har tekshiruv FAQAT shu harakat yozganini qaraydi: baza toza
+  //  emas va oldingi testlar ham xabar qoldirgan.
+  const belgi = async () => Number((await H.id(
+    `SELECT COALESCE(MAX(id), 0)::int AS n FROM notifications`)).n);
+  const yangi = async (dan, t) => (await db.query(
+    `SELECT n.worker_id, n.permission_code, n.title, n.body, w.name
+       FROM notifications n LEFT JOIN workers w ON w.id = n.worker_id
+      WHERE n.id > $1 AND n.title LIKE $2 ORDER BY n.id`, [dan, t])).rows;
+
+  //  ── 1. TSEXGA JO'NATILDI → qabul qiluvchi TSEXGA
+  const u = await newUnit({ section_id: SHKUR });
+  const b1 = await belgi();
+  assert.equal((await korpus('POST', '/api/units/handover',
+    { items: [u.id] })).status, 200);
+  const x1 = await yangi(b1, "%tsexingizga jo'natildi");
+  assert.ok(x1.length, 'xabar yozildi');
+  const ismlar = x1.map((r) => r.name);
+  assert.ok(ismlar.includes("Bo'yoq ustasi"),
+    `keyingi tsexning boshlig'iga: ${ismlar.join(', ')}`);
+  assert.match(x1[0].body, new RegExp(u.conveyor_no), 'konver raqami turadi');
+  assert.match(x1[0].body, /Korpus ustasi/, 'kim jo\'natgani ham');
+
+  //  Jo'natgan odamning O'ZIGA yozilmaydi: qabul qilish keyingi
+  //  tsexning ishi va unga bu xabar emas. Doirasi YO'Q xodimga ham
+  //  (administrator) — butun zavodning topshirig'i unga hech qachon
+  //  tinmaydigan xabar bo'lib qolardi (navbat 2 bilan bir xil qoida).
+  assert.ok(!ismlar.includes('Korpus ustasi'), 'jo\'natganning o\'ziga emas');
+  assert.ok(!ismlar.includes('Administrator'), 'doirasi yo\'q xodimga emas');
+
+  //  ── 2. T/M OMBORGA JO'NATILDI → ombor mudirining navbati
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  const u2 = await newUnit({ section_id: QADQAD });
+  const b2 = await belgi();
+  assert.equal((await qad('POST', '/api/units/handover',
+    { items: [u2.id] })).status, 200);
+  const x2 = await yangi(b2, '%T/M omborga jo\'natildi');
+  assert.ok(x2.length, 'omborga jo\'natilgani yozildi');
+  assert.match(x2[0].body, new RegExp(u2.conveyor_no));
+  //  HAR oluvchida qabul qilish huquqi bor: qoldiqni savdo ham
+  //  ko'radi, lekin mahsulotni omborga u kiritmaydi (navbat 4 bilan
+  //  bir xil shart).
+  for (const r of x2) {
+    const huquq = await H.id(
+      `SELECT COUNT(*)::int AS n FROM v_worker_permissions
+        WHERE worker_id = $1
+          AND permission_code = ANY(ARRAY['warehouse.move','warehouse.manage',
+                                          'production.manage'])`, [r.worker_id]);
+    assert.ok(Number(huquq.n) > 0, `${r.name}: qabul qilish huquqi yo'q`);
+  }
+
+  //  ── 3. YANGI BUYURTMA → konverning EGASI bo'lgan tsexga
+  await require('../db').db.query(
+    `INSERT INTO customers (name) VALUES ('Sinov xabar mijozi')
+       ON CONFLICT (lower(name)) DO NOTHING`);
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Sinov xabar mijozi'`)).id;
+  const u3 = await newUnit({ section_id: ARRA, qty: 4 });
+  const z = await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, items: [{ product_id: PENAL, qty: 2, unit_price: 500 }] });
+  assert.equal(z.status, 200, z.text);
+  const qator = (await admin('GET', '/api/sales/orders/' + z.body.id)).body.items[0];
+  const b3 = await belgi();
+  assert.equal((await admin('POST', `/api/sales/orders/${z.body.id}/assign`,
+    { item_id: qator.id, unit_id: u3.id, qty: 2 })).status, 200);
+  const x3 = await yangi(b3, 'Konverga yangi buyurtma');
+  assert.ok(x3.length, 'bron xabari yozildi');
+  assert.ok(x3.map((r) => r.name).includes('Korpus ustasi'),
+    'konver EGASI bo\'lgan tsexga');
+  assert.match(x3[0].body, new RegExp(u3.conveyor_no));
+  assert.match(x3[0].body, /Sinov xabar mijozi/);
+
+  //  ── 4. TOPSHIRILGAN PUL → kassirga (huquq bo'yicha)
+  const pulchi = await xodim('Sinov pul topshiruvchi', 'sotuvchi');
+  await require('../db').db.query(
+    `UPDATE workers SET can_hold_cash = true, opening_usd = 100
+      WHERE name = 'Sinov pul topshiruvchi'`);
+  const b4 = await belgi();
+  const op = await pulchi('POST', '/api/cash/ops',
+    { to_kind: 'account', currency: 'USD', amount: 50 });
+  assert.equal(op.status, 200, op.text);
+  assert.equal(op.body.status, 'pending');
+  const x4 = await yangi(b4, 'Pul topshirildi%');
+  assert.equal(x4.length, 1, 'bitta xabar — huquq bo\'yicha yo\'llanadi');
+  assert.equal(x4[0].permission_code, 'cash.manage', 'kassirga');
+  assert.match(x4[0].body, /Sinov pul topshiruvchi/);
+});
+
 test('chegirma tasdiq kutayotgani XABAR bo\'lib tushadi', async () => {
   //  ★ ZAVOD QARORI (2026-09). Ilgari hech narsa aytmasdi: menejer
   //  narxni tushirib saqlardi, buyurtma «Chegirma kutmoqda» bo'lib

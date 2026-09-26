@@ -999,6 +999,40 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
     if (o.status === 'new')
       await client.query(`UPDATE orders SET status = 'reserved' WHERE id = $1`, [o.id]);
 
+    //  ★ YANGI BUYURTMA TSEX BOSHLIG'IGA AYTILADI (zavod qarori,
+    //  2026-09). Ekrandagi oltin nuqta bor edi, lekin u sayt ochiq
+    //  bo'lgandagina ko'rinadi: boshliq 10 talik konverni bir hafta
+    //  ko'rib yurib, bugun unga mijoz biriktirilganini sezmay
+    //  qolardi.
+    //
+    //  Faqat ISHLAB CHIQARISHDAGI konverga: ombordagisi javonda
+    //  turibdi va tsexning ishi qolmagan (navbat 2 bilan bir xil
+    //  shart). Tsexi konverning EGASIDAN chiqadi, turgan joyidan
+    //  emas — stul lak bo'limiga o'tganda ham stul tsexiniki
+    //  bo'lib qoladi.
+    if (u.status === 'production') {
+      const eg = (await client.query(
+        `SELECT r.owner_shop_id, p.name AS product, g.name AS turi
+           FROM v_unit_register r
+           JOIN products p       ON p.id = r.product_id
+           JOIN product_groups g ON g.id = p.group_id
+          WHERE r.id = $1`, [u.id])).rows[0];
+      const mijoz = (await client.query(
+        `SELECT c.name FROM customers c WHERE c.id = $1`, [o.customer_id]
+      )).rows[0];
+      if (eg?.owner_shop_id)
+        await notify.queueShop({
+          shop_id: eg.owner_shop_id,
+          perms: ['production.entry', 'production.view'],
+          module: 'production',
+          title: 'Konverga yangi buyurtma',
+          body: `${u.conveyor_no} · ${eg.product} · ${n} ta`
+                + `\n${mijoz ? mijoz.name : ''} · ${o.order_no}`
+                + (o.due_on ? `\nChiqish sanasi: ${String(o.due_on).slice(0, 10)}` : '')
+                + `\n\nKim yozdi: ${req.user.name}`,
+        }, client);
+    }
+
     await audit(req, { module: 'sales', action: 'bron', entity: 'order',
                        entity_id: o.id,
                        payload: { order_no: o.order_no, conveyor_no: u.conveyor_no,
@@ -1300,6 +1334,25 @@ async function sendOne(req, id) {
     await client.query(
       `UPDATE orders SET status = 'to_ship', sent_to_wh_on = CURRENT_DATE,
               sent_by = $2 WHERE id = $1`, [o.id, req.user.id]);
+    //  ★ CHIQARISHGA BERILGANI OMBOR MUDIRIGA AYTILADI (zavod
+    //  qarori, 2026-09). Mudir kun bo'yi «Jo'natish» tabida
+    //  o'tirmaydi: savdo ertalab chiqarishga bergan buyurtma u
+    //  sahifani ochmaguncha yotib qolardi va mashina kechikardi.
+    const mij = (await client.query(
+      `SELECT c.name, d.name AS qayerga FROM orders o
+         JOIN customers c ON c.id = o.customer_id
+         LEFT JOIN order_destinations d ON d.code = o.ship_to
+        WHERE o.id = $1`, [o.id])).rows[0];
+    await notify.queueWarehouse({
+      perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
+      module: 'warehouse',
+      title: 'Buyurtma chiqarishga berildi',
+      body: `${o.order_no} · ${mij ? mij.name : ''}`
+            + (mij?.qayerga ? `\n${mij.qayerga}` : '')
+            + (o.due_on ? `\nChiqish sanasi: ${String(o.due_on).slice(0, 10)}` : '')
+            + `\n\nKim berdi: ${req.user.name}`,
+    }, client);
+
     await audit(req, { module: 'sales', action: 'send-to-wh', entity: 'order',
                        entity_id: o.id, payload: { order_no: o.order_no } }, client);
     await client.query('COMMIT');
@@ -1601,6 +1654,28 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
       `UPDATE orders SET status = 'shipped',
               shipped_on = COALESCE($2::date, CURRENT_DATE), shipped_by = $3
         WHERE id = $1`, [o.id, shipOn, req.user.id]);
+    //  ★ CHIQIB KETGANI MENEJERGA AYTILADI (zavod qarori, 2026-09).
+    //  Mahsulot zavoddan chiqdi va o'sha zahoti mijozning BALANSIGA
+    //  qo'shildi — menejer mijozga qo'ng'iroq qilishi, qog'ozni
+    //  kutishi va qarzni aytishi kerak. Ilgari buni bilish uchun u
+    //  ro'yxatni o'zi ochib ko'rardi va ko'pincha mijozdan eshitardi.
+    //
+    //  Xabar BUYURTMANING menejeriga: chiqarishni mudir tasdiqlaydi,
+    //  lekin bu uning ishi emas — u allaqachon o'z ekranida ko'rib
+    //  turibdi.
+    if (o.manager_id) {
+      const mij = (await client.query(
+        `SELECT c.name FROM orders x JOIN customers c ON c.id = x.customer_id
+          WHERE x.id = $1`, [o.id])).rows[0];
+      await notify.queue({
+        worker_id: o.manager_id, module: 'sales',
+        title: 'Buyurtma chiqib ketdi',
+        body: `${o.order_no} · ${mij ? mij.name : ''}`
+              + `\n${bron.length} ta konver`
+              + `\n\nKim chiqardi: ${req.user.name}`,
+      }, client);
+    }
+
     await audit(req, { module: 'warehouse', action: 'ship', entity: 'order',
                        entity_id: o.id,
                        payload: { order_no: o.order_no,

@@ -2321,7 +2321,10 @@ async function handoverOne(client, req, it, undo) {
         SET handover_on = CURRENT_DATE, handover_at = NOW(),
             handover_by = $2, handover_shop_id = $3
       WHERE id = $1`, [id, req.user.id, u.shop_id]);
-  return { unit_id: id, conveyor_no: u.conveyor_no, sent: true, qty: n };
+  //  Qayerga ketayotgani xabar uchun qaytariladi (izoh: `/handover`):
+  //  keyingi TSEXGA yoki chiqish bo'limidan T/M OMBORGA.
+  return { unit_id: id, conveyor_no: u.conveyor_no, sent: true, qty: n,
+           next_shop_id: u.next_shop_id || null, from_shop: u.shop };
 }
 
 //  Har element: { unit_id, qty? } yoki oddiy id — soni ko'rsatilmasa
@@ -2335,6 +2338,45 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
     await client.query('BEGIN');
     const done = [];
     for (const id of ids) done.push(await handoverOne(client, req, id, undo));
+
+    //  ★ JO'NATILGANI QABUL QILUVCHIGA AYTILADI (zavod qarori,
+    //  2026-09). Menyudagi raqam bor edi, lekin u sayt ochiq
+    //  bo'lgandagina ko'rinadi: ertalab jo'natilgan konver tsex
+    //  boshlig'i ekranni ochmaguncha kechgacha qabul qilinmay
+    //  turardi.
+    //
+    //  Xabar HAR KONVERGA emas, qabul qiluvchiga BITTA: boshliq o'n
+    //  talik konverni birato'la jo'natadi va o'n xabar bitta ishni
+    //  o'n marta aytgan bo'lardi — savol esa bitta: «qabul qil».
+    if (!undo) {
+      const tsexga = new Map();
+      const omborga = [];
+      for (const d of done) {
+        if (!d.sent) continue;
+        const qator = `${d.conveyor_no} · ${d.qty} ta`;
+        if (d.next_shop_id) {
+          if (!tsexga.has(d.next_shop_id)) tsexga.set(d.next_shop_id, []);
+          tsexga.get(d.next_shop_id).push(qator);
+        } else omborga.push(qator);
+      }
+      for (const [shopId, qatorlar] of tsexga)
+        await notify.queueShop({
+          shop_id: shopId, perms: ['production.entry', 'production.view'],
+          module: 'production',
+          title: `${qatorlar.length} ta konver tsexingizga jo'natildi`,
+          body: qatorlar.join('\n')
+                + `\n\nKim jo'natdi: ${req.user.name}`,
+        }, client);
+      if (omborga.length)
+        await notify.queueWarehouse({
+          perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
+          module: 'warehouse',
+          title: `${omborga.length} ta konver T/M omborga jo'natildi`,
+          body: omborga.join('\n')
+                + `\n\nKim jo'natdi: ${req.user.name}`,
+        }, client);
+    }
+
     await audit(req, { module: 'production', action: undo ? 'handover-undo' : 'handover',
                        entity: 'unit', entity_id: done.length,
                        payload: { units: done.map((x) => x.conveyor_no) } }, client);

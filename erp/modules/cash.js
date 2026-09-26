@@ -23,6 +23,7 @@ const { db, wrap, audit } = require('../db');
 //  joyda yozilsa bir kun bir-biridan ajralib ketardi.
 const { scopeOf } = require('./units');
 const { need, ownOf } = require('../auth');
+const notify = require('../notify');
 
 const router = express.Router();
 const READ  = ['cash.view', 'cash.manage'];
@@ -559,6 +560,18 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
        currency, amount, rate, pl_month, item_id,
        b.order_id || null, (b.note || '').trim() || null, req.user.id, status,
        staff_id]);
+
+    //  ★ TOPSHIRILGAN PUL KASSIRGA AYTILADI (zavod qarori, 2026-09).
+    //  `pending` yozuv hech qaysi qoldiqda turmaydi: pul xodimning
+    //  qo'lida, kassada esa hali yo'q. Kassir kassa sahifasini ochib
+    //  ko'rmasa, pul kechgacha o'sha qo'lda qolib ketardi.
+    if (status === 'pending')
+      await notify.queue({
+        permission_code: 'cash.manage', module: 'cash',
+        title: 'Pul topshirildi — qabul qilinmagan',
+        body: `${doc_no} · ${amount} ${currency}`
+              + `\n\nKim topshirdi: ${req.user.name}`,
+      }, client);
 
     await audit(req, { module: 'cash', action: 'create', entity: 'cash_op',
                        entity_id: rows[0].id,

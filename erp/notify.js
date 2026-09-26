@@ -16,6 +16,72 @@ async function queue({ worker_id, permission_code, module, title, body }, client
     [worker_id || null, permission_code || null, module, title, body || null]);
 }
 
+//  ★ KIMGA BORISHI NAVBAT BILAN BIR XIL (zavod qarori, 2026-09).
+//
+//  Menyudagi raqam va Telegram xabari BITTA savolga javob beradi —
+//  «bu ish kimniki». Shart ikki joyda yozilsa bir kun ajralib ketardi:
+//  menyuda tsex boshlig'i ko'radi, xabar esa boshqa odamga borardi va
+//  buni hech narsa aytmasdi. Shuning uchun quyidagi ikki yordamchi
+//  `modules/nav.js` dagi navbat shartlarini AYNAN takrorlaydi.
+//
+//  TSEX: faqat DOIRASI BOR xodim oladi — konver qabul qilish tsexning
+//  ishi, direktorniki emas; unga butun zavodning topshirig'i kun bo'yi
+//  keladigan xabar bo'lib qolardi (navbat 2 bilan bir xil sabab).
+async function queueShop({ shop_id, perms, module, title, body }, client) {
+  if (!shop_id) return 0;
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT DISTINCT w.id FROM workers w
+       JOIN worker_roles wr        ON wr.worker_id = w.id
+                                  AND wr.scope_shop_id = $1
+       JOIN v_worker_permissions vp ON vp.worker_id = w.id
+      WHERE w.active AND vp.permission_code = ANY($2)`, [shop_id, perms]);
+  for (const r of rows)
+    await queue({ worker_id: r.id, module, title, body }, c);
+  return rows.length;
+}
+
+//  OMBOR: `warehouse_id` berilmasa doira umuman qaralmaydi (navbat 4
+//  va 5 shunday — qabul qilish huquqining o'zi yetarli). Berilsa
+//  vitrina doirasi CHEGARA bo'ladi: doirasi yo'q xodim hammasini
+//  oladi, doirasi bor esa faqat o'zinikini (navbat 6).
+//
+//  `sees_warehouse` belgisi bu yerda ham o'qiladi: belgisi olib
+//  tashlangan xodimda ombor bo'limi UMUMAN yopiladi (`erp/auth.js`)
+//  va unga ombor xabari borishi ham yolg'on bo'lardi.
+//  `scoped_only` — faqat O'SHA nuqtaga biriktirilgan xodim: vitrinaga
+//  kelayotgan hujjatni o'sha do'kondagi odam qabul qiladi va doirasi
+//  yo'q bosh ofis menejeriga u xabar emas (navbat 6 bilan bir xil).
+async function queueWarehouse(
+  { warehouse_id, perms, module, title, body, except, scoped_only }, client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT DISTINCT w.id FROM workers w
+       JOIN v_worker_permissions vp ON vp.worker_id = w.id
+      WHERE w.active AND vp.permission_code = ANY($1)
+        AND (w.sees_warehouse IS NOT FALSE
+             OR vp.permission_code NOT LIKE 'warehouse.%')
+        AND ($3::int IS NULL OR w.id <> $3)
+        AND ($2::int IS NULL OR
+             CASE WHEN $4::boolean THEN EXISTS (
+                    SELECT 1 FROM worker_roles wr
+                     WHERE wr.worker_id = w.id
+                       AND wr.scope_warehouse_id = $2)
+                  ELSE NOT EXISTS (
+                    SELECT 1 FROM worker_roles wr
+                     WHERE wr.worker_id = w.id
+                       AND wr.scope_warehouse_id IS NOT NULL)
+                    OR EXISTS (
+                    SELECT 1 FROM worker_roles wr
+                     WHERE wr.worker_id = w.id
+                       AND wr.scope_warehouse_id = $2)
+             END)`,
+    [perms, warehouse_id || null, except || null, !!scoped_only]);
+  for (const r of rows)
+    await queue({ worker_id: r.id, module, title, body }, c);
+  return rows.length;
+}
+
 // Bot jarayoni shuni chaqiradi. send(tg_id, text) — Telegram yuboruvchi funksiya.
 async function sendPending(send, limit = 50) {
   const { rows } = await db.query(
@@ -46,4 +112,4 @@ async function sendPending(send, limit = 50) {
   return rows.length;
 }
 
-module.exports = { queue, sendPending };
+module.exports = { queue, queueShop, queueWarehouse, sendPending };

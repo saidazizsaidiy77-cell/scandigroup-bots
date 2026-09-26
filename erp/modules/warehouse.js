@@ -17,6 +17,7 @@ const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
 const { clonePart, scopeOf } = require('./units');
+const notify = require('../notify');
 
 const router = express.Router();
 //  ★ XOM ASHYO XODIMI HAM RO'YXATGA KIRADI (zavod qarori, 2026-09).
@@ -726,6 +727,26 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
         `INSERT INTO wh_return_items (return_id, unit_id, conveyor_no, qty)
          VALUES ($1,$2,$3,$4)`, [doc.id, x.unit_id, x.conveyor_no, x.qty]);
 
+    //  ★ TASDIQLASHNI KUTAYOTGANI VITRINAGA AYTILADI (zavod qarori,
+    //  2026-09). Hujjatni vitrinasi biriktirilmagan xodim yozadi,
+    //  tasdiqlashni esa o'sha do'kondagi odam qiladi — u sayt ochib
+    //  o'tirmaydi va hujjat kechgacha yotib qolardi, mashina esa
+    //  kutardi.
+    //
+    //  Yozgan odamga yuborilmaydi (`except`): ikki odam qoidasi
+    //  bo'yicha u baribir o'zi tasdiqlay olmaydi.
+    const nomi = (await client.query(
+      `SELECT name FROM warehouses WHERE id = $1`, [whId])).rows[0];
+    await notify.queueWarehouse({
+      warehouse_id: whId, scoped_only: true, except: req.user.id,
+      perms: [...RET, 'warehouse.view', 'warehouse.move'],
+      module: 'warehouse',
+      title: 'Qaytarish hujjati tasdiqlashni kutmoqda',
+      body: `${doc.doc_no} · ${nomi ? nomi.name : ''}`
+            + `\n${saved.length} ta konver — T/M omborga`
+            + `\n\nKim yozdi: ${req.user.name}`,
+    }, client);
+
     await audit(req, { module: 'warehouse', action: 'return-new', entity: 'wh_returns',
                        entity_id: doc.id,
                        payload: { doc_no: doc.doc_no, lines: saved.length } }, client);
@@ -877,6 +898,39 @@ router.post('/fg/returns/:id/confirm', need(...RET, 'warehouse.view'),
         `UPDATE wh_returns SET status = 'confirmed', confirmed_by = $2,
                 confirmed_on = COALESCE($3::date, CURRENT_DATE) WHERE id = $1`,
         [r.id, req.user.id, req.body.on || null]);
+      //  ★ YO'LGA CHIQQANI QABUL QILUVCHIGA AYTILADI. Mahsulot
+      //  mashinada yuradi va faqat UCHINCHI bosqichda ko'chadi —
+      //  kutayotgan odam uni ro'yxatdan qidirib o'tirmasin.
+      //
+      //  Kim qabul qiladi — MANZIL omborni ko'radigan odam: T/M ga
+      //  kelayotganini mudir, vitrinaga kelayotganini o'sha nuqtaga
+      //  biriktirilgan xodim (navbat 6 bilan bir xil qoida).
+      const man = (await client.query(
+        `SELECT id, code, name FROM warehouses WHERE id = $1`,
+        [r.to_warehouse_id])).rows[0];
+      const nechta = (await client.query(
+        `SELECT COUNT(*)::int AS n FROM wh_return_items WHERE return_id = $1`,
+        [r.id])).rows[0].n;
+      if (man) {
+        const umumiy = {
+          module: 'warehouse',
+          title: 'Hujjat yo\'lga chiqdi — qabul qilinadi',
+          body: `${r.doc_no} · ${man.name}`
+                + `\n${nechta} ta konver`
+                + `\n\nKim jo'natdi: ${req.user.name}`,
+        };
+        if (man.code === 'TM')
+          await notify.queueWarehouse({
+            ...umumiy,
+            perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
+          }, client);
+        else
+          await notify.queueWarehouse({
+            ...umumiy, warehouse_id: man.id, scoped_only: true,
+            perms: [...RET, 'warehouse.view', 'warehouse.move'],
+          }, client);
+      }
+
       await audit(req, { module: 'warehouse', action: 'return-confirm',
                          entity: 'wh_returns', entity_id: r.id,
                          payload: { doc_no: r.doc_no } }, client);
