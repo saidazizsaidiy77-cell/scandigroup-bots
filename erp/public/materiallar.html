@@ -651,10 +651,10 @@ async function kirimSaqla() {
 //  Tizim ishga tushgan kundagi holat. Bir martalik ish: o'sha ombor va
 //  material uchun ikkinchi marta yozilmaydi — aks holda qoldiq
 //  jimgina ikki barobar bo'lib ketardi (tekshiruv serverda).
-let boshQator = 0;
+let oQator = [];
 
 function boshlangich(whId) {
-  boshQator = 0;
+  oQator = [];
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:720px">
@@ -689,13 +689,21 @@ function boshlangich(whId) {
           kundagi holat. Bir martalik ish: bir xil material ikkinchi
           marta yozilmaydi. <b>Narx ixtiyoriy</b> — yozilmagan qator
           omborning qiymatiga qo'shilmaydi, lekin qoldiqda turaveradi.</p>
+        <!--  ★ OCHILMA EMAS, QIDIRUV (konverga xom ashyo biriktirish va
+              kirim hujjati bilan bir xil qoida). Zavodda to'qqiz yuz
+              material bor: ochilmada ularni aylantirib topib bo'lmaydi
+              va «Shkurka» ni qidirayotgan mudir ro'yxatning o'rtasida
+              adashib qolardi. -->
+        <input id="oQ" placeholder="material nomini yozing" autocomplete="off"
+          oninput="boshTop()" style="margin-bottom:8px">
+        <div id="oList" style="max-height:190px;overflow:auto;
+          margin-bottom:12px"></div>
         <div id="oRows"></div>
-        <button onclick="boshQosh()" style="margin-top:8px">+ Qator</button>
-        <button class="primary" style="margin-top:14px;margin-left:8px"
+        <button class="primary" id="oSave" style="margin-top:14px" hidden
           onclick="boshSaqla()">Saqlash</button>
       </div></div>`;
   oKurs();
-  boshQosh();
+  boshTop(); boshRows();
 }
 
 //  So'm tanlanganda kurs katagi ochiladi: dollarda u kerak emas va
@@ -714,9 +722,8 @@ function boshJami() {
   const kurs = Number($('oRate')?.value) || 0;
   const uzs  = $('oCcy').value === 'UZS';
   let jami = 0, yoq = 0;
-  for (const d of document.querySelectorAll('#oRows > div')) {
-    const q = Number(d.querySelector('.oQty').value) || 0;
-    const p = Number(d.querySelector('.oPrice').value) || 0;
+  for (const r of oQator) {
+    const q = Number(r.qty) || 0, p = Number(r.price) || 0;
     if (!q) continue;
     if (!p) { yoq++; continue; }
     jami += q * (uzs ? (kurs ? p / kurs : 0) : p);
@@ -728,37 +735,73 @@ function boshJami() {
     : '';
 }
 
-function boshQosh() {
-  const i = boshQator++;
-  $('oRows').insertAdjacentHTML('beforeend', `
-    <div class="row" style="gap:8px;margin-bottom:8px;align-items:center">
-      <select class="oMat" style="flex:1">
-        <option value="">— material —</option>
-        ${rows2opts()}</select>
-      <input type="number" class="oQty" min="0" step="0.001" placeholder="soni"
-        style="width:110px;text-align:right" oninput="boshJami()">
-      <input type="number" class="oPrice" min="0" step="0.0001" placeholder="narx"
-        style="width:130px;text-align:right" oninput="boshJami()">
+//  Qidiruv yozilmaguncha ro'yxat chiqarilmaydi: to'qqiz yuz qator
+//  ekranni egallab, qatorlar ostida qolib ketardi. Olingani ro'yxatdan
+//  tushadi — bitta material ikki marta yozilsa server baribir rad
+//  etadi, lekin buni saqlashdan oldin ko'rgan ma'qul.
+function boshTop() {
+  const q = ($('oQ')?.value || '').trim().toLowerCase();
+  if (!$('oList')) return;
+  const olingan = new Set(oQator.map((r) => r.id));
+  const mos = q
+    ? barcha.filter((m) => !olingan.has(m.id)
+        && String(m.name).toLowerCase().includes(q)).slice(0, 30)
+    : [];
+  $('oList').innerHTML = q
+    ? (mos.length
+        ? mos.map((m) => `
+            <button style="width:100%;text-align:left;margin-bottom:4px;
+              display:flex;justify-content:space-between;gap:10px"
+              onclick="boshQosh(${m.id})">
+              <span>${esc(m.name)}</span>
+              <span class="muted" style="font-size:12px">${
+                esc(m.uom_name || m.uom)}</span></button>`).join('')
+        : '<p class="muted" style="font-size:13px">Topilmadi</p>')
+    : '';
+}
+
+function boshQosh(id) {
+  const m = barcha.find((x) => x.id === id);
+  if (!m) return;
+  oQator.push({ id, name: m.name, uom: m.uom_name || m.uom, qty: '', price: '' });
+  $('oQ').value = '';
+  boshTop(); boshRows();
+}
+
+function boshRows() {
+  if (!$('oRows')) return;
+  $('oRows').innerHTML = oQator.map((r, i) => `
+    <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+      <div style="flex:1"><b>${esc(r.name)}</b>
+        <span class="muted" style="font-size:12px"> ${esc(r.uom)}</span></div>
+      <input type="number" min="0" step="0.001" value="${r.qty}"
+        style="width:100px;text-align:right" placeholder="soni"
+        oninput="boshQty(${i}, this.value)">
+      <input type="number" min="0" step="0.0001" value="${r.price}"
+        style="width:120px;text-align:right" placeholder="narx"
+        oninput="boshNarx(${i}, this.value)">
       <span class="muted oPfx" style="width:34px;font-size:12px">$</span>
-      <button onclick="this.parentElement.remove();boshJami()">×</button>
-    </div>`);
-  void i;
+      <button class="ic" onclick="boshOchir(${i})">&times;</button>
+    </div>`).join('');
+  $('oSave').hidden = !oQator.length;
   oKurs();
 }
+
+const boshQty   = (i, v) => { oQator[i].qty = v; boshJami(); };
+const boshNarx  = (i, v) => { oQator[i].price = v; boshJami(); };
+const boshOchir = (i) => { oQator.splice(i, 1); boshTop(); boshRows(); };
 
 //  Ro'yxat spravochnikdan: qo'lda yozish yo'q, aks holda bitta
 //  «Petlya» va bitta «petlya » qoldiqni ikkiga bo'lib yuborardi.
 let barcha = [];
-const rows2opts = () => barcha.map((m) =>
-  `<option value="${m.id}">${esc(m.name)} · ${esc(m.uom_name || m.uom)}</option>`).join('');
 
 async function boshSaqla() {
-  const items = [...document.querySelectorAll('#oRows > div')].map((d) => ({
-    material_id: Number(d.querySelector('.oMat').value) || null,
-    qty: Number(d.querySelector('.oQty').value) || 0,
-    price: Number(d.querySelector('.oPrice').value) || null,
+  const items = oQator.map((r) => ({
+    material_id: r.id,
+    qty: Number(r.qty) || 0,
+    price: Number(r.price) || null,
     warehouse_id: Number($('oWh').value) || null,
-  })).filter((x) => x.material_id && x.qty > 0);
+  })).filter((x) => x.qty > 0);
   if (!items.length) return toast('Birorta ham qator to\'ldirilmadi', true);
   try {
     const r = await App.api('/api/materials/opening', { method: 'POST',
