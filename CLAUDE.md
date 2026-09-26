@@ -1235,10 +1235,21 @@ buyurtmani ochib ko'rilardi — «Chiqib ketdi» tabi esa aynan shu savol
 bilan ochiladi.
 
 Eng chapda turadi, chunki o'sha tab KUNLAR bo'yicha o'qiladi: qog'oz
-daftardagidek, avval sana, keyin nima chiqqani. Chiqmagan buyurtmada
-katak BO'SH qoladi — «Holat» buni allaqachon aytadi va yolg'on sana
-yozilmaydi. Ko'rinishi yonidagi ikki sana bilan BIR XIL: bitta qatorda
-uchta sana turadi va biri boshqacha yozilsa u xato bo'lib o'qilardi.
+daftardagidek, avval sana, keyin nima chiqqani.
+
+**Ustun FAQAT o'sha tabda chiziladi** (zavod qarori, 2026-09):
+boshlanmagan, ishlab chiqarilmoqda va tayyor buyurtmada bu sana YO'Q
+va bo'lishi ham mumkin emas — mahsulot hali zavodda. Hamma tabda
+tursa uchtasida butunlay bo'sh bo'lib qolardi va «nega
+to'ldirilmagan» degan savol berardi: bo'sh katak bu yerda javob emas,
+savol.
+
+Sarlavha ham, katak ham, bo'sh ro'yxatning `colspan` i ham BITTA
+shartdan chiqadi (`chiqqan = status === 'shipped'`): ikki joyda
+yozilsa biri ko'rinib, ikkinchisi yo'qolib ustunlar siljib ketardi.
+
+Ko'rinishi yonidagi ikki sana bilan BIR XIL: bitta qatorda uchta sana
+turadi va biri boshqacha yozilsa u xato bo'lib o'qilardi.
 
 Server tomonida hech narsa qo'shilmadi — `shipped_on` allaqachon
 `v_sales_orders` da va `/orders` uni `o.*` bilan beradi.

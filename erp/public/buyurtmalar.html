@@ -102,14 +102,24 @@
 
           Eng chapda turadi, chunki o'sha tab kunlar bo'yicha
           o'qiladi: qog'oz daftardagidek, avval sana, keyin nima
-          chiqqani. Chiqmagan buyurtmada katak BO'SH qoladi —
-          «Holat» buni allaqachon aytadi va yolg'on sana yozilmaydi.
+          chiqqani.
+
+          ★ FAQAT «Chiqib ketdi» TABIDA (zavod qarori, 2026-09).
+          Boshlanmagan, ishlab chiqarilmoqda va tayyor buyurtmada bu
+          sana YO'Q va bo'lishi ham mumkin emas — mahsulot hali
+          zavodda. Ustun hamma tabda tursa uchta tabda butunlay bo'sh
+          bo'lib qolardi va «nega to'ldirilmagan» degan savol
+          berardi: bo'sh katak javob emas, savol.
+
+          Sarlavha ham, katak ham BITTA shartdan chiqadi (`chiqqan`):
+          ikki joyda yozilsa biri ko'rinib, ikkinchisi yo'qolib
+          ustunlar siljib ketardi.
 
           Ko'rinishi yonidagi ikki sana bilan BIR XIL: bitta qatorda
           uchta sana turadi va biri boshqacha yozilsa u xato bo'lib
           o'qilardi. -->
     <thead><tr><th id="thSel"></th>
-      <th>Chiqqan</th>
+      <th id="thShip" hidden>Chiqqan</th>
       <th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
       <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
       <th class="num">Summa, $</th>
@@ -349,6 +359,10 @@ async function load(){
   //  Sarlavhadagi bo'sh katak ham faqat ruxsatlida: qolganlarda u
   //  nima uchun turgani tushunarsiz bo'lardi.
   if ($('thSel')) $('thSel').hidden = !relOk();
+  //  ★ «Chiqqan» ustuni FAQAT «Chiqib ketdi» tabida (izoh: yuqorida).
+  //  Sarlavha ham, katak ham SHU o'zgaruvchidan chiqadi.
+  const chiqqan = status === 'shipped';
+  if ($('thShip')) $('thShip').hidden = !chiqqan;
   $('tB').innerHTML = rows.length ? rows.map(o => {
     // Muddat o'tgan va hali yopilmagan buyurtma qizarib turadi.
     const late = o.days_left != null && o.days_left < 0
@@ -371,7 +385,8 @@ async function load(){
         ? `<input type="checkbox" style="width:auto" ${
             tanlangan.has(o.id) ? 'checked' : ''}
            onchange="tanla(${o.id}, this.checked)">` : ''}</td>
-      <td class="muted">${(o.shipped_on || '').slice(0, 10)}</td>
+      ${chiqqan
+        ? `<td class="muted">${(o.shipped_on || '').slice(0, 10)}</td>` : ''}
       <td><strong>${esc(o.order_no)}</strong></td>
       <td>${esc(o.customer_name)}${o.region
         ? `<div class="muted" style="font-size:12px">${esc(o.region)}</div>` : ''}</td>
@@ -401,7 +416,8 @@ async function load(){
         onclick="openOrder(${o.id})"
         title="${yopiq ? 'Ko\'rish' : 'Tahrirlash'}">${yopiq ? '👁' : '✎'}</button></td>
     </tr>`;
-  }).join('') : '<tr><td class="muted" colspan="12">Buyurtma yo\'q</td></tr>';
+  }).join('') : `<tr><td class="muted" colspan="${chiqqan ? 13 : 12}"
+      >Buyurtma yo'q</td></tr>`;
   chizTanlov();
 }
 
