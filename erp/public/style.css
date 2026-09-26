@@ -112,12 +112,26 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
 .pad button{padding:22px 0;font-size:22px;font-weight:600}
 .counter{font-size:64px;font-weight:600;text-align:center;
   letter-spacing:-.03em;font-variant-numeric:tabular-nums;padding:12px 0}
-.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
+/* ★ XABAR OYNANING USTIDA TURADI (zavod qarori, 2026-09). `z-index`
+   yo'q edi va `.overlay` (50) ustidan tushardi: oyna ochiq turganda
+   HAR QANDAY xabar qorong'i qatlamning ORQASIDA, xiralashgan holda
+   chiqardi. Ya'ni «nega saqlanmadi» degan javob aynan o'sha payt —
+   oyna ochiq, xodim tugmani endi bosgan paytda — ko'rinmasdi. */
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:60;
   background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
   padding:14px 22px;box-shadow:0 8px 28px rgba(20,26,36,.12);max-width:min(92vw,520px)}
 /* Xato xabari o'tib ketmasin: rangi bilan ajralib tursin, chunki u
    "saqlanmadi" degani — xodim ko'rmasa ishini yo'qotadi. */
-.toast.bad{background:rgba(178,60,60,.10);border-color:rgba(178,60,60,.35);color:var(--bad)}
+.toast.bad{background:linear-gradient(rgba(178,60,60,.12),rgba(178,60,60,.12)),
+  var(--surface-2);border-color:rgba(178,60,60,.45);color:var(--bad)}
+/* ★ «SAQLANDI» BELGISI — CSS da, bitta joyda. Xabar funksiyasi yetti
+   sahifada nusxalangan (`toast()`), ya'ni belgini JS ga yozish yetti
+   marta yozish bo'lardi va biri ertaga unutilardi. Xatodan boshqa
+   xabarning hammasi tugagan ishning tasdig'i: «Saqlandi», «yozildi»,
+   «qabul qilindi» — shuning uchun belgi shartdan chiqadi. */
+.toast:not(.bad){background:linear-gradient(rgba(46,125,81,.12),rgba(46,125,81,.12)),
+  var(--surface-2);border-color:rgba(46,125,81,.45)}
+.toast:not(.bad)::before{content:'✓';margin-right:9px;font-weight:700;color:var(--ok)}
 
 /* Telefonda sarlavha va foydalanuvchi paneli bir qatorga sig'maydi —
    sig'dirishga urinish ikkalasini ham siqib, o'qilmas qiladi. */

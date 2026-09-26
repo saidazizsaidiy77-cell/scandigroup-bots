@@ -131,6 +131,32 @@ function go(k) {
   load();
 }
 
+//  ★ JAVOB TUGMANING O'ZIDA VA UNING OSTIDA (zavod qarori, 2026-09).
+//  Toast ekranning pastida chiqadi va besh soniyada yo'qoladi: xodim
+//  ko'zi oynaning ichida, endi bosgan tugmasida bo'ladi va xabarni
+//  ko'rmay qolardi; ustiga qatorni tuzatayotganda sabab allaqachon
+//  o'chib ketgan bo'lardi — «nega saqlanmadi» degan savol qaytadan
+//  tug'ilardi. Shuning uchun sabab OYNADA, tugmaning ostida qoladi va
+//  keyingi bosishgacha turaveradi.
+//
+//  Tugma bosilganda «Saqlanmoqda…» bo'lib o'chadi: so'rov sekin
+//  bo'lsa xodim uni ikkinchi marta bosardi va ikkita hujjat yozilardi.
+function saqlanmoqda(id) {
+  const b = $(id); if (!b) return;
+  b.dataset.matn = b.dataset.matn || b.textContent;
+  b.disabled = true; b.textContent = 'Saqlanmoqda…';
+  if ($(id + 'Msg')) $(id + 'Msg').innerHTML = '';
+}
+
+function saqlanmadi(id, e) {
+  const b = $(id);
+  if (b) { b.disabled = false; b.textContent = b.dataset.matn || 'Saqlash'; }
+  if ($(id + 'Msg'))
+    $(id + 'Msg').innerHTML = `<div class="tag bad" style="margin-top:10px;
+      display:inline-block;white-space:normal">${esc(e.message)}</div>`;
+  toast(e.message, true);
+}
+
 function toast(msg, bad) {
   const el = document.createElement('div');
   el.className = 'toast' + (bad ? ' bad' : '');
@@ -536,6 +562,7 @@ function kirimOch() {
           <button class="primary" id="nSave" onclick="kirimSaqla()" hidden
             >Saqlash</button>
         </div>
+        <div id="nSaveMsg"></div>
       </div></div>`;
   kirimKurs(); kirimTop(); kirimRows();
 }
@@ -628,9 +655,13 @@ async function kirimSaqla() {
     qty: Number(r.qty) || 0,
     price: Number(r.price) || 0,
   })).filter((x) => x.qty > 0);
-  if (!items.length) return toast('Birorta ham qator to\'ldirilmadi', true);
-  if (!$('nSup').value) return toast('Ta\'minotchi tanlanmadi', true);
-  if (!$('nWh').value)  return toast('Ombor tanlanmadi', true);
+  if (!items.length)
+    return saqlanmadi('nSave', new Error("Soni yozilgan qator yo'q"));
+  if (!$('nSup').value)
+    return saqlanmadi('nSave', new Error('Ta\'minotchi tanlanmadi'));
+  if (!$('nWh').value)
+    return saqlanmadi('nSave', new Error('Ombor tanlanmadi'));
+  saqlanmoqda('nSave');
   try {
     const r = await App.api('/api/materials/receipts', { method: 'POST',
       body: JSON.stringify({
@@ -643,7 +674,7 @@ async function kirimSaqla() {
         items }) });
     yop(); toast(r.doc_no + ' yozildi');
     tab = 'kirim'; drawTabs(); await load();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) { saqlanmadi('nSave', e); }
 }
 
 // ─────────────────────────────────────────────── BOSHLANG'ICH QOLDIQ
@@ -701,6 +732,7 @@ function boshlangich(whId) {
         <div id="oRows"></div>
         <button class="primary" id="oSave" style="margin-top:14px" hidden
           onclick="boshSaqla()">Saqlash</button>
+        <div id="oSaveMsg"></div>
       </div></div>`;
   oKurs();
   boshTop(); boshRows();
@@ -802,14 +834,21 @@ async function boshSaqla() {
     price: Number(r.price) || null,
     warehouse_id: Number($('oWh').value) || null,
   })).filter((x) => x.qty > 0);
-  if (!items.length) return toast('Birorta ham qator to\'ldirilmadi', true);
+  const wh = ref.warehouses.find((w) => String(w.id) === $('oWh').value);
+  if (!items.length)
+    return saqlanmadi('oSave', new Error("Soni yozilgan qator yo'q"));
+  saqlanmoqda('oSave');
   try {
     const r = await App.api('/api/materials/opening', { method: 'POST',
       body: JSON.stringify({ on: $('oOn').value || null,
         ccy: $('oCcy').value, rate: Number($('oRate').value) || null, items }) });
-    yop(); toast(`${r.saved} ta qator yozildi`);
+    yop();
+    //  Qayerga yozilgani ham aytiladi: oynada ikkita ombor ro'yxati
+    //  turadi (sahifaniki va oynaniki) va adashib boshqasiga
+    //  yozilgani faqat qoldiqni ochib ko'rganda bilinardi.
+    toast(`${r.saved} ta qator yozildi${wh ? ' · ' + wh.name : ''}`);
     tab = 'stock'; drawTabs(); await load();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) { saqlanmadi('oSave', e); }
 }
 
 //  Bitta material qo'lda ham qo'shiladi: ro'yxat fayldan yuklanadi,
