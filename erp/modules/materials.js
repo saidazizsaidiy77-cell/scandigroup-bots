@@ -871,6 +871,24 @@ async function saldoYubor(client) {
     { module: 'materials', title: x.title, body: x.body }, client);
 }
 
+//  ★ «HOZIR YUBORISH» — SINASH UCHUN, va kundalik ish uchun ham
+//  (zavod qarori, 2026-09). Jadval kuniga bir marta yuradi, ya'ni
+//  belgini endi qo'ygan odam ertalabgacha ishlaganini bila olmasdi
+//  va «keldimi?» degan savol bilan qolardi. Ustiga savol kun
+//  o'rtasida ham beriladi: «hozir kimga qancha qarzmiz».
+//
+//  Yuboradigan joy BITTA (`saldoYubor`): xabar matni jadval bilan
+//  bir xil bo'lishi shart, aks holda sinab ko'rilgani ertalab
+//  kelganidan boshqacha bo'lardi.
+router.post('/supply-report', need('purchasing.view', 'purchasing.manage'),
+  wrap(async (req, res) => {
+    const n = await saldoYubor();
+    if (!n) return res.status(400).json({
+      error: "Ta'minot xabarlarini oladigan xodim yo'q — Xodimlar "
+           + "sahifasida «Ta'minot xabarlarini oladi» katagini belgilang" });
+    res.json({ ok: true, workers: n });
+  }));
+
 module.exports = router;
 module.exports.saldoXabari = saldoXabari;
 module.exports.saldoYubor = saldoYubor;

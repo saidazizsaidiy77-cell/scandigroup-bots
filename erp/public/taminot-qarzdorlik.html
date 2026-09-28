@@ -34,7 +34,15 @@
     <div style="flex:1;min-width:180px"><label>Qidiruv</label>
       <input id="fQ" placeholder="ta'minotchi, region yoki telefon" oninput="onSearch()"></div>
     <button onclick="exportCsv()">Excelga yuklash</button>
+    <!--  ★ «TELEGRAMGA YUBORISH» (izoh: modules/materials.js).
+          Jadval kuniga bir marta, ertalab yuradi — belgini endi
+          qo'ygan odam ishlaganini ertalabgacha bila olmasdi. Ustiga
+          savol kun o'rtasida ham beriladi: «hozir kimga qancha
+          qarzmiz». Matn jadvalnikidan farq qilmaydi: yuboradigan
+          joy BITTA. -->
+    <button id="tgBtn" onclick="tgYubor()">Telegramga yuborish</button>
   </div>
+  <p class="muted" style="margin-top:10px;font-size:12px" id="tgMsg"></p>
 </div>
 
 <div class="grid g3" style="margin-top:16px">
@@ -224,6 +232,21 @@ function drawRows(id) {
 
 //  Excel zavodda shu ko'rinishda kutiladi: bitta mijoz — bitta qator,
 //  to'rt ustun. Tafsilot kerak bo'lsa saytda qator ochiladi.
+//  Javob TUGMANING OSTIDA qoladi: sahifada toast yo'q va xabar
+//  yuborilgani-yuborilmagani ekranda ko'rinib tursin.
+async function tgYubor() {
+  const b = $('tgBtn'), m = $('tgMsg');
+  b.disabled = true; b.textContent = 'Yuborilmoqda…'; m.textContent = '';
+  try {
+    const r = await App.api('/api/materials/supply-report', { method: 'POST' });
+    m.innerHTML = `<span class="tag ok">${r.workers} ta xodimga yuborildi</span>
+      · xabar bir daqiqa ichida yetib boradi`;
+  } catch (e) {
+    m.innerHTML = `<span class="tag bad">${e.message}</span>`;
+  }
+  b.disabled = false; b.textContent = 'Telegramga yuborish';
+}
+
 function exportCsv() {
   const head = ['Ta\'minotchi', 'Region', 'Telefon', 'Nima yetkazadi',
                 'Boshiga qarzdor', 'Boshiga haqdor',

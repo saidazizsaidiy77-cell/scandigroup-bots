@@ -6533,6 +6533,28 @@ test("ta'minot xabarlari: kirim hujjati va kunlik saldo", async () => {
     `SELECT title, worker_id FROM notifications WHERE id > $1`, [b2])).rows;
   assert.equal(s2.length, 1);
   assert.equal(s2[0].worker_id, kuzatuvchi.id);
+
+  //  ★ «HOZIR YUBORISH»: jadval kuniga bir marta yuradi va belgini
+  //  endi qo'ygan odam ishlaganini ertalabgacha bila olmasdi.
+  //  Yuboradigan joy BITTA — matn jadvalnikidan farq qilmaydi.
+  const b3 = await belgi();
+  const yub = await admin('POST', '/api/materials/supply-report');
+  assert.equal(yub.status, 200, yub.text);
+  assert.equal(yub.body.workers, 1);
+  const s3 = (await db.query(
+    `SELECT title, body, worker_id FROM notifications WHERE id > $1`, [b3])).rows;
+  assert.equal(s3.length, 1);
+  assert.equal(s3[0].worker_id, kuzatuvchi.id);
+  assert.equal(s3[0].title, s2[0].title, 'matn jadvalnikiga teng');
+
+  //  Belgisi bor xodim qolmasa SABAB yoziladi: tugmani bosgan odam
+  //  «yuborildi» degan javobni olib, keyin xabar kelmaganini
+  //  kutib o'tirmasin.
+  await db.query(`UPDATE workers SET supply_reports = false WHERE id = $1`,
+                 [kuzatuvchi.id]);
+  const yoq = await admin('POST', '/api/materials/supply-report');
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /Ta'minot xabarlarini oladi/);
 });
 
 test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
