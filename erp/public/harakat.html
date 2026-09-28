@@ -742,8 +742,13 @@ function xomQosh(id) {
   const st = xomStock.find((r) => r.material_id === id);
   const m = st || xomAll.find((x) => x.id === id);
   if (!m) return;
-  xomQator.push({ id, name: st ? st.material : m.name,
-                  uom: m.uom_name || m.uom, qty: '' });
+  //  ★ YANGI QATOR TEPAGA (zavod qarori, 2026-09). Ilgari oxiriga
+  //  qo'shilardi: telefonda ro'yxat o'n qatorga yetganda yangi
+  //  tanlangan material EKRANDAN CHIQIB ketardi va boshliq soni
+  //  yozish uchun har safar pastga surardi — qidiruv katagi esa
+  //  tepada qolardi. Talabnoma va kirim oynalarida ham shunday.
+  xomQator.unshift({ id, name: st ? st.material : m.name,
+                     uom: m.uom_name || m.uom, qty: '' });
   $('xomQ').value = '';
   xomTop(); xomRowsChiz();
 }

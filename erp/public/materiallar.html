@@ -679,7 +679,14 @@ function talabTop() {
 function talabQosh(id) {
   const m = barcha.find((x) => x.id === id);
   if (!m) return;
-  tQator.push({ id, name: m.name, uom: m.uom_name || m.uom, qty: '' });
+  //  ★ YANGI QATOR TEPAGA (zavod qarori, 2026-09). Ilgari oxiriga
+  //  qo'shilardi: telefonda ro'yxat o'n qatorga yetganda yangi
+  //  tanlangan material EKRANDAN CHIQIB ketardi va boshliq soni
+  //  yozish uchun har safar pastga surardi — qidiruv katagi esa
+  //  tepada qolardi. Endi javob tanlangan joyning O'ZIDA turadi.
+  //  Hujjatga ta'sir qilmaydi: saqlangach qatorlar nom bo'yicha
+  //  tartiblanadi (`ORDER BY mt.name`, `sql/materials.sql`).
+  tQator.unshift({ id, name: m.name, uom: m.uom_name || m.uom, qty: '' });
   $('tQ').value = '';
   talabTop(); talabRows();
 }
@@ -967,7 +974,15 @@ function kirimTop() {
 function kirimQosh(id) {
   const m = barcha.find((x) => x.id === id);
   if (!m) return;
-  kQator.push({ id, name: m.name, uom: m.uom_name || m.uom, qty: '', price: '' });
+  //  ★ YANGI QATOR TEPAGA (zavod qarori, 2026-09). Ilgari oxiriga
+  //  qo'shilardi: telefonda ro'yxat o'n qatorga yetganda yangi
+  //  tanlangan material EKRANDAN CHIQIB ketardi va boshliq soni
+  //  yozish uchun har safar pastga surardi — qidiruv katagi esa
+  //  tepada qolardi. Endi javob tanlangan joyning O'ZIDA turadi.
+  //  Hujjatga ta'sir qilmaydi: saqlangach qatorlar nom bo'yicha
+  //  tartiblanadi (`ORDER BY mt.name`, `sql/materials.sql`).
+  kQator.unshift({ id, name: m.name, uom: m.uom_name || m.uom,
+    qty: '', price: '' });
   $('nQ').value = '';
   kirimTop(); kirimRows();
 }
@@ -1162,7 +1177,15 @@ function boshTop() {
 function boshQosh(id) {
   const m = barcha.find((x) => x.id === id);
   if (!m) return;
-  oQator.push({ id, name: m.name, uom: m.uom_name || m.uom, qty: '', price: '' });
+  //  ★ YANGI QATOR TEPAGA (zavod qarori, 2026-09). Ilgari oxiriga
+  //  qo'shilardi: telefonda ro'yxat o'n qatorga yetganda yangi
+  //  tanlangan material EKRANDAN CHIQIB ketardi va boshliq soni
+  //  yozish uchun har safar pastga surardi — qidiruv katagi esa
+  //  tepada qolardi. Endi javob tanlangan joyning O'ZIDA turadi.
+  //  Hujjatga ta'sir qilmaydi: saqlangach qatorlar nom bo'yicha
+  //  tartiblanadi (`ORDER BY mt.name`, `sql/materials.sql`).
+  oQator.unshift({ id, name: m.name, uom: m.uom_name || m.uom,
+    qty: '', price: '' });
   $('oQ').value = '';
   boshTop(); boshRows();
 }
