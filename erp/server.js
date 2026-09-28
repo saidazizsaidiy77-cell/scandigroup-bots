@@ -123,7 +123,11 @@ app.get('/health', async (_req, res) => {
 const ZAXIRA_VAQT = '09:00';
 
 function zaxiraJadvali() {
-  const manzil = (process.env.BACKUP_TG_TOKEN && process.env.BACKUP_TG_CHAT)
+  //  Token `ERP_TG_TOKEN` dan ham olinadi (izoh: `erp/backup.js`) —
+  //  shart shu bilan BIR XIL bo'lishi kerak, aks holda jadval «manzil
+  //  yo'q» deb jim turar, qo'lda yuritilganda esa ishlayverardi.
+  const manzil = (process.env.BACKUP_TG_CHAT
+    && (process.env.BACKUP_TG_TOKEN || process.env.ERP_TG_TOKEN))
     || process.env.BACKUP_DIR;
   const yozilgan = String(process.env.BACKUP_AT || '').trim();
   const m = /^(\d{1,2}):(\d{2})$/.exec(yozilgan || (manzil ? ZAXIRA_VAQT : ''));

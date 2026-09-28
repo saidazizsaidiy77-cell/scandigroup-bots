@@ -44,7 +44,15 @@ const path = require('path');
 const zlib = require('zlib');
 
 const PASS = String(process.env.BACKUP_PASS || '').trim();
-const TG_TOKEN = String(process.env.BACKUP_TG_TOKEN
+//  ★ TOKEN UCHUN ALOHIDA O'ZGARUVCHI SHART EMAS. Zaxira alohida botga
+//  ham yuborilishi mumkin (`BACKUP_TG_TOKEN`), lekin odatda zavodda
+//  bitta bot bo'ladi va uning tokeni `ERP_TG_TOKEN` da allaqachon
+//  turadi. Ikkinchi marta yozdirish bitta qiymatni ikki joyda saqlash
+//  bo'lardi: biri o'zgarsa ikkinchisi jimgina eskirib qolardi.
+//
+//  Manzil esa (`BACKUP_TG_CHAT`) baribir so'raladi: zaxira xodimlarga
+//  emas, EGASIGA boradi va uni bot o'zi bila olmaydi.
+const TG_TOKEN = String(process.env.BACKUP_TG_TOKEN || process.env.ERP_TG_TOKEN
   || process.env.HR_BOT_TOKEN || process.env.ERP_BOT_TOKEN || '').trim();
 const TG_CHAT = String(process.env.BACKUP_TG_CHAT || '').trim();
 
