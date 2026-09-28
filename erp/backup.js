@@ -119,7 +119,11 @@ dump.on('error', (e) => {
     console.error('  macOS:   brew install libpq && brew link --force libpq');
     console.error('  Windows: postgresql.org/download/windows (faqat Command Line Tools)');
     console.error('  Ubuntu:  sudo apt install postgresql-client');
-    console.error('  Railway: NIXPACKS_PKGS=postgresql sozlamasini qo\'shing');
+    //  `postgresql` — butun SERVER paketi va u Railway'ning build
+    //  bosqichini uzaytiradi; bizga esa faqat `pg_dump` kerak. Shuning
+    //  uchun avval yengilrog'i aytiladi.
+    console.error('  Railway: NIXPACKS_APT_PKGS=postgresql-client sozlamasini');
+    console.error('           qo\'shing (yoki NIXPACKS_PKGS=postgresql)');
   } else console.error('Xato:', e.message);
   fs.rmSync(file, { force: true });
   process.exit(1);

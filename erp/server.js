@@ -92,8 +92,9 @@ app.get('/health', async (_req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────── KUNLIK ZAXIRA
- *  `BACKUP_AT=03:00` qo'yilsa server har kuni o'sha vaqtda zaxira oladi
- *  va uni Telegram kanaliga yuboradi (izoh: `erp/backup.js`).
+ *  Server har kuni zaxira oladi va uni Telegram kanaliga yuboradi
+ *  (izoh: `erp/backup.js`). Vaqti standart 09:00, `BACKUP_AT=03:00`
+ *  bilan o'zgartiriladi.
  *
  *  Vaqt SERVER vaqti bo'yicha: Railway'da u UTC, ya'ni mahalliy vaqt
  *  kerak bo'lsa `TZ=Asia/Tashkent` ham qo'yiladi.
@@ -106,8 +107,23 @@ app.get('/health', async (_req, res) => {
  *  vaqtdan keyingi 15 daqiqa ichida olinadi. Oynadan tashqarida qayta
  *  ishga tushish hech narsa qilmaydi.
  */
+//  ★ VAQT QO'YILMASA HAM ZAXIRA OLINADI — standarti 09:00 (zavod
+//  qarori, 2026-09). Ilgari `BACKUP_AT` bo'sh bo'lsa jadval UMUMAN
+//  ishga tushmasdi: zaxirani yoqish uchun TO'RTTA o'zgaruvchini
+//  to'g'ri qo'yish kerak edi va bittasi unutilsa hech narsa
+//  yuborilmasdi — hech qanday xato ham chiqmasdi, chunki xususiyat
+//  «o'chirilgan» deb o'qilardi.
+//
+//  Standart FAQAT manzil ma'lum bo'lganda qo'yiladi (Telegram kanali
+//  yoki papka): aks holda manzilsiz serverda zaxira har kuni
+//  ko'tarilib, jurnalga xato yozib turardi.
+const ZAXIRA_VAQT = '09:00';
+
 function zaxiraJadvali() {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(process.env.BACKUP_AT || '').trim());
+  const manzil = (process.env.BACKUP_TG_TOKEN && process.env.BACKUP_TG_CHAT)
+    || process.env.BACKUP_DIR;
+  const yozilgan = String(process.env.BACKUP_AT || '').trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(yozilgan || (manzil ? ZAXIRA_VAQT : ''));
   if (!m) return;
   const daqiqa = Number(m[1]) * 60 + Number(m[2]);
   const OYNA = 15;
