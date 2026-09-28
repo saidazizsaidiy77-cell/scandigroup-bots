@@ -437,6 +437,26 @@ function openForm(id){
                   stulni baribir savdo so'raydi</span></span>
             </div></div>
 
+          <!--  ★ OMBOR DOIRASI (izoh: sql/materials.sql). Tsex doirasi
+                IKKI savolga birdan javob berardi: xodim qaysi
+                KONVERNI yuritadi va qaysi OMBORNI ko'radi. Zavodda
+                esa ular ajraldi — korpus boshlig'i ayni paytda
+                ta'minotchi, xom ashyo mudiriga tsex omborlari faqat
+                boshlang'ich qoldiq kiritilguncha kerak. -->
+          <div><label>Ombor doirasi</label>
+            <select id="wMatScope">
+              <option value=""${!w?.mat_scope ? ' selected' : ''}
+                >Tsexi bo'yicha (standart)</option>
+              <option value="all"${w?.mat_scope === 'all' ? ' selected' : ''}
+                >Barcha ombor</option>
+              <option value="factory"${w?.mat_scope === 'factory' ? ' selected' : ''}
+                >Faqat zavod omborlari</option>
+            </select>
+            <p class="muted" style="margin-top:6px;font-size:12px">Xom ashyo
+              omborlariga tegishli. «Tsexi bo'yicha» — roldagi tsex
+              qaysi bo'lsa, o'sha tsexning ombori; doirasi bo'sh
+              xodimga hammasi.</p></div>
+
           <!--  ★ TA'MINOT XABARLARI (izoh: sql/materials.sql). Kirim
                 hujjatini xom ashyo mudiri yozadi, O'QIYDIGAN odam esa
                 boshqa — ta'minotni nazorat qiladigan boshliq.
@@ -557,6 +577,7 @@ async function save(id){
     can_release: $('wRel').checked,
     can_request_unit: $('wReq').checked,
     supply_reports: $('wSup').checked,
+    mat_scope: $('wMatScope').value,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
     roles,

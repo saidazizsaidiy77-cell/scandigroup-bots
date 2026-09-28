@@ -426,12 +426,20 @@ SELECT r.*,
 --  eskicha: turgan joyining tsexi yuritadi.
 ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS owner_shop_id INT REFERENCES shops(id);
 
+--  ★ QAROR QAYTARILDI (zavod qarori, 2026-09): «Lak karkas ombori»
+--  ni STUL tsexining boshlig'i yuritadi. Lak tsexiniki qilib
+--  qo'yilgan edi va natijasi ikki tomonga ham teskari chiqdi: stul
+--  boshlig'i o'z tsexidagi omborni ko'rmay qoldi, lak boshlig'ida
+--  esa o'zi ishlatmaydigan ikkinchi ombor paydo bo'ldi.
+--
+--  Mexanizm OLIB TASHLANMADI — ustun ham, `COALESCE` ham joyida
+--  qoladi va kerak bo'lganda bitta katakcha to'ldiriladi (4-qoida).
+--  Olib tashlansa ertaga o'sha ish qaytadan yozilardi.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'lak-karkas-javobgar') THEN
-    UPDATE warehouses w SET owner_shop_id = s.id
-      FROM shops s WHERE s.code = 'BOYOQ' AND w.code = 'TSEX-STU-LAK';
-    INSERT INTO migration_flags (key) VALUES ('lak-karkas-javobgar');
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'lak-karkas-stulga') THEN
+    UPDATE warehouses SET owner_shop_id = NULL WHERE code = 'TSEX-STU-LAK';
+    INSERT INTO migration_flags (key) VALUES ('lak-karkas-stulga');
   END IF;
 END $$;
 
@@ -904,3 +912,37 @@ SELECT r.supplier_id,
 --  KUZATUV: uni kim o'qishini zavod o'zi hal qiladi.
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS
   supply_reports BOOLEAN NOT NULL DEFAULT false;
+
+
+-- ═══════════════════════════════ OMBOR DOIRASI — XODIM BELGISI
+--
+--  ★ ZAVOD QARORI (2026-09). Tsex doirasi IKKI savolga birdan javob
+--  berardi: xodim qaysi KONVERNI yuritadi va qaysi OMBORNI ko'radi.
+--  Zavodda esa ular ajraldi:
+--
+--    · korpus boshlig'i AYNI PAYTDA ta'minotchi — konverda doirasi
+--      Korpus, omborda esa hammasini ko'rishi kerak;
+--    · xom ashyo mudiriga tsex omborlari FAQAT boshlang'ich qoldiq
+--      kiritilguncha kerak, keyin esa faqat zavod omborlari qolsin.
+--
+--  Tsex doirasini o'zgartirish yo'l emas edi: u konverni ham
+--  ochib yuborardi. Shuning uchun OMBOR uchun alohida belgi —
+--  `can_hold_cash`, `sees_warehouse` va `can_request_unit` bilan
+--  bir xil idiom va bir xil sabab (4-qoida).
+--
+--    NULL       tsexi bo'yicha — bugungi qoida, standarti
+--    'all'      barcha ombor (doira o'qilmaydi)
+--    'factory'  faqat ZAVOD omborlari (tsexga biriktirilmaganlari)
+--
+--  Standarti NULL: hech kimning ekrani o'zidan-o'zi o'zgarmaydi
+--  (`sees_warehouse` bilan bir xil sabab).
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS mat_scope TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'workers_mat_scope_check') THEN
+    ALTER TABLE workers ADD CONSTRAINT workers_mat_scope_check
+      CHECK (mat_scope IS NULL OR mat_scope IN ('all', 'factory'));
+  END IF;
+END $$;

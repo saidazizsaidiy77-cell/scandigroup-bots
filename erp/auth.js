@@ -18,7 +18,7 @@ async function createSession(workerId, surface) {
 async function loadWorker(workerId) {
   const w = (await db.query(
     `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
-            can_release, can_request_unit
+            can_release, can_request_unit, mat_scope
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles] = await Promise.all([
@@ -79,6 +79,9 @@ async function loadWorker(workerId) {
     //  ruxsat beradigani ham `sotuvchi`, qolganlari ham.
     can_release: w.can_release === true,
     can_request_unit: w.can_request_unit !== false,
+    //  Ombor doirasi: tsexi bo'yicha (NULL) / barcha / faqat zavod
+    //  (izoh: sql/materials.sql).
+    mat_scope: w.mat_scope || null,
   };
 }
 

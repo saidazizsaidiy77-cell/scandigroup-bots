@@ -35,7 +35,7 @@ const trim = (v) => {
 //  tsex doirasi bo'yicha qisqaradi — boshliqqa faqat o'z tsexining
 //  ombori ko'rinadi (4-qoida: ism ham, tsex ham kodga yozilmaydi).
 router.get('/ref', need(...VIEW), wrap(async (req, res) => {
-  const doira = req.user.scope_shop_ids || [];
+  const doira = whDoira(req);
   const [cats, uoms, whs, sups, kurs] = await Promise.all([
     db.query(`SELECT code, name FROM material_categories WHERE active ORDER BY sort, name`),
     db.query(`SELECT code, name FROM material_uoms ORDER BY sort, name`),
@@ -59,9 +59,9 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
           --  boshlig'i yuritadi — ishlab chiqarishdagi javobgar
           --  tsex bilan aynan bir xil qoida.
           AND ($1::int[] IS NULL
-               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
         ORDER BY w.sort, w.name`,
-      [doira.length ? doira : null]),
+      [doira]),
     //  Ta'minotchilar SPRAVOCHNIK: unda na qarz bor, na to'lov —
     //  shuning uchun doira qo'yilmaydi, material bog'laydigan har
     //  kimga ochiq (kassadagi `/refs` bilan bir xil qoida).
@@ -88,10 +88,11 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
   //  Oylik moddasining doirasi bilan bir xil idiom (izoh:
   //  modules/cash.js): ro'yxat qisqarsa QAYSI doira bilan
   //  qisqargani o'sha yerda yozilib turadi.
-  const doiraNom = doira.length
-    ? (await db.query(`SELECT name FROM shops WHERE id = ANY($1) ORDER BY name`,
-                      [doira])).rows.map((r) => r.name)
-    : [];
+  const doiraNom = req.user.mat_scope === 'factory' ? ['Zavod omborlari']
+    : doira
+      ? (await db.query(`SELECT name FROM shops WHERE id = ANY($1) ORDER BY name`,
+                        [doira])).rows.map((r) => r.name)
+      : [];
 
   //  ★ ZAVOD OMBORLARI DOIRADAN QAT'I NAZAR KELADI — faqat
   //  TALABNOMANING manbasi uchun. Tsex boshlig'ining doirasi uning
@@ -103,7 +104,7 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
   //  Bu QULAYLIK emas, ishning SHARTI — lekin qoldiqni ochmaydi:
   //  ro'yxatda faqat nomi turadi, `/stock` esa eskicha doira bilan
   //  chegaralangan.
-  const zavodWhs = doira.length
+  const zavodWhs = doira
     ? (await db.query(
         `SELECT id, code, name FROM warehouses
           WHERE kind = 'material' AND is_active AND shop_id IS NULL
@@ -264,7 +265,7 @@ router.patch('/:id', need(...MANAGE), wrap(async (req, res) => {
 //  omborlarini ko'radi. Ombor xodimi va rahbariyatda doira yo'q —
 //  ularga hammasi ochiq.
 router.get('/stock', need(...VIEW), wrap(async (req, res) => {
-  const doira = req.user.scope_shop_ids || [];
+  const doira = whDoira(req);
   const { rows } = await db.query(
     `SELECT s.*, c.name AS category_name, u.name AS uom_name
        FROM v_material_stock s
@@ -272,12 +273,12 @@ router.get('/stock', need(...VIEW), wrap(async (req, res) => {
        LEFT JOIN material_categories c ON c.code = s.category
        LEFT JOIN material_uoms u       ON u.code = s.uom
       WHERE ($1::int[] IS NULL
-             OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
         AND ($2::int IS NULL OR s.warehouse_id = $2)
         AND ($3::text IS NULL OR s.material ILIKE '%' || $3 || '%')
       ORDER BY w.sort, c.code NULLS LAST, s.material
       LIMIT 3000`,
-    [doira.length ? doira : null,
+    [doira,
      Number(req.query.warehouse_id) || null, trim(req.query.q)]);
   res.json({ rows });
 }));
@@ -285,7 +286,7 @@ router.get('/stock', need(...VIEW), wrap(async (req, res) => {
 //  Harakat tarixi: qaysi kuni, qayerdan qayerga, nechta va kim.
 //  «Qancha bor» degan savoldan keyingi savol «qayerdan keldi» bo'ladi.
 router.get('/moves', need(...VIEW), wrap(async (req, res) => {
-  const doira = req.user.scope_shop_ids || [];
+  const doira = whDoira(req);
   const { rows } = await db.query(
     `SELECT m.id, m.moved_on, m.qty, m.note, m.status,
             m.from_kind, m.to_kind,
@@ -305,7 +306,7 @@ router.get('/moves', need(...VIEW), wrap(async (req, res) => {
         AND ($4::int IS NULL OR m.material_id = $4)
       ORDER BY m.moved_on DESC, m.id DESC
       LIMIT 500`,
-    [doira.length ? doira : null, trim(req.query.from), trim(req.query.to),
+    [doira, trim(req.query.from), trim(req.query.to),
      Number(req.query.material_id) || null]);
   res.json({ rows });
 }));
@@ -419,8 +420,12 @@ router.post('/opening', need(...MANAGE), wrap(async (req, res) => {
 //  bo'lsa marshrutning birinchi qadami. Ikki xil yozilsa boshliq o'z
 //  konverini bir ekranda ko'rib, ikkinchisida ko'rmay qolardi.
 async function konverDoira(req, id) {
-  const doira = req.user.scope_shop_ids || [];
-  if (!doira.length) return;
+  //  Konverning doirasi OMBORNIKI emas, ishlab chiqarishniki: xodim
+  //  qaysi konverga material biriktira olishini tsex doirasi hal
+  //  qiladi va ombor belgisi («barcha ombor») unga tegmaydi.
+  const d = req.user.scope_shop_ids || [];
+  const doira = d.length ? d : null;
+  if (!doira) return;
   const ok = (await db.query(
     `SELECT 1 FROM v_unit_register WHERE id = $1
       AND COALESCE(owner_shop_id, (
@@ -451,7 +456,7 @@ const OMBOR = `
     LEFT JOIN shops    o  ON o.id  = w.owner_shop_id
    WHERE w.kind = 'material' AND w.is_active
      AND ($1::int[] IS NULL
-          OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
+          OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
    ORDER BY (w.section_id IS NOT DISTINCT FROM $2::int) DESC,
             (w.shop_id IS NOT DISTINCT FROM $3::int
              AND w.section_id IS NULL) DESC,
@@ -463,7 +468,7 @@ const OMBOR = `
 router.get('/unit/:id', need(...VIEW, 'materials.request'),
   wrap(async (req, res) => {
   await konverDoira(req, req.params.id);
-  const doira = req.user.scope_shop_ids || [];
+  const doira = whDoira(req);
   const u = (await db.query(
     `SELECT u.id, u.conveyor_no, u.qty, u.current_section_id AS section_id,
             p.name AS product, s.name AS section, s.shop_id
@@ -474,7 +479,7 @@ router.get('/unit/:id', need(...VIEW, 'materials.request'),
   if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
 
   const [whs, rows] = await Promise.all([
-    db.query(OMBOR, [doira.length ? doira : null, u.section_id, u.shop_id]),
+    db.query(OMBOR, [doira, u.section_id, u.shop_id]),
     //  Bekor qilingani ham chiqadi, lekin o'chirilgan holida: sarf
     //  PULGA tegadi va yo'qolgan qator savol qoldirardi («men yozgan
     //  edim-ku»). Ombor qoldig'iga esa qo'shilmaydi (`status = 'ok'`).
@@ -505,7 +510,7 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
   await konverDoira(req, req.params.id);
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
-  const doira = req.user.scope_shop_ids || [];
+  const doira = whDoira(req);
 
   const client = await db.connect();
   try {
@@ -522,7 +527,7 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
     //  id ni qo'lda yuborib boshqa tsexning omboridan yozib bo'lmaydi
     //  (tugmani yashirish himoya emas).
     const whs = (await client.query(
-      OMBOR, [doira.length ? doira : null, u.section_id, u.shop_id])).rows;
+      OMBOR, [doira, u.section_id, u.shop_id])).rows;
     const wh = req.body.warehouse_id
       ? whs.find((w) => w.id === Number(req.body.warehouse_id))
       : whs[0];
@@ -603,7 +608,20 @@ async function nextReceiptNo(client) {
 //  Ombor doirasi — `/ref` dagi bilan AYNAN bir xil shart: ro'yxatda
 //  ko'rinmaydigan omborning hujjati ham ko'rinmasligi kerak, aks
 //  holda tsex boshlig'i o'z ekranida begona kirimni o'qirdi.
+//  ★ OMBOR DOIRASI — BITTA JOYDA (izoh: sql/materials.sql). Uchta
+//  javob bor va ikkitasi tsex doirasidan CHIQMAYDI:
+//
+//    'all'      — barcha ombor: doira o'qilmaydi;
+//    'factory'  — faqat ZAVOD omborlari: `[0]`;
+//    NULL       — tsexi bo'yicha, ya'ni eskicha.
+//
+//  Zavod ombori `COALESCE(owner_shop_id, shop_id, 0)` da NOLGA
+//  aylanadi, shuning uchun uchala javob ham BITTA massiv bo'lib
+//  chiqadi va so'rovlarga ikkinchi shart qo'shilmaydi — qo'shilsa u
+//  o'n bir joyda takrorlanib, biri ertaga unutilardi.
 const whDoira = (req) => {
+  if (req.user.mat_scope === 'all')     return null;
+  if (req.user.mat_scope === 'factory') return [0];
   const d = req.user.scope_shop_ids || [];
   return d.length ? d : null;
 };
@@ -660,7 +678,7 @@ router.get('/receipts', need(...VIEW), wrap(async (req, res) => {
        FROM v_mat_receipts r
        JOIN warehouses w ON w.id = r.warehouse_id
       WHERE ($1::int[] IS NULL
-             OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($1))
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
         AND ($2::int  IS NULL OR r.supplier_id  = $2)
         AND ($3::int  IS NULL OR r.warehouse_id = $3)
         AND ($4::date IS NULL OR r.doc_on >= $4)
@@ -682,7 +700,7 @@ router.get('/receipts/:id', need(...VIEW), wrap(async (req, res) => {
        JOIN warehouses w ON w.id = r.warehouse_id
       WHERE r.id = $1
         AND ($2::int[] IS NULL
-             OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))`,
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
     [req.params.id, whDoira(req)])).rows[0];
   if (!r) return res.status(404).json({ error: 'Kirim hujjati topilmadi' });
   res.json(r);
@@ -726,7 +744,7 @@ router.post('/receipts', need(...MANAGE), wrap(async (req, res) => {
       `SELECT w.id, w.name, w.shop_id FROM warehouses w
         WHERE w.id = $1 AND w.kind = 'material' AND w.is_active
           AND ($2::int[] IS NULL
-               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))`,
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
       [req.body.warehouse_id, whDoira(req)])).rows[0];
     if (!wh) throw new Error('Ombor tanlanmagan');
     if (wh.shop_id) throw new Error(
@@ -826,7 +844,7 @@ router.post('/receipts/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
          JOIN warehouses w ON w.id = r.warehouse_id
         WHERE r.id = $1 AND r.status = 'ok'
           AND ($2::int[] IS NULL
-               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))
         FOR UPDATE OF r`,
       [req.params.id, whDoira(req)])).rows[0];
     if (!r) throw new Error('Kirim hujjati topilmadi');
@@ -919,10 +937,9 @@ async function saldoYubor(client) {
 //  cheklaydi (faqat o'z tsexining omboriga so'raydi), MANBANI esa
 //  yo'q — zavod ombori hech kimning tsexida emas va doira uni
 //  ro'yxatdan chiqarib tashlardi, ya'ni so'rash uchun joy qolmasdi.
-const talabDoira = (req) => {
-  const d = req.user.scope_shop_ids || [];
-  return d.length ? d : null;
-};
+//  Talabnomada ham AYNAN o'sha doira: ro'yxatda ko'rinmaydigan
+//  omborning hujjati ham ko'rinmasligi kerak.
+const talabDoira = whDoira;
 
 async function nextReqNo(client, kind) {
   const prefix = `${kind === 'return' ? 'Q' : 'T'}`

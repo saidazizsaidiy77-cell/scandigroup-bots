@@ -52,6 +52,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
             w.can_release, w.can_request_unit, w.supply_reports,
+            w.mat_scope,
             --  Inkassator: pulni hamma mijozdan u yig'adi
             --  (izoh: sql/cash.sql).
             w.cash_all_customers,
@@ -175,7 +176,7 @@ async function saveCashGroups(client, workerId, codes) {
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
-          can_request_unit, supply_reports, roles = [] } = req.body;
+          can_request_unit, supply_reports, mat_scope, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   const kod = req.body.pin ? String(req.body.pin) : null;
@@ -191,8 +192,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
       `INSERT INTO workers (name, phone, pin, pin_hash, tg_id, can_hold_cash,
                             cash_all_customers, can_spend_cash, sees_warehouse,
                             can_release, can_request_unit, supply_reports,
+                            mat_scope,
                             staff_group, shop_id, section_id, dept, position, hired_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
@@ -213,6 +215,10 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
        //  uni kim o'qishini zavod o'zi hal qiladi (izoh:
        //  sql/materials.sql).
        supply_reports === true,
+       //  Ombor doirasi: standarti NULL — tsexi bo'yicha, ya'ni
+       //  hech kimning ekrani o'zidan-o'zi o'zgarmaydi (izoh:
+       //  sql/materials.sql).
+       ['all', 'factory'].includes(mat_scope) ? mat_scope : null,
        st.staff_group, st.shop_id, st.section_id, st.dept, st.position,
        st.hired_at])).rows[0];
     for (const r of roles) {
@@ -242,7 +248,7 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
   const { name, phone, tg_id, active, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
-          can_request_unit, supply_reports, roles } = req.body;
+          can_request_unit, supply_reports, mat_scope, roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -289,7 +295,11 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          can_request_unit = COALESCE($21, can_request_unit),
          --  Ta'minot xabarlarini oladigan odam (izoh:
          --  sql/materials.sql) — yuborilmasa tegilmaydi.
-         supply_reports = COALESCE($22, supply_reports)
+         supply_reports = COALESCE($22, supply_reports),
+         --  Ombor doirasi (izoh: sql/materials.sql). Bo'sh matn —
+         --  «tsexi bo'yicha», ya'ni tozalash; yuborilmasa tegilmaydi.
+         mat_scope = CASE WHEN $23::text IS NULL THEN mat_scope
+                          WHEN $23 = '' THEN NULL ELSE $23 END
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -304,7 +314,9 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        st.hired_at,
        typeof can_release === 'boolean' ? can_release : null,
        typeof can_request_unit === 'boolean' ? can_request_unit : null,
-       typeof supply_reports === 'boolean' ? supply_reports : null]);
+       typeof supply_reports === 'boolean' ? supply_reports : null,
+       mat_scope === undefined ? null
+         : (['all', 'factory'].includes(mat_scope) ? mat_scope : '')]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
