@@ -93,7 +93,25 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
                       [doira])).rows.map((r) => r.name)
     : [];
 
+  //  ★ ZAVOD OMBORLARI DOIRADAN QAT'I NAZAR KELADI — faqat
+  //  TALABNOMANING manbasi uchun. Tsex boshlig'ining doirasi uning
+  //  KO'RADIGAN ro'yxatini cheklaydi (qoldiq, harakat), lekin
+  //  talabnoma yozish uchun manba kerak: zavod ombori hech kimning
+  //  tsexida emas va doira uni ro'yxatdan chiqarib tashlardi, ya'ni
+  //  so'rash uchun joy qolmasdi.
+  //
+  //  Bu QULAYLIK emas, ishning SHARTI — lekin qoldiqni ochmaydi:
+  //  ro'yxatda faqat nomi turadi, `/stock` esa eskicha doira bilan
+  //  chegaralangan.
+  const zavodWhs = doira.length
+    ? (await db.query(
+        `SELECT id, code, name FROM warehouses
+          WHERE kind = 'material' AND is_active AND shop_id IS NULL
+          ORDER BY sort, name`)).rows
+    : whs.rows.filter((w) => !w.shop_id);
+
   res.json({ categories: cats.rows, uoms: uoms.rows, warehouses: whs.rows,
+             factory_warehouses: zavodWhs,
              suppliers: sups.rows, scope_shops: doiraNom,
              rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null });
 }));
@@ -883,6 +901,259 @@ async function saldoYubor(client) {
   return notify.queueSupply(
     { module: 'materials', title: x.title, body: x.body }, client);
 }
+
+// ═══════════════════════════════════════════════════ TALABNOMA
+//
+//  ★ ZAVOD QARORI (2026-09). Tsex boshlig'i xom ashyoni OG'ZAKI
+//  so'ramaydi — hujjat yozadi: qaysi ombordan, qaysi material va
+//  qancha kerak. Jadvallar va bosqichlar `sql/materials.sql` da
+//  yozilgan, bu yerda faqat yo'llari.
+//
+//  ★ MANBA — ZAVOD OMBORI, MANZIL — TSEX OMBORI. Mol zavodga
+//  ta'minotchidan kiradi (`/receipts`), tsexga esa undan TALABNOMA
+//  bilan beriladi. Ikkala yo'l ochiq qolsa material zavod
+//  qoldig'idan UMUMAN o'tmagan holda tsexda paydo bo'lardi.
+//
+//  ★ DOIRA BU YERDA IKKI XIL ISHLAYDI, va aynan shu yeri boshqa
+//  ro'yxatlardan farq qiladi: tsex boshlig'ining doirasi MANZILNI
+//  cheklaydi (faqat o'z tsexining omboriga so'raydi), MANBANI esa
+//  yo'q — zavod ombori hech kimning tsexida emas va doira uni
+//  ro'yxatdan chiqarib tashlardi, ya'ni so'rash uchun joy qolmasdi.
+const talabDoira = (req) => {
+  const d = req.user.scope_shop_ids || [];
+  return d.length ? d : null;
+};
+
+async function nextReqNo(client, kind) {
+  const prefix = `${kind === 'return' ? 'Q' : 'T'}`
+    + `${String(new Date().getFullYear()).slice(-2)}-`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
+       FROM mat_requests WHERE doc_no LIKE $1`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(4, '0');
+}
+
+//  Ro'yxat. Doira CHEGARA: tsex boshlig'i o'z tsexining hujjatini
+//  ko'radi, xom ashyo xodimi (doirasiz) hammasini.
+router.get('/requests', need(...VIEW), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM v_mat_requests r
+      WHERE ($1::int[] IS NULL
+             OR r.to_shop = ANY($1) OR r.from_shop = ANY($1))
+        AND ($2::text IS NULL OR r.status = $2)
+        AND ($3::text IS NULL OR r.kind = $3)
+      ORDER BY r.id DESC LIMIT 500`,
+    [talabDoira(req), trim(req.query.status), trim(req.query.kind)]);
+  res.json({ rows });
+}));
+
+//  ★ YOZADIGAN ODAM — `materials.request`: tsex boshlig'i va ishlab
+//  chiqarish boshlig'i. Xom ashyo xodimi talabnoma YOZMAYDI — u
+//  tayyorlaydi va chiqaradi.
+router.post('/requests', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+  const kind = req.body.kind === 'return' ? 'return' : 'issue';
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const doira = talabDoira(req);
+
+    //  Tsex ombori — hujjatning TSEX tomoni; zavod ombori — ZAVOD
+    //  tomoni. `kind` yo'nalishni aytadi, ustunlar esa qayerdan
+    //  qayerga ekanini.
+    const tsexWh = (await client.query(
+      `SELECT id, name, shop_id, owner_shop_id FROM warehouses
+        WHERE id = $1 AND kind = 'material' AND is_active`,
+      [req.body.shop_warehouse_id])).rows[0];
+    if (!tsexWh) throw new Error('Tsex ombori tanlanmagan');
+    if (!tsexWh.shop_id)
+      throw new Error(`«${tsexWh.name}» zavod ombori — talabnoma tsex omboriga yoziladi`);
+    if (doira && !doira.includes(tsexWh.owner_shop_id || tsexWh.shop_id))
+      throw new Error(`«${tsexWh.name}» sizning doirangizda emas`);
+
+    const zavodWh = (await client.query(
+      `SELECT id, name, shop_id FROM warehouses
+        WHERE id = $1 AND kind = 'material' AND is_active`,
+      [req.body.factory_warehouse_id])).rows[0];
+    if (!zavodWh) throw new Error('Zavod ombori tanlanmagan');
+    if (zavodWh.shop_id)
+      throw new Error(`«${zavodWh.name}» tsex ombori — talabnoma zavod omboriga yoziladi`);
+
+    const doc_no = await nextReqNo(client, kind);
+    const r = (await client.query(
+      `INSERT INTO mat_requests (doc_no, kind, from_warehouse_id,
+                                 to_warehouse_id, need_on, note, created_by)
+       VALUES ($1,$2,$3,$4,$5::date,$6,$7) RETURNING id`,
+      [doc_no, kind,
+       kind === 'return' ? tsexWh.id : zavodWh.id,
+       kind === 'return' ? zavodWh.id : tsexWh.id,
+       kind === 'return' ? null : SANA(req.body.need_on),
+       trim(req.body.note), req.user.id])).rows[0];
+
+    let n = 0;
+    for (const it of items) {
+      const qty = Number(it.qty);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const mt = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1`, [it.material_id])).rows[0];
+      if (!mt) throw new Error('Material topilmadi');
+      await client.query(
+        `INSERT INTO mat_request_items (request_id, material_id, qty)
+         VALUES ($1,$2,$3)
+         ON CONFLICT (request_id, material_id) DO UPDATE SET qty = $3`,
+        [r.id, mt.id, qty]);
+      n++;
+    }
+    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+
+    //  ★ TAYYORLAYDIGAN ODAMGA AYTILADI. U kun bo'yi talabnoma
+    //  sahifasida o'tirmaydi va ertalab yozilgani kechgacha yotib
+    //  qolardi — tsex esa materialsiz turardi.
+    await notify.queueWarehouse({
+      perms: ['materials.manage'], module: 'materials',
+      title: kind === 'return'
+        ? `Qaytarish ${doc_no} · ${tsexWh.name}`
+        : `Talabnoma ${doc_no} · ${tsexWh.name}`,
+      body: `${zavodWh.name}${SANA(req.body.need_on)
+                ? ' · kerak: ' + SANA(req.body.need_on) : ''}`
+            + `\n${n} ta material`
+            + `\n\nKim yozdi: ${req.user.name}`,
+    }, client);
+
+    await audit(req, { module: 'materials', action: 'request-new',
+                       entity: 'mat_requests', entity_id: r.id,
+                       payload: { doc_no, kind, lines: n } }, client);
+    await client.query('COMMIT');
+    res.json({ id: r.id, doc_no, lines: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  «Tayyorladim» — javondan yig'ib qo'ydi. Material HALI ko'chmaydi:
+//  u chiqarilganda ko'chadi (uchinchi bosqich).
+router.post('/requests/:id/ready', need(...MANAGE), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `UPDATE mat_requests SET status = 'ready', ready_by = $2, ready_at = NOW()
+      WHERE id = $1 AND status = 'new' AND kind = 'issue'
+      RETURNING doc_no`, [req.params.id, req.user.id]);
+  if (!rows[0]) return res.status(400).json({
+    error: "Hujjat topilmadi yoki allaqachon tayyorlangan" });
+  await audit(req, { module: 'materials', action: 'request-ready',
+                     entity: 'mat_requests', entity_id: Number(req.params.id),
+                     payload: { doc_no: rows[0].doc_no } });
+  res.json({ ok: true });
+}));
+
+//  ★ MATERIAL SHU YERDA KO'CHADI. Har qator uchun `material_moves` ga
+//  bitta yozuv: ombordan omborga. Narx yozilmaydi — sarflangan
+//  materialning bahosi KIRIMLARdan chiqadi (izoh: sql/materials.sql).
+//
+//  ★ BERILGAN SONI ALOHIDA: ombor xodimi 100 so'ralganda 60 ta bera
+//  oladi — qolgani hali kelmagan. Ko'chadigani AYNAN berilgani,
+//  so'ralgani emas: aks holda yo'q material tsex qoldig'iga tushib
+//  qolardi.
+router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const r = (await client.query(
+      `SELECT * FROM mat_requests WHERE id = $1 FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!r) throw new Error('Hujjat topilmadi');
+    if (r.status === 'done') throw new Error('Allaqachon chiqarilgan');
+    if (!['new', 'ready'].includes(r.status))
+      throw new Error('Hujjat yopilgan');
+
+    const berilgan = new Map(
+      (Array.isArray(req.body.items) ? req.body.items : [])
+        .map((x) => [Number(x.material_id), Number(x.qty)]));
+
+    const qatorlar = (await client.query(
+      `SELECT x.id, x.material_id, x.qty, m.name
+         FROM mat_request_items x JOIN materials m ON m.id = x.material_id
+        WHERE x.request_id = $1`, [r.id])).rows;
+
+    let n = 0;
+    for (const q of qatorlar) {
+      //  Yuborilmagan qator SO'RALGANICHA beriladi: ombor xodimi
+      //  hammasini bergan bo'lsa raqamlarni qayta terib o'tirmasin.
+      const v = berilgan.has(q.material_id)
+        ? berilgan.get(q.material_id) : Number(q.qty);
+      if (!Number.isFinite(v) || v < 0)
+        throw new Error(`«${q.name}» — soni noto'g'ri`);
+      await client.query(
+        `UPDATE mat_request_items SET issued_qty = $2 WHERE id = $1`, [q.id, v]);
+      if (!v) continue;
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                     to_kind, to_id, moved_on, doc_kind,
+                                     doc_id, worker_id)
+         VALUES ($1,$2,'warehouse',$3,'warehouse',$4,
+                 COALESCE($5::date, CURRENT_DATE), 'request', $6, $7)`,
+        [q.material_id, v, r.from_warehouse_id, r.to_warehouse_id,
+         SANA(req.body.on), r.id, req.user.id]);
+      n++;
+    }
+    if (!n) throw new Error("Birorta ham qator chiqarilmadi");
+
+    await client.query(
+      `UPDATE mat_requests SET status = 'done', done_by = $2,
+              done_on = COALESCE($3::date, CURRENT_DATE)
+        WHERE id = $1`, [r.id, req.user.id, SANA(req.body.on)]);
+
+    //  Yozgan odamga aytiladi: u materialni kutib turibdi va
+    //  ombor eshigiga borishdan oldin bilishi kerak.
+    if (r.created_by)
+      await notify.queue({
+        worker_id: r.created_by, module: 'materials',
+        title: `${r.kind === 'return' ? 'Qaytarish' : 'Talabnoma'} `
+             + `${r.doc_no} — chiqarildi`,
+        body: `${n} ta material\n\nKim chiqardi: ${req.user.name}`,
+      }, client);
+
+    await audit(req, { module: 'materials', action: 'request-done',
+                       entity: 'mat_requests', entity_id: r.id,
+                       payload: { doc_no: r.doc_no, lines: n } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, lines: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  Rad etish ham, yozgan odamning bekor qilishi ham BITTA yo'ldan,
+//  lekin holati boshqa: `rejected` — boshqaniki, `cancelled` —
+//  o'zinikidir. Sabab ikkalasida ham so'raladi (konver so'rovi bilan
+//  bir xil idiom).
+router.post('/requests/:id/reject',
+  need('materials.request', ...MANAGE), wrap(async (req, res) => {
+  const sabab = trim(req.body.note);
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const r = (await db.query(
+    `SELECT * FROM mat_requests WHERE id = $1`, [req.params.id])).rows[0];
+  if (!r) return res.status(404).json({ error: 'Hujjat topilmadi' });
+  if (!['new', 'ready'].includes(r.status))
+    return res.status(400).json({ error: 'Hujjat yopilgan' });
+  const ozi = r.created_by === req.user.id;
+  if (!ozi && !req.user.permissions.some((p) => MANAGE.includes(p)))
+    return res.status(403).json({ error: "Bu hujjat sizniki emas" });
+
+  await db.query(
+    `UPDATE mat_requests SET status = $2, decided_by = $3, decided_at = NOW(),
+            decide_note = $4 WHERE id = $1`,
+    [r.id, ozi ? 'cancelled' : 'rejected', req.user.id, sabab]);
+  await audit(req, { module: 'materials',
+                     action: ozi ? 'request-cancel' : 'request-reject',
+                     entity: 'mat_requests', entity_id: r.id,
+                     payload: { doc_no: r.doc_no, note: sabab } });
+  res.json({ ok: true, status: ozi ? 'cancelled' : 'rejected' });
+}));
 
 //  ★ «HOZIR YUBORISH» — SINASH UCHUN, va kundalik ish uchun ham
 //  (zavod qarori, 2026-09). Jadval kuniga bir marta yuradi, ya'ni

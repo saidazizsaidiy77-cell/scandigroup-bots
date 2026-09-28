@@ -274,6 +274,24 @@ const NAVBATLAR = [
               izoh: `${n} ta buyurtma tayyor — chiqarishga berilmagan` }];
   },
 
+  //  ★ 7a. TALABNOMA — XOM ASHYO XODIMINING NAVBATI (zavod qarori,
+  //  2026-09). Tsex boshlig'i hujjat yozdi va materialni kutib
+  //  turibdi: ombor xodimi sahifani ochib ko'rmasa, ertalab
+  //  yozilgani kechgacha yotib qolardi va tsex materialsiz
+  //  turardi.
+  //
+  //  Shart sahifadagi ro'yxat bilan AYNAN bir xil: tayyorlanmagan
+  //  va chiqarilmagan hujjat (`new`, `ready`) — ya'ni kimdir qo'l
+  //  ko'tarishini kutayotgani.
+  async (req) => {
+    if (!bor(req, 'materials.manage', 'production.manage')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM mat_requests
+        WHERE status IN ('new', 'ready')`);
+    return [{ page: '/materiallar.html', mod: 'materials', n,
+              izoh: `${n} ta talabnoma sizni kutmoqda` }];
+  },
+
   //  8. TOPSHIRILGAN, LEKIN QABUL QILINMAGAN PUL — kassirning navbati.
   //  Xodim «topshirdim» ni bosdi va pul uning qo'lida kassirni kutib
   //  turibdi: kassir sanab olmaguncha u hech qaysi qoldiqda yo'q

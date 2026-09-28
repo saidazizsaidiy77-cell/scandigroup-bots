@@ -6444,6 +6444,131 @@ test('jurnalda boshlanmagan konverlar filtri', async () => {
   assert.ok(xls.text.includes(bosh.conveyor_no));
 });
 
+test('talabnoma: tsexga material zavod omboridan beriladi', async () => {
+  //  ★ ZAVOD QARORI (2026-09). Tsex boshlig'i xom ashyoni OG'ZAKI
+  //  so'ramaydi — hujjat yozadi. Material faqat CHIQARILGANDA
+  //  ko'chadi: yo'ldagi material ikkala qoldiqda ham to'g'ri turadi
+  //  (vitrinadan qaytarish bilan bir xil sabab).
+  const { db } = require('../db');
+  const xom = await xodim('Sinov talab xodim', 'xom_ombor');
+  await xodim('Sinov talab boshliq', 'tsex_usta');
+  //  Tsex boshlig'ining DOIRASI bor: u faqat o'z tsexining omboriga
+  //  so'raydi, lekin zavod omborini ko'rishi SHART — aks holda
+  //  so'rash uchun manba qolmasdi.
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = (SELECT id FROM shops WHERE code='KORPUS')
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov talab boshliq')`);
+  const boshliq = H.api(base, await H.sessionFor('Sinov talab boshliq'));
+
+  const zavod = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const tsexWh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
+
+  //  ★ ZAVOD OMBORI DOIRADAN QAT'I NAZAR KELADI (faqat manba uchun).
+  const ref = (await boshliq('GET', '/api/materials/ref')).body;
+  assert.ok((ref.factory_warehouses || []).some((w) => w.id === zavod),
+    'zavod ombori manba ro\'yxatida turadi');
+  assert.ok(!ref.warehouses.some((w) => w.id === zavod),
+    'ko\'radigan ro\'yxatida esa yo\'q — doira o\'z kuchida');
+
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Sinov Talab Yelim', uom: 'kg', category: 'BOSHQA' })).body;
+  //  Omborda 100 kg bor.
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ material_id: m.id, qty: 100, warehouse_id: zavod }] })).status, 200);
+
+  //  ── Talabnoma: tsex ombori MANZIL, zavod ombori MANBA.
+  const t = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
+    need_on: '2026-10-01',
+    items: [{ material_id: m.id, qty: 40 }] });
+  assert.equal(t.status, 200, t.text);
+  assert.match(t.body.doc_no, /^T\d\d-\d{4}$/, 'raqam T26-0001 shaklida');
+
+  //  Teskari yo'nalish rad etiladi: mol zavodga ta'minotchidan
+  //  kiradi, tsexga esa undan talabnoma bilan beriladi.
+  const teskari = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: zavod, factory_warehouse_id: tsexWh,
+    items: [{ material_id: m.id, qty: 5 }] });
+  assert.equal(teskari.status, 400, teskari.text);
+
+  //  Boshqa tsexning omboriga so'rab bo'lmaydi — doira CHEGARA.
+  const begona = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-STU-ZBOR'`)).id;
+  assert.equal((await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: begona, factory_warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 5 }] })).status, 400);
+
+  //  ── Material HALI ko'chmagan: hujjat yozilgani — berilgani emas.
+  const qoldiq = async (whId) => {
+    const r = (await xom('GET', '/api/materials/stock?warehouse_id=' + whId))
+      .body.rows.find((x) => x.material_id === m.id);
+    return r ? Number(r.qty) : 0;
+  };
+  assert.equal(await qoldiq(zavod), 100, 'zavodda hali 100');
+  assert.equal(await qoldiq(tsexWh), 0, 'tsexda hali yo\'q');
+
+  //  «Tayyorladim» — javondan yig'ib qo'ydi, material baribir joyida.
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${t.body.id}/ready`)).status, 200);
+  assert.equal(await qoldiq(zavod), 100, 'tayyorlash qoldiqqa tegmaydi');
+
+  //  ★ BERILGAN SONI ALOHIDA: 40 so'ralgan, 25 ta berildi.
+  const d = await xom('POST', `/api/materials/requests/${t.body.id}/done`, {
+    items: [{ material_id: m.id, qty: 25 }] });
+  assert.equal(d.status, 200, d.text);
+  assert.equal(await qoldiq(zavod), 75, 'zavoddan 25 chiqdi');
+  assert.equal(await qoldiq(tsexWh), 25, 'tsexga 25 kirdi');
+
+  const r2 = (await xom('GET', '/api/materials/requests')).body.rows
+    .find((x) => x.id === t.body.id);
+  assert.equal(r2.status, 'done');
+  assert.equal(Number(r2.items[0].qty), 40, 'so\'ralgani saqlanadi');
+  assert.equal(Number(r2.items[0].issued_qty), 25, 'berilgani alohida');
+
+  //  Ikkinchi marta chiqarib bo'lmaydi.
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${t.body.id}/done`, {})).status, 400);
+
+  //  ── Qaytarish: o'sha hujjat, teskari yo'nalishda.
+  const q = await boshliq('POST', '/api/materials/requests', {
+    kind: 'return', shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 10 }] });
+  assert.equal(q.status, 200, q.text);
+  assert.match(q.body.doc_no, /^Q\d\d-\d{4}$/, 'qaytarish Q bilan');
+  //  Qaytarishda «tayyorlash» bosqichi YO'Q.
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${q.body.id}/ready`)).status, 400);
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${q.body.id}/done`, {})).status, 200);
+  assert.equal(await qoldiq(tsexWh), 15, 'tsexdan 10 qaytdi');
+  assert.equal(await qoldiq(zavod), 85, 'zavodga qaytib keldi');
+
+  //  ── Rad etish: sabab SHART, aks holda boshliq nega
+  //  bo'lmaganini bilmay, ertaga yana yozardi.
+  const r3 = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 5 }] });
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${r3.body.id}/reject`, {})).status, 400);
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${r3.body.id}/reject`,
+    { note: 'Omborda yo\'q' })).status, 200);
+  const r4 = (await xom('GET', '/api/materials/requests')).body.rows
+    .find((x) => x.id === r3.body.id);
+  assert.equal(r4.status, 'rejected', 'boshqa odam rad etdi');
+
+  //  ★ NAVBAT RAQAMI RO'YXAT BILAN BIR XIL: ikki joyda yozilgan
+  //  shart bir kun ajralib ketardi.
+  const kutmoqda = (await xom('GET', '/api/materials/requests')).body.rows
+    .filter((x) => ['new', 'ready'].includes(x.status)).length;
+  const nav = (await xom('GET', '/api/navbat')).body.navbat
+    .filter((x) => /talabnoma/.test(x.izoh || ''))
+    .reduce((a, x) => a + x.n, 0);
+  assert.equal(nav, kutmoqda, 'menyudagi raqam ro\'yxat bilan bir xil');
+});
+
 test("ta'minot xabarlari: kirim hujjati va kunlik saldo", async () => {
   //  ★ ZAVOD QARORI (2026-09): kirim yozilgan zahoti u Telegramga
   //  ketsin — qatorlari, summasi va ta'minotchining YANGI qarzi bilan;
