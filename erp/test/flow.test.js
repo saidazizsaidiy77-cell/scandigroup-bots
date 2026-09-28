@@ -6534,6 +6534,24 @@ test("adashib yozilgan boshlang'ich qoldiq bekor qilinadi", async () => {
     .body.rows.find((x) => x.from_kind === 'opening' && x.status === 'ok');
   if (yana) assert.equal((await usta2('POST',
     `/api/materials/moves/${yana.id}/cancel`)).status, 403);
+
+  //  ★ KONVERGA SARFNI HAM OMBOR MUDIRI BEKOR QILADI. Ilgari bu
+  //  faqat tsex boshlig'ining ekranida edi (▣ oynasi) — mudir esa
+  //  ombor tarixida xato qatorni ko'rib turib, telefon qilishdan
+  //  boshqa yo'l topmasdi. Qoldiq shu paytgacha minusda turardi.
+  const u = await newUnit();
+  const sarf = await admin('POST', `/api/materials/unit/${u.id}/consume`, {
+    warehouse_id: wh, items: [{ material_id: m.id, qty: 5 }] });
+  assert.equal(sarf.status, 200, sarf.text);
+  const smv = (await xom('GET', '/api/materials/moves?material_id=' + m.id))
+    .body.rows.find((x) => x.to_kind === 'unit' && x.status === 'ok');
+  assert.ok(smv, 'sarf qatori turadi');
+  //  Ombor tarixidagi «×» aynan shu yo'ldan o'tadi.
+  assert.equal((await xom('POST',
+    `/api/materials/consume/${smv.id}/cancel`)).status, 200);
+  const skeyin = (await xom('GET', '/api/materials/moves?material_id=' + m.id))
+    .body.rows.find((x) => x.id === smv.id);
+  assert.equal(skeyin.status, 'cancelled', 'tarixda qoladi');
 });
 
 test("bron ko'chgan dona bilan birga yuradi", async () => {

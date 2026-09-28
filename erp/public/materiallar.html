@@ -425,15 +425,21 @@ function drawMoves() {
     $('body').innerHTML = '<p class="muted">Harakat yo\'q.</p>';
     return;
   }
-  //  ★ ADASHIB YOZILGAN BOSHLANG'ICH QOLDIQ SHU YERDAN BEKOR
-  //  QILINADI (izoh: modules/materials.js). Qoldiq bir martalik ish
-  //  va o'sha bir martada adashish oson — material boshqa omborga
-  //  tushib qolardi va uni hisobdan chiqaradigan yo'l yo'q edi.
+  //  ★ ADASHIB YOZILGANI SHU YERDAN BEKOR QILINADI (izoh:
+  //  modules/materials.js). Ikki xil qator:
   //
-  //  Faqat qoldiq qatorida: kirim O'Z hujjatidan, talabnomaniki esa
-  //  hujjatdan bekor qilinadi.
-  const ochirsaBoladi = (r) => boshqara() && r.status === 'ok'
-    && r.from_kind === 'opening' && !r.doc_kind;
+  //    · BOSHLANG'ICH QOLDIQ — bir martalik ish va o'sha bir martada
+  //      adashish oson: material boshqa omborga tushib qolardi;
+  //    · KONVERGA SARF — tsex boshlig'i adashib yozgan bo'lishi
+  //      mumkin, lekin buni OMBOR tarixida ombor mudiri ko'radi:
+  //      qoldiq minusga tushib turadi. Ilgari bekor qilish faqat
+  //      boshliqning ekranida (▣ oynasi) edi va mudir uni ko'rib
+  //      turib, telefon qilishdan boshqa yo'l topmasdi.
+  //
+  //  Kirim va talabnoma qatori bu yerdan bekor qilinmaydi: ularning
+  //  O'Z hujjati bor va u qarzga ham, ikkinchi omborga ham tegadi.
+  const ochirsaBoladi = (r) => boshqara() && r.status === 'ok' && !r.doc_kind
+    && (r.from_kind === 'opening' || r.to_kind === 'unit');
   $('body').innerHTML = `<div style="overflow-x:auto"><table>
     <thead><tr><th>Sana</th><th>Material</th><th>Qayerdan</th><th>Qayerga</th>
       <th class="num">Soni</th><th>Kim</th><th></th></tr></thead>
@@ -447,18 +453,24 @@ function drawMoves() {
       <td class="muted" style="font-size:12px">${esc(r.worker || '')}</td>
       <td>${ochirsaBoladi(r)
         ? `<button class="ic" title="Bekor qilish"
-             onclick="qoldiqOchir(${r.id})">&times;</button>` : ''}</td>
+             onclick="qoldiqOchir(${r.id}, '${r.to_kind}')">&times;</button>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 
 //  O'CHIRILMAYDI, BEKOR QILINADI: qoldiqdan chiqadi, tarixda
 //  o'chirilgan holida qoladi. Shuning uchun so'raladi — bosilgani
 //  qaytarilmaydi.
-async function qoldiqOchir(id) {
-  if (!confirm("Boshlang'ich qoldiq qatori bekor qilinsinmi?\n"
-             + 'Qoldiqdan chiqadi, tarixda esa qoladi.')) return;
+async function qoldiqOchir(id, kind) {
+  const sarf = kind === 'unit';
+  if (!confirm(`${sarf ? 'Konverga sarf' : "Boshlang'ich qoldiq"} qatori `
+             + 'bekor qilinsinmi?\nQoldiqdan chiqadi, tarixda esa qoladi.'))
+    return;
+  //  Sarfning O'Z yo'li bor: u konverga tegadi va konver doirasi
+  //  o'sha yerda tekshiriladi (izoh: modules/materials.js).
+  const yol = sarf ? `/api/materials/consume/${id}/cancel`
+                   : `/api/materials/moves/${id}/cancel`;
   try {
-    await App.api(`/api/materials/moves/${id}/cancel`, { method: 'POST' });
+    await App.api(yol, { method: 'POST' });
     toast('Bekor qilindi');
     await load();
   } catch (e) { toast(e.message, true); }
