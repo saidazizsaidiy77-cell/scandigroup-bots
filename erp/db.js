@@ -1,4 +1,44 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+//  ★ SANA MATN BO'LIB KELADI, `Date` OBYEKTI EMAS (zavod qarori,
+//  2026-09).
+//
+//  `pg` DATE ustunini (OID 1082) JS `Date` qilib o'giradi va uni
+//  SERVERNING mintaqasidagi YARIM TUNGA qo'yadi. `TZ=Asia/Tashkent`
+//  qo'yilgach «27-sentabr» degan sana `2026-09-26T19:00:00Z` bo'lib
+//  qoldi: JSON UTC da yoziladi, sahifa esa undan birinchi o'n
+//  belgini kesib oladi — va ekranda 26-sentabr chiqdi. Baza
+//  to'g'ri, ko'rsatilishi noto'g'ri edi; xato BIR KUNLIK va jimgina,
+//  chiqib ketgan buyurtmadan tortib kassa operatsiyasigacha hamma
+//  sanaga tegdi.
+//
+//  DATE da vaqt ham, mintaqa ham YO'Q — uni vaqtga aylantirishning
+//  o'zi xato edi. Shuning uchun u o'zi turgan holida, `YYYY-MM-DD`
+//  matn bo'lib qaytariladi. Tuzatish BITTA joyda: har so'rovda
+//  `::text` yozib chiqilsa ertaga qo'shilgan ustun unutilardi.
+//
+//  `timestamptz` (OID 1184) TEGILMAYDI: unda vaqt bor va mintaqa
+//  ma'noga ega.
+types.setTypeParser(1082, (v) => v);
+
+//  ★ BAZA HAM ZAVODNING VAQTIDA YURADI (zavod qarori, 2026-09).
+//
+//  `TZ=Asia/Tashkent` faqat NODE ga tegadi, bazaga emas: Railway'da
+//  Postgres UTC da turadi va `CURRENT_DATE` u bo'yicha hisoblanadi.
+//  Toshkent UTC dan BESH SOAT oldinda, ya'ni yarim tundan ertalab
+//  soat beshgacha qilingan har ish KECHAGI sana bilan yozilardi —
+//  chiqib ketgan buyurtma, konver harakati, kassa operatsiyasi va
+//  ombor kirimi, hammasi. Xato bir kunlik va jimgina: hujjatdagi
+//  sana zavodning kunidan farq qilib qolardi va buni faqat
+//  hisobotni solishtirganda sezilardi.
+//
+//  Sozlama ULANISHDA beriladi (`options`), ya'ni hovuzdagi har
+//  ulanish uchun bir xil. Ikkinchi joyda takrorlanmaydi: `SET TIME
+//  ZONE` ni so'rovlarga qo'shib chiqilsa biri ertaga unutilardi.
+//
+//  `TZ` qo'yilmagan bo'lsa hech narsa o'zgarmaydi — server o'z
+//  vaqtida yuradi va testlar ham shunday ishlaydi.
+const mintaqa = String(process.env.TZ || '').trim();
 
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -7,6 +47,7 @@ const db = new Pool({
   idleTimeoutMillis: 30000,
   // Hovuz tugaganda so'rov cheksiz kutmasin — xato bergani ma'qul
   connectionTimeoutMillis: 10000,
+  ...(mintaqa ? { options: `-c timezone=${mintaqa}` } : {}),
 });
 
 // Har modul shu yordamchilarni ishlatadi — xatolikni bir joyda ushlash uchun.
@@ -21,8 +62,16 @@ const wrap = (fn) => (req, res) =>
     res.status(status).json({ error: e.message });
   });
 
-const today   = () => new Date().toISOString().slice(0, 10);
-const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+//  ★ SANA MAHALLIY, UTC EMAS. `toISOString()` har doim UTC beradi va
+//  Toshkentda yarim tundan ertalab beshgacha KECHAGI kunni
+//  qaytarardi — baza tomonidagi `CURRENT_DATE` bilan bir xil xato va
+//  bir xil sabab (yuqorida).
+const kunI = (d) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const today   = () => kunI(new Date());
+const daysAgo = (n) => kunI(new Date(Date.now() - n * 864e5));
 
 // Pul va ombor tegadigan har amal audit jurnaliga tushadi.
 //
