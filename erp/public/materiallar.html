@@ -608,17 +608,19 @@ function talabOch(kind) {
         <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
           margin-bottom:12px">
           <div style="flex:1;min-width:210px"><label>Tsex ombori</label>
-            <select id="tShopWh">${tsexlar.map((w) =>
+            <select id="tShopWh" onchange="talabYol()">${tsexlar.map((w) =>
               `<option value="${w.id}">${esc(w.name)}${
                 joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}</select></div>
           <div style="flex:1;min-width:210px"><label>Zavod ombori</label>
-            <select id="tFactWh">${zavod.map((w) =>
+            <select id="tFactWh" onchange="talabYol()">${zavod.map((w) =>
               `<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div>
           ${qaytar ? '' : `<div style="width:170px"><label>Qachon kerak</label>
             <input id="tNeed" type="date"></div>`}
         </div>
+        <p id="tYol" style="margin-bottom:6px"></p>
         <p class="muted" style="margin-bottom:10px">${qaytar
-          ? "Tsexdan ortib qolgan material zavod omboriga qaytariladi."
+          ? "Tsexdan ortib qolgan material zavod omboriga QAYTARILADI — "
+            + "tsex qoldig'i kamayadi. Material so'rash uchun «+ Talabnoma»."
           : "Mol zavod omboriga ta'minotchidan keladi, tsexga esa undan "
             + "shu hujjat bilan beriladi."}</p>
         <input id="tQ" placeholder="material nomini yozing" autocomplete="off"
@@ -630,7 +632,27 @@ function talabOch(kind) {
           onclick="talabSaqla()">Saqlash</button>
         <div id="tSaveMsg"></div>
       </div></div>`;
-  talabTop(); talabRows();
+  talabTop(); talabRows(); talabYol();
+}
+
+//  ★ YO'NALISH YOZILIB TURADI, IKKALA HUJJATDA HAM. Ikki katak ham
+//  «ombor» deb ataladi va qaysi biri manba ekani nomidan ko'rinmaydi:
+//  tsex boshlig'i «Qaytarish» tugmasini adashib bosib, shkurka
+//  so'ragan o'rniga tsexdagi shkurkani omborga qaytarib yuborardi va
+//  buni hujjat CHIQARILGANDA — qoldiq kamayganda — bilardi. Strelka
+//  saqlashdan OLDIN turadi: kirim oynasidagi «jami» bilan bir xil
+//  sabab, xato o'sha yerda bilinsin.
+function talabYol() {
+  if (!$('tYol')) return;
+  const nom = (id) => (ref.warehouses.find((w) => w.id === Number(id))
+    || (ref.factory_warehouses || []).find((w) => w.id === Number(id))
+    || {}).name || '—';
+  const tsex  = nom($('tShopWh')?.value);
+  const zavod = nom($('tFactWh')?.value);
+  const qaytar = $('tKindNew').value === 'return';
+  $('tYol').innerHTML = '<b>' + esc(qaytar ? tsex : zavod) + '</b>'
+    + ' <span class="muted">&rarr;</span> <b>' + esc(qaytar ? zavod : tsex)
+    + '</b>';
 }
 
 function talabTop() {
@@ -706,6 +728,13 @@ async function talabKor(id) {
   const [nom, rang] = TALAB_HOLAT[r.status] || [r.status, ''];
   const ochiq = ['new', 'ready'].includes(r.status);
   const it = r.items || [];
+  //  ★ QAYTARISHDA SO'Z BOSHQA. Talabnomada ombor xodimi materialni
+  //  CHIQARADI, qaytarishda esa QABUL QILADI — yo'nalish teskari va
+  //  hujjatni boshlagan odam ham boshqa (izoh: sql/materials.sql).
+  //  Ilgari ikkala hujjatda ham «Chiqardim» deb turardi: qaytarishni
+  //  ochgan mudir o'zi chiqarayotgandek o'qirdi va tsex boshlig'i
+  //  tugmani adashtirib bosgani aynan shu yerda ko'rinmay qolardi.
+  const qaytar = r.kind === 'return';
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:640px">
@@ -717,8 +746,10 @@ async function talabKor(id) {
           ${r.need_on ? ' · kerak: ' + kun(r.need_on) : ''}
           · <span class="tag ${rang}">${nom}</span></p>
         <table><thead><tr><th>Material</th><th class="num">So'raldi</th>
-          ${boshqara() && ochiq ? '<th class="num">Beriladi</th>' : ''}
-          ${r.status === 'done' ? '<th class="num">Berildi</th>' : ''}
+          ${boshqara() && ochiq
+            ? `<th class="num">${qaytar ? 'Qabul qilinadi' : 'Beriladi'}</th>` : ''}
+          ${r.status === 'done'
+            ? `<th class="num">${qaytar ? 'Qabul qilindi' : 'Berildi'}</th>` : ''}
           </tr></thead><tbody>
           ${it.map((x, i) => `<tr>
             <td>${esc(x.material)} <span class="muted">${esc(x.uom || '')}</span></td>
@@ -739,7 +770,7 @@ async function talabKor(id) {
             ? `<button onclick="talabReady(${r.id})">Tayyorladim</button>` : ''}
           ${boshqara() && ochiq
             ? `<button class="primary" onclick="talabDone(${r.id})">
-                 Chiqardim</button>` : ''}
+                 ${qaytar ? 'Qabul qildim' : 'Chiqardim'}</button>` : ''}
           ${ochiq ? `<button onclick="talabRad(${r.id})">Bekor qilish</button>` : ''}
         </div>
         <div id="tActMsg"></div>

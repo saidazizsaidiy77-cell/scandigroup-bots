@@ -1162,12 +1162,19 @@ router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
 
     //  Yozgan odamga aytiladi: u materialni kutib turibdi va
     //  ombor eshigiga borishdan oldin bilishi kerak.
+    //
+    //  ★ QAYTARISHDA SO'Z BOSHQA: ombor xodimi materialni CHIQARMAYDI,
+    //  QABUL QILADI — yo'nalish teskari. Ekrandagi tugma bilan bir xil
+    //  so'z bo'lishi shart, aks holda xabarni o'qigan tsex boshlig'i
+    //  hujjat teskari ketganini sezmasdi.
+    const qaytar = r.kind === 'return';
     if (r.created_by)
       await notify.queue({
         worker_id: r.created_by, module: 'materials',
-        title: `${r.kind === 'return' ? 'Qaytarish' : 'Talabnoma'} `
-             + `${r.doc_no} — chiqarildi`,
-        body: `${n} ta material\n\nKim chiqardi: ${req.user.name}`,
+        title: `${qaytar ? 'Qaytarish' : 'Talabnoma'} ${r.doc_no}`
+             + ` — ${qaytar ? 'qabul qilindi' : 'chiqarildi'}`,
+        body: `${n} ta material\n\n`
+             + `${qaytar ? 'Kim qabul qildi' : 'Kim chiqardi'}: ${req.user.name}`,
       }, client);
 
     await audit(req, { module: 'materials', action: 'request-done',
