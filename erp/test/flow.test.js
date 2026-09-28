@@ -7127,6 +7127,32 @@ test("konver so'rovini kim yozishi XODIMDA belgilanadi", async () => {
     `UPDATE workers SET can_request_unit = true WHERE name = 'Administrator'`);
 });
 
+//  ★ NOMI BO'SHLIQ BILAN KELGAN O'ZGARUVCHI (izoh: `erp/env.js`).
+//  Railway sozlamasiga nom yopishtirilganda oxirida probel qolib
+//  ketgan edi va zaxira Telegramga ketmay qolgandi: ekranda ikkala
+//  nom bir xil ko'rinadi, kod esa tozasini o'qiydi.
+test("o'zgaruvchi nomidagi ortiqcha bo'shliq o'qiladi", () => {
+  const tozala = require('../env');
+  const eski = { ...process.env };
+  try {
+    process.env['ZELTA_SINOV '] = 'bor';
+    delete process.env.ZELTA_SINOV;
+    //  Bo'shini to'ldiradi.
+    assert.deepEqual(tozala(() => {}), ['ZELTA_SINOV']);
+    assert.equal(process.env.ZELTA_SINOV, 'bor');
+
+    //  ★ TO'LDIRILGANI USTUN: ataylab qo'yilgan qiymat tasodifiy
+    //  nusxa bilan almashtirilmaydi.
+    process.env.ZELTA_SINOV2 = 'asl';
+    process.env['ZELTA_SINOV2 '] = 'nusxa';
+    assert.deepEqual(tozala(() => {}), []);
+    assert.equal(process.env.ZELTA_SINOV2, 'asl');
+  } finally {
+    for (const k of Object.keys(process.env))
+      if (!(k in eski)) delete process.env[k];
+  }
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

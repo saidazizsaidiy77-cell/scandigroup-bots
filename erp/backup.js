@@ -34,6 +34,9 @@
  *  aytadi — jim qolib, bo'sh fayl qoldirmaydi.
  * ========================================================================== */
 require('dotenv').config();
+//  Nomi bo'shliq bilan kelgan o'zgaruvchi (izoh: `erp/env.js`). Quyidagi
+//  const'lar `process.env` dan O'QIYDI, ya'ni tozalash ulardan oldin.
+require('./env')();
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');

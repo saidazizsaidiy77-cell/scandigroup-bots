@@ -1,4 +1,7 @@
 require('dotenv').config();
+//  Sozlamadagi o'zgaruvchi nomining oxiridagi ortiqcha bo'shliq — izoh:
+//  `erp/env.js`. Hamma `process.env` o'qishidan OLDIN turishi shart.
+require('./env')();
 const path = require('path');
 const express = require('express');
 const { db } = require('./db');
