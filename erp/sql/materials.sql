@@ -109,7 +109,6 @@ SELECT v.code, v.name, 'material', v.note, TRUE, v.sort, 'materials.view', s.id
     ('TSEX-KOR-ARRA', 'Arra ombori',           'Korpus tsexi',    'KORPUS', 11),
     ('TSEX-KOR',      'Korpus tseh ombori',    'Korpus tsexi',    'KORPUS', 12),
     ('TSEX-LAK',      'Lak tseh ombori',       'Lak tsexi',       'BOYOQ',  13),
-    ('TSEX-QAD',      'Qadoqlash ombori',      'Qadoqlash tsexi', 'QADOQ',  14),
     ('TSEX-STU-ZBOR', 'Zborka karkas ombori',  'Stul tsexi',      'STUL',   15),
     ('TSEX-STU-LAK',  'Lak karkas ombori',     'Stul tsexi',      'STUL',   16),
     ('TSEX-STU-QOPL', 'Qoplash ombori',        'Stul tsexi',      'STUL',   17)
@@ -122,13 +121,54 @@ ON CONFLICT (code) DO NOTHING;
 --  saytdan tahrirlanmaydi, ya'ni qoida kodda turadi.
 UPDATE warehouses w SET shop_id = s.id, perm = 'materials.view', kind = 'material'
   FROM shops s
- WHERE w.code LIKE 'TSEX-%'
+ WHERE w.code LIKE 'TSEX-%' AND w.code <> 'TSEX-QAD'
    AND s.code = CASE
      WHEN w.code LIKE 'TSEX-KOR%' THEN 'KORPUS'
      WHEN w.code = 'TSEX-LAK'     THEN 'BOYOQ'
-     WHEN w.code = 'TSEX-QAD'     THEN 'QADOQ'
      ELSE 'STUL' END
    AND (w.shop_id IS DISTINCT FROM s.id OR w.perm IS DISTINCT FROM 'materials.view');
+
+-- ═══════════════════════ QADOQLASH OMBORI — ZAVOD OMBORI
+--
+--  ★ ZAVOD QARORI (2026-09): «Qadoqlash ombori» TSEX ombori EMAS.
+--  Mol unga TA'MINOTCHIDAN to'g'ridan-to'g'ri keladi (qadoqlash
+--  materiali zavodning eng katta xarid guruhlaridan biri), boshqa
+--  omborlardan ham qabul qiladi va konverga chiqim shu yerdan
+--  bo'ladi.
+--
+--  Tsex ombori bo'lib turgani ishni TO'XTATARDI: kirim FAQAT zavod
+--  omboriga yoziladi (`shop_id IS NULL`, izoh: modules/materials.js)
+--  va bu ombor ochilmada umuman turmasdi — ta'minotchidan kelgan
+--  qadoqlash materialini kiritadigan joy qolmasdi.
+--
+--  IKKI USTUN, ikki savol (`owner_shop_id` bilan bir xil idiom):
+--    · `shop_id`       — ombor tsexniki EMAS: zavodniki, ya'ni NULL;
+--    · `owner_shop_id` — uni QADOQLASH boshlig'i yuritadi, ya'ni
+--      tsex doirasi bor xodimga u eskicha ko'rinadi va chiqimni ham
+--      o'zi yozadi (doira `COALESCE(owner_shop_id, shop_id)` dan
+--      chiqadi).
+--
+--  `section_id` — QAD-QAD: konverga material biriktirayotganda
+--  konver turgan BO'LIMNING ombori birinchi turadi (izoh: `OMBOR`,
+--  modules/materials.js). Tsexi olinganidan keyin bu yagona yo'l:
+--  «o'sha bo'lim tsexining ombori» degan zaxira shart endi unga
+--  to'g'ri kelmaydi.
+--
+--  BAYROQ QO'YILMAYDI — bu bir martalik ko'chirish emas, DOIMIY
+--  qoida: yuqoridagi blok har migratsiyada `TSEX-%` ni tsexga
+--  bog'laydi va bayroq bilan qilinsa keyingi deploy uni qaytarib
+--  tsex ombori qilib qo'yardi (`materials.view` huquqi bilan bir xil
+--  sabab).
+INSERT INTO warehouses (code, name, kind, note, is_active, sort, perm)
+VALUES ('TSEX-QAD', 'Qadoqlash ombori', 'material',
+        'Qadoqlash materiali — zavod ombori, qadoqlash tsexi yuritadi',
+        TRUE, 14, 'materials.view')
+ON CONFLICT (code) DO NOTHING;
+
+--  `owner_shop_id` va `section_id` ustunlari pastda qo'shiladi,
+--  shuning uchun ularni yozadigan UPDATE ham O'SHA YERDA — toza
+--  bazada bu yerda hali ustun yo'q va migratsiya yiqilardi
+--  (1-qoida: sayt umuman ko'tarilmasdi).
 
 -- ═══════════════════════════════════════════════ MATERIAL HARAKATI
 --
@@ -464,6 +504,28 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('ombor-bolim');
   END IF;
 END $$;
+
+--  ★ QADOQLASH OMBORI — ZAVOD OMBORI (izoh yuqorida, qator ~135).
+--  Ikkala ustun ham shu faylda, yuqorida qo'shiladi — shuning uchun
+--  yozuv aynan SHU YERDA turadi.
+UPDATE warehouses w
+   SET shop_id = NULL,
+       owner_shop_id = (SELECT id FROM shops WHERE code = 'QADOQ'),
+       section_id = COALESCE(w.section_id,
+                             (SELECT id FROM sections WHERE code = 'QAD-QAD')),
+       perm = 'materials.view', kind = 'material',
+       --  Kartochkadagi izoh ham: eski bazada u «Qadoqlash tsexi»
+       --  bo'lib turardi va ZAVOD OMBORLARI guruhida bu qarama-qarshi
+       --  o'qilardi — ombor tsexniki emas, uni tsex YURITADI.
+       note = 'Qadoqlash materiali — zavod ombori, qadoqlash tsexi yuritadi'
+ WHERE w.code = 'TSEX-QAD'
+   AND (w.shop_id IS NOT NULL
+        OR w.owner_shop_id IS DISTINCT FROM
+           (SELECT id FROM shops WHERE code = 'QADOQ')
+        OR w.section_id IS NULL
+        OR w.perm IS DISTINCT FROM 'materials.view'
+        OR w.note IS DISTINCT FROM
+           'Qadoqlash materiali — zavod ombori, qadoqlash tsexi yuritadi');
 
 --  «Bu bo'lim qaysi materialni ishlatadi» — QOLDIQDAN emas,
 --  HARAKATDAN. Sarflanib bo'lingan material ham o'sha bo'limniki:

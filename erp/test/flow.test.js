@@ -2380,7 +2380,22 @@ test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {
   const tsexOmbor = (await H.id(
     `SELECT COUNT(*)::int AS n FROM warehouses w JOIN shops s ON s.id = w.shop_id
       WHERE w.kind = 'material' AND w.code LIKE 'TSEX-%'`)).n;
-  assert.equal(tsexOmbor, 7, 'yettita tsex ombori');
+  assert.equal(tsexOmbor, 6, 'oltita tsex ombori');
+
+  //  ★ QADOQLASH OMBORI — ZAVOD OMBORI (zavod qarori, 2026-09).
+  //  Mol unga TA'MINOTCHIDAN keladi, ya'ni kirim yoziladigan joy
+  //  bo'lishi kerak: kirim faqat zavod omboriga (`shop_id IS NULL`)
+  //  yoziladi va tsex ombori bo'lib turgani ishni to'xtatardi.
+  //  Yurituvchi esa o'sha-o'sha — qadoqlash boshlig'i.
+  const qadOmbor = await H.id(
+    `SELECT w.shop_id, s.code AS yurituvchi, sc.code AS bolim
+       FROM warehouses w
+       LEFT JOIN shops s     ON s.id  = w.owner_shop_id
+       LEFT JOIN sections sc ON sc.id = w.section_id
+      WHERE w.code = 'TSEX-QAD'`);
+  assert.equal(qadOmbor.shop_id, null, 'tsexga biriktirilmagan');
+  assert.equal(qadOmbor.yurituvchi, 'QADOQ', 'qadoqlash boshlig\'i yuritadi');
+  assert.equal(qadOmbor.bolim, 'QAD-QAD', 'konverga sarf shu bo\'limdan');
 
   //  Tayyor mahsulot sahifalariga tsex omborlari CHIQMAYDI: qoida
   //  ombor qatorida (`warehouses.perm`), kodda emas — `materials.view`
