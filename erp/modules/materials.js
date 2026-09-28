@@ -289,7 +289,7 @@ router.get('/moves', need(...VIEW), wrap(async (req, res) => {
   const doira = whDoira(req);
   const { rows } = await db.query(
     `SELECT m.id, m.moved_on, m.qty, m.note, m.status,
-            m.from_kind, m.to_kind,
+            m.from_kind, m.to_kind, m.doc_kind,
             mt.name AS material, mt.uom,
             fw.name AS from_name, tw.name AS to_name,
             w.name  AS worker
@@ -299,8 +299,8 @@ router.get('/moves', need(...VIEW), wrap(async (req, res) => {
        LEFT JOIN warehouses tw  ON tw.id = m.to_id   AND m.to_kind   = 'warehouse'
        LEFT JOIN workers w      ON w.id  = m.worker_id
       WHERE ($1::int[] IS NULL
-             OR COALESCE(fw.owner_shop_id, fw.shop_id) = ANY($1)
-             OR COALESCE(tw.owner_shop_id, tw.shop_id) = ANY($1))
+             OR COALESCE(fw.owner_shop_id, fw.shop_id, 0) = ANY($1)
+             OR COALESCE(tw.owner_shop_id, tw.shop_id, 0) = ANY($1))
         AND ($2::date IS NULL OR m.moved_on >= $2)
         AND ($3::date IS NULL OR m.moved_on <= $3)
         AND ($4::int IS NULL OR m.material_id = $4)
@@ -581,6 +581,43 @@ router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
                  [mv.id]);
   await audit(req, { module: 'materials', action: 'consume-cancel',
                      entity: 'material_moves', entity_id: mv.id });
+  res.json({ ok: true });
+}));
+
+//  ★ ADASHIB YOZILGAN BOSHLANG'ICH QOLDIQ BEKOR QILINADI (zavod
+//  qarori, 2026-09). Qoldiq bir martalik ish va o'sha bir martada
+//  adashish oson: material boshqa omborga tushib qolardi va uni
+//  hisobdan chiqaradigan yo'l YO'Q edi — tuzatishning yagona usuli
+//  o'sha materialni «minus» qilib ikkinchi marta yozish bo'lardi,
+//  ya'ni ombor tarixida ikkita yolg'on qator qolardi.
+//
+//  O'CHIRILMAYDI, BEKOR QILINADI: qoldiqdan chiqadi, tarixda esa
+//  o'chirilgan holida qoladi (kassadagi operatsiya va konverga sarf
+//  bilan bir xil qoida).
+//
+//  FAQAT boshlang'ich qoldiq qatori: kirim HUJJAT bilan bekor
+//  qilinadi (u ta'minotchining qarziga ham tegadi), talabnomaniki
+//  esa o'z hujjatining qatori — bitta qatorni yakka bekor qilish
+//  hujjatni haqiqatdan ajratib qo'yardi.
+router.post('/moves/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
+  const mv = (await db.query(
+    `SELECT m.id, m.to_id, w.name AS ombor FROM material_moves m
+       JOIN warehouses w ON w.id = m.to_id
+      WHERE m.id = $1 AND m.status = 'ok'
+        AND m.from_kind = 'opening' AND m.to_kind = 'warehouse'
+        AND m.doc_kind IS NULL
+        AND ($2::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
+    [req.params.id, whDoira(req)])).rows[0];
+  if (!mv) return res.status(404).json({
+    error: "Boshlang'ich qoldiq qatori topilmadi. Kirim hujjati o'z "
+         + "oynasidan, talabnomaniki esa hujjatdan bekor qilinadi" });
+
+  await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`,
+                 [mv.id]);
+  await audit(req, { module: 'materials', action: 'opening-cancel',
+                     entity: 'material_moves', entity_id: mv.id,
+                     payload: { warehouse: mv.ombor } });
   res.json({ ok: true });
 }));
 

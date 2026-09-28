@@ -6469,6 +6469,73 @@ test('jurnalda boshlanmagan konverlar filtri', async () => {
   assert.ok(xls.text.includes(bosh.conveyor_no));
 });
 
+test("adashib yozilgan boshlang'ich qoldiq bekor qilinadi", async () => {
+  //  ★ ZAVOD QARORI (2026-09). Qoldiq bir martalik ish va o'sha bir
+  //  martada adashish oson: material boshqa omborga tushib qolardi
+  //  va uni hisobdan chiqaradigan yo'l YO'Q edi — yagona usul
+  //  «minus» qilib ikkinchi marta yozish bo'lardi, ya'ni tarixda
+  //  ikkita yolg'on qator qolardi.
+  const xom = await xodim('Sinov ochirish xodim', 'xom_ombor');
+  const wh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-STU-ZBOR'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Sinov Ochirish Yelim', uom: 'kg', category: 'BOSHQA' })).body;
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ material_id: m.id, qty: 30, warehouse_id: wh, price: 4 }] })).status,
+    200);
+
+  const qoldiq = async () => {
+    const r = (await xom('GET', '/api/materials/stock?warehouse_id=' + wh))
+      .body.rows.find((x) => x.material_id === m.id);
+    return r ? Number(r.qty) : 0;
+  };
+  assert.equal(await qoldiq(), 30);
+
+  const mv = (await xom('GET', '/api/materials/moves?material_id=' + m.id))
+    .body.rows[0];
+  assert.equal(mv.from_kind, 'opening');
+
+  //  O'CHIRILMAYDI, BEKOR QILINADI: qoldiqdan chiqadi, tarixda
+  //  o'chirilgan holida qoladi (kassadagi operatsiya bilan bir xil).
+  assert.equal((await xom('POST',
+    `/api/materials/moves/${mv.id}/cancel`)).status, 200);
+  assert.equal(await qoldiq(), 0, 'qoldiqdan chiqdi');
+  const keyin = (await xom('GET', '/api/materials/moves?material_id=' + m.id))
+    .body.rows.find((x) => x.id === mv.id);
+  assert.ok(keyin, 'tarixda qoladi');
+  assert.equal(keyin.status, 'cancelled');
+
+  //  Ikkinchi marta bekor qilinmaydi.
+  assert.equal((await xom('POST',
+    `/api/materials/moves/${mv.id}/cancel`)).status, 404);
+
+  //  ★ FAQAT QOLDIQ QATORI: kirim HUJJAT bilan bekor qilinadi (u
+  //  ta'minotchining qarziga ham tegadi) — yakka qatorni bekor
+  //  qilish hujjatni haqiqatdan ajratib qo'yardi.
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Ochirish Mdf', category: 'MDF' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Sinov Ochirish Mdf'`)).id;
+  const zavod = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const k = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 10, price: 3 }] });
+  assert.equal(k.status, 200, k.text);
+  const kmv = (await xom('GET', '/api/materials/moves?material_id=' + m.id))
+    .body.rows.find((x) => x.doc_kind === 'receipt');
+  assert.ok(kmv, 'kirim qatori turadi');
+  assert.equal((await xom('POST',
+    `/api/materials/moves/${kmv.id}/cancel`)).status, 404,
+    'kirim qatori bu yo\'ldan bekor qilinmaydi');
+
+  //  Huquqi yo'q xodimda ham yo'q: tugmani yashirish himoya emas.
+  const usta2 = await xodim('Sinov ochirish usta', 'tsex_usta');
+  const yana = (await xom('GET', '/api/materials/moves?material_id=' + m.id))
+    .body.rows.find((x) => x.from_kind === 'opening' && x.status === 'ok');
+  if (yana) assert.equal((await usta2('POST',
+    `/api/materials/moves/${yana.id}/cancel`)).status, 403);
+});
+
 test("bron ko'chgan dona bilan birga yuradi", async () => {
   //  ★ ZAVOD QARORI (2026-09). 16 talik konverning 8 tasi
   //  buyurtmada edi; boshliq 8 tasini keyingi bo'limga o'tkazdi — va

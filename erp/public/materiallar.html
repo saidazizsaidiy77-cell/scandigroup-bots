@@ -425,17 +425,43 @@ function drawMoves() {
     $('body').innerHTML = '<p class="muted">Harakat yo\'q.</p>';
     return;
   }
+  //  ★ ADASHIB YOZILGAN BOSHLANG'ICH QOLDIQ SHU YERDAN BEKOR
+  //  QILINADI (izoh: modules/materials.js). Qoldiq bir martalik ish
+  //  va o'sha bir martada adashish oson — material boshqa omborga
+  //  tushib qolardi va uni hisobdan chiqaradigan yo'l yo'q edi.
+  //
+  //  Faqat qoldiq qatorida: kirim O'Z hujjatidan, talabnomaniki esa
+  //  hujjatdan bekor qilinadi.
+  const ochirsaBoladi = (r) => boshqara() && r.status === 'ok'
+    && r.from_kind === 'opening' && !r.doc_kind;
   $('body').innerHTML = `<div style="overflow-x:auto"><table>
     <thead><tr><th>Sana</th><th>Material</th><th>Qayerdan</th><th>Qayerga</th>
-      <th class="num">Soni</th><th>Kim</th></tr></thead>
+      <th class="num">Soni</th><th>Kim</th><th></th></tr></thead>
     <tbody>${rows.map((r) => `<tr${r.status === 'ok' ? '' : ' style="opacity:.5"'}>
       <td class="muted">${String(r.moved_on).slice(0, 10).split('-').reverse().join('.')}</td>
-      <td><b>${esc(r.material)}</b></td>
+      <td><b>${esc(r.material)}</b>${r.status === 'ok' ? ''
+        : ' <span class="tag bad">bekor qilingan</span>'}</td>
       <td class="muted">${tomon(r.from_kind, r.from_name)}</td>
       <td class="muted">${tomon(r.to_kind, r.to_name)}</td>
       <td class="num">${son(r.qty)} <span class="muted">${esc(r.uom)}</span></td>
       <td class="muted" style="font-size:12px">${esc(r.worker || '')}</td>
+      <td>${ochirsaBoladi(r)
+        ? `<button class="ic" title="Bekor qilish"
+             onclick="qoldiqOchir(${r.id})">&times;</button>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
+}
+
+//  O'CHIRILMAYDI, BEKOR QILINADI: qoldiqdan chiqadi, tarixda
+//  o'chirilgan holida qoladi. Shuning uchun so'raladi — bosilgani
+//  qaytarilmaydi.
+async function qoldiqOchir(id) {
+  if (!confirm("Boshlang'ich qoldiq qatori bekor qilinsinmi?\n"
+             + 'Qoldiqdan chiqadi, tarixda esa qoladi.')) return;
+  try {
+    await App.api(`/api/materials/moves/${id}/cancel`, { method: 'POST' });
+    toast('Bekor qilindi');
+    await load();
+  } catch (e) { toast(e.message, true); }
 }
 
 const yop = () => { $('modalRoot').innerHTML = ''; };
