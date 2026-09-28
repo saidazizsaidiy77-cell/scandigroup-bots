@@ -6469,6 +6469,63 @@ test('jurnalda boshlanmagan konverlar filtri', async () => {
   assert.ok(xls.text.includes(bosh.conveyor_no));
 });
 
+test("bron ko'chgan dona bilan birga yuradi", async () => {
+  //  ★ ZAVOD QARORI (2026-09). 16 talik konverning 8 tasi
+  //  buyurtmada edi; boshliq 8 tasini keyingi bo'limga o'tkazdi — va
+  //  buyurtma ORQADA qolib, bo'sh bo'lak oldinga ketdi. Mijozga
+  //  va'da qilingan sana ham shundan buziladi: omborga tushish kuni
+  //  QATORNING qadamidan hisoblanadi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO customers (name) VALUES ('Sinov bron mijozi')
+                   ON CONFLICT (lower(name)) DO NOTHING`);
+  const mijoz = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Sinov bron mijozi'`)).id;
+
+  const u = await newUnit({ qty: 16 });
+  const z = await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, items: [{ product_id: PENAL, qty: 8, unit_price: 100 }] });
+  const qator = (await admin('GET', '/api/sales/orders/' + z.body.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.body.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 8 })).status, 200);
+
+  const bronlar = async () => (await db.query(
+    `SELECT p.id, p.qty, p.current_section_id,
+            COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                       WHERE r.unit_id = p.id), 0)::int AS bron
+       FROM production_units p
+      WHERE p.conveyor_no = $1 AND p.status = 'production'
+      ORDER BY p.id`, [u.conveyor_no])).rows;
+
+  //  ── 8 tasi keyingi bo'limga: bron ular BILAN ketadi.
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, qty: 8 }] })).status, 200);
+  let q = await bronlar();
+  assert.equal(q.length, 2, 'konver ikki bo\'lakka bo\'lindi');
+  const ketgan = q.find((x) => x.current_section_id === ROVER);
+  const qolgan = q.find((x) => x.current_section_id === ARRA);
+  assert.equal(Number(ketgan.qty), 8);
+  assert.equal(ketgan.bron, 8, 'bron ko\'chgan dona bilan ketdi');
+  assert.equal(qolgan.bron, 0, 'qolgan bo\'lak bo\'sh');
+
+  //  Umumiy bron o'zgarmadi: mijozga va'da qilingan dona o'sha.
+  assert.equal(q.reduce((a, x) => a + x.bron, 0), 8);
+
+  //  ★ VA ENG YOMONI: bo'lak o'z bo'lagi bilan UCHRASHGANDA eski
+  //  qator o'chadi, `unit_reservations` esa `ON DELETE CASCADE` —
+  //  butun bron JIMGINA yo'qolardi. Qolgan 8 tasini ham o'sha
+  //  bo'limga o'tkazamiz: ikkala bo'lak qo'shiladi.
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: qolgan.id }] })).status, 200);
+  q = await bronlar();
+  assert.equal(q.length, 1, 'bo\'laklar qo\'shildi');
+  assert.equal(Number(q[0].qty), 16);
+  assert.equal(q[0].bron, 8, 'bron yo\'qolmadi');
+
+  //  Savdo tomonida ham o'sha raqam: buyurtma hali to'liq bron.
+  const o = (await admin('GET', '/api/sales/orders/' + z.body.id)).body;
+  assert.equal(Number(o.order.assigned_qty), 8, 'buyurtmada 8 ta qoldi');
+});
+
 test('talabnoma: tsexga material zavod omboridan beriladi', async () => {
   //  ★ ZAVOD QARORI (2026-09). Tsex boshlig'i xom ashyoni OG'ZAKI
   //  so'ramaydi — hujjat yozadi. Material faqat CHIQARILGANDA

@@ -1832,6 +1832,55 @@ async function relocate(client, req, unitId, sectionId) {
 //
 //  `toSection` NULL bo'lishi mumkin — qaytarishda konver boshlanmagan
 //  holatiga tushadi.
+//  ★ BRON DONA BILAN BIRGA YURADI (zavod qarori, 2026-09).
+//
+//  16 talik konverning 8 tasi buyurtmada edi; boshliq 8 tasini
+//  keyingi bo'limga o'tkazdi — va buyurtma ORQADA qolib, bo'sh
+//  bo'lak oldinga ketdi. Sabab: bron `unit_id` ga bog'langan va
+//  konver bo'linganda u ESKI qatorda qolardi.
+//
+//  Mijozga va'da qilingan dona ham, sana ham shundan buziladi:
+//  konverning omborga tushish kuni QATORNING qadamidan
+//  hisoblanadi, ya'ni orqada qolgan bronning muddati haqiqatdan
+//  uzoqlashib borardi — savdo esa buni faqat mijoz kutib
+//  qolganda bilardi.
+//
+//  ★ VA ENG YOMONI: bo'lak keyingi bo'limda O'Z BO'LAGI bilan
+//  uchrashsa eski qator O'CHADI, `unit_reservations` esa
+//  `ON DELETE CASCADE` — ya'ni butun bron JIMGINA yo'qolardi.
+//  Buyurtma «Boshlanmagan» bo'lib qolar, konver esa bo'sh bo'lib
+//  ko'rinardi va buni hech narsa aytmasdi.
+//
+//  Shuning uchun bron ko'chirilayotgan DONAGA ergashadi — nechtasi
+//  ko'chsa, shunchasi (`limit`). Uchrashganda qo'shiladi: bitta
+//  qatorga bitta konverdan bitta bron (`UNIQUE`).
+async function bronKochir(client, fromId, toId, limit) {
+  if (!toId || fromId === toId) return 0;
+  const bron = (await client.query(
+    `SELECT id, order_item_id, qty, created_by FROM unit_reservations
+      WHERE unit_id = $1 ORDER BY id`, [fromId])).rows;
+  let qoldi = limit == null ? Infinity : Number(limit);
+  let kochdi = 0;
+  for (const b of bron) {
+    if (qoldi <= 0) break;
+    const k = Math.min(Number(b.qty), qoldi);
+    await client.query(
+      `INSERT INTO unit_reservations (unit_id, order_item_id, qty, created_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (unit_id, order_item_id)
+       DO UPDATE SET qty = unit_reservations.qty + $3, changed_at = NOW()`,
+      [toId, b.order_item_id, k, b.created_by]);
+    if (k >= Number(b.qty))
+      await client.query(`DELETE FROM unit_reservations WHERE id = $1`, [b.id]);
+    else
+      await client.query(
+        `UPDATE unit_reservations SET qty = qty - $2 WHERE id = $1`, [b.id, k]);
+    qoldi -= k;
+    kochdi += k;
+  }
+  return kochdi;
+}
+
 async function placePieces(client, req, u, toSection, n, movedOn) {
   const sibling = toSection ? (await client.query(
     `SELECT id FROM production_units
@@ -1845,6 +1894,9 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
       `UPDATE production_units SET qty = qty + $2,
               entered_section_on = COALESCE($3::date, entered_section_on)
         WHERE id = $1`, [sibling.id, n, movedOn || null]);
+    //  Butun qator ko'chsa bronning HAMMASI ko'chadi: qator
+    //  o'chirilishidan OLDIN — `ON DELETE CASCADE` uni yo'q qilardi.
+    await bronKochir(client, u.id, sibling.id, whole ? null : n);
     if (whole) {
       await client.query(`UPDATE unit_moves SET unit_id = $2 WHERE unit_id = $1`,
                          [u.id, sibling.id]);
@@ -1865,7 +1917,14 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
     return u.id;
   }
 
-  return clonePart(client, req, u, n, { toSection, movedOn });
+  //  Bo'lak YANGI qator bo'ldi: bron ko'chgan dona bilan birga
+  //  ketadi. `clonePart` ning O'ZIDA qilinmaydi — jo'natish,
+  //  ombordagi qisman qabul va vitrinaga ko'chirish ham o'sha
+  //  funksiyadan o'tadi va u yerda bron ESKI qatorda qolishi kerak
+  //  (izoh: `handoverOne`).
+  const yangi = await clonePart(client, req, u, n, { toSection, movedOn });
+  await bronKochir(client, u.id, yangi, n);
+  return yangi;
 }
 
 //  Konverdan n dona ajratib, yangi qator qiladi. Tarix (unit_moves) ESKI
