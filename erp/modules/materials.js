@@ -14,6 +14,7 @@
 const express = require('express');
 const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
+const notify = require('../notify');
 
 const router = express.Router();
 
@@ -578,6 +579,43 @@ const whDoira = (req) => {
 
 const SANA = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? v : null);
 
+//  Xabar MATN bo'lib ketadi, ya'ni raqamni o'qiydigan qilib yozish
+//  serverning ishi: sahifadagi `pul()` bilan bir xil ko'rinish —
+//  mingliklar ajratilgan, ikki kasr.
+//  Minglik ajratgichi ODDIY bo'shliq: `toLocaleString` uzilmaydigan
+//  bo'shliq (U+00A0) qo'yadi va u ba'zi Telegram klientlarida boshqa
+//  belgi bo'lib chiqadi — ustiga xabarni qidirib topib bo'lmaydi.
+const pul = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\u00a0/g, ' ');
+//  Soni butun bo'lsa kasrsiz: «100 dona», «2,5 kg» emas «2,500 kg».
+const son = (v) => {
+  const n = Number(v || 0);
+  return Number.isInteger(n) ? String(n)
+    : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
+       .replace(/\u00a0/g, ' ');
+};
+//  ★ SANA `YYYY-MM-DD` BO'LIB YOZILADI. `pg` DATE ustunini JS
+//  `Date` obyekti qilib qaytaradi va `String(d).slice(0,10)` undan
+//  «Sat Sep 12» chiqarardi — xabarda sana o'qib bo'lmas holga
+//  kelardi. `toISOString()` ham yo'l emas: u UTC ga o'tkazadi va
+//  `TZ=Asia/Tashkent` da kun bir kunga surilib ketardi.
+const kun = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') return d.slice(0, 10);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+//  ★ QARZ IKKI TOMONLI (izoh: sql/materials.sql). Musbat bo'lsa BIZ
+//  qarzdormiz, manfiy bo'lsa ta'minotchi — ishorali raqamni o'qigan
+//  odam tomonni teskari tushunib qolardi.
+const qarzQatori = (nom, bal) => {
+  const v = Number(bal || 0);
+  if (!v) return `${nom}: qarz yo'q`;
+  return v > 0 ? `${nom}ga qarzimiz: ${pul(v)} $`
+               : `${nom} bizga qarzdor: ${pul(-v)} $`;
+};
+
 //  Ro'yxat. Filtrlar SERVERDA: oraliq katta bo'lsa qatorlar
 //  chegarasiga yetib, klientda yarmi yo'qolardi (ombor tarixi bilan
 //  bir xil sabab).
@@ -701,6 +739,37 @@ router.post('/receipts', need(...MANAGE), wrap(async (req, res) => {
     }
     if (!n) throw new Error('Birorta ham qator kiritilmadi');
 
+    //  ★ KIRIM HUJJATI TELEGRAMGA — QATORLARI BILAN (zavod qarori,
+    //  2026-09). Kirim ikki ishni birga qiladi: omborni to'ldiradi va
+    //  ta'minotchining qarzini oshiradi. «M26-0001 yozildi» degan
+    //  xabar ikkinchisini AYTMASDI va nazorat qiladigan odam qarzni
+    //  bilish uchun sahifani ochib ko'rishi kerak bo'lardi — shuning
+    //  uchun xabarda nima kelgani, qanchaga va qarz endi qancha
+    //  bo'lgani turadi.
+    //
+    //  Qarz SHU tranzaksiyaning `client` idan o'qiladi (3-qoida):
+    //  hovuzdan yangi ulanish hali yozilmagan kirimni ko'rmasdi va
+    //  xabarda ESKI qarz turardi.
+    const hujjat = (await client.query(
+      `SELECT doc_on, amount, items FROM v_mat_receipts WHERE id = $1`,
+      [r.id])).rows[0];
+    const qarz = (await client.query(
+      `SELECT balance FROM v_supplier_debt WHERE id = $1`, [sup.id])).rows[0];
+    await notify.queueSupply({
+      module: 'materials',
+      title: `Kirim ${doc_no} · ${sup.name}`,
+      body: [
+        `${kun(hujjat.doc_on)} · ${wh.name}`,
+        '',
+        ...(hujjat.items || []).map((x) =>
+          `${x.material} · ${son(x.qty)} ${x.uom || ''} × ${pul(x.price)}`
+          + ` ${ccy === 'UZS' ? "so'm" : '$'} = ${pul(x.amount)} $`),
+        '',
+        `Jami: ${pul(hujjat.amount)} $`,
+        qarz ? qarzQatori(sup.name, qarz.balance) : '',
+      ].filter((x) => x !== null).join('\n'),
+    }, client);
+
     await audit(req, { module: 'materials', action: 'receipt',
                        entity: 'mat_receipts', entity_id: r.id,
                        payload: { doc_no, supplier: sup.name,
@@ -752,4 +821,56 @@ router.post('/receipts/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+// ═══════════════════ KUNLIK TA'MINOTCHILAR SALDOSI
+//
+//  ★ ZAVOD QARORI (2026-09): har kuni ertalab «kimga qancha
+//  qarzmiz» degan javob o'zi kelsin. Sahifa bor edi, lekin uni ochib
+//  ko'rish kerak edi — kirim esa kun bo'yi yoziladi va qarz
+//  jimgina o'sib borardi.
+//
+//  Xabar `notifications` NAVBATIGA qo'yiladi, Telegramga shu yerdan
+//  yuborilmaydi: jadval Telegramning javobini kutmasligi kerak
+//  (konver so'rovi bilan bir xil idiom, izoh: erp/notify.js).
+//
+//  Qarzi NOL bo'lgan ta'minotchi yozilmaydi: o'ttiz ikkita qatorning
+//  yarmi nol bo'lsa javob o'sha to'da orasida ko'rinmay ketardi.
+//  Ikki tomon ham ALOHIDA yoziladi va yig'indi qisqartirilmaydi —
+//  biri 1000 qarzdor, boshqasi 1000 haqdor bo'lsa «0» degan javob
+//  ikkalasini ham yashirardi (qarzdorlik hisoboti bilan bir xil
+//  qoida).
+async function saldoXabari(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT name, balance FROM v_supplier_debt
+      WHERE balance <> 0 ORDER BY balance DESC, name`);
+  if (!rows.length) return null;
+
+  const biz  = rows.filter((r) => Number(r.balance) > 0);
+  const ular = rows.filter((r) => Number(r.balance) < 0);
+  const jami = (a) => a.reduce((x, r) => x + Math.abs(Number(r.balance)), 0);
+  const qator = (r) => `${r.name} — ${pul(Math.abs(r.balance))} $`;
+
+  const matn = [];
+  if (biz.length) {
+    matn.push('Qarzimiz:', ...biz.map(qator), `Jami: ${pul(jami(biz))} $`);
+  }
+  if (ular.length) {
+    if (matn.length) matn.push('');
+    matn.push('Bizga qarzdor:', ...ular.map(qator),
+              `Jami: ${pul(jami(ular))} $`);
+  }
+  return { title: `Ta'minotchilar saldosi · ${kun(new Date())}`,
+           body: matn.join('\n'), rows: rows.length };
+}
+
+//  Server buni kuniga bir marta chaqiradi (izoh: erp/server.js).
+async function saldoYubor(client) {
+  const x = await saldoXabari(client);
+  if (!x) return 0;
+  return notify.queueSupply(
+    { module: 'materials', title: x.title, body: x.body }, client);
+}
+
 module.exports = router;
+module.exports.saldoXabari = saldoXabari;
+module.exports.saldoYubor = saldoYubor;

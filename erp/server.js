@@ -150,13 +150,31 @@ function xabarJadvali() {
   const notify = require('./notify');
   console.log('Telegram xabarlari: yoqilgan');
 
-  const send = async (chatId, text) => {
+  //  ★ MARKDOWN YIQILSA XABAR YO'QOLMAYDI (zavod qarori, 2026-09).
+  //  Sarlavha `*...*` bilan yuboriladi, xabarning ICHIDA esa zavodning
+  //  o'z matni turadi: material nomi, ta'minotchi va xodim ismi.
+  //  Ulardan birida `*` yoki `_` bo'lsa Telegram butun xabarni rad
+  //  etadi (400) va u navbatda xato bilan yotib qolardi — «LDSP 16*18»
+  //  degan bitta nom kirim xabarini butunlay yo'qotardi.
+  //
+  //  Shuning uchun rad etilgani BELGISIZ qayta yuboriladi: qalin
+  //  sarlavhadan ko'ra yetib borgan xabar muhimroq.
+  const yubor = async (chatId, text, md) => {
     const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+      body: JSON.stringify({ chat_id: chatId, text,
+                             ...(md ? { parse_mode: 'Markdown' } : {}) }),
     });
     if (!r.ok) throw new Error(`Telegram ${r.status}: ${await r.text()}`);
+  };
+
+  const send = async (chatId, text) => {
+    try { await yubor(chatId, text, true); }
+    catch (e) {
+      if (!/Telegram 400/.test(String(e.message))) throw e;
+      await yubor(chatId, text.replace(/[*_`]/g, ''), false);
+    }
   };
 
   let band = false;
@@ -169,6 +187,44 @@ function xabarJadvali() {
     catch (e) { console.error('[xabar] XATO:', e.message); }
     finally { band = false; }
   }, 60 * 1000);
+}
+
+//  ★ KUNLIK TA'MINOTCHILAR SALDOSI (zavod qarori, 2026-09).
+//
+//  Har kuni ertalab «kimga qancha qarzmiz» degan javob o'zi kelsin:
+//  sahifa bor edi, lekin uni ochib ko'rish kerak edi va kirim kun
+//  bo'yi yozilaveradi.
+//
+//  Vaqt `SUPPLY_AT` da, standarti 09:00 — zavod so'ragani shu. Vaqt
+//  SERVER vaqti bo'yicha, ya'ni `TZ=Asia/Tashkent` qo'yilgan bo'lishi
+//  kerak (Railway'da u UTC).
+//
+//  Idiom zaxira jadvali bilan AYNAN bir xil va bir xil sababdan:
+//  alohida cron xizmati ko'tarilmaydi, konteyner qayta ishga tushsa
+//  taymer noldan boshlanadi — shuning uchun «bugun yuborildimi» degan
+//  xotira emas, VAQT OYNASI ishlatiladi.
+//
+//  Xabar NAVBATGA qo'yiladi: tokensiz ham hech narsa buzilmaydi,
+//  belgisi bor xodim bo'lmasa hech kimga yozilmaydi.
+function saldoJadvali() {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(
+    String(process.env.SUPPLY_AT || '09:00').trim());
+  if (!m) return;
+  const daqiqa = Number(m[1]) * 60 + Number(m[2]);
+  const OYNA = 15;
+  let oxirgi = '';
+  console.log(`Kunlik ta'minot saldosi: ${m[1]}:${m[2]} (server vaqti)`);
+  setInterval(async () => {
+    const d = new Date();
+    const kun = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const farq = (d.getHours() * 60 + d.getMinutes()) - daqiqa;
+    if (kun === oxirgi || farq < 0 || farq >= OYNA) return;
+    oxirgi = kun;
+    try {
+      const n = await require('./modules/materials').saldoYubor();
+      if (n) console.log(`[saldo] ${n} ta xodimga navbatga qo'yildi`);
+    } catch (e) { console.error('[saldo] XATO:', e.message); }
+  }, 5 * 60 * 1000);
 }
 
 const PORT = process.env.PORT || 3000;
@@ -190,4 +246,5 @@ const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`ZELTA ERP → http://localhost:${PORT}`));
   zaxiraJadvali();
   xabarJadvali();
+  saldoJadvali();
 })();

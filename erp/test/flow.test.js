@@ -6444,6 +6444,97 @@ test('jurnalda boshlanmagan konverlar filtri', async () => {
   assert.ok(xls.text.includes(bosh.conveyor_no));
 });
 
+test("ta'minot xabarlari: kirim hujjati va kunlik saldo", async () => {
+  //  ★ ZAVOD QARORI (2026-09): kirim yozilgan zahoti u Telegramga
+  //  ketsin — qatorlari, summasi va ta'minotchining YANGI qarzi bilan;
+  //  ustiga har kuni ertalab saldo. «M26-0001 yozildi» degan xabar
+  //  qarzni AYTMASDI va nazorat qiladigan odam sahifani ochib
+  //  ko'rishi kerak bo'lardi.
+  //
+  //  ★ KIMGA BORISHI ROLDAN EMAS, XODIM BELGISIDAN: kirimni xom ashyo
+  //  mudiri YOZADI, o'qiydigan odam esa boshqa (4-qoida).
+  const { db } = require('../db');
+  const xom = await xodim("Sinov taminot xodim", 'xom_ombor');
+  await xodim("Sinov taminot boshlig", 'ishlab_boshl');
+  const kuzatuvchi = (await H.id(
+    `SELECT id, supply_reports FROM workers WHERE name = 'Sinov taminot boshlig'`));
+  //  Standarti BO'SH: xabar qilinadigan ish emas, kuzatuv — uni kim
+  //  o'qishini zavod o'zi hal qiladi.
+  assert.equal(kuzatuvchi.supply_reports, false, 'standarti bo\'sh');
+
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Xabar Mdf', category: 'MDF' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Sinov Xabar Mdf'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Sinov Xabar LDSP', uom: 'list', category: 'LDSP' })).body;
+
+  const belgi = async () => Number((await H.id(
+    `SELECT COALESCE(MAX(id), 0)::int AS n FROM notifications`)).n);
+  const yangi = async (dan) => (await db.query(
+    `SELECT n.worker_id, n.title, n.body FROM notifications n
+      WHERE n.id > $1 AND n.title LIKE 'Kirim %' ORDER BY n.id`, [dan])).rows;
+
+  //  ── Belgisi YO'Q: xabar umuman yozilmaydi.
+  const b0 = await belgi();
+  const k0 = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh,
+    items: [{ material_id: m.id, qty: 10, price: 5 }] });
+  assert.equal(k0.status, 200, k0.text);
+  assert.equal((await yangi(b0)).length, 0, 'belgisiz xodimga yozilmaydi');
+
+  //  ── Belgi qo'yiladi (Xodimlar sahifasidagi katakcha).
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + kuzatuvchi.id,
+    { supply_reports: true })).status, 200);
+
+  const b1 = await belgi();
+  const k = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh, doc_on: '2026-09-12',
+    items: [{ material_id: m.id, qty: 100, price: 20 }] });
+  assert.equal(k.status, 200, k.text);
+
+  const x = await yangi(b1);
+  assert.equal(x.length, 1, 'faqat belgisi bor xodimga');
+  assert.equal(x[0].worker_id, kuzatuvchi.id);
+  assert.match(x[0].title, new RegExp(k.body.doc_no), 'hujjat raqami');
+  assert.match(x[0].title, /Sinov Xabar Mdf/, 'ta\'minotchi');
+  //  Qatorlar: nomi, soni, narxi va summasi — «nima keldi va
+  //  qanchaga» degan savolga javob hujjatni ochmasdan bo'lsin.
+  assert.match(x[0].body, /Sinov Xabar LDSP/, 'material nomi');
+  assert.match(x[0].body, /100 list/, 'soni va o\'lchov birligi');
+  assert.match(x[0].body, /20,00/, 'narxi');
+  assert.match(x[0].body, /2 000,00/, 'summasi');
+  //  ★ YANGI QARZ: 10 × 5 + 100 × 20 = 2 050. Qarz SHU
+  //  tranzaksiyadan o'qiladi — hovuzdan yangi ulanish hali
+  //  yozilmagan kirimni ko'rmasdi va xabarda ESKI qarz turardi.
+  assert.match(x[0].body, /qarzimiz: 2 050,00/, 'kirimdan KEYINGI qarz');
+
+  //  ── Kunlik saldo: qarzi bor ta'minotchilar, ikki tomon alohida.
+  const saldo = await require('../modules/materials').saldoXabari();
+  assert.ok(saldo, 'saldo xabari quriladi');
+  assert.match(saldo.title, /Ta'minotchilar saldosi/);
+  assert.match(saldo.body, /Qarzimiz:/);
+  assert.match(saldo.body, /Sinov Xabar Mdf — 2 050,00 \$/);
+
+  //  Nol qarzli ta'minotchi yozilmaydi: o'ttiz ikkita qatorning yarmi
+  //  nol bo'lsa javob o'sha to'da orasida ko'rinmay ketardi.
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Nol Taminot', category: 'MDF' });
+  assert.ok(!/Sinov Nol Taminot/.test(
+    (await require('../modules/materials').saldoXabari()).body),
+    'qarzi yo\'q ta\'minotchi yozilmaydi');
+
+  //  Navbatga qo'yilishi ham shu belgidan.
+  const b2 = await belgi();
+  const n = await require('../modules/materials').saldoYubor();
+  assert.equal(n, 1, 'belgisi bor bitta xodimga');
+  const s2 = (await db.query(
+    `SELECT title, worker_id FROM notifications WHERE id > $1`, [b2])).rows;
+  assert.equal(s2.length, 1);
+  assert.equal(s2[0].worker_id, kuzatuvchi.id);
+});
+
 test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
   //  ★ MOL TA'MINOTCHIDAN KELDI (zavod qarori). Kirim IKKITA ishni
   //  birga qiladi: omborni to'ldiradi va ta'minotchining oldidagi

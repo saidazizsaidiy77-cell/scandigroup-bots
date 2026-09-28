@@ -437,6 +437,26 @@ function openForm(id){
                   stulni baribir savdo so'raydi</span></span>
             </div></div>
 
+          <!--  ★ TA'MINOT XABARLARI (izoh: sql/materials.sql). Kirim
+                hujjatini xom ashyo mudiri yozadi, O'QIYDIGAN odam esa
+                boshqa — ta'minotni nazorat qiladigan boshliq.
+                Standarti BO'SH: xabar qilinadigan ish emas, kuzatuv va
+                uni kim o'qishini zavod o'zi hal qiladi. Telegram ID
+                yozilmagan bo'lsa belgi hech narsa bermaydi — o'sha
+                yerda aytib turiladi. -->
+          <div><label>Ta'minot</label>
+            <div class="row" style="gap:10px;align-items:center">
+              <input type="checkbox" id="wSup" style="width:auto"
+                     ${w?.supply_reports ? 'checked' : ''}>
+              <span style="flex:1">Ta'minot xabarlarini oladi
+                <span class="muted" style="font-size:12px">· har kirim
+                  hujjati qatorlari va ta'minotchining yangi qarzi
+                  bilan, ustiga har kuni ertalab saldo${
+                    w && !w.tg_id
+                      ? ' — <b>Telegram ID yozilmagan</b>, xabar bormaydi'
+                      : ''}</span></span>
+            </div></div>
+
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
               ${meta.roles.map(r => `
@@ -536,6 +556,7 @@ async function save(id){
     sees_warehouse: $('wWh').checked,
     can_release: $('wRel').checked,
     can_request_unit: $('wReq').checked,
+    supply_reports: $('wSup').checked,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
     roles,

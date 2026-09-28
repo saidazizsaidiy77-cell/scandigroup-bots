@@ -880,3 +880,27 @@ SELECT r.supplier_id,
        r.doc_no, NULL::int, r.id
   FROM v_mat_receipts r
  WHERE r.status = 'ok' AND r.amount <> 0;
+
+-- ═══════════════════════════ TA'MINOT XABARLARI — XODIM BELGISI
+--
+--  ★ ZAVOD QARORI (2026-09): kirim hujjati yozilgan zahoti u
+--  Telegramga ketsin — qatorlari, summasi va ta'minotchining YANGI
+--  qarzi bilan; ustiga har kuni ertalab ta'minotchilar saldosi.
+--
+--  Kimga borishi ROLDAN chiqmaydi: kirimni xom ashyo mudiri yozadi,
+--  o'qiydigan odam esa boshqa — ta'minotni nazorat qiladigan
+--  boshliq. Rol huquqlari KODDA turadi (`sql/core-seed.sql`), ya'ni
+--  bitta odam uchun o'zgartirib bo'lmaydi va «hamma xom ashyo
+--  xodimiga yuborish» degan javob ham noto'g'ri bo'lardi.
+--
+--  Shuning uchun belgi XODIMDA — `can_hold_cash`, `sees_warehouse`,
+--  `can_release` va `can_request_unit` bilan bir xil idiom va bir xil
+--  sabab: kodga na ism, na lavozim yoziladi (4-qoida), ertaga o'sha
+--  odam almashsa bitta katakcha ko'chadi.
+--
+--  Standarti `false`, va bu ataylab: `true` bo'lsa deploy kuni
+--  zavodning oltmish oltita xodimidan `tg_id` si borlarining hammasi
+--  kirim xabarini ola boshlardi. Xabar — QILINADIGAN ISH emas,
+--  KUZATUV: uni kim o'qishini zavod o'zi hal qiladi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS
+  supply_reports BOOLEAN NOT NULL DEFAULT false;

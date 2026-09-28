@@ -82,6 +82,19 @@ async function queueWarehouse(
   return rows.length;
 }
 
+//  TA'MINOT: xodimning BELGISI bo'yicha (`workers.supply_reports`,
+//  izoh: sql/materials.sql). Rol bo'yicha bo'lmasligining sababi
+//  qoidaning o'zida: kirimni xom ashyo mudiri YOZADI, o'qiydigan
+//  odam esa boshqa — ta'minotni nazorat qiladigan boshliq.
+async function queueSupply({ module, title, body }, client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT id FROM workers WHERE active AND supply_reports`);
+  for (const r of rows)
+    await queue({ worker_id: r.id, module, title, body }, c);
+  return rows.length;
+}
+
 // Bot jarayoni shuni chaqiradi. send(tg_id, text) — Telegram yuboruvchi funksiya.
 async function sendPending(send, limit = 50) {
   const { rows } = await db.query(
@@ -112,4 +125,4 @@ async function sendPending(send, limit = 50) {
   return rows.length;
 }
 
-module.exports = { queue, queueShop, queueWarehouse, sendPending };
+module.exports = { queue, queueShop, queueWarehouse, queueSupply, sendPending };
