@@ -80,8 +80,21 @@ router.get('/ref', need(...VIEW), wrap(async (req, res) => {
                  WHERE rate IS NOT NULL AND status = 'ok') x
                ORDER BY d DESC, id DESC LIMIT 1`),
   ]);
+  //  ★ QISQARGAN RO'YXAT SABABINI AYTADI (zavod qarori, 2026-09).
+  //  Doirasi bor xodimga faqat o'z tsexining ombori keladi va bu
+  //  TO'G'RI, lekin ekran buni aytmasdi: «tsex omborlari
+  //  ko'rinmayapti» degan savolga javob faqat Xodimlar sahifasini
+  //  ochib, rol yonidagi ro'yxatni ko'rgandan keyin topilardi.
+  //  Oylik moddasining doirasi bilan bir xil idiom (izoh:
+  //  modules/cash.js): ro'yxat qisqarsa QAYSI doira bilan
+  //  qisqargani o'sha yerda yozilib turadi.
+  const doiraNom = doira.length
+    ? (await db.query(`SELECT name FROM shops WHERE id = ANY($1) ORDER BY name`,
+                      [doira])).rows.map((r) => r.name)
+    : [];
+
   res.json({ categories: cats.rows, uoms: uoms.rows, warehouses: whs.rows,
-             suppliers: sups.rows,
+             suppliers: sups.rows, scope_shops: doiraNom,
              rate: kurs.rows[0] ? Number(kurs.rows[0].rate) : null });
 }));
 

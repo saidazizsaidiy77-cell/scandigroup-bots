@@ -50,6 +50,13 @@
       <input id="sQ" placeholder="material nomi" oninput="deb()"></div>
     <div class="row" style="gap:8px" id="stockTools"></div>
   </div>
+  <!--  ★ QISQARGAN RO'YXAT SABABINI AYTADI (izoh:
+        modules/materials.js): doirasi bor xodimga faqat o'z
+        tsexining ombori keladi va bu to'g'ri, lekin ekran buni
+        aytmasa «tsex omborlari ko'rinmayapti» degan savol
+        tug'ilardi — javobi esa Xodimlar sahifasida. -->
+  <p class="muted" style="margin-top:10px;font-size:12px" id="sDoira" hidden></p>
+  </div>
 </div>
 
 <!--  ★ KIRIM HUJJATI: mol ta'minotchidan keldi. Filtrlar SERVERDA —
@@ -185,6 +192,16 @@ async function boot() {
   //  qator ikki marta bir xil so'zni takrorlamaydi, shuning uchun
   //  bo'lim nomi ombor nomida bo'lsa qo'shilmaydi.
   $('sWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar();
+  if ($('sDoira')) {
+    const d = ref.scope_shops || [];
+    $('sDoira').hidden = !d.length;
+    $('sDoira').innerHTML = d.length
+      ? `Ro'yxat <b>${d.map(esc).join(', ')}</b> doirasi bilan qisqargan —
+         boshqa tsexning va zavod omborlari ko'rsatilmaydi. Hammasi kerak
+         bo'lsa Xodimlar sahifasida rol yonidagi tsex «Barcha tsex»
+         qilinadi.`
+      : '';
+  }
   //  Spravochnikdagi filtr: «Barcha material» — cheklov yo'q.
   $('fWh').innerHTML = '<option value="">Barcha material</option>' + omborlar();
 
