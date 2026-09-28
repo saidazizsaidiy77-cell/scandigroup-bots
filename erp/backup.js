@@ -165,11 +165,24 @@ dump.on('close', (code) => {
     if (PASS) console.log(`Ochish:   node erp/backup.js --och "${file}"`);
     console.log('Tiklash:  gunzip -c <fayl> | psql "<DATABASE_URL>"');
 
+    //  ★ MANZIL YO'QLIGI JIM QOLMAYDI. Ilgari ikkala o'zgaruvchi ham
+    //  bo'sh bo'lsa skript hech narsa demasdan tugardi: ekranda
+    //  «Zaxira tayyor» turardi va odam nusxa Telegramga ketdi deb
+    //  o'ylardi — holbuki fayl konteynerda qolgan edi va konteyner
+    //  qayta ishga tushganda u bilan birga yo'qolardi. Zaxirada eng
+    //  yomon narsa — bor deb o'ylangan, aslida yo'q nusxa.
     if (TG_TOKEN && TG_CHAT) {
       const ok = await telegram(file, size, mb);
       if (!ok) process.exit(1);
     } else if (TG_CHAT || TG_TOKEN) {
-      console.warn('Telegram: BACKUP_TG_TOKEN va BACKUP_TG_CHAT — ikkalasi ham kerak.');
+      console.error('Telegram: BACKUP_TG_TOKEN va BACKUP_TG_CHAT — ikkalasi '
+        + `ham kerak (hozir ${TG_TOKEN ? 'CHAT' : 'TOKEN'} bo'sh). Yuborilmadi.`);
+      process.exit(1);
+    } else if (!process.env.BACKUP_DIR) {
+      console.error("Telegram: BACKUP_TG_TOKEN va BACKUP_TG_CHAT qo'yilmagan, "
+        + 'BACKUP_DIR ham yo\'q — nusxa FAQAT shu konteynerda qoldi va '
+        + 'konteyner qayta ishga tushganda yo\'qoladi.');
+      process.exit(1);
     }
   });
 });
