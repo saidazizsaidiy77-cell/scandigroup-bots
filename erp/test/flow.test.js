@@ -7480,6 +7480,59 @@ test('ishlab chiqarish paneli: chiqarilgan tsexdan chiqqanda sanaladi', async ()
     'bo\'limlar navbati to\'ladi');
 });
 
+//  ★ KPI: OYLIK REJA VA FAKT. Panel «qancha qildik» degan savolga
+//  javob beradi, lekin 76 ming dollar ko'pmi yoki ozmi — buni faqat
+//  REJA bilan solishtirganda bilinadi.
+test('KPI: reja qo\'yiladi, fakt o\'sha view\'lardan chiqadi', async () => {
+  const yil = new Date().getFullYear();
+  const oy = `${yil}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+  const boshi = (await admin('GET', '/api/kpi?year=' + yil)).body;
+  assert.equal(boshi.year, yil);
+  assert.ok(boshi.bolimlar.some((b) => b.code === 'sales'));
+  assert.equal(boshi.yozadi, true, 'administrator reja qo\'yadi');
+
+  //  Reja saqlanadi va o'qilganda qaytadi.
+  assert.equal((await admin('POST', '/api/kpi',
+    { bolim: 'sales', metric: 'chiqdi', mon: oy, target: 1234 })).status, 200);
+  const keyin = (await admin('GET', '/api/kpi?year=' + yil)).body;
+  const r = keyin.reja.find((x) => x.bolim === 'sales' && x.metric === 'chiqdi'
+                                && x.mon === oy);
+  assert.equal(Number(r.target), 1234);
+
+  //  ★ BITTA OYGA BITTA REJA: ikkinchisi USTIGA yoziladi, ikkinchi
+  //  qator yaratilmaydi — qaysi biri haqiqiy ekani noaniq qolardi.
+  assert.equal((await admin('POST', '/api/kpi',
+    { bolim: 'sales', metric: 'chiqdi', mon: oy, target: 2000 })).status, 200);
+  const ikki = (await admin('GET', '/api/kpi?year=' + yil)).body.reja
+    .filter((x) => x.bolim === 'sales' && x.metric === 'chiqdi' && x.mon === oy);
+  assert.equal(ikki.length, 1);
+  assert.equal(Number(ikki[0].target), 2000);
+
+  //  Bo'sh yuborilgani «tegma» emas, «yo'q» degani.
+  assert.equal((await admin('POST', '/api/kpi',
+    { bolim: 'sales', metric: 'chiqdi', mon: oy, target: '' })).status, 200);
+  assert.equal((await admin('GET', '/api/kpi?year=' + yil)).body.reja
+    .filter((x) => x.bolim === 'sales' && x.metric === 'chiqdi'
+                && x.mon === oy).length, 0);
+
+  //  Noma'lum bo'lim va ko'rsatkich qabul qilinmaydi: ro'yxat KODDA
+  //  va tashqaridan kelgan nom bazaga yetib bormaydi.
+  assert.equal((await admin('POST', '/api/kpi',
+    { bolim: 'yoq', metric: 'chiqdi', mon: oy, target: 1 })).status, 400);
+  assert.equal((await admin('POST', '/api/kpi',
+    { bolim: 'sales', metric: 'yoq', mon: oy, target: 1 })).status, 400);
+
+  //  ★ HUQUQI YO'Q BO'LIMNING REJASI HAM KO'RINMAYDI — u boshqa
+  //  odamning raqami. Tsex ustasida savdo ham, moliya ham yo'q.
+  const usta = (await korpus('GET', '/api/kpi?year=' + yil));
+  if (usta.status === 200)
+    assert.ok(!usta.body.bolimlar.some((b) => b.code === 'cash'),
+      'tsex ustasiga moliya ko\'rinmaydi');
+  assert.equal((await korpus('POST', '/api/kpi',
+    { bolim: 'sales', metric: 'chiqdi', mon: oy, target: 1 })).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

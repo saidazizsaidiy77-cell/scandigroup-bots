@@ -61,6 +61,7 @@ async function startServer() {
   app.use('/api/cash', require('../modules/cash'));
   app.use('/api/materials', require('../modules/materials'));
   app.use('/api/navbat', require('../modules/nav'));
+  app.use('/api/kpi', require('../modules/kpi'));
 
   const server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));

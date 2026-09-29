@@ -819,3 +819,41 @@ SELECT f.side_id,
   FROM v_cash_flow f
   LEFT JOIN orders ord ON ord.id = f.order_id
  WHERE f.side_kind = 'customer';
+
+-- ════════════════════════════════════════════ KPI — OYLIK REJA
+--
+--  ★ ZAVOD QARORI (2026-09). Panel «qancha qildik» degan savolga
+--  javob beradi, lekin javobning O'ZI yetarli emas: 76 ming dollar
+--  ko'pmi yoki ozmi — buni faqat REJA bilan solishtirganda bilinadi.
+--  Ilgari reja direktorning daftarida turardi va oy oxirida esdan
+--  chiqardi.
+--
+--  Reja OY bo'yicha qo'yiladi: zavodning rejasi shunday tuziladi va
+--  hisobot oyi ham shu (foyda-zarar bilan bir xil o'q).
+--
+--  ★ KO'RSATKICH RO'YXATI KODDA, reja esa BAZADA — va bu 4-qoidaga
+--  zid emas: ro'yxat ma'lumot emas, KODNING o'zi. Har ko'rsatkich
+--  aniq bir SQL javobiga bog'langan («chiqib ketgan savdo» —
+--  v_sales_orders dagi summa) va uni bazadan o'qib bo'lmaydi.
+--  Raqamni esa zavod qo'yadi va u har oy o'zgaradi.
+--
+--  Bo'lim va ko'rsatkich MATN bo'lib saqlanadi, id emas: ro'yxat
+--  kodda turadi va id bilan bog'lansa har yangi ko'rsatkich uchun
+--  migratsiya yozish kerak bo'lardi.
+CREATE TABLE IF NOT EXISTS kpi_targets (
+  id      SERIAL PRIMARY KEY,
+  bolim   TEXT NOT NULL,
+  metric  TEXT NOT NULL,
+  mon     DATE NOT NULL,
+  target  NUMERIC(16,2) NOT NULL,
+  note    TEXT,
+  created_by INT REFERENCES workers(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by INT REFERENCES workers(id),
+  updated_at TIMESTAMPTZ,
+  --  Bitta oyga bitta reja: ikkinchisi yozilsa qaysi biri haqiqiy
+  --  ekani noaniq qolardi. Qayta yozilsa USTIGA yoziladi.
+  UNIQUE (bolim, metric, mon)
+);
+
+CREATE INDEX IF NOT EXISTS kpi_targets_oy_idx ON kpi_targets (mon, bolim);

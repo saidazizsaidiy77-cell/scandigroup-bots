@@ -49,6 +49,7 @@ app.use('/api/auth', auth.router);
 app.use('/api', require('./modules/production'));
 app.use('/api/admin', require('./modules/admin'));
 app.use('/api/units', require('./modules/units'));
+app.use('/api/kpi', require('./modules/kpi'));
 app.use('/api/catalog', require('./modules/catalog'));
 app.use('/api/purchasing', require('./modules/purchasing'));
 // Excel/CSV dan yuklash. Fayl xom bayt bo'lib keladi, shuning uchun yo'l

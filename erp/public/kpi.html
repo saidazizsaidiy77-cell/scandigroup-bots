@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KPI · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/app.js"></script>
+<script src="/panel.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>KPI — oylik reja</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="width:130px"><label>Yil</label>
+      <input id="yil" type="number" min="2000" max="2100" onchange="load()"></div>
+    <div class="row" style="gap:8px" id="tabs"></div>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:10px" id="izoh"></p>
+</div>
+
+<div id="body"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = Panel.esc;
+let d = null, tab = '';
+
+//  ★ BAJARILISH FOIZI YO'NALISHGA QARAB. Harajatda rejadan OSHGANI
+//  yomon, savdoda esa yaxshi — bitta formula ikkalasiga to'g'ri
+//  kelmaydi va harajat rejadan oshgani «yashil» bo'lib ko'rinardi.
+function holat(m, reja, fakt) {
+  if (reja == null || !Number(reja)) return null;
+  const f = Number(fakt) || 0;
+  const p = Math.round(f / Number(reja) * 100);
+  //  Ko'p yaxshi bo'lganda: 100% dan yuqori — yaxshi, 80% dan past —
+  //  yomon. Kam yaxshi bo'lganda teskari.
+  const yaxshi = m.yaxshi === 'kam' ? p <= 100 : p >= 100;
+  const yomon  = m.yaxshi === 'kam' ? p > 110  : p < 80;
+  return { p, rang: yaxshi ? 'ok' : yomon ? 'bad' : 'warn' };
+}
+
+const fmt = (m, v) => m.birlik === 'usd' ? Panel.pul(v, true)
+  : Panel.son(v) + (m.birlik === 'dona' ? ' dona' : '');
+
+async function load() {
+  const yil = Number($('yil').value) || new Date().getFullYear();
+  try { d = await App.api('/api/kpi?year=' + yil); }
+  catch (e) { $('body').innerHTML =
+    `<p class="tag bad" style="white-space:normal">${esc(e.message)}</p>`; return; }
+  $('yil').value = d.year;
+
+  if (!d.bolimlar.length) {
+    $('body').innerHTML = '<p class="muted">Sizga ochiq bo\'lim yo\'q.</p>';
+    return;
+  }
+  if (!d.bolimlar.some((b) => b.code === tab)) tab = d.bolimlar[0].code;
+
+  $('tabs').innerHTML = d.bolimlar.map((b) =>
+    `<button ${b.code === tab ? 'class="primary"' : ''} onclick="go('${b.code}')"
+      >${esc(b.nom)}</button>`).join('');
+  $('izoh').innerHTML = d.yozadi
+    ? 'Reja katagiga raqam yozing — <b>o\'zi saqlanadi</b>. Bo\'sh qoldirilgani '
+      + '«tegma» emas, «reja yo\'q» degani.'
+    : 'Rejani direktor va ishlab chiqarish boshlig\'i qo\'yadi.';
+  draw();
+}
+
+const go = (k) => { tab = k; draw(); };
+
+function draw() {
+  const b = d.bolimlar.find((x) => x.code === tab);
+  const fakt = d.fakt[b.code] || {};
+  const reja = {};
+  for (const r of d.reja)
+    if (r.bolim === b.code) reja[r.metric + '|' + r.mon] = Number(r.target);
+
+  const oylar = [];
+  for (let i = 1; i <= 12; i++)
+    oylar.push(`${d.year}-${String(i).padStart(2, '0')}`);
+
+  //  ★ JAMI QATORI PASTDA: «yil bo'yicha qanchaga chiqdik» degan
+  //  savol oylik qatorlardan keyin beriladi va o'n ikki raqamni
+  //  ko'z bilan qo'shib bo'lmaydi.
+  //
+  //  ★ FOIZ FAQAT REJA QO'YILGAN OYLAR BO'YICHA. Butun yilning
+  //  fakti bitta oyning rejasiga taqqoslansa «1161%» degan javob
+  //  chiqardi — u to'g'ri hisoblangan, lekin savolga javob emas.
+  //  Shuning uchun jami FAKT ham faqat rejasi bor oylardan
+  //  yig'iladi; ustundagi «Fakt» esa yilning to'liq yig'indisi
+  //  bo'lib qolaveradi.
+  const jamR = {}, jamF = {}, jamFR = {};
+  for (const m of b.metrics) {
+    jamR[m.code] = 0; jamF[m.code] = 0; jamFR[m.code] = 0;
+    for (const o of oylar) {
+      const r = reja[m.code + '|' + o] || 0;
+      const f = Number((fakt[o] || {})[m.code]) || 0;
+      jamR[m.code] += r;
+      jamF[m.code] += f;
+      if (r) jamFR[m.code] += f;
+    }
+  }
+
+  $('body').innerHTML = `<div class="card"><div class="tbox"><table>
+    <thead><tr><th rowspan="2" style="vertical-align:bottom">Oy</th>
+      ${b.metrics.map((m) => `<th colspan="3" style="text-align:center">${
+        esc(m.nom)}</th>`).join('')}</tr>
+      <tr>${b.metrics.map(() =>
+        '<th class="num">Reja</th><th class="num">Fakt</th>'
+        + '<th class="num">Bajarildi</th>').join('')}</tr></thead>
+    <tbody>
+    ${oylar.map((o) => `<tr>
+      <td>${esc(Panel.oyNom(o))}</td>
+      ${b.metrics.map((m) => {
+        const r = reja[m.code + '|' + o];
+        const f = Number((fakt[o] || {})[m.code]) || 0;
+        const h = holat(m, r, f);
+        return `<td class="num">${d.yozadi
+          ? `<input type="number" min="0" step="0.01" value="${r ?? ''}"
+               style="width:110px;text-align:right"
+               onchange="saqla('${m.code}','${o}',this)">`
+          : (r == null ? '—' : fmt(m, r))}</td>
+          <td class="num">${f ? fmt(m, f) : '—'}</td>
+          <td class="num">${h ? `<span class="tag ${h.rang}">${h.p}%</span>`
+            : '<span class="muted">—</span>'}</td>`;
+      }).join('')}
+    </tr>`).join('')}
+    <tr><td><b>Jami</b></td>
+      ${b.metrics.map((m) => {
+        const h = holat(m, jamR[m.code], jamFR[m.code]);
+        return `<td class="num"><b>${jamR[m.code] ? fmt(m, jamR[m.code]) : '—'}</b></td>
+          <td class="num"><b>${jamF[m.code] ? fmt(m, jamF[m.code]) : '—'}</b></td>
+          <td class="num" title="faqat reja qo'yilgan oylar bo'yicha">${
+            h ? `<span class="tag ${h.rang}">${h.p}%</span>`
+              : '<span class="muted">—</span>'}</td>`;
+      }).join('')}
+    </tr>
+    </tbody></table></div>
+    <div id="msg" style="margin-top:10px"></div></div>`;
+}
+
+//  Katakcha o'zgargan zahoti saqlanadi: «Saqlash» tugmasi qaysi katak
+//  o'zgarganini eslab turishni talab qilardi va o'n ikki qatorli
+//  jadvalda bu oson unutilardi.
+async function saqla(metric, mon, el) {
+  el.style.borderColor = 'var(--line)';
+  try {
+    await App.api('/api/kpi', { method: 'POST', body: JSON.stringify({
+      bolim: tab, metric, mon, target: el.value }) });
+    el.style.borderColor = 'var(--ok)';
+    //  Fakt o'zgarmaydi, lekin foiz REJAGA bog'liq — shuning uchun
+    //  jadval qayta chiziladi (o'sha zahoti javob ko'rinsin).
+    const r = d.reja.find((x) => x.bolim === tab && x.metric === metric
+                              && x.mon === mon);
+    if (el.value === '') {
+      if (r) d.reja.splice(d.reja.indexOf(r), 1);
+    } else if (r) r.target = el.value;
+    else d.reja.push({ bolim: tab, metric, mon, target: el.value });
+    draw();
+  } catch (e) {
+    el.style.borderColor = 'var(--bad)';
+    if ($('msg')) $('msg').innerHTML =
+      `<span class="tag bad" style="white-space:normal">${esc(e.message)}</span>`;
+  }
+}
+
+App.start(load, 'production.reports', 'production.manage',
+  'sales.view', 'sales.manage', 'cash.view', 'cash.manage',
+  'warehouse.view', 'warehouse.manage');
+</script>
+</body>
+</html>

@@ -212,10 +212,24 @@ const App = (() => {
       //  huquqi `production.manage` — tarixga tegadigan boshqa ishlar
       //  bilan bir xil.
       perm: ['production.manage'] },
+    //  ★ KPI — PANELLARNING YONIDA. Panel «qancha qildik» degan
+    //  savolga javob beradi, lekin 76 ming dollar ko'pmi yoki ozmi —
+    //  buni faqat REJA bilan solishtirganda bilinadi.
+    { href: '/kpi.html', mod: 'reports', nav: 'KPI',
+      group: 'Ishlab chiqarish hisobotlari',
+      title: 'KPI — oylik reja', lead: 'Reja va fakt',
+      text: "Har bo'limga oylik reja qo'yiladi \u00b7 yonida fakt va bajarilish foizi \u00b7 savdo, ishlab chiqarish, moliya va ombor",
+      perm: ['production.reports', 'production.manage', 'sales.view',
+             'sales.manage', 'cash.view', 'cash.manage',
+             'warehouse.view', 'warehouse.manage'] },
     //  ★ PANEL HISOBOTLARDAN OLDIN: direktorning savoli «bu oy
     //  qancha qildik» — javob bitta ekranda turadi. «Zavod» esa
     //  boshqa savolga javob beradi: qaysi konver qayerda.
-    { href: '/ishlab-panel.html', mod: 'reports', nav: 'Panel',
+    { href: '/ishlab-panel.html', mod: 'reports',
+      //  ★ NOM AJRATILADI: «Hisobotlar» bo'limida uchta «Panel»
+      //  turib qolgan edi (ishlab chiqarish, moliya va eskisi) va
+      //  qaysi biri qaysi ekani faqat bosib ko'rilardi.
+      nav: 'Ishlab chiqarish paneli',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Ishlab chiqarish paneli', lead: 'Zavod bir ekranda',
       text: "Chiqarilgan mahsulot oylar bo'yicha \u00b7 tsex va mahsulot kesimi \u00b7 hozir yo'lda va boshlanmagan konverlar \u00b7 bo'limlarda nechta turibdi \u00b7 kechikkanlar",
@@ -232,7 +246,8 @@ const App = (() => {
     //  ★ PANEL HISOBOTLARDAN OLDIN: direktorning savoli «qancha
     //  ishladik» — javob bitta ekranda turadi, jadval esa javobni
     //  TEKSHIRISH uchun.
-    { href: '/moliya-panel.html', mod: ['cash', 'reports'], nav: 'Panel',
+    { href: '/moliya-panel.html', mod: ['cash', 'reports'],
+      nav: 'Moliya paneli',
       group: 'Moliyaviy hisobotlar',
       title: 'Moliya paneli', lead: 'Uch savol bir ekranda',
       text: "Tushum, harajat va foyda oylar bo'yicha \u00b7 harajat qayerga ketdi \u00b7 kassa, bank va xodimlar qo'lidagi pul \u00b7 mijoz va ta'minotchi qarzi",
