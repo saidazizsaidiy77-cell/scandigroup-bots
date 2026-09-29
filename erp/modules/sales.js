@@ -135,6 +135,14 @@ router.get('/products', need(...READ), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT p.id, p.name, p.sku, g.name AS product_type, g.uom,
             p.${ustun} AS price,
+            --  ★ SAVDO BU MAHSULOTNI ISHLAB CHIQARISHGA SO'RAY OLADIMI
+            --  (product_groups.sales_can_request — stol va stul).
+            --  Sahifa rang ro'yxatini shunga qarab ochadi: so'ralgan
+            --  konver hali YASALMAGAN va u mijoz aytgan rangda
+            --  bo'yaladi, ya'ni ro'yxat zavodda turgan konverlarning
+            --  rangi bilan cheklanmasligi kerak.
+            COALESCE(g.sales_can_request, false) AS can_request,
+            COALESCE(g.needs_fabric, false)      AS needs_fabric,
             COALESCE(f.qty, 0)::int AS free_fg,
             COALESCE(f.stock, 0)::int AS free_stock
        FROM products p

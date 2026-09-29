@@ -1822,6 +1822,19 @@ test('narxdan past sotilmaydi \u2014 direktor tasdiqlaydi', async () => {
   assert.equal(Number(pOpt.price), 100);
   assert.equal(Number(pRet.price), 130);
 
+  //  ★ SAHIFA RANG RO'YXATINI SHU BELGIGA QARAB OCHADI (zavod
+  //  qarori, 2026-09). Savdo stol va stulni ishlab chiqarishga
+  //  SO'RAY oladi va so'ralgan konver hali yasalmagan: u mijoz
+  //  aytgan rangda bo'yaladi. Ilgari ro'yxat faqat MAVJUD
+  //  konverning rangi bilan cheklanardi va mijoz to'rtinchi rangni
+  //  so'rasa menejer uni yoza olmasdi.
+  assert.equal(pOpt.can_request, false, 'penalga so\'rov yozilmaydi');
+  const stulId = (await H.id(`SELECT id FROM products WHERE sku='STU-LAURA'`)).id;
+  const pStul = (await opt('GET', '/api/sales/products')).body.rows
+    .find((p) => p.id === stulId);
+  assert.equal(pStul.can_request, true, 'stulga yoziladi');
+  assert.equal(typeof pStul.needs_fabric, 'boolean');
+
   //  Chegaradan YUQORI narx jim o'tadi.
   const yaxshi = await opt('POST', '/api/sales/orders', { customer_id: mijoz,
     items: [{ product_id: PENAL, qty: 1, unit_price: 120 }] });

@@ -886,8 +886,23 @@ const rowsFor = (it, level) => stock.filter(r =>
 
 //  Rangi tanlanadigan konver shu mahsulotda bormi — rang ro'yxati
 //  shunga qarab ochiladi.
-const rangTanlanadi = (it) => it.product_id
-  && rowsFor(it, 2).some((r) => r.src === 'stock' || bosh(r));
+//
+//  ★ SO'RALADIGAN MAHSULOTDA RO'YXAT HAR DOIM OCHIQ (zavod qarori,
+//  2026-09). Ilgari shart faqat MAVJUD konverga qarardi: bo'yalmagan
+//  partiya bo'lsa rang tanlanardi, bo'lmasa katak BO'SH qolardi.
+//  Stulda esa zavodda uch xil rang turgan bo'lib, mijoz to'rtinchi
+//  rangni so'rasa menejer uni yoza olmasdi — holbuki savdo stulni
+//  ishlab chiqarishga SO'RAY oladi va so'ralgan konver hali
+//  yasalmagan: u mijoz aytgan rangda bo'yaladi.
+//
+//  Shuning uchun ikkinchi shart — GURUHNING belgisi
+//  (product_groups.sales_can_request, stol va stul). Penal va
+//  kamodda ro'yxat eskicha: ularga so'rov yozilmaydi, ya'ni bor
+//  konverning rangidan boshqasini va'da qilish yolg'on bo'lardi.
+const soraladi = (it) => !!(products.find((p) => p.id === Number(it.product_id))
+  || {}).can_request;
+const rangTanlanadi = (it) => !!it.product_id
+  && (soraladi(it) || rowsFor(it, 2).some((r) => r.src === 'stock' || bosh(r)));
 
 //  Qator QAYERDAN yopiladi — HAMMA manbasi bilan. Ilgari bittasi
 //  yozilardi va omborda bori ko'rinib, ishlab chiqarishdagisi
@@ -958,8 +973,18 @@ function cell(i, key, rows, val, dis, tanlov) {
     ? (key === 'color' ? palette.colors : palette.fabrics)
         .filter(v => !list.some(x => String(x.v) === v)) : [];
   const has = list.some(x => String(x.v) === String(val ?? '')) || pal.includes(val);
+  //  ★ BO'SH RO'YXAT SABABINI AYTADI (zavod qarori, 2026-09). Rang va
+  //  mato faqat BORIDAN tanlanadi — yangisi jurnal orqali kiritiladi
+  //  (`production.units`). Zavodda hali birorta konverga mato
+  //  yozilmagan bo'lsa katak ochilar, lekin ichi bo'sh bo'lardi va
+  //  menejer nima qilishini bilmay qolardi: tanlay olmaydi, yoza ham
+  //  olmaydi. Bo'sh katak bu yerda javob emas, savol.
+  const bosh_royxat = !list.length && !pal.length && !val;
   return `<select ${dis} onchange="setPick(${i},'${key}',this.value)" style="width:100%">
     <option value=""${val == null || val === '' ? ' selected' : ''}>— tanlang —</option>
+    ${bosh_royxat && key !== 'product_id' ? `<option value="" disabled
+      >— ro'yxat bo'sh: ${key === 'color' ? 'rang' : 'mato'} jurnaldan kiritiladi —</option>`
+      : ''}
     ${SRC.map(grp).join('')}
     ${pal.length ? `<optgroup label="${key === 'color' ? 'Rangi' : 'Matosi'} tanlanadi">${pal.map(v =>
         `<option value="${esc(v)}"${sel(v)}>${esc(v)}</option>`).join('')}</optgroup>` : ''}
