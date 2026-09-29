@@ -504,3 +504,84 @@ input.need, select.need{border-color:var(--accent);background:var(--surface)}
 /* Tizim o'zi to'ldirgan katak. Xodim ko'rib tursin: bu qiymat oldingi
    kiritilganlardan olingan, uni tekshirish yoki o'zgartirish mumkin. */
 input.auto{color:var(--accent-ink)}
+
+/* ═══════════════════════════════════════════════════════ PANEL
+ *  Dashboard elementlari (izoh: `public/panel.js`). Ranglar shu yerda
+ *  EMAS — ular skriptda, chunki ular MA'LUMOTGA tegishli: qaysi
+ *  bo'lak qaysi rangda ekani qatorning tartibidan chiqadi.
+ *
+ *  ★ GRID VA O'Q RECESSIV. Grafikda ko'z DIQQATI ma'lumotda bo'lishi
+ *  kerak: o'q chizig'i, oy nomi va setka matndan ochroq turadi.
+ *  To'q chiziqlar ustunlar bilan raqobatlashib, shaklni yo'qotardi.
+ */
+.pkpi{display:flex;flex-direction:column;justify-content:space-between;min-height:104px}
+.pkpi.bad  .kpi{color:var(--bad)}
+.pkpi.warn .kpi{color:var(--warn)}
+.pkpi.ok   .kpi{color:var(--ok)}
+.plabel{font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--muted);margin-bottom:10px}
+
+/*  Ustunli grafik. Balandligi QATTIQ: telefonda ham, katta ekranda ham
+ *  bir xil o'qiladi va kartochka sakramaydi. */
+.pbars{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:6px;
+  align-items:end;height:190px}
+.pbar{display:flex;flex-direction:column;height:100%;min-width:0}
+.pbar-v{font-size:11px;color:var(--muted);text-align:center;height:16px;
+  white-space:nowrap;overflow:visible}
+.pbar-col{flex:1;display:flex;align-items:flex-end;
+  border-bottom:1px solid var(--line)}
+/*  ★ USTUNNING TEPASI YUMALOQ, PASTI EMAS: u o'qning ustida turadi va
+ *  pastki burchaklar yumaloqlansa chiziqdan uzilib ko'rinardi. */
+/*  ★ USTUN INGICHKA. To'liq kenglikda bo'lsa grafik rangli devorga
+ *  aylanadi va ko'z ma'lumotni emas, fonni ko'radi: ustunlar
+ *  orasidagi FARQ shaklning o'zi, rang esa faqat belgisi. */
+.pbar-col>i{display:block;width:100%;max-width:44px;margin:0 auto;
+  background:#8a5a00;border-radius:4px 4px 0 0;transition:opacity .12s}
+.pbar:hover .pbar-col>i{opacity:.75}
+.pbar-x{font-size:11px;color:var(--muted);text-align:center;padding-top:6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/*  Reyting: nom — chiziq — qiymat. Nom uchun qattiq kenglik, aks holda
+ *  uzun ism chiziqni qisqartirib, ikki qator taqqoslab bo'lmasdi. */
+.prank{display:flex;flex-direction:column;gap:10px}
+.prow{display:grid;grid-template-columns:minmax(90px,150px) 1fr auto;
+  gap:12px;align-items:center;font-size:13px}
+.pname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ptrack{background:var(--surface-2);border-radius:4px;height:10px}
+.ptrack>i{display:block;height:100%;background:#8a5a00;border-radius:0 4px 4px 0;
+  transition:opacity .12s}
+.prow:hover .ptrack>i{opacity:.75}
+.pval{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+
+/*  Ulush: bitta chiziq, bo'laklari orasida 2px yuza bo'shlig'i —
+ *  ikki rang tutashsa chegarasi yo'qolardi. */
+.pshare{display:flex;gap:2px;height:14px;margin-bottom:12px}
+.pshare>i{display:block;border-radius:3px;min-width:3px;transition:opacity .12s}
+.pshare>i:hover{opacity:.75}
+.plegend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px}
+.plegend b{display:inline-block;width:9px;height:9px;border-radius:2px;
+  margin-right:6px;vertical-align:baseline}
+
+/*  ★ TOOLTIP `position:fixed`: sahifa surilganda ham sichqoncha
+ *  ostida qoladi. Toast bilan bir xil sababdan z-index yuqori —
+ *  kartochka chegarasi ostida qolib ketmasin. */
+.ptip{position:fixed;z-index:70;display:none;pointer-events:none;
+  background:#212227;color:#fbfaf7;font-size:12px;line-height:1.5;
+  padding:7px 10px;border-radius:8px;max-width:260px;
+  box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.ptip b{font-weight:600}
+
+/*  Reja/fakt: bajarilish chizig'i. Rang HOLATNI aytadi va yonida
+ *  foiz raqami turadi — rang yolg'iz o'zi javob bo'la olmaydi. */
+.pgoal{display:flex;align-items:center;gap:10px;font-size:13px}
+.pgoal .ptrack{flex:1}
+.pgoal .ptrack>i.ok{background:var(--ok)}
+.pgoal .ptrack>i.warn{background:var(--warn)}
+.pgoal .ptrack>i.bad{background:var(--bad)}
+
+@media (max-width:640px){
+  .pbars{height:150px;gap:3px}
+  .pbar-x{font-size:10px}
+  .prow{grid-template-columns:minmax(70px,110px) 1fr auto;font-size:12px}
+}
+@media print{ .ptip{display:none!important} }

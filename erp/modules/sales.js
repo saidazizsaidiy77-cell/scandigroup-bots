@@ -1523,6 +1523,177 @@ router.post('/orders/:id/plan-day', need(...SHIP), wrap(async (req, res) => {
 //  chiqmagan buyurtma — kechikkani ro'yxatdan tushib qolsa u
 //  unutilardi — ustiga o'sha kuni chiqib ketgani.
 const KUN = [...READ, ...SHIP];
+// ═══════════════════════════════════════════════ SAVDO PANELI
+//
+//  ★ BITTA SO'ROV — BUTUN EKRAN (zavod qarori, 2026-09). Panelda
+//  o'nga yaqin raqam bor va har biri uchun alohida so'rov yozilsa
+//  sahifa ochilishi o'n marta serverga borardi; ustiga ular BIR
+//  PAYTDAGI holat bo'lishi kerak — oraliqda buyurtma chiqib ketsa
+//  kartochka bilan grafik bir-biriga to'g'ri kelmay qolardi.
+//
+//  Oraliq BITTA va hammasiga tegishli: standarti — oxirgi 12 oy
+//  (joriy oyning boshidan o'n bir oy orqaga). Trend shu oraliqdan
+//  chiqadi, ya'ni ekranda ko'rinadigan raqam grafikdagi ustunlarning
+//  yig'indisiga TENG bo'ladi.
+//
+//  Doira bu yerda ham CHEGARA: yo'nalish (`channelsOf`) va «faqat
+//  o'zinikini» (`ownOf`) — ro'yxat bilan AYNAN bir xil shart, aks
+//  holda panel menejerga boshqa menejerning savdosini ko'rsatardi.
+router.get('/dashboard', need(...READ), wrap(async (req, res) => {
+  const chans = channelsOf(req);
+  const own = ownOf(req);
+  //  Sana faqat `YYYY-MM-DD` shaklida qabul qilinadi: bo'sh katak
+  //  ham, noto'g'ri terilgani ham NULL bo'ladi va server o'z
+  //  standartini qo'yadi — aks holda `$1::date` yiqilardi.
+  const sana = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim())
+    ? String(v).trim() : null);
+  const to = sana(req.query.to) || today();
+  const from = sana(req.query.from);
+
+  //  Oraliq bir marta hisoblanadi va hamma so'rovga SHU tushadi.
+  const { rows: [oraliq] } = await db.query(
+    `SELECT COALESCE($1::date, (date_trunc('month', $2::date)
+              - INTERVAL '11 months')::date) AS dan, $2::date AS gacha`,
+    [from, to]);
+  const P = [oraliq.dan, oraliq.gacha, chans, own];
+
+  const [kpi, oylar, kanal, menejer, mahsulot, qarz, holat] = await Promise.all([
+    //  Kartochkalar. «Zavodda» va «qarz» ORALIQQA bog'liq emas: ular
+    //  BUGUNGI holat — oraliq filtri bilan aralashtirib bo'lmaydi
+    //  (ombor qoldig'idagi bilan bir xil qoida).
+    db.query(
+      `SELECT
+         (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
+           WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
+             AND ($3::text[] IS NULL OR o.channel = ANY($3))
+             AND ($4::int IS NULL OR o.manager_id = $4)) AS chiqdi,
+         (SELECT COUNT(*) FROM v_sales_orders o
+           WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
+             AND ($3::text[] IS NULL OR o.channel = ANY($3))
+             AND ($4::int IS NULL OR o.manager_id = $4)) AS chiqdi_soni,
+         --  ZAVODDA TURGANI — bugungi holat: bekor qilingani ham,
+         --  chiqib ketgani ham hisobga olinmaydi (buyurtmalar
+         --  ro'yxatidagi «Hammasi» chipi bilan bir xil qoida).
+         (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
+           WHERE o.status NOT IN ('shipped', 'cancelled')
+             AND ($3::text[] IS NULL OR o.channel = ANY($3))
+             AND ($4::int IS NULL OR o.manager_id = $4)) AS zavodda,
+         (SELECT COUNT(*) FROM v_sales_orders o
+           WHERE o.status NOT IN ('shipped', 'cancelled')
+             AND ($3::text[] IS NULL OR o.channel = ANY($3))
+             AND ($4::int IS NULL OR o.manager_id = $4)) AS zavodda_soni,
+         --  KECHIKKAN: mijozga aytilgan kun o'tib ketgan, lekin
+         --  mahsulot hali chiqmagan.
+         (SELECT COUNT(*) FROM v_sales_orders o
+           WHERE o.status NOT IN ('shipped', 'cancelled')
+             AND o.due_on IS NOT NULL AND o.due_on < CURRENT_DATE
+             AND ($3::text[] IS NULL OR o.channel = ANY($3))
+             AND ($4::int IS NULL OR o.manager_id = $4)) AS kechikkan,
+         --  QARZ: mijozning balansi (boshlang'ich + chiqqan − to'lov).
+         --  Faqat QARZDOR tomoni: haqdorni ayirish «0» degan javob
+         --  berib, ikkalasini ham yashirardi (qarzdorlik hisoboti
+         --  bilan bir xil qoida).
+         (SELECT COALESCE(SUM(GREATEST(v.balance, 0)), 0) FROM v_customer_sales v
+           WHERE ($3::text[] IS NULL OR v.channel = ANY($3))
+             AND ($4::int IS NULL OR v.manager_id = $4)) AS qarz`, P),
+
+    //  Oylar bo'yicha chiqqan summa — trend. Oyi bo'sh bo'lsa ham
+    //  ustun turadi: bo'sh ustun javob, yo'q ustun esa savol
+    //  (foyda-zarar hisoboti bilan bir xil qoida).
+    db.query(
+      `WITH oy AS (
+         SELECT generate_series(date_trunc('month', $1::date),
+                                date_trunc('month', $2::date),
+                                INTERVAL '1 month')::date AS m)
+       SELECT to_char(oy.m, 'YYYY-MM') AS mon,
+              COALESCE(SUM(o.amount), 0)::numeric AS amount,
+              COUNT(o.id)::int AS orders
+         FROM oy
+         LEFT JOIN v_sales_orders o
+                ON o.status = 'shipped'
+               AND date_trunc('month', o.shipped_on) = oy.m
+               AND ($3::text[] IS NULL OR o.channel = ANY($3))
+               AND ($4::int IS NULL OR o.manager_id = $4)
+        GROUP BY oy.m ORDER BY oy.m`, P),
+
+    //  Yo'nalish kesimi — ORALIQ ichida chiqqani.
+    db.query(
+      `SELECT COALESCE(ch.name, 'Kiritilmagan') AS name,
+              COALESCE(SUM(o.amount), 0)::numeric AS amount,
+              COUNT(*)::int AS orders
+         FROM v_sales_orders o
+         JOIN customers c ON c.id = o.customer_id
+         LEFT JOIN customer_channels ch ON ch.code = c.channel
+        WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
+          AND ($3::text[] IS NULL OR o.channel = ANY($3))
+          AND ($4::int IS NULL OR o.manager_id = $4)
+        GROUP BY 1 ORDER BY amount DESC`, P),
+
+    //  Menejerlar. Doirasi bor xodimda bitta qator qoladi va sahifa
+    //  blokni umuman chizmaydi — o'sha yerda javob yo'q.
+    db.query(
+      `SELECT COALESCE(o.manager_name, 'Biriktirilmagan') AS name,
+              COALESCE(SUM(o.amount), 0)::numeric AS amount,
+              COUNT(*)::int AS orders
+         FROM v_sales_orders o
+        WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
+          AND ($3::text[] IS NULL OR o.channel = ANY($3))
+          AND ($4::int IS NULL OR o.manager_id = $4)
+        GROUP BY 1 ORDER BY amount DESC LIMIT 8`, P),
+
+    //  Mahsulot kesimi: qaysi mahsulot ko'p sotilgan. DONA emas,
+    //  SUMMA bo'yicha — stul dona bilan, penal komplekt bilan
+    //  sanaladi va ularni qo'shib bo'lmaydi (uom qoidasi).
+    db.query(
+      `SELECT p.name, g.name AS product_type,
+              COALESCE(SUM(i.qty * COALESCE(i.unit_price, 0)), 0)::numeric AS amount,
+              COALESCE(SUM(i.qty), 0)::int AS qty
+         FROM v_sales_orders o
+         JOIN order_items i ON i.order_id = o.id
+         JOIN products p ON p.id = i.product_id
+         JOIN product_groups g ON g.id = p.group_id
+        WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
+          AND ($3::text[] IS NULL OR o.channel = ANY($3))
+          AND ($4::int IS NULL OR o.manager_id = $4)
+        GROUP BY p.name, g.name ORDER BY amount DESC LIMIT 8`, P),
+
+    //  Eng katta qarzdorlar — BUGUNGI holat (oraliqqa bog'liq emas).
+    //  ★ BU IKKALASI ORALIQNI O'QIMAYDI — ular BUGUNGI holat.
+    //  Shuning uchun parametrlari ham o'ziniki: ishlatilmagan `$1`
+    //  ni Postgres qabul qilmaydi («could not determine data type»).
+    db.query(
+      `SELECT v.id, v.name, v.balance::numeric AS balance,
+              v.manager_name, v.last_order_on
+         FROM v_customer_sales v
+        WHERE v.balance > 0
+          AND ($1::text[] IS NULL OR v.channel = ANY($1))
+          AND ($2::int IS NULL OR v.manager_id = $2)
+        ORDER BY v.balance DESC LIMIT 10`, [chans, own]),
+
+    //  Buyurtmalar HOLAT bo'yicha — bugun zavodda nima turibdi.
+    //  Holat HOLAT bilan bir xil manbadan chiqadi (modules/sales.js):
+    //  ekranda ikki xil nom bo'lmasin.
+    db.query(
+      `SELECT o.status, COUNT(*)::int AS orders,
+              COALESCE(SUM(o.amount), 0)::numeric AS amount
+         FROM v_sales_orders o
+        WHERE o.status NOT IN ('shipped', 'cancelled')
+          AND ($1::text[] IS NULL OR o.channel = ANY($1))
+          AND ($2::int IS NULL OR o.manager_id = $2)
+        GROUP BY o.status ORDER BY amount DESC`, [chans, own]),
+  ]);
+
+  res.json({
+    dan: oraliq.dan, gacha: oraliq.gacha,
+    kpi: kpi.rows[0], oylar: oylar.rows, kanal: kanal.rows,
+    menejer: menejer.rows, mahsulot: mahsulot.rows,
+    qarz: qarz.rows, holat: holat.rows,
+    //  Doirasi bor menejerda «kim ko'p sotdi» degan savol yo'q:
+    //  ro'yxatda baribir bitta ism turadi.
+    ozi: !!own,
+  });
+}));
+
 router.get('/day', need(...KUN), wrap(async (req, res) => {
   const on = req.query.on || null;
   const { rows } = await db.query(

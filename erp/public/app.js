@@ -257,6 +257,14 @@ const App = (() => {
       title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
       text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
       perm: ['production.view', 'sales.view'] },
+    //  ★ PANEL RO'YXATNING TEPASIDA. Menejerning kuni «bugun nima
+    //  bor» degan savoldan boshlanadi va javob jadvalda emas,
+    //  kartochkada turadi — jadval «qaysi buyurtma» degan KEYINGI
+    //  savolga javob beradi.
+    { href: '/savdo-panel.html', mod: 'sales', nav: 'Panel',
+      title: 'Savdo paneli', lead: 'Raqamlar bir ekranda',
+      text: "Chiqib ketgan savdo oylar bo'yicha \u00b7 yo'nalish, menejer va mahsulot kesimi \u00b7 zavodda turgan buyurtmalar \u00b7 eng katta qarzdorlar",
+      perm: ['sales.view', 'sales.manage'] },
     { href: '/buyurtmalar.html', mod: 'sales', nav: 'Buyurtmalar',
       title: 'Buyurtmalar', lead: 'Mijoz nima so\'ragan',
       text: "Buyurtma qatorlari \u00b7 T/M ombordan va zahiradan konver biriktirish \u00b7 muddat va summa",
