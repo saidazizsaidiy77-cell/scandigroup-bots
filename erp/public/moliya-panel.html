@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moliya paneli · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/app.js"></script>
+<script src="/panel.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Moliya paneli</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="width:150px"><label>Oydan</label>
+      <input id="dan" type="month" onchange="load()"></div>
+    <div style="width:150px"><label>Oygacha</label>
+      <input id="gacha" type="month" onchange="load()"></div>
+  </div>
+  <!--  ★ UCHTA SAVOL BIR XIL RAQAMNI BERMAYDI va bermasligi ham
+        kerak. Ekran buni o'zi aytib turadi, aks holda ikki kartochka
+        bir-biriga to'g'ri kelmagani XATO bo'lib o'qilardi. -->
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    <b>Foyda-zarar</b> — «qancha ishladik»: tushum chiqib ketgan mahsulotdan,
+    harajat esa hisobot oyi bo'yicha. <b>Qoldiq</b> — «qo'limizda nima»,
+    bugungi holat. Ikkalasi bir xil raqam bermaydi: «foyda bor, pul yo'q»
+    degan holat aynan shunda ko'rinadi.</p>
+</div>
+
+<!--  ★ IKKI GURUH, chunki savol ikki xil: ORALIQ («qancha
+      ishladik») va BUGUNGI holat («qo'limizda nima»). Bitta qatorda
+      yettitasi tursa ko'z ularni bir xil deb o'qirdi va «foyda bor,
+      pul yo'q» degan farq yo'qolardi — u esa bu ekranning asosiy
+      javobi. -->
+<h2 style="margin:0 0 10px">Oraliq bo'yicha</h2>
+<div class="grid g3" id="kpis"></div>
+<h2 style="margin:22px 0 10px">Bugungi holat</h2>
+<div class="grid g3" id="kpis2"></div>
+
+<div class="card" style="margin-top:16px">
+  <h2>Tushum va harajat — oylar bo'yicha</h2>
+  <div id="oylar"></div>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card"><h2>Harajat qayerga ketdi</h2><div id="harajat"></div></div>
+  <div class="card"><h2>Pul qayerda turibdi</h2><div id="kassa"></div></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>Oylik natija</h2>
+  <div id="jadval"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = Panel.esc;
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('dan').value)   q.set('from', $('dan').value);
+  if ($('gacha').value) q.set('to', $('gacha').value);
+  let d;
+  try { d = await App.api('/api/cash/dashboard?' + q); }
+  catch (e) { $('kpis').innerHTML =
+    `<p class="tag bad" style="white-space:normal">${esc(e.message)}</p>`; return; }
+  if (!$('dan').value)   $('dan').value = d.from;
+  if (!$('gacha').value) $('gacha').value = d.to;
+
+  const jam = (k) => d.oylar.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const tushum = jam('tushum'), harajat = jam('harajat');
+  const foyda = tushum - harajat;
+  //  Kassa va bank — bugungi qoldiq; xodim qo'lidagi pul ham
+  //  korxonaniki, shunchaki javonda emas (aylanma kapital bilan bir
+  //  xil qoida).
+  const kassa = d.kassa.reduce((a, r) => a + (Number(r.total_usd) || 0), 0);
+
+  Panel.kpi($('kpis'), [
+    { name: 'Tushum', value: Panel.pul(tushum),
+      hint: 'chiqib ketgan mahsulotdan' },
+    { name: 'Harajat', value: Panel.pul(harajat), hint: 'hisobot oyi bo\'yicha' },
+    { name: 'Foyda', value: Panel.pul(foyda),
+      tone: foyda < 0 ? 'bad' : foyda > 0 ? 'ok' : '',
+      //  ★ TANNARX YO'Q — sahifa buni O'ZI aytadi, aks holda raqam
+      //  boshqa narsa deb o'qilardi (foyda-zarar hisoboti bilan bir
+      //  xil qoida).
+      hint: 'tannarxsiz — pul harajatlari ayirilgani' },
+  ]);
+
+  Panel.kpi($('kpis2'), [
+    { name: 'Kassa va bank', value: Panel.pul(kassa),
+      tone: kassa < 0 ? 'bad' : '', hint: 'javonda turgan pul' },
+    { name: 'Xodimlar qo\'lida', value: Panel.pul(d.qolda),
+      hint: 'korxonaning puli, lekin kassada emas' },
+    { name: 'Mijozlar qarzi', value: Panel.pul(d.mijoz_qarzi),
+      hint: 'bizga qarzdor' },
+    { name: 'Ta\'minotchilarga qarz', value: Panel.pul(d.taminot_qarzi),
+      tone: Number(d.taminot_qarzi) > 0 ? 'warn' : '',
+      hint: 'biz qarzdormiz' },
+  ]);
+
+  Panel.bars2($('oylar'), { rows: d.oylar,
+    a: { key: 'tushum', name: 'Tushum' },
+    b: { key: 'harajat', name: 'Harajat' } });
+
+  Panel.rank($('harajat'), { rows: d.harajat });
+
+  //  Kassa kartochkasi emas, REYTING: ikkita hisob bor va savol
+  //  «qaysi birida ko'p» emas, «jami qancha» — lekin ikkalasini
+  //  yonma-yon ko'rsatish baribir kerak.
+  $('kassa').innerHTML = d.kassa.length ? `<table><thead><tr>
+      <th>Joy</th><th class="num">So'm</th><th class="num">Dollar</th>
+      <th class="num">Jami, $</th></tr></thead><tbody>
+    ${d.kassa.map((r) => `<tr>
+      <td><b>${esc(r.name)}</b></td>
+      <td class="num">${Panel.son(r.uzs)}</td>
+      <td class="num">${Panel.son(r.usd)}</td>
+      <td class="num">${esc(Panel.pul(r.total_usd, true))}</td></tr>`).join('')}
+    <tr><td><b>Xodimlar qo'lida</b></td><td class="num">—</td>
+      <td class="num">—</td>
+      <td class="num">${esc(Panel.pul(d.qolda, true))}</td></tr>
+    </tbody></table>`
+    : '<p class="muted" style="font-size:13px">Kassa yo\'q.</p>';
+
+  //  ★ JADVAL GRAFIKNING YONIDA TURADI (ko'rish imkoniyati cheklangan
+  //  odam uchun ham, raqamni AYNAN o'qish kerak bo'lganda ham).
+  $('jadval').innerHTML = `<table><thead><tr><th>Oy</th>
+      <th class="num">Tushum</th><th class="num">Harajat</th>
+      <th class="num">Foyda</th></tr></thead><tbody>
+    ${d.oylar.map((r) => {
+      const f = Number(r.foyda) || 0;
+      return `<tr><td>${esc(Panel.oyNom(r.mon))}</td>
+        <td class="num">${Panel.son(r.tushum)}</td>
+        <td class="num">${Panel.son(r.harajat)}</td>
+        <td class="num"${f < 0 ? ' style="color:var(--bad)"' : ''}>${
+          Panel.son(f)}</td></tr>`;
+    }).join('')}
+    <tr><td><b>Jami</b></td>
+      <td class="num"><b>${Panel.son(tushum)}</b></td>
+      <td class="num"><b>${Panel.son(harajat)}</b></td>
+      <td class="num"><b${foyda < 0 ? ' style="color:var(--bad)"' : ''}>${
+        Panel.son(foyda)}</b></td></tr>
+    </tbody></table>`;
+}
+
+App.start(load, 'cash.view', 'cash.manage');
+</script>
+</body>
+</html>

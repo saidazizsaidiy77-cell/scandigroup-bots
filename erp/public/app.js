@@ -221,6 +221,14 @@ const App = (() => {
     //  ko'rinadi. Bittasi «qancha ishladik», ikkinchisi «pul qayerda»:
     //  ikkalasi bir xil raqamni bermaydi va bermasligi ham kerak
     //  (izoh: sql/cash.sql dagi v_pl_month va v_cash_month).
+    //  ★ PANEL HISOBOTLARDAN OLDIN: direktorning savoli «qancha
+    //  ishladik» — javob bitta ekranda turadi, jadval esa javobni
+    //  TEKSHIRISH uchun.
+    { href: '/moliya-panel.html', mod: ['cash', 'reports'], nav: 'Panel',
+      group: 'Moliyaviy hisobotlar',
+      title: 'Moliya paneli', lead: 'Uch savol bir ekranda',
+      text: "Tushum, harajat va foyda oylar bo'yicha \u00b7 harajat qayerga ketdi \u00b7 kassa, bank va xodimlar qo'lidagi pul \u00b7 mijoz va ta'minotchi qarzi",
+      perm: ['cash.view', 'cash.manage'] },
     { href: '/foyda-zarar.html', mod: 'reports', nav: 'Foyda-zarar',
       group: 'Moliyaviy hisobotlar',
       title: 'Foyda-zarar', lead: 'Oy bo\'yicha',

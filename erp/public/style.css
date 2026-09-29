@@ -585,3 +585,9 @@ input.auto{color:var(--accent-ink)}
   .prow{grid-template-columns:minmax(70px,110px) 1fr auto;font-size:12px}
 }
 @media print{ .ptip{display:none!important} }
+
+/*  Ikki qator: ustunlar yonma-yon, orasida 2px yuza bo'shlig'i — ikki
+ *  rang tutashsa chegarasi yo'qolardi (ulush chizig'i bilan bir xil). */
+.pbar-col.pbar-2{gap:2px;justify-content:center}
+.pbar-col.pbar-2>i{width:auto;flex:1;max-width:20px;margin:0;
+  border-radius:4px 4px 0 0}

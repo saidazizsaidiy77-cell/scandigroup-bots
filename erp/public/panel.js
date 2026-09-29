@@ -125,6 +125,43 @@ const Panel = (() => {
     ulash(el);
   }
 
+  /* --------------------------------------------- IKKI QATOR, VAQT
+   *  Tushum va harajat — bir xil O'LCHOVDA (dollar), shuning uchun
+   *  BITTA o'qda turadi va yonma-yon o'qiladi. Ikkinchi o'q
+   *  qo'yilsa ikki qatorning kesishishi tasodifiy joyda chiqib,
+   *  «harajat tushumdan oshib ketdi» degan yolg'on javob berardi.
+   *
+   *  ★ IKKI QATORDA LEGENDA HAR DOIM BO'LADI: rang yolg'iz o'zi
+   *  identiklikni ayta olmaydi (rang ko'rmaydigan odam uchun ham,
+   *  qora-oq bosmada ham).
+   */
+  function bars2(el, { rows, a, b, label = oyNom, fmt = pul }) {
+    const max = Math.max(1, ...rows.map((r) =>
+      Math.max(Number(r[a.key]) || 0, Number(r[b.key]) || 0)));
+    const rang = [RANG[0], RANG[2]];
+    el.innerHTML = `
+      <div class="plegend" style="margin-bottom:10px">
+        ${[a, b].map((x, i) => `<span><b style="background:${rang[i]}"></b>${
+          esc(x.name)}</span>`).join('')}
+      </div>
+      <div class="pbars" style="--n:${rows.length}">
+        ${rows.map((r) => `
+          <div class="pbar" data-tip="<b>${esc(label(r.mon ?? r.name))}</b><br>${
+            esc(a.name)}: ${esc(fmt(r[a.key], true))}<br>${
+            esc(b.name)}: ${esc(fmt(r[b.key], true))}">
+            <div class="pbar-v"></div>
+            <div class="pbar-col pbar-2">
+              ${[a, b].map((x, i) => `<i style="height:${
+                Math.max((Number(r[x.key]) || 0) > 0 ? 3 : 0,
+                  Math.round((Number(r[x.key]) || 0) / max * 100))
+                }%;background:${rang[i]}"></i>`).join('')}
+            </div>
+            <div class="pbar-x">${esc(label(r.mon ?? r.name))}</div>
+          </div>`).join('')}
+      </div>`;
+    ulash(el);
+  }
+
   /* ------------------------------------------------------- REYTING
    *  Gorizontal ustun: nomi uzun bo'ladi va tik ustunda o'qilmasdi.
    *  Tartib kattadan kichikka — savol «kim ko'p» degan savol.
@@ -175,5 +212,5 @@ const Panel = (() => {
     ulash(el);
   }
 
-  return { RANG, KUL, pul, son, oyNom, kpi, bars, rank, share, esc };
+  return { RANG, KUL, pul, son, oyNom, kpi, bars, bars2, rank, share, esc };
 })();
