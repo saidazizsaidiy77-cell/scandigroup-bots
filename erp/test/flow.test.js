@@ -6755,6 +6755,48 @@ test('talabnoma: tsexga material zavod omboridan beriladi', async () => {
     shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
     items: [{ material_id: m.id, qty: 1 }] })).status, 400);
 
+  //  ★ MANBANI TIZIM TOPADI VA HAR OMBOR ALOHIDA HUJJAT BO'LADI
+  //  (zavod qarori, 2026-09). Tsex boshlig'i «qaysi zavod omboridan»
+  //  degan savolga javob bermaydi: material qaysi javonda turganini
+  //  ombor biladi. Ikki xil ombordagi material BITTA hujjatga
+  //  tushirilsa uni ikki xodim chiqarishi kerak bo'lardi — biri o'z
+  //  javonidagini berar, qolgani «berilmadi» bo'lib osilib qolardi.
+  const furn = (await H.id(`SELECT id FROM warehouses WHERE code = 'FURN'`)).id;
+  const m2 = (await xom('POST', '/api/materials',
+    { name: 'Sinov Talab Petlya', uom: 'dona', category: 'BOSHQA' })).body;
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ material_id: m2.id, qty: 50, warehouse_id: furn }] })).status, 200);
+
+  //  Ekran ham shu javobni oladi: boshliq saqlashdan OLDIN qaysi
+  //  ombordan kelishini o'qiydi.
+  const manba = (await boshliq('GET',
+    `/api/materials/requests/source?ids=${m.id},${m2.id}&to=${tsexWh}`)).body.rows;
+  assert.equal(manba.find((x) => x.material_id === m.id).warehouse_id, zavod);
+  assert.equal(manba.find((x) => x.material_id === m2.id).warehouse_id, furn);
+
+  //  Ombor YUBORILMAYDI — server o'zi topadi va guruhlaydi.
+  const avto = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh,
+    items: [{ material_id: m.id, qty: 2 }, { material_id: m2.id, qty: 3 }] });
+  assert.equal(avto.status, 200, avto.text);
+  assert.equal(avto.body.docs.length, 2, 'ikki ombor — ikki hujjat');
+  const whlar = avto.body.docs.map((d) => d.doc_no).sort();
+  assert.equal(new Set(whlar).size, 2, 'raqamlari ham boshqa');
+
+  //  Har hujjatda FAQAT o'z omborining qatori turadi.
+  const royxat = (await xom('GET', '/api/materials/requests')).body.rows;
+  const kutilgan = new Map([[zavod, m.id], [furn, m2.id]]);
+  for (const d of avto.body.docs) {
+    const h = royxat.find((x) => x.id === d.id);
+    assert.equal(h.lines, 1, 'hujjatda bitta qator');
+    assert.equal(h.to_warehouse_id, tsexWh, 'manzil — tsex ombori');
+    assert.equal(h.items[0].material_id, kutilgan.get(h.from_warehouse_id),
+      'qator O\'Z omborining materiali');
+  }
+  assert.equal(new Set(avto.body.docs.map((d) =>
+    royxat.find((x) => x.id === d.id).from_warehouse_id)).size, 2,
+    'ikki hujjat ikki xil ombordan');
+
   //  ── Rad etish: sabab SHART, aks holda boshliq nega
   //  bo'lmaganini bilmay, ertaga yana yozardi.
   const r3 = await boshliq('POST', '/api/materials/requests', {

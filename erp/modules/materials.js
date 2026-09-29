@@ -1001,6 +1001,79 @@ router.get('/requests', need(...VIEW), wrap(async (req, res) => {
   res.json({ rows });
 }));
 
+//  ═════════════════════════════════════════ MANBANI TIZIM TOPADI
+//
+//  ★ ZAVOD QARORI (2026-09). Tsex boshlig'i «qaysi zavod omboridan»
+//  degan savolga javob bermasligi kerak: u NIMA kerakligini biladi,
+//  material qaysi javonda turganini esa ombor biladi. Ilgari u ikkala
+//  omborni ham qo'lda tanlardi va ikki xato chiqardi — noto'g'ri
+//  ombor tanlansa hujjat begona odamga borardi, ikki xil ombordagi
+//  material esa BITTA hujjatga tushib, yarmi bajarilmay qolardi.
+//
+//  Javob MA'LUMOTDAN chiqadi, kodga yozilgan ro'yxatdan emas
+//  (4-qoida) va uch bosqichda — birinchi topilgani javob:
+//
+//    1. QOLDIQ — material hozir qaysi zavod omborida turibdi.
+//       Bir nechta bo'lsa ko'prog'i: ishni bugun bajara oladigani.
+//    2. TARIX — hech qayerda qolmagan bo'lsa, oxirgi marta qaysi
+//       omborga KIRGAN. Tugab qolgani «u yerdan kelmaydi» degani
+//       emas: aynan shuning uchun so'ralyapti.
+//    3. Ikkalasi ham bo'lmasa — birinchi zavod ombori (Xom ashyo).
+//       Yangi material hech qayerda uchramaydi va uni javobsiz
+//       qoldirish talabnomani umuman yozdirmasdi.
+//
+//  Manzil omborning O'ZI chiqarib tashlanadi: «Qadoqlash ombori»
+//  ham zavodniki, ham tsexniki — o'zidan o'ziga hujjat bo'lmaydi.
+async function manbaTop(client, idlar, tashqari) {
+  const zavod = (await client.query(
+    `SELECT id, name FROM warehouses
+      WHERE kind = 'material' AND is_active AND shop_id IS NULL
+        AND id <> COALESCE($1, 0)
+      ORDER BY sort, name`, [tashqari || null])).rows;
+  if (!zavod.length) throw new Error("Zavod ombori topilmadi");
+  const bor = new Set(zavod.map((w) => w.id));
+
+  const { rows } = await client.query(
+    `SELECT m.id AS material_id,
+            COALESCE(q.warehouse_id, k.to_id) AS wh
+       FROM UNNEST($1::int[]) AS m(id)
+       LEFT JOIN LATERAL (
+         SELECT s.warehouse_id FROM v_material_stock s
+          WHERE s.material_id = m.id AND s.shop_id IS NULL AND s.qty > 0
+            AND s.warehouse_id <> COALESCE($2, 0)
+          ORDER BY s.qty DESC, s.warehouse_id LIMIT 1) q ON true
+       LEFT JOIN LATERAL (
+         SELECT mm.to_id FROM material_moves mm
+          JOIN warehouses w ON w.id = mm.to_id AND w.shop_id IS NULL
+          WHERE mm.material_id = m.id AND mm.to_kind = 'warehouse'
+            AND mm.status = 'ok' AND mm.to_id <> COALESCE($2, 0)
+          ORDER BY mm.moved_on DESC, mm.id DESC LIMIT 1) k ON true`,
+    [idlar, tashqari || null]);
+
+  const xarita = new Map();
+  for (const r of rows)
+    xarita.set(r.material_id,
+      bor.has(r.wh) ? zavod.find((w) => w.id === r.wh) : zavod[0]);
+  return xarita;
+}
+
+//  Manbani EKRAN ham ko'rsatadi: boshliq saqlashdan oldin har
+//  materialning yonida qaysi ombordan kelishini o'qiydi. Tizim jim
+//  hal qilsa, hujjat begona omborga ketgani faqat rad etilganda
+//  bilinardi (kirim oynasidagi «jami» bilan bir xil sabab).
+router.get('/requests/source', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
+  const idlar = String(req.query.ids || '').split(',')
+    .map(Number).filter(Boolean).slice(0, 200);
+  if (!idlar.length) return res.json({ rows: [] });
+  const client = await db.connect();
+  try {
+    const x = await manbaTop(client, idlar, Number(req.query.to) || null);
+    res.json({ rows: idlar.map((id) => ({ material_id: id,
+      warehouse_id: x.get(id)?.id || null, warehouse: x.get(id)?.name || null })) });
+  } finally { client.release(); }
+}));
+
 //  ★ YOZADIGAN ODAM — `materials.request`: tsex boshlig'i va ishlab
 //  chiqarish boshlig'i. Xom ashyo xodimi talabnoma YOZMAYDI — u
 //  tayyorlaydi va chiqaradi.
@@ -1041,65 +1114,98 @@ router.post('/requests', need('materials.request', ...MANAGE),
     if (doira && !doira.includes(tsexi))
       throw new Error(`«${tsexWh.name}» sizning doirangizda emas`);
 
-    const zavodWh = (await client.query(
-      `SELECT id, name, shop_id FROM warehouses
-        WHERE id = $1 AND kind = 'material' AND is_active`,
-      [req.body.factory_warehouse_id])).rows[0];
-    if (!zavodWh) throw new Error('Zavod ombori tanlanmagan');
-    if (zavodWh.shop_id)
-      throw new Error(`«${zavodWh.name}» tsex ombori — talabnoma zavod omboriga yoziladi`);
-    //  O'zidan o'ziga hujjat bo'lmaydi: «Qadoqlash ombori» ikkala
-    //  ro'yxatda ham turadi va ikki katakda bir xil tanlansa qoldiq
-    //  o'zgarmagan hujjat navbatda qolib ketardi.
-    if (zavodWh.id === tsexWh.id)
-      throw new Error(`«${tsexWh.name}» — ikkala katakda bir xil ombor tanlangan`);
-
-    const doc_no = await nextReqNo(client, kind);
-    const r = (await client.query(
-      `INSERT INTO mat_requests (doc_no, kind, from_warehouse_id,
-                                 to_warehouse_id, need_on, note, created_by)
-       VALUES ($1,$2,$3,$4,$5::date,$6,$7) RETURNING id`,
-      [doc_no, kind,
-       kind === 'return' ? tsexWh.id : zavodWh.id,
-       kind === 'return' ? zavodWh.id : tsexWh.id,
-       kind === 'return' ? null : SANA(req.body.need_on),
-       trim(req.body.note), req.user.id])).rows[0];
-
-    let n = 0;
+    //  Qatorlar avval TOZALANADI: soni yozilmagani hujjatga ham,
+    //  guruhlashga ham tushmasin.
+    const toza = [];
     for (const it of items) {
       const qty = Number(it.qty);
       if (!Number.isFinite(qty) || qty <= 0) continue;
       const mt = (await client.query(
         `SELECT id, name FROM materials WHERE id = $1`, [it.material_id])).rows[0];
       if (!mt) throw new Error('Material topilmadi');
-      await client.query(
-        `INSERT INTO mat_request_items (request_id, material_id, qty)
-         VALUES ($1,$2,$3)
-         ON CONFLICT (request_id, material_id) DO UPDATE SET qty = $3`,
-        [r.id, mt.id, qty]);
-      n++;
+      toza.push({ id: mt.id, name: mt.name, qty });
     }
-    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+    if (!toza.length) throw new Error('Birorta ham qator kiritilmadi');
 
-    //  ★ TAYYORLAYDIGAN ODAMGA AYTILADI. U kun bo'yi talabnoma
-    //  sahifasida o'tirmaydi va ertalab yozilgani kechgacha yotib
-    //  qolardi — tsex esa materialsiz turardi.
-    await notify.queueWarehouse({
-      perms: ['materials.manage'], module: 'materials',
-      title: kind === 'return'
-        ? `Qaytarish ${doc_no} · ${tsexWh.name}`
-        : `Talabnoma ${doc_no} · ${tsexWh.name}`,
-      body: `${zavodWh.name}${SANA(req.body.need_on)
-                ? ' · kerak: ' + SANA(req.body.need_on) : ''}`
-            + `\n${n} ta material`
-            + `\n\nKim yozdi: ${req.user.name}`,
-    }, client);
+    //  ★ HAR OMBOR — ALOHIDA HUJJAT (zavod qarori, 2026-09). Ombor
+    //  tanlanmagan bo'lsa manbani tizim topadi (izoh: `manbaTop`) va
+    //  qatorlar o'sha bo'yicha guruhlanadi: xom ashyoniki bitta
+    //  hujjat, furnituraniki boshqasi. Bitta hujjatga tushirilsa uni
+    //  IKKI xodim chiqarishi kerak bo'lardi — biri o'z javonidagini
+    //  berar, qolgani esa «berilmadi» bo'lib osilib qolardi.
+    let guruhlar;
+    if (req.body.factory_warehouse_id) {
+      const zavodWh = (await client.query(
+        `SELECT id, name, shop_id FROM warehouses
+          WHERE id = $1 AND kind = 'material' AND is_active`,
+        [req.body.factory_warehouse_id])).rows[0];
+      if (!zavodWh) throw new Error('Zavod ombori tanlanmagan');
+      if (zavodWh.shop_id)
+        throw new Error(`«${zavodWh.name}» tsex ombori — talabnoma zavod omboriga yoziladi`);
+      //  O'zidan o'ziga hujjat bo'lmaydi: «Qadoqlash ombori» ikkala
+      //  ro'yxatda ham turadi.
+      if (zavodWh.id === tsexWh.id)
+        throw new Error(`«${tsexWh.name}» — ikkala katakda bir xil ombor tanlangan`);
+      guruhlar = [{ wh: zavodWh, qatorlar: toza }];
+    } else {
+      const xarita = await manbaTop(client, toza.map((x) => x.id), tsexWh.id);
+      const yigin = new Map();
+      for (const q of toza) {
+        const wh = xarita.get(q.id);
+        if (!wh) throw new Error(`«${q.name}» qaysi ombordan kelishi topilmadi`);
+        if (!yigin.has(wh.id)) yigin.set(wh.id, { wh, qatorlar: [] });
+        yigin.get(wh.id).qatorlar.push(q);
+      }
+      guruhlar = [...yigin.values()];
+    }
 
-    await audit(req, { module: 'materials', action: 'request-new',
-                       entity: 'mat_requests', entity_id: r.id,
-                       payload: { doc_no, kind, lines: n } }, client);
+    const hujjatlar = [];
+    for (const g of guruhlar) {
+      const doc_no = await nextReqNo(client, kind);
+      const r = (await client.query(
+        `INSERT INTO mat_requests (doc_no, kind, from_warehouse_id,
+                                   to_warehouse_id, need_on, note, created_by)
+         VALUES ($1,$2,$3,$4,$5::date,$6,$7) RETURNING id`,
+        [doc_no, kind,
+         kind === 'return' ? tsexWh.id : g.wh.id,
+         kind === 'return' ? g.wh.id : tsexWh.id,
+         kind === 'return' ? null : SANA(req.body.need_on),
+         trim(req.body.note), req.user.id])).rows[0];
+
+      for (const q of g.qatorlar)
+        await client.query(
+          `INSERT INTO mat_request_items (request_id, material_id, qty)
+           VALUES ($1,$2,$3)
+           ON CONFLICT (request_id, material_id) DO UPDATE SET qty = $3`,
+          [r.id, q.id, q.qty]);
+
+      //  ★ TAYYORLAYDIGAN ODAMGA AYTILADI. U kun bo'yi talabnoma
+      //  sahifasida o'tirmaydi va ertalab yozilgani kechgacha yotib
+      //  qolardi — tsex esa materialsiz turardi.
+      await notify.queueWarehouse({
+        perms: ['materials.manage'], module: 'materials',
+        title: kind === 'return'
+          ? `Qaytarish ${doc_no} · ${tsexWh.name}`
+          : `Talabnoma ${doc_no} · ${tsexWh.name}`,
+        body: `${g.wh.name}${SANA(req.body.need_on)
+                  ? ' · kerak: ' + SANA(req.body.need_on) : ''}`
+              + `\n${g.qatorlar.length} ta material`
+              + `\n\nKim yozdi: ${req.user.name}`,
+      }, client);
+
+      await audit(req, { module: 'materials', action: 'request-new',
+                         entity: 'mat_requests', entity_id: r.id,
+                         payload: { doc_no, kind, lines: g.qatorlar.length } },
+                  client);
+      hujjatlar.push({ id: r.id, doc_no, warehouse: g.wh.name,
+                       lines: g.qatorlar.length });
+    }
+
     await client.query('COMMIT');
-    res.json({ id: r.id, doc_no, lines: n });
+    //  Birinchi hujjat eskicha ham qaytariladi: sahifa endi
+    //  `docs` ni o'qiydi, lekin javobning shakli buzilmasin.
+    res.json({ id: hujjatlar[0].id, doc_no: hujjatlar[0].doc_no,
+               lines: toza.length, docs: hujjatlar });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(e.status || 400).json({ error: e.message });

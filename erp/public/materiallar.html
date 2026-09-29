@@ -626,8 +626,9 @@ function talabOch(kind) {
             <select id="tShopWh" onchange="talabYol()">${tsexlar.map((w) =>
               `<option value="${w.id}">${esc(w.name)}${
                 joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}</select></div>
-          <div style="flex:1;min-width:210px"><label>Zavod ombori</label>
-            <select id="tFactWh" onchange="talabYol()"></select></div>
+          ${qaytar ? `<div style="flex:1;min-width:210px">
+            <label>Zavod ombori</label>
+            <select id="tFactWh" onchange="talabYol()"></select></div>` : ''}
           ${qaytar ? '' : `<div style="width:170px"><label>Qachon kerak</label>
             <input id="tNeed" type="date"></div>`}
         </div>
@@ -638,8 +639,8 @@ function talabOch(kind) {
         <p class="muted" style="margin-bottom:10px">${qaytar
           ? "Tsexdan ortib qolgan material zavod omboriga QAYTARILADI — "
             + "tsex qoldig'i kamayadi. Material so'rash uchun «+ Talabnoma»."
-          : "Mol zavod omboriga ta'minotchidan keladi, tsexga esa undan "
-            + "shu hujjat bilan beriladi."}</p>
+          : "Kerakli materialni yozing — qaysi ombordan kelishini tizim "
+            + "o'zi topadi va har ombor uchun alohida hujjat yasaydi."}</p>
         <input id="tQ" placeholder="material nomini yozing" autocomplete="off"
           oninput="talabTop()" style="margin-bottom:8px">
         <div id="tList" style="max-height:190px;overflow:auto;
@@ -665,12 +666,15 @@ function talabYol() {
     || (ref.factory_warehouses || []).find((w) => w.id === Number(id))
     || {}).name || '—';
 
-  //  ★ O'ZIDAN O'ZIGA TALABNOMA BO'LMAYDI. «Qadoqlash ombori» ikkala
+  //  ★ O'ZIDAN O'ZIGA HUJJAT BO'LMAYDI. «Qadoqlash ombori» ikkala
   //  ro'yxatda ham turadi — u ZAVOD ombori (manba bo'la oladi) va
   //  ayni paytda TSEXNIKI (qabul qila oladi). Ikkala katakda bir xil
   //  ombor tanlansa hujjat o'zidan o'ziga yozilardi: qoldiq
   //  o'zgarmasdi, hujjat esa navbatda turardi. Shuning uchun manba
   //  ro'yxatidan tanlangan qabul ombori olib tashlanadi.
+  //
+  //  Katak faqat QAYTARISHDA turadi: talabnomada manbani tizim
+  //  topadi va u har QATOR uchun boshqacha bo'lishi mumkin.
   const f = $('tFactWh');
   if (f) {
     const qabul = Number($('tShopWh')?.value) || 0;
@@ -681,12 +685,43 @@ function talabYol() {
     if (mos.some((w) => String(w.id) === eski)) f.value = eski;
   }
 
-  const tsex  = nom($('tShopWh')?.value);
-  const zavod = nom($('tFactWh')?.value);
+  const tsex   = nom($('tShopWh')?.value);
   const qaytar = $('tKindNew').value === 'return';
-  $('tYol').innerHTML = '<b>' + esc(qaytar ? tsex : zavod) + '</b>'
-    + ' <span class="muted">&rarr;</span> <b>' + esc(qaytar ? zavod : tsex)
-    + '</b>';
+  $('tYol').innerHTML = qaytar
+    ? '<b>' + esc(tsex) + '</b> <span class="muted">&rarr;</span> <b>'
+      + esc(nom($('tFactWh')?.value)) + '</b>'
+    : '<span class="muted">Zavod omboridan</span> <span class="muted">&rarr;</span> <b>'
+      + esc(tsex) + '</b>';
+  if (!qaytar) talabManba();
+}
+
+//  ★ MANBA HAR QATORNING YONIDA YOZILADI (zavod qarori, 2026-09).
+//  Tizim manbani o'zi topadi, lekin JIM topmaydi: boshliq
+//  saqlashdan OLDIN «Sintifon — Xom ashyo ombori» deb o'qiydi.
+//  Jim hal qilinsa, hujjat begona omborga ketgani faqat rad
+//  etilganda bilinardi (kirim oynasidagi «jami» bilan bir xil
+//  sabab).
+//
+//  Javob SERVERDAN so'raladi: qoida u yerda (`manbaTop`) va
+//  ekranda ikkinchi nusxasi bo'lsa bir kun ajralib ketardi —
+//  ekranda bir ombor yozilib, hujjat boshqasiga ketardi.
+let tManbaSorov = 0;
+async function talabManba() {
+  const idlar = tQator.map((r) => r.id);
+  if (!idlar.length) return;
+  const nav = ++tManbaSorov;
+  try {
+    const r = await App.api('/api/materials/requests/source?ids=' + idlar.join(',')
+      + '&to=' + (Number($('tShopWh')?.value) || ''));
+    //  Kechikib kelgan javob yangisining ustiga yozmasin: qator
+    //  qo'shilgan zahoti yangi so'rov ketadi.
+    if (nav !== tManbaSorov) return;
+    for (const x of r.rows) {
+      const q = tQator.find((y) => y.id === x.material_id);
+      if (q) q.manba = x.warehouse || null;
+    }
+    talabRows();
+  } catch { /* manba topilmasa qator baribir yoziladi */ }
 }
 
 function talabTop() {
@@ -723,6 +758,7 @@ function talabQosh(id) {
   tQator.unshift({ id, name: m.name, uom: m.uom_name || m.uom, qty: '' });
   $('tQ').value = '';
   talabTop(); talabRows();
+  if ($('tKindNew').value !== 'return') talabManba();
 }
 
 function talabRows() {
@@ -730,7 +766,9 @@ function talabRows() {
   $('tRows').innerHTML = tQator.map((r, i) => `
     <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
       <div style="flex:1"><b>${esc(r.name)}</b>
-        <span class="muted" style="font-size:12px"> ${esc(r.uom)}</span></div>
+        <span class="muted" style="font-size:12px"> ${esc(r.uom)}</span>
+        ${r.manba ? `<div class="muted" style="font-size:12px">${
+          esc(r.manba)}</div>` : ''}</div>
       <input type="number" min="0" step="0.001" value="${r.qty}"
         style="width:120px;text-align:right" placeholder="soni"
         oninput="talabQty(${i}, this.value)">
@@ -753,10 +791,24 @@ async function talabSaqla() {
       body: JSON.stringify({
         kind: $('tKindNew').value,
         shop_warehouse_id: Number($('tShopWh').value) || null,
-        factory_warehouse_id: Number($('tFactWh').value) || null,
+        //  Talabnomada ombor YUBORILMAYDI — manbani server topadi va
+        //  qatorlarni o'sha bo'yicha guruhlaydi (izoh: `manbaTop`,
+        //  modules/materials.js). Qaytarishda esa manzil bitta va uni
+        //  odam tanlaydi.
+        factory_warehouse_id: $('tFactWh') ? (Number($('tFactWh').value) || null)
+                                           : null,
         need_on: $('tNeed') ? ($('tNeed').value || null) : null,
         items }) });
-    yop(); toast(r.doc_no + ' yozildi');
+    //  ★ NECHTA HUJJAT YASALGANI AYTILADI. Bitta ro'yxat ikki
+    //  omborga bo'linishi mumkin va boshliq buni BILISHI kerak:
+    //  ikkita hujjatni ikki xodim chiqaradi, ya'ni material ham
+    //  ikki bo'lib keladi.
+    const d = r.docs || [{ doc_no: r.doc_no }];
+    yop();
+    toast(d.length > 1
+      ? d.length + ' ta hujjat: ' + d.map((x) =>
+          x.doc_no + (x.warehouse ? ' · ' + x.warehouse : '')).join(', ')
+      : d[0].doc_no + ' yozildi');
     tab = 'talab'; drawTabs(); await load();
   } catch (e) { saqlanmadi('tSave', e); }
 }
