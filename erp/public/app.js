@@ -212,16 +212,6 @@ const App = (() => {
       //  huquqi `production.manage` — tarixga tegadigan boshqa ishlar
       //  bilan bir xil.
       perm: ['production.manage'] },
-    //  ★ KPI — PANELLARNING YONIDA. Panel «qancha qildik» degan
-    //  savolga javob beradi, lekin 76 ming dollar ko'pmi yoki ozmi —
-    //  buni faqat REJA bilan solishtirganda bilinadi.
-    { href: '/kpi.html', mod: 'reports', nav: 'KPI',
-      group: 'Ishlab chiqarish hisobotlari',
-      title: 'KPI — oylik reja', lead: 'Reja va fakt',
-      text: "Har bo'limga oylik reja qo'yiladi \u00b7 yonida fakt va bajarilish foizi \u00b7 savdo, ishlab chiqarish, moliya va ombor",
-      perm: ['production.reports', 'production.manage', 'sales.view',
-             'sales.manage', 'cash.view', 'cash.manage',
-             'warehouse.view', 'warehouse.manage'] },
     //  ★ PANEL HISOBOTLARDAN OLDIN: direktorning savoli «bu oy
     //  qancha qildik» — javob bitta ekranda turadi. «Zavod» esa
     //  boshqa savolga javob beradi: qaysi konver qayerda.
@@ -234,6 +224,16 @@ const App = (() => {
       title: 'Ishlab chiqarish paneli', lead: 'Zavod bir ekranda',
       text: "Chiqarilgan mahsulot oylar bo'yicha \u00b7 tsex va mahsulot kesimi \u00b7 hozir yo'lda va boshlanmagan konverlar \u00b7 bo'limlarda nechta turibdi \u00b7 kechikkanlar",
       perm: ['production.reports', 'production.manage'] },
+    //  ★ KPI — PANELLARNING YONIDA. Panel «qancha qildik» degan
+    //  savolga javob beradi, lekin 76 ming dollar ko'pmi yoki ozmi —
+    //  buni faqat REJA bilan solishtirganda bilinadi.
+    { href: '/kpi.html', mod: 'reports', nav: 'KPI',
+      group: 'Ishlab chiqarish hisobotlari',
+      title: 'KPI — oylik reja', lead: 'Reja va fakt',
+      text: "Har bo'limga oylik reja qo'yiladi \u00b7 yonida fakt va bajarilish foizi \u00b7 savdo, ishlab chiqarish, moliya va ombor",
+      perm: ['production.reports', 'production.manage', 'sales.view',
+             'sales.manage', 'cash.view', 'cash.manage',
+             'warehouse.view', 'warehouse.manage'] },
     { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
       group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',
@@ -293,10 +293,6 @@ const App = (() => {
     // chiqarish jurnal orqali yuritiladi: birlik "O'tkazish" bilan
     // marshrutdagi keyingi bo'limga o'tadi va jamlanma yozuv ham
     // o'sha yerda yoziladi.
-    { href: '/mijozlar.html', mod: ['sales', 'refs'], nav: 'Mijozlar',
-      title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
-      text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
-      perm: ['production.view', 'sales.view'] },
     //  ★ PANEL RO'YXATNING TEPASIDA. Menejerning kuni «bugun nima
     //  bor» degan savoldan boshlanadi va javob jadvalda emas,
     //  kartochkada turadi — jadval «qaysi buyurtma» degan KEYINGI
@@ -305,6 +301,10 @@ const App = (() => {
       title: 'Savdo paneli', lead: 'Raqamlar bir ekranda',
       text: "Chiqib ketgan savdo oylar bo'yicha \u00b7 yo'nalish, menejer va mahsulot kesimi \u00b7 zavodda turgan buyurtmalar \u00b7 eng katta qarzdorlar",
       perm: ['sales.view', 'sales.manage'] },
+    { href: '/mijozlar.html', mod: ['sales', 'refs'], nav: 'Mijozlar',
+      title: 'Mijozlar', lead: "Ro'yxat va kanal tahlili",
+      text: "Mijoz nomi, region, telefon, kanal \u00b7 qaysi kanal qancha sotuv keltirdi",
+      perm: ['production.view', 'sales.view'] },
     { href: '/buyurtmalar.html', mod: 'sales', nav: 'Buyurtmalar',
       title: 'Buyurtmalar', lead: 'Mijoz nima so\'ragan',
       text: "Buyurtma qatorlari \u00b7 T/M ombordan va zahiradan konver biriktirish \u00b7 muddat va summa",
@@ -394,6 +394,16 @@ const App = (() => {
 
     // Ta'minot
     //  Xom ashyo
+    //  ★ PANEL IKKI MODULDA: T/M ombor mudiri bilan xom ashyo
+    //  mudiri IKKI xil odam va ularning huquqi ham boshqa. Sahifa
+    //  ikkalasini ham ko'rsatadi, lekin huquqi yo'q bloki UMUMAN
+    //  chizilmaydi — bo'sh blok «nega bo'sh» degan savol
+    //  qoldirardi.
+    { href: '/ombor-panel.html', mod: ['warehouse', 'materials'], nav: 'Panel',
+      title: 'Ombor paneli', lead: 'Javonda nima bor',
+      text: "T/M ombor va vitrinalar qoldig'i \u00b7 kirim-chiqim oylar bo'yicha \u00b7 javonda ko'p turgan mahsulot \u00b7 xom ashyo qiymati, minus qoldiq, zayavka va talabnoma \u00b7 ta'minotchilarga qarz",
+      perm: ['warehouse.view', 'warehouse.manage',
+             'materials.view', 'materials.manage'] },
     { href: '/materiallar.html', mod: 'materials', nav: 'Xom ashyo',
       title: 'Xom ashyo', lead: 'Material spravochnigi',
       text: "Nomi \u00b7 o'lchov birligi \u00b7 turkumi \u00b7 har rang alohida material",
@@ -429,16 +439,6 @@ const App = (() => {
     // va zavod aytadigan boshqalari), shuning uchun bo'limga kirilganda
     // avval omborlar ro'yxati chiqadi — shu qator birinchi turgani
     // uchun yuqoridagi "Ombor" havolasi o'sha yerga olib boradi.
-    //  ★ PANEL IKKI MODULDA: T/M ombor mudiri bilan xom ashyo
-    //  mudiri IKKI xil odam va ularning huquqi ham boshqa. Sahifa
-    //  ikkalasini ham ko'rsatadi, lekin huquqi yo'q bloki UMUMAN
-    //  chizilmaydi — bo'sh blok «nega bo'sh» degan savol
-    //  qoldirardi.
-    { href: '/ombor-panel.html', mod: ['warehouse', 'materials'], nav: 'Panel',
-      title: 'Ombor paneli', lead: 'Javonda nima bor',
-      text: "T/M ombor va vitrinalar qoldig'i \u00b7 kirim-chiqim oylar bo'yicha \u00b7 javonda ko'p turgan mahsulot \u00b7 xom ashyo qiymati, minus qoldiq, zayavka va talabnoma \u00b7 ta'minotchilarga qarz",
-      perm: ['warehouse.view', 'warehouse.manage',
-             'materials.view', 'materials.manage'] },
     { href: '/omborlar.html', mod: 'warehouse', nav: 'Omborlar',
       title: 'Omborlar', lead: 'Zavod omborlari',
       text: "Har ombor alohida: tayyor mahsulot, xom ashyo \u00b7 qoldig'i yonida turadi",
