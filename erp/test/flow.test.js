@@ -7451,6 +7451,35 @@ test("buyurtmalar ro'yxati saralanadi", async () => {
   }
 });
 
+//  ★ ISHLAB CHIQARISH PANELI: CHIQARILGAN MAHSULOT TSEXDAN
+//  CHIQQANDA SANALADI, bo'limdan o'tganda emas (zavod qarori).
+//  Bo'lim bo'yicha sanalsa bitta konver o'n to'qqiz marta «ishlab
+//  chiqarilgan» bo'lib qo'shilardi. Qoida tsex ekranidagi `oy` bilan
+//  AYNAN bir xil manbadan — ikki joyda yozilsa boshliqning ekrani
+//  direktornikidan farq qilardi.
+test('ishlab chiqarish paneli: chiqarilgan tsexdan chiqqanda sanaladi', async () => {
+  const panel = async () => (await admin('GET',
+    '/api/units/dashboard?from=' + kun(-30) + '&to=' + kun(1))).body;
+  const jamiOf = (d) => d.oylar.reduce((a, r) => a + (Number(r.qty) || 0), 0);
+
+  const oldin = jamiOf(await panel());
+  const u = await newUnit();          //  Korpus tsexi, Arra
+
+  //  TSEX ICHIDAGI harakat sanalmaydi: mahsulot zavoddan chiqmadi.
+  await xomsiz();
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u.id }] })).status, 200);
+  assert.equal(jamiOf(await panel()), oldin,
+    'tsex ichidagi harakat sanalmaydi');
+
+  //  Bo'lim ham, konver ham ekranda turadi — bu BUGUNGI holat va
+  //  oraliqqa bog'liq emas.
+  const d = await panel();
+  assert.ok(Number(d.wip.yolda) >= 1, 'yo\'lda turgani sanaladi');
+  assert.ok(d.bolimlar.some((b) => Number(b.qty) > 0),
+    'bo\'limlar navbati to\'ladi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

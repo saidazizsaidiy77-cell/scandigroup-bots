@@ -212,6 +212,14 @@ const App = (() => {
       //  huquqi `production.manage` — tarixga tegadigan boshqa ishlar
       //  bilan bir xil.
       perm: ['production.manage'] },
+    //  ★ PANEL HISOBOTLARDAN OLDIN: direktorning savoli «bu oy
+    //  qancha qildik» — javob bitta ekranda turadi. «Zavod» esa
+    //  boshqa savolga javob beradi: qaysi konver qayerda.
+    { href: '/ishlab-panel.html', mod: 'reports', nav: 'Panel',
+      group: 'Ishlab chiqarish hisobotlari',
+      title: 'Ishlab chiqarish paneli', lead: 'Zavod bir ekranda',
+      text: "Chiqarilgan mahsulot oylar bo'yicha \u00b7 tsex va mahsulot kesimi \u00b7 hozir yo'lda va boshlanmagan konverlar \u00b7 bo'limlarda nechta turibdi \u00b7 kechikkanlar",
+      perm: ['production.reports', 'production.manage'] },
     { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
       group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',

@@ -2921,6 +2921,119 @@ router.post('/:id/no-material', need('production.entry'), wrap(async (req, res) 
 //
 //  Jurnalda sana qo'yilmagan bo'lsa eski hisob (marshrut va bo'lim
 //  tezligidan chiqqan taxmin) zaxira bo'lib qoladi.
+// ═════════════════════════════════════════ ISHLAB CHIQARISH PANELI
+//
+//  ★ CHIQARILGAN MAHSULOT — TSEXDAN CHIQQANDA SANALADI, bo'limdan
+//  o'tganda emas (zavod qarori). Bo'lim bo'yicha sanalsa bitta
+//  konver o'n to'qqiz marta «ishlab chiqarilgan» bo'lib qo'shilardi.
+//  Qoida tsex ekranidagi `oy` bilan AYNAN bir xil manbadan: ikki
+//  joyda yozilsa boshliqning ekrani direktornikidan farq qilardi.
+//
+//  Ikki yo'l bilan chiqadi va ikkalasi ham sanaladi: boshqa TSEXGA
+//  o'tkazildi (`unit_moves`) yoki T/M OMBORGA topshirildi (`fg_on`,
+//  u `unit_moves` ga yozilmaydi). Faqat birinchisi sanalsa oxirgi
+//  tsexda raqam HAR DOIM nol bo'lib turardi.
+const CHIQDI = `
+  SELECT date_trunc('month', mv.moved_on)::date AS oy, f.shop_id,
+         u.product_id, mv.qty::int AS qty
+    FROM unit_moves mv
+    JOIN sections f ON f.id = mv.from_section_id
+    JOIN sections t ON t.id = mv.section_id AND t.shop_id <> f.shop_id
+    JOIN production_units u ON u.id = mv.unit_id AND u.status <> 'cancelled'
+   WHERE mv.moved_on BETWEEN $1::date AND $2::date
+  UNION ALL
+  SELECT date_trunc('month', u.fg_on)::date, s.shop_id, u.product_id, u.qty::int
+    FROM production_units u
+    JOIN sections s ON s.id = u.current_section_id
+   WHERE u.fg_on BETWEEN $1::date AND $2::date AND u.status <> 'cancelled'`;
+
+router.get('/dashboard', need('production.reports', 'production.manage'),
+  wrap(async (req, res) => {
+  const sana = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim())
+    ? String(v).trim() : null);
+  const to = sana(req.query.to) || today();
+  const { rows: [oraliq] } = await db.query(
+    `SELECT COALESCE($1::date, (date_trunc('month', $2::date)
+              - INTERVAL '11 months')::date) AS dan, $2::date AS gacha`,
+    [sana(req.query.from), to]);
+  const P = [oraliq.dan, oraliq.gacha];
+
+  const [oylar, tsexlar, mahsulot, wip, bolimlar, kech] = await Promise.all([
+    //  Oylar bo'yicha — O'LCHOV BIRLIGI ajratilmaydi: trend SHAKLNI
+    //  ko'rsatadi, aniq raqam esa pastdagi kesimlarda turadi. Dona
+    //  bilan komplektni qo'shish bu yerda ham noto'g'ri bo'lardi,
+    //  shuning uchun KONVER emas, DONA sanaladi va sahifa buni
+    //  yozib turadi.
+    db.query(
+      `WITH c AS (${CHIQDI}),
+        oy AS (SELECT generate_series(date_trunc('month', $1::date),
+                                      date_trunc('month', $2::date),
+                                      INTERVAL '1 month')::date AS m)
+       SELECT to_char(oy.m, 'YYYY-MM') AS mon,
+              COALESCE(SUM(c.qty), 0)::int AS qty
+         FROM oy LEFT JOIN c ON c.oy = oy.m
+        GROUP BY oy.m ORDER BY oy.m`, P),
+
+    //  Tsex kesimi: qaysi tsex qancha chiqardi.
+    db.query(
+      `WITH c AS (${CHIQDI})
+       SELECT sh.name, SUM(c.qty)::int AS qty
+         FROM c JOIN shops sh ON sh.id = c.shop_id
+        GROUP BY sh.name ORDER BY qty DESC`, P),
+
+    //  Mahsulot kesimi — O'LCHOV BIRLIGI bilan: stul DONA, penal
+    //  KOMPLEKT va ularni qo'shib bo'lmaydi.
+    db.query(
+      `WITH c AS (${CHIQDI})
+       SELECT p.name || ' · ' || COALESCE(g.uom, 'dona') AS name,
+              SUM(c.qty)::int AS qty
+         FROM c JOIN products p ON p.id = c.product_id
+         LEFT JOIN product_groups g ON g.id = p.group_id
+        GROUP BY 1 ORDER BY qty DESC LIMIT 8`, P),
+
+    //  ★ HOZIR ISHLAB CHIQARISHDA — BUGUNGI holat, oraliqqa bog'liq
+    //  emas (savdo panelidagi «zavodda turgani» bilan bir xil
+    //  qoida). Boshlanmagan alohida sanaladi: u yo'lda emas,
+    //  navbatda turibdi va uni tsex boshlig'i bir bosishda
+    //  yo'lga chiqaradi.
+    db.query(
+      `SELECT
+         COALESCE(SUM(u.qty) FILTER (WHERE u.current_section_id IS NOT NULL), 0)::int
+           AS yolda,
+         COUNT(*) FILTER (WHERE u.current_section_id IS NOT NULL)::int AS yolda_konver,
+         COALESCE(SUM(u.qty) FILTER (WHERE u.current_section_id IS NULL), 0)::int
+           AS boshlanmagan,
+         COUNT(*) FILTER (WHERE u.current_section_id IS NULL)::int
+           AS boshlanmagan_konver
+         FROM production_units u
+        WHERE u.status = 'production'`),
+
+    //  Bo'limlar navbati: qayerda ko'p konver turibdi. Savol
+    //  «qayerda tiqilib qoldi» — shuning uchun kattadan kichikka.
+    db.query(
+      `SELECT s.name || ' · ' || sh.name AS name, SUM(u.qty)::int AS qty
+         FROM production_units u
+         JOIN sections s ON s.id = u.current_section_id
+         JOIN shops sh ON sh.id = s.shop_id
+        WHERE u.status = 'production'
+        GROUP BY 1 ORDER BY qty DESC LIMIT 10`),
+
+    //  ★ KECHIKKAN — reja sanasi o'tib ketgani. Sana marshrutdan
+    //  hisoblanadi va QOTIB turadi, ya'ni kechikish ko'rinadi
+    //  (izoh: sql/register.sql).
+    db.query(
+      `SELECT COUNT(*)::int AS konver, COALESCE(SUM(qty), 0)::int AS qty
+         FROM v_unit_register
+        WHERE status = 'production' AND fg_late`),
+  ]);
+
+  res.json({
+    dan: oraliq.dan, gacha: oraliq.gacha,
+    oylar: oylar.rows, tsexlar: tsexlar.rows, mahsulot: mahsulot.rows,
+    wip: wip.rows[0], bolimlar: bolimlar.rows, kech: kech.rows[0],
+  });
+}));
+
 router.get('/board', need('production.view', 'production.entry'), wrap(async (req, res) => {
   const scope = scopeOf(req);
 
