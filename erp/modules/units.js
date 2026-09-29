@@ -2058,6 +2058,53 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
   if (shopChanged && from && !(u.handover_on && u.handover_shop_id === shopOf(from.shop_id)))
     throw new Error(`${u.conveyor_no}: hali jo'natilmagan — oldingi tsex «jo'natdim» deyishi kerak`);
 
+  //  ★ XOM ASHYOSIZ BO'LIMDAN O'TKAZILMAYDI (zavod qarori, 2026-09;
+  //  izoh: sql/materials.sql). Konver ketgandan keyin o'sha bo'limda
+  //  nima sarflangani BOSHQA hech qachon yozilmaydi: usta keyingi
+  //  ishga o'tadi va kecha nima ishlatilgani esida qolmaydi. Tannarx
+  //  esa aynan shu yozuvlardan yig'iladi.
+  //
+  //  Tekshiruv KELGAN bo'lim uchun emas, KETAYOTGAN bo'lim uchun:
+  //  material konver TURGAN joyda sarflanadi. Shuning uchun
+  //  boshlanmagan konverda (bo'limi yo'q) savol ham yo'q.
+  //
+  //  Har bo'limda material sarflanmaydi — yig'ish ba'zan qo'l mehnati.
+  //  Shuning uchun yo'l ochiq: usta «bu bo'limda biriktirilmaydi» deb
+  //  belgilaydi va konver o'tadi. Belgi YOZUV bo'lib qoladi
+  //  (`unit_no_material`): kim va qachon aytgani ko'rinib turadi.
+  //
+  //  ★ QAYSI BO'LIMDA — BIR MARTA AYTILADI (`sections.needs_material`,
+  //  izoh: sql/materials.sql). Hamma bo'limga qo'yilsa usta yig'ish
+  //  bo'limida har konverda «biriktirilmaydi» tugmasini bosib
+  //  yurardi: u yerda material umuman sarflanmaydi va javob har safar
+  //  bir xil.
+  if (u.current_section_id) {
+    const bor = (await client.query(
+      `SELECT
+         (SELECT COALESCE(needs_material, false) FROM sections
+           WHERE id = $2) AS kerak,
+         EXISTS (SELECT 1 FROM material_moves mm
+                  WHERE mm.to_kind = 'unit' AND mm.to_id = $1
+                    AND mm.section_id = $2 AND mm.status = 'ok') AS sarf,
+         EXISTS (SELECT 1 FROM unit_no_material nm
+                  WHERE nm.unit_id = $1 AND nm.section_id = $2) AS belgi`,
+      [u.id, u.current_section_id])).rows[0];
+    if (bor.kerak && !bor.sarf && !bor.belgi) {
+      const nom = (await client.query(
+        `SELECT name FROM sections WHERE id = $1`, [u.current_section_id]))
+        .rows[0]?.name || 'Shu bo\'lim';
+      const e = new Error(
+        `${u.conveyor_no}: «${nom}» bo'limida xom ashyo biriktirilmagan`);
+      //  Sahifa shu belgiga qarab «Bu bo'limda biriktirilmaydi»
+      //  tugmasini chizadi — xabar matnini o'qib chiqish emas
+      //  (matn ertaga o'zgarsa tugma yo'qolib qolardi).
+      e.code = 'xom-ashyo-yoq';
+      e.unit_id = u.id;
+      e.section_id = u.current_section_id;
+      throw e;
+    }
+  }
+
   const defect = Number(qty_defect) || 0;
   if (defect > 0 && !defect_reason) throw new Error('Brak uchun sabab kodi majburiy');
 
@@ -2797,10 +2844,52 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
     res.json({ moved });
   } catch (e) {
     await client.query('ROLLBACK');
-    return res.status(400).json({ error: e.message });
+    //  Xom ashyo tekshiruvi BELGI bilan qaytadi: sahifa unga qarab
+    //  «Bu bo'limda biriktirilmaydi» tugmasini chizadi.
+    return res.status(400).json({ error: e.message, code: e.code,
+                                  unit_id: e.unit_id, section_id: e.section_id });
   } finally {
     client.release();
   }
+}));
+
+//  ★ «BU BO'LIMDA BIRIKTIRILMAYDI» — usta o'zi belgilaydi. Qat'iy
+//  to'siq butun tsexni to'xtatardi: yig'ish bo'limida ba'zan hech
+//  narsa sarflanmaydi. Belgi YOZUV bo'lib qoladi — kim va qachon
+//  aytgani ko'rinib turadi, ya'ni javobsiz o'tib ketmaydi.
+//
+//  Bo'lim SO'RALMAYDI: konver hozir qaysi bo'limda tursa, belgi
+//  o'shanga qo'yiladi. Id ni qo'lda yuborib boshqa bo'limni
+//  belgilash yo'li yo'q.
+router.post('/:id/no-material', need('production.entry'), wrap(async (req, res) => {
+  const u = (await db.query(
+    `SELECT u.id, u.conveyor_no, u.current_section_id, s.shop_id,
+            g.owner_shop_id
+       FROM production_units u
+       LEFT JOIN sections s ON s.id = u.current_section_id
+       JOIN products p ON p.id = u.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE u.id = $1 AND u.status <> 'cancelled'`, [req.params.id])).rows[0];
+  if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
+  if (!u.current_section_id)
+    return res.status(400).json({ error: "Konver hali bo'limda emas" });
+
+  //  Doira CHEGARA: boshqa tsexning konveriga belgi qo'yilmaydi.
+  //  Javobgar tsex ustun — o'tkazishdagi bilan aynan bir xil qoida.
+  const scope = scopeOf(req);
+  const egasi = u.owner_shop_id || u.shop_id;
+  if (scope && !scope.includes(egasi))
+    return res.status(403).json({ error: "Bu konver sizning doirangizda emas" });
+
+  await db.query(
+    `INSERT INTO unit_no_material (unit_id, section_id, worker_id)
+     VALUES ($1,$2,$3) ON CONFLICT (unit_id, section_id) DO NOTHING`,
+    [u.id, u.current_section_id, req.user.id]);
+  await audit(req, { module: 'production', action: 'no-material',
+                     entity: 'production_units', entity_id: u.id,
+                     payload: { conveyor_no: u.conveyor_no,
+                                section_id: u.current_section_id } });
+  res.json({ ok: true });
 }));
 
 // ══════════════════════════════════ BO'LIMLAR ARO HARAKAT — TSEX EKRANI

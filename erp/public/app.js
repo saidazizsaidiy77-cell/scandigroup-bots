@@ -32,7 +32,16 @@ const App = (() => {
     });
     if (r.status === 401) { setToken(null); gate(); throw new Error('Sessiya tugadi'); }
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || 'Xato');
+    if (!r.ok) {
+      //  ★ XATONING QOLGAN MAYDONLARI HAM SAQLANADI. Ilgari faqat
+      //  matni olinardi va sahifa javobga qarab ish qila olmasdi —
+      //  masalan «xom ashyo biriktirilmagan» xatosida tuzatish
+      //  tugmasini chizish uchun matnni O'QIB CHIQISH kerak bo'lardi,
+      //  ya'ni matn ertaga o'zgarsa tugma jimgina yo'qolardi.
+      const e = new Error(j.error || 'Xato');
+      Object.assign(e, j, { status: r.status });
+      throw e;
+    }
     return j;
   }
 

@@ -1063,3 +1063,79 @@ SELECT o.*,
       LEFT JOIN warehouses tw ON tw.id = r.to_warehouse_id
       LEFT JOIN shops sh ON sh.id = COALESCE(tw.owner_shop_id, tw.shop_id)
      WHERE x.order_id = o.id) i ON true;
+
+-- ════════════════════════════ XOM ASHYOSIZ BO'LIMDAN O'TKAZILMAYDI
+--
+--  ★ ZAVOD QARORI (2026-09). Konver bo'limdan bo'limga o'tkazilganda
+--  unga sarflangan material yozilmagan bo'lsa, o'sha sarf BOSHQA
+--  hech qachon yozilmaydi: konver ketdi, usta keyingi ishga o'tdi va
+--  kecha nima ishlatilgani hech kimning esida qolmaydi. Tannarx esa
+--  aynan shu yozuvlardan yig'iladi — bittasi tushib qolsa mahsulotning
+--  bahosi jimgina past chiqadi.
+--
+--  Shuning uchun o'tkazish TO'XTATILADI va sabab ekranda yoziladi.
+--
+--  ★ LEKIN HAR BO'LIMDA MATERIAL SARFLANMAYDI. Shkurka bo'limida
+--  shkurka ketadi, yig'ish bo'limida esa ba'zan hech narsa: ish
+--  qo'l mehnati. Qat'iy to'siq o'shanda butun tsexni to'xtatardi.
+--  Yo'l ochiq qoladi — usta «bu bo'limda biriktirilmaydi» deb
+--  BELGILAYDI va konver o'tadi. Belgi YOZUV bo'lib qoladi: kim va
+--  qachon aytgani ko'rinib turadi, ya'ni javobsiz o'tib ketmaydi.
+--
+--  Qoida hozircha SHUNDAY SODDA — «bu bo'limda shu material ketishi
+--  kerak» degan norma hali yo'q. Norma yozilgandan keyin tekshiruv
+--  aniqlashadi va bu jadval o'sha yerda ham kerak bo'ladi:
+--  belgilangan bo'lim normadan chetga chiqish bo'lib qoladi.
+
+--  ★ SARF QAYSI BO'LIMDA YOZILGANI SAQLANADI. Ilgari faqat ombor va
+--  konver yozilardi, bo'lim esa ombordan chiqarilardi
+--  (`warehouses.section_id`) — u ixtiyoriy ustun va tsexning umumiy
+--  ombori har doim bo'limsiz turadi, ya'ni javob ko'pincha bo'sh
+--  bo'lardi. Tekshiruv esa AYNAN bo'lim bo'yicha: konver Arradan
+--  o'tayotganda Arrada nima sarflangani so'raladi.
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS section_id INT
+  REFERENCES sections(id);
+
+CREATE INDEX IF NOT EXISTS material_moves_unit_section_idx
+  ON material_moves (to_id, section_id) WHERE to_kind = 'unit';
+
+CREATE TABLE IF NOT EXISTS unit_no_material (
+  unit_id    INT NOT NULL REFERENCES production_units(id) ON DELETE CASCADE,
+  section_id INT NOT NULL REFERENCES sections(id),
+  worker_id  INT REFERENCES workers(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (unit_id, section_id)
+);
+
+--  ★ QAYSI BO'LIMDA MATERIAL YOZILADI — BIR MARTA AYTILADI
+--  (`sections.needs_material`). Qat'iy to'siq HAMMA bo'limga
+--  qo'yilsa usta yig'ish bo'limida har konverda «biriktirilmaydi»
+--  tugmasini bosib yurardi: o'sha bo'limda material umuman
+--  sarflanmaydi va javob har safar bir xil. Bir xil javobni har kuni
+--  qaytartirish — ishni sekinlashtirish, nazorat emas.
+--
+--  Belgi BO'LIMDA, kodda emas (4-qoida): zavod ertaga «endi Frezada
+--  ham yoziladi» desa bitta katakcha belgilanadi.
+--
+--  Standarti FALSE: hech kimning ekrani o'zidan-o'zi to'xtamaydi
+--  (`sees_warehouse` va `can_request_unit` bilan bir xil sabab).
+--  Deploy kuni hamma bo'limga qo'yilsa yo'lda turgan o'nlab konver
+--  BIRDANIGA to'xtab qolardi — ularning material yozuvi yo'q va
+--  bo'lishi ham mumkin emas edi.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS needs_material BOOLEAN
+  NOT NULL DEFAULT false;
+
+--  Boshlang'ich belgi TAXMIN emas, MA'LUMOTDAN: zavod tsex
+--  omborlarini allaqachon bo'limga bog'lagan (`warehouses.section_id`,
+--  bayroq `ombor-bolim`) — ya'ni o'sha bo'limlarda material
+--  chiqariladi degani. Bir martalik: keyin saytdan olib tashlangani
+--  qaytarib qo'yilmaydi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'bolim-material') THEN
+    UPDATE sections s SET needs_material = true
+     WHERE EXISTS (SELECT 1 FROM warehouses w
+                    WHERE w.section_id = s.id AND w.kind = 'material');
+    INSERT INTO migration_flags (key) VALUES ('bolim-material');
+  END IF;
+END $$;

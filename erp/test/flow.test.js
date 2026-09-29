@@ -45,6 +45,24 @@ test('baza quriladi va migratsiya IKKI MARTA o\'tadi', async () => {
   QADQAD = (await H.id(`SELECT id FROM sections WHERE code = 'QAD-QAD'`)).id;
 });
 
+//  ★ XOM ASHYOSIZ BO'LIMDAN O'TKAZILMAYDI (izoh: modules/units.js,
+//  sql/materials.sql). `needs_material` belgili bo'limda (Arra, Lak
+//  karkas, Qadoqlash, Qoplash, Zborka karkas) konver material
+//  yozilmasdan keyingi bo'limga o'tmaydi.
+//
+//  Quyidagi testlarning ko'pchiligi material haqida EMAS — ularda
+//  konver shunchaki yo'lda yurishi kerak. Shuning uchun o'tkazishdan
+//  oldin «bu bo'limda biriktirilmaydi» belgisi qo'yiladi: ekranda
+//  usta bosadigan tugmaning AYNAN o'zi. Qoidaning O'ZI alohida
+//  testda tekshiriladi.
+const xomsiz = () => require('../db').db.query(
+  `INSERT INTO unit_no_material (unit_id, section_id)
+   SELECT u.id, u.current_section_id
+     FROM production_units u
+     JOIN sections s ON s.id = u.current_section_id AND s.needs_material
+    WHERE u.status = 'production'
+   ON CONFLICT DO NOTHING`);
+
 const newUnit = async (extra = {}) => {
   const r = await admin('POST', '/api/units/', {
     items: [{ product_id: PENAL, qty: 1, section_id: ARRA, ...extra }] });
@@ -62,6 +80,7 @@ test('konver yaratiladi va jurnalda ko\'rinadi', async () => {
 
 test('tsex ichida o\'tkaziladi, marshrutdan tashqariga emas', async () => {
   const u = await newUnit();
+  await xomsiz();
   const ok = await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal(ok.status, 200, ok.text);
   assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
@@ -72,6 +91,7 @@ test('tsex ichida o\'tkaziladi, marshrutdan tashqariga emas', async () => {
   // u bu qoidani sinash uchun yaramaydi.) Admin orqali: tsex ustasida
   // avval doira tekshiriladi va marshrut qoidasiga navbat yetmaydi.
   const STUZBOR = (await H.id(`SELECT id FROM sections WHERE code='STU-ZBOR'`)).id;
+  await xomsiz();
   const bad = await admin('POST', '/api/units/move',
     { items: [{ unit_id: u.id, section_id: STUZBOR }] });
   assert.equal(bad.status, 400);
@@ -81,6 +101,7 @@ test('tsex ichida o\'tkaziladi, marshrutdan tashqariga emas', async () => {
 test('jo\'natilmagan konverni keyingi tsex qabul qila olmaydi', async () => {
   const u = await newUnit({ section_id: SHKUR });
 
+  await xomsiz();
   const early = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal(early.status, 400);
   assert.match(early.body.error, /jo'natilmagan/);
@@ -97,6 +118,7 @@ test('jo\'natilmagan konverni keyingi tsex qabul qila olmaydi', async () => {
 
   //  Sana endi majburiy emas (zanjir uni o'zi hisoblaydi), lekin
   //  yozilgani yoziladi va formuladan ustun turadi.
+  await xomsiz();
   const move = await lak('POST', '/api/units/move',
     { items: [{ unit_id: u.id, plan_on: '2026-09-25' }] });
   assert.equal(move.status, 200, move.text);
@@ -120,6 +142,7 @@ test('chiqish bo\'limiga o\'tish OMBORGA TUSHIRMAYDI', async () => {
     `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q;
 
   const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
   assert.equal((await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] })).status, 200);
 
   const row = await H.id(`SELECT status FROM production_units WHERE id=$1`, [u.id]);
@@ -137,6 +160,7 @@ test('T/M ombor: jo\'natdim → qabul qildim → jurnaldan chiqadi', async () =>
   const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
   const u = await newUnit({ section_id: QADOYNA });
   const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
   await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });   // → Qadoqlash
 
   const omborchi = H.api(base, await H.sessionFor('Administrator'));
@@ -184,6 +208,7 @@ test('omborda qisman qabul va tsexga qaytarish', async () => {
   const u = (await admin('POST', '/api/units/', { items: [
     { product_id: PENAL, qty: 10, color: 'Oq', section_id: QADOYNA }] })).body.created[0];
   const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
   await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   //  Ombor huquqi bilan: administrator ham — alohida «omborchi»
   //  yaratilmaydi, chunki yuk xatidagi «ombor mudiri» o'sha roldagi
@@ -451,6 +476,7 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
     { unit_price: 999 })).status, 403, 'savdo jurnalni tahrirlay olmaydi');
   assert.equal((await savdo('POST', '/api/units/',
     { items: [{ product_id: PENAL, qty: 1 }] })).status, 403);
+  await xomsiz();
   assert.equal((await savdo('POST', '/api/units/move',
     { items: [{ unit_id: bor.id }] })).status, 403);
   // Omborda: qoldiq ochiq, qabul qilish va kirim/chiqim tarixi yopiq
@@ -467,6 +493,7 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
   const u = await newUnit({ section_id: QADOYNA, color: 'Venge', fabric: 'Velvet-12' });
   const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
   await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   await qad('POST', '/api/units/handover', { items: [u.id] });
   // Qabul qilish ham mudirning huquqi (warehouse.move)
@@ -602,6 +629,7 @@ test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', asyn
   //  Keyingi qadam — O'Z tsexining astar bo'limi, ya'ni topshirish ham
   //  so'ralmaydi: konver hech kimning qo'liga o'tmayapti.
   const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  await xomsiz();
   const mv = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal(mv.status, 200, mv.text);
   assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
@@ -628,6 +656,7 @@ test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', asyn
   assert.equal(begona, 0, 'stul ekranida begona tsexning bo\'limi yo\'q');
 
   //  Lak ustasi uni qimirlata olmaydi
+  await xomsiz();
   const urinish = await lak('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal(urinish.status, 400, urinish.text);
   assert.match(urinish.body.error, /doirangizda emas/);
@@ -635,6 +664,7 @@ test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', asyn
   //  Marshrutni oxirigacha o'zi olib boradi: STU-ASTSH → STU-LAK →
   //  STU-QOPL → STU-QAD.
   for (let i = 0; i < 4; i++) {
+    await xomsiz();
     const step = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
     assert.equal(step.status, 200, `${i + 1}-qadam: ${step.text}`);
   }
@@ -709,6 +739,7 @@ test('boshlanmagan konver tsex ekranida turadi va bitta bosishda yo\'lga chiqadi
   assert.ok(!board.body.inbox.some((x) => x.id === u.id));
 
   // Bitta bosishda birinchi bo'limga chiqadi
+  await xomsiz();
   assert.equal((await stul('POST', '/api/units/move',
     { items: [{ unit_id: u.id }] })).status, 200);
   assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
@@ -734,6 +765,7 @@ test('konver bo\'lib o\'tkaziladi va uchrashganda qayta qo\'shiladi', async () =
       ORDER BY p.part`, [u.conveyor_no]).then((r) => r.rows);
 
   // 3 tasi Roverga, 7 tasi Arrada qoladi
+  await xomsiz();
   const r1 = await korpus('POST', '/api/units/move',
     { items: [{ unit_id: u.id, qty: 3 }] });
   assert.equal(r1.status, 200, r1.text);
@@ -741,12 +773,14 @@ test('konver bo\'lib o\'tkaziladi va uchrashganda qayta qo\'shiladi', async () =
     [{ part: 1, qty: 7, bolim: 'KOR-ARRA' }, { part: 2, qty: 3, bolim: 'KOR-ROVER' }]);
 
   // Yana 2 tasi — Roverdagi bo'lakka QO'SHILADI, uchinchi qator ochilmaydi
+  await xomsiz();
   assert.equal((await korpus('POST', '/api/units/move',
     { items: [{ unit_id: u.id, qty: 2 }] })).status, 200);
   assert.deepEqual(await holat(),
     [{ part: 1, qty: 5, bolim: 'KOR-ARRA' }, { part: 2, qty: 5, bolim: 'KOR-ROVER' }]);
 
   // Qolgan 5 tasi ham o'tdi — bitta 10 lik qator qoladi
+  await xomsiz();
   assert.equal((await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id }] })).status, 200);
   assert.deepEqual(await holat(), [{ part: 2, qty: 10, bolim: 'KOR-ROVER' }]);
 
@@ -767,6 +801,7 @@ test('bo\'lib o\'tkazishni qaytarganda donalar o\'z joyiga qaytadi', async () =>
       WHERE p.conveyor_no = $1 AND p.status = 'production'
       ORDER BY p.part`, [u.conveyor_no]).then((r) => r.rows);
 
+  await xomsiz();
   const r = await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id, qty: 3 }] });
   const yangi = r.body.moved[0].unit_id;
   assert.notEqual(yangi, u.id, 'bo\'lak alohida qator bo\'ldi');
@@ -783,6 +818,7 @@ test('noto\'g\'ri son o\'tkazilmaydi', async () => {
   const u = await newUnit({ qty: 4 });
   for (const [qty, kutilgan] of [[0, /noldan katta/], [-2, /noldan katta/],
                                  [5, /o'tkazib bo'lmaydi/], [1.5, /butun/]]) {
+    await xomsiz();
     const r = await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id, qty }] });
     assert.equal(r.status, 400, `${qty} → ${r.text}`);
     assert.match(r.body.error, kutilgan);
@@ -800,6 +836,7 @@ test('keyingi tsex konverning bir qismini qabul qila oladi', async () => {
 
   // Lak tsexi 4 tasini oladi, 6 tasi korpusda qoladi. Qabul qilayotgan
   // tsex keyingisiga muddat qo'yadi — shuning uchun sana bilan.
+  await xomsiz();
   const r = await lak('POST', '/api/units/move',
     { items: [{ unit_id: u.id, qty: 4, plan_on: '2026-09-25' }] });
   assert.equal(r.status, 200, r.text);
@@ -814,6 +851,7 @@ test('keyingi tsex konverning bir qismini qabul qila oladi', async () => {
   ], 'qolgani jo\'natilgan holida turadi, o\'tgani lak tsexida');
 
   // Qolgan 6 tasi ham qabul qilinadi — belgi saqlangani uchun
+  await xomsiz();
   assert.equal((await lak('POST', '/api/units/move',
     { items: [{ unit_id: u.id, plan_on: '2026-09-25' }] })).status, 200);
   assert.deepEqual(await holat(), [{ qty: 10, bolim: 'BOY-AST1', jonatilgan: false }],
@@ -1181,6 +1219,7 @@ test('direktor bo\'limlarni va bugungi harakatlarni ko\'radi, o\'zgartirmaydi', 
 
   // Lekin qimirlata olmaydi — bu tsex boshlig'ining ishi
   const u = await newUnit();
+  await xomsiz();
   assert.equal((await dir('POST', '/api/units/move',
     { items: [{ unit_id: u.id }] })).status, 403);
   assert.equal((await dir('POST', '/api/units/handover',
@@ -1586,6 +1625,7 @@ test('ishlab chiqarishdagi konverga ham bron qo\'yiladi', async () => {
   assert.equal(j.length, 1);
 
   // Bron konverni qimirlatmaydi: keyingi bo'limga o'tkazish ishlayveradi
+  await xomsiz();
   assert.equal((await admin('POST', '/api/units/move',
     { items: [{ unit_id: ish.id }] })).status, 200);
   assert.equal((await admin('GET', `/api/units/${ish.id}/bron`)).body.reserved, 3,
@@ -2260,6 +2300,7 @@ test('tsex ekranida oy boshidan beri chiqarilgani', async () => {
 
   //  Tsex ICHIDAGI harakat hisobga qo'shilmaydi: mahsulot hali
   //  tsexdan chiqmagan.
+  await xomsiz();
   await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   assert.equal((await bor(korpus, 'Milano'))?.qty ?? 0, edi,
     'bo\'limdan bo\'limga o\'tish sanalmaydi');
@@ -2271,9 +2312,11 @@ test('tsex ekranida oy boshidan beri chiqarilgani', async () => {
     if (!r) break;
     if (r.next_shop_id && r.next_shop_id !== korpus) {
       await admin('POST', '/api/units/handover', { items: [u.id] });
+      await xomsiz();
       await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
       break;
     }
+    await xomsiz();
     await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
   }
   assert.equal(Number((await bor(korpus, 'Milano')).qty), edi + 6,
@@ -2295,11 +2338,13 @@ test('tsex ekranida oy boshidan beri chiqarilgani', async () => {
       topildi = true;
       if (r.next_shop_id && r.next_shop_id !== sh.id) {
         await admin('POST', '/api/units/handover', { items: [u.id] });
+        await xomsiz();
         await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
       } else if (!r.next_section_id) {
         await admin('POST', '/api/units/handover', { items: [u.id] });
         await admin('POST', '/api/units/stock/accept', { items: [{ unit_id: u.id }] });
       } else {
+        await xomsiz();
         await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
       }
       break;
@@ -2665,6 +2710,7 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   assert.ok(bosh.some((x) => x.id === ok.body.unit_id), 'konver ro\'yxatda');
 
   //  Tsex boshlab qo'ysa buyurtma chernovikdan chiqadi.
+  await xomsiz();
   assert.equal((await stulchi('POST', '/api/units/move',
     { items: [{ unit_id: ok.body.unit_id }] })).status, 200);
   const ro2 = (await admin('GET', '/api/sales/orders?q=' + z.order_no)).body.rows[0];
@@ -3814,10 +3860,12 @@ test('ombor harakatida kim qabul qilgani ko\'rinadi va filtr ishlaydi', async ()
     //  Tsexdan tsexga qabul qilishda muddat majburiy, tsex ichida esa
     //  e'tiborga olinmaydi — har o'tkazishda yuborilaveradi.
     const it = { unit_id: u.id, plan_on: '2026-09-25' };
+    await xomsiz();
     let mv = await admin('POST', '/api/units/move', { items: [it] });
     if (mv.status !== 200) {
       assert.equal((await admin('POST', '/api/units/handover',
         { items: [u.id] })).status, 200);
+      await xomsiz();
       mv = await admin('POST', '/api/units/move', { items: [it] });
     }
     assert.equal(mv.status, 200, mv.text);
@@ -5708,6 +5756,7 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
     { items: [ok.body.unit_id] })).status, 200);
 
   //  LAK QABUL QILADI — sanasiz ham o'tadi, lekin yozilgani yoziladi.
+  await xomsiz();
   assert.equal((await lak('POST', '/api/units/move',
     { items: [{ unit_id: ok.body.unit_id, plan_on: '2026-10-01' }] })).status, 200);
   const r2 = (await admin('GET', '/api/units/?conveyor_no=' + ok.body.conveyor_no)).body[0];
@@ -5722,6 +5771,7 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
     { section_id: SHKUR2 })).status, 200);
   assert.equal((await korpus('POST', '/api/units/handover',
     { items: [ok2.body.unit_id] })).status, 200);
+  await xomsiz();
   const sanasiz = await lak('POST', '/api/units/move',
     { items: [{ unit_id: ok2.body.unit_id }] });
   assert.equal(sanasiz.status, 200, sanasiz.text);
@@ -6595,6 +6645,7 @@ test("bron ko'chgan dona bilan birga yuradi", async () => {
       ORDER BY p.id`, [u.conveyor_no])).rows;
 
   //  ── 8 tasi keyingi bo'limga: bron ular BILAN ketadi.
+  await xomsiz();
   assert.equal((await korpus('POST', '/api/units/move',
     { items: [{ unit_id: u.id, qty: 8 }] })).status, 200);
   let q = await bronlar();
@@ -6612,6 +6663,7 @@ test("bron ko'chgan dona bilan birga yuradi", async () => {
   //  qator o'chadi, `unit_reservations` esa `ON DELETE CASCADE` —
   //  butun bron JIMGINA yo'qolardi. Qolgan 8 tasini ham o'sha
   //  bo'limga o'tkazamiz: ikkala bo'lak qo'shiladi.
+  await xomsiz();
   assert.equal((await korpus('POST', '/api/units/move',
     { items: [{ unit_id: qolgan.id }] })).status, 200);
   q = await bronlar();
@@ -7311,6 +7363,56 @@ test("o'zgaruvchi nomidagi ortiqcha bo'shliq o'qiladi", () => {
     for (const k of Object.keys(process.env))
       if (!(k in eski)) delete process.env[k];
   }
+});
+
+//  ★ XOM ASHYOSIZ BO'LIMDAN O'TKAZILMAYDI (zavod qarori, 2026-09).
+//  Konver ketgandan keyin o'sha bo'limda nima sarflangani BOSHQA
+//  hech qachon yozilmaydi: usta keyingi ishga o'tadi va kecha nima
+//  ishlatilgani esida qolmaydi. Tannarx esa aynan shu yozuvlardan
+//  yig'iladi.
+test("xom ashyosiz bo'limdan o'tkazilmaydi", async () => {
+  const { db } = require('../db');
+  const u = await newUnit();          //  Arra — `needs_material` belgili
+  const arra = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+
+  //  Belgisiz bo'limda tekshiruv YO'Q: yig'ish ba'zan qo'l mehnati va
+  //  usta har konverda bir xil javobni qaytarib yurmasin.
+  assert.equal((await H.id(
+    `SELECT needs_material::text AS id FROM sections WHERE id=$1`, [arra])).id,
+    'true');
+
+  const rad = await korpus('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  assert.equal(rad.status, 400, rad.text);
+  assert.match(rad.body.error, /xom ashyo biriktirilmagan/);
+  //  ★ SAHIFA BELGIGA QARAB TUGMA CHIZADI, matnni o'qib emas: matn
+  //  ertaga o'zgarsa tugma jimgina yo'qolardi.
+  assert.equal(rad.body.code, 'xom-ashyo-yoq');
+  assert.equal(rad.body.section_id, arra);
+
+  //  ★ «BU BO'LIMDA BIRIKTIRILMAYDI» — ikkinchi yo'l, va u YOZUV
+  //  bo'lib qoladi: kim va qachon aytgani ko'rinib turadi.
+  assert.equal((await korpus('POST', `/api/units/${u.id}/no-material`)).status, 200);
+  assert.equal((await H.id(
+    `SELECT worker_id AS id FROM unit_no_material
+      WHERE unit_id = $1 AND section_id = $2`, [u.id, arra])).id != null, true);
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u.id }] })).status, 200, 'belgidan keyin o\'tadi');
+
+  //  ★ MATERIAL YOZILGAN BO'LIM ham o'tkazadi — belgisiz.
+  const u2 = await newUnit();
+  await db.query(
+    `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                 to_kind, to_id, moved_on, section_id)
+     SELECT (SELECT id FROM materials ORDER BY id LIMIT 1), 1,
+            'warehouse', (SELECT id FROM warehouses WHERE code='TSEX-KOR-ARRA'),
+            'unit', $1, CURRENT_DATE, $2`, [u2.id, arra]);
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u2.id }] })).status, 200, 'sarf yozilgan — o\'tadi');
+
+  //  Doira CHEGARA: boshqa tsexning konveriga belgi qo'yilmaydi.
+  const u3 = await newUnit();
+  const stulUsta = H.api(base, await H.sessionFor('Stul ustasi'));
+  assert.equal((await stulUsta('POST', `/api/units/${u3.id}/no-material`)).status, 403);
 });
 
 test('yakun', async () => {

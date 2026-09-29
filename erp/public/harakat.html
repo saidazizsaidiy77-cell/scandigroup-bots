@@ -475,7 +475,63 @@ async function apply(ids, qty, planOn) {
       : `${ids.length} ta konver yuborildi`);
     picked.clear();
     await loadBoard();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    //  ★ «XOM ASHYO BIRIKTIRILMAGAN» — XATO EMAS, SAVOL. Toast besh
+    //  soniyada yo'qoladi va usta nima qilishini bilmay qolardi:
+    //  ▣ tugmasini bosib material yozadimi, yoki bu bo'limda
+    //  umuman sarflanmaydimi. Shuning uchun OYNA ochiladi va ikkala
+    //  yo'l ham o'sha yerda turadi.
+    //
+    //  Tugma xatoning BELGISIGA qarab chiziladi (`code`), matnini
+    //  o'qib emas: matn ertaga o'zgarsa tugma jimgina yo'qolardi.
+    if (e.code === 'xom-ashyo-yoq') return xomYoq(e, ids, qty, planOn);
+    toast(e.message, true);
+  }
+}
+
+//  Ikkinchi yo'l ham SHU OYNADA: usta ekrandan chiqmasdan yo material
+//  biriktiradi, yo «bu bo'limda kerak emas» deb belgilaydi.
+function xomYoq(e, ids, qty, planOn) {
+  xyYop();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="xyBox" onclick="if(event.target===this)xyYop()">
+      <div class="modal" style="max-width:460px">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <h2 style="margin:0">Xom ashyo biriktirilmagan</h2>
+          <button onclick="xyYop()">Yopish</button></div>
+        <p style="margin-bottom:10px">${esc(e.message)}</p>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">
+          Konver bu bo'limdan ketgandan keyin bu yerda nima
+          sarflangani boshqa yozilmaydi — tannarx o'sha yozuvlardan
+          yig'iladi. Agar bu bo'limda material umuman sarflanmasa,
+          shuni belgilang: kim va qachon aytgani yozib qo'yiladi.</p>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button class="primary" onclick="xyYop(); xomOch(${e.unit_id})"
+            >\u25a3 Xom ashyo biriktirish</button>
+          <button onclick='xomKerakmas(${e.unit_id}, ${JSON.stringify(ids)},
+            ${qty == null ? 'null' : qty}, ${planOn === undefined
+              ? 'undefined' : JSON.stringify(planOn)})'
+            >Bu bo'limda biriktirilmaydi</button>
+        </div>
+        <div id="xyMsg"></div>
+      </div></div>`);
+}
+
+const xyYop = () => { $('xyBox')?.remove(); };
+
+//  Belgilangach o'tkazish O'ZI qaytadan uriniladi: usta tugmani
+//  ikkinchi marta qidirib o'tirmasin.
+async function xomKerakmas(unitId, ids, qty, planOn) {
+  try {
+    await App.api(`/api/units/${unitId}/no-material`, { method: 'POST' });
+    xyYop();
+    await apply(ids, qty, planOn);
+  } catch (err) {
+    if ($('xyMsg'))
+      $('xyMsg').innerHTML = `<div class="tag bad" style="margin-top:10px;
+        display:inline-block;white-space:normal">${esc(err.message)}</div>`;
+    toast(err.message, true);
+  }
 }
 
 const move  = id => askQty(id);

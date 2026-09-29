@@ -546,11 +546,19 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
       //  har qatorda narx terib o'tirsa bitta xato raqam butun
       //  tannarxni buzardi.
       await client.query(
+        //  ★ QAYSI BO'LIMDA SARFLANGANI YOZILADI (izoh:
+        //  sql/materials.sql). Konver bo'limdan bo'limga o'tkazilganda
+        //  «shu bo'limda material biriktirilganmi» degan savolga javob
+        //  AYNAN shu ustundan chiqadi. Ombordan chiqarib bo'lmasdi:
+        //  `warehouses.section_id` ixtiyoriy va tsexning umumiy ombori
+        //  har doim bo'limsiz turadi.
         `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
-                                     to_kind, to_id, moved_on, note, worker_id)
+                                     to_kind, to_id, moved_on, note, worker_id,
+                                     section_id)
          VALUES ($1,$2,'warehouse',$3,'unit',$4,
-                 COALESCE($5::date, CURRENT_DATE), $6, $7)`,
-        [m.id, qty, wh.id, u.id, trim(req.body.on), trim(it.note), req.user.id]);
+                 COALESCE($5::date, CURRENT_DATE), $6, $7, $8)`,
+        [m.id, qty, wh.id, u.id, trim(req.body.on), trim(it.note), req.user.id,
+         u.section_id]);
       n++;
     }
     if (!n) throw new Error('Birorta ham qator kiritilmadi');
