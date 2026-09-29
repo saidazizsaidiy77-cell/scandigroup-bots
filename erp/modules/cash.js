@@ -726,6 +726,79 @@ const oyQ = (v, def) => {
   return /^\d{4}-\d{2}$/.test(t) ? t + '-01' : def;
 };
 
+// ═══════════════════════════════════════════════ MOLIYA PANELI
+//
+//  ★ UCHTA SAVOL, UCHTA JAVOB — BITTA EKRANDA. Zavodda pul haqida
+//  uch xil savol beriladi va ular bir xil raqamni bermaydi:
+//
+//    «qancha ishladik»   — foyda-zarar  (v_pl_month)
+//    «pul qayerda»       — pul oqimi    (v_cash_month)
+//    «qo'limizda nima»   — qoldiq       (v_cash_balance, v_worker_cash)
+//
+//  Ilgari ular UCH sahifada edi va direktor ularni yonma-yon qo'yib
+//  solishtira olmasdi — «foyda bor, pul yo'q» degan holat aynan
+//  shunda ko'rinadi.
+//
+//  Batafsil jadvallar O'Z sahifasida qoladi: panel savolga javob
+//  beradi, hisobot esa javobni TEKSHIRISH uchun.
+router.get('/dashboard', need(...READ), wrap(async (req, res) => {
+  const bugun = new Date();
+  const from = oyQ(req.query.from,
+    `${bugun.getFullYear() - (bugun.getMonth() < 11 ? 1 : 0)}-` +
+    `${String((bugun.getMonth() + 2) % 12 || 12).padStart(2, '0')}-01`);
+  const to = oyQ(req.query.to,
+    `${bugun.getFullYear()}-${String(bugun.getMonth() + 1).padStart(2, '0')}-01`);
+
+  const [oylar, harajat, kassa, qol, mijoz, taminot] = await Promise.all([
+    //  Oy bo'yicha: tushum, harajat va farqi. Bo'sh oy ham qator
+    //  bo'ladi — bo'sh ustun javob, yo'q ustun esa savol.
+    db.query(
+      `WITH oy AS (
+         SELECT generate_series($1::date, $2::date, INTERVAL '1 month')::date AS m)
+       SELECT to_char(oy.m, 'YYYY-MM') AS mon,
+              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'income'), 0)::numeric
+                AS tushum,
+              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind <> 'income'), 0)::numeric
+                AS harajat,
+              (COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'income'), 0)
+               - COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind <> 'income'), 0)
+              )::numeric AS foyda
+         FROM oy LEFT JOIN v_pl_month p ON p.pl_month = oy.m
+        GROUP BY oy.m ORDER BY oy.m`, [from, to]),
+
+    //  Harajat GURUH bo'yicha: «pul qayerga ketdi» degan savolga
+    //  modda emas, guruh javob beradi — o'ttizta modda ro'yxatda
+    //  o'qilmasdi.
+    db.query(
+      `SELECT COALESCE(group_name, 'Boshqa') AS name,
+              SUM(amount_usd)::numeric AS amount
+         FROM v_pl_month
+        WHERE pl_month BETWEEN $1::date AND $2::date AND kind <> 'income'
+        GROUP BY 1 HAVING SUM(amount_usd) <> 0
+        ORDER BY amount DESC LIMIT 8`, [from, to]),
+
+    //  Qoldiq — BUGUNGI holat, oraliqqa bog'liq emas (savdo
+    //  panelidagi «zavodda turgani» bilan bir xil qoida).
+    db.query(`SELECT name, main_ccy, uzs, usd, total_usd
+                FROM v_cash_balance WHERE is_active ORDER BY sort, name`),
+    db.query(`SELECT COALESCE(SUM(total_usd), 0)::numeric AS usd
+                FROM v_worker_cash`),
+    db.query(`SELECT COALESCE(SUM(GREATEST(balance, 0)), 0)::numeric AS usd
+                FROM v_customer_sales`),
+    db.query(`SELECT COALESCE(SUM(GREATEST(balance, 0)), 0)::numeric AS usd
+                FROM v_supplier_debt`),
+  ]);
+
+  res.json({
+    from: from.slice(0, 7), to: to.slice(0, 7),
+    oylar: oylar.rows, harajat: harajat.rows,
+    kassa: kassa.rows,
+    qolda: qol.rows[0].usd,
+    mijoz_qarzi: mijoz.rows[0].usd,
+    taminot_qarzi: taminot.rows[0].usd,
+  });
+}));
+
 router.get('/pl', need(...READ), wrap(async (req, res) => {
   const bugun = new Date();
   //  Sukut bo'yicha — joriy yil: direktor hisobotni «shu yil qanday»

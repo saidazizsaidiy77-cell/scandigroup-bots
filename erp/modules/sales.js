@@ -312,8 +312,31 @@ const HOLAT = `CASE
         WHEN o.status = 'to_ship'   THEN 'to_ship'
         ELSE 'reserved' END`;
 
+//  ★ SARALASH SERVERDA (zavod qarori, 2026-09). Ro'yxat 500 qator
+//  bilan CHEKLANGAN, ya'ni klientda saralash faqat ko'rinib turganini
+//  tartiblardi va «eng katta summa» degan savolga 501-buyurtmani
+//  hisobga olmagan javob berardi. Ombor qoldig'ida teskari va sababi
+//  ham teskari: u yerda LIMIT yo'q, hamma qator sahifada turadi.
+//
+//  Ustunlar ro'yxati YOPIQ: tashqaridan kelgan nom SQL ga yetib
+//  bormaydi. Ikkinchi darajali kalit har doim `id` — teng qiymatli
+//  qatorlar har so'rovda joyini almashtirmasin.
+const TARTIB = {
+  ordered_on: 'o.ordered_on', due_on: 'o.due_on', shipped_on: 'o.shipped_on',
+  order_no: 'o.order_no', customer_name: 'o.customer_name',
+  manager_name: 'o.manager_name', lines: 'o.lines', qty: 'o.qty',
+  amount: 'o.amount', holat: HOLAT,
+};
+
 router.get('/orders', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
+  //  Standart — yozilgan sanasi bo'yicha, yangisi tepada: ro'yxat
+  //  shunday o'qilardi va saralash tanlanmaguncha shunday qoladi.
+  const ust = TARTIB[req.query.sort] || 'o.ordered_on';
+  const yon = String(req.query.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  //  ★ BO'SH KATAK HAR DOIM OXIRIDA, yo'nalishdan qat'i nazar (ombor
+  //  qoldig'i va xodimlar ro'yxati bilan bir xil qoida): chiqish
+  //  sanasi yozilmagan o'nta buyurtma tepaga chiqsa javob ko'rinmasdi.
   const { rows } = await db.query(
     `SELECT o.*, ${HOLAT} AS holat FROM v_sales_orders o
       WHERE ($1::text[] IS NULL OR channel = ANY($1))
@@ -324,7 +347,7 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
              OR customer_name ILIKE '%' || $5 || '%')
         --  O'z buyurtmasi chegarasi: filtr EMAS, klient o'chira olmaydi.
         AND ($6::int IS NULL OR manager_id = $6)
-      ORDER BY ordered_on DESC, id DESC
+      ORDER BY ${ust} ${yon} NULLS LAST, o.id DESC
       LIMIT 500`,
     [chans, req.query.status || null,
      req.query.customer_id || null,

@@ -118,15 +118,29 @@
           Ko'rinishi yonidagi ikki sana bilan BIR XIL: bitta qatorda
           uchta sana turadi va biri boshqacha yozilsa u xato bo'lib
           o'qilardi. -->
+    <!--  ★ SARLAVHA BOSILSA SARALANADI, va saralash SERVERDA: ro'yxat
+          500 qator bilan cheklangan, ya'ni klientda tartiblash faqat
+          ko'rinib turganini saralardi va «eng katta summa» degan
+          savolga 501-buyurtmani hisobga olmagan javob berardi.
+          Ombor qoldig'ida teskari va sababi ham teskari — u yerda
+          LIMIT yo'q.
+
+          «Qayerda» saralanmaydi: u qator EMAS, bir nechta joyning
+          ro'yxati va nimaga qarab tartiblashi noaniq bo'lardi. -->
     <thead><tr><th id="thSel"></th>
-      <th id="thShip" hidden>Chiqqan</th>
-      <th>Z&#8470;</th><th>Mijoz</th><th>Menejer</th><th>Yozilgan</th>
-      <th>Muddat</th><th class="num">Qator</th><th class="num">Soni</th>
-      <th class="num">Summa, $</th>
+      <th id="thShip" hidden data-s="shipped_on">Chiqqan</th>
+      <th data-s="order_no">Z&#8470;</th>
+      <th data-s="customer_name">Mijoz</th>
+      <th data-s="manager_name">Menejer</th>
+      <th data-s="ordered_on">Yozilgan</th>
+      <th data-s="due_on">Muddat</th>
+      <th class="num" data-s="lines">Qator</th>
+      <th class="num" data-s="qty">Soni</th>
+      <th class="num" data-s="amount">Summa, $</th>
       <!--  «Qayerda» — biriktirilgan konverlar hozir turgan joyi.
             Savdo xodimidan kun bo'yi «mahsulotim qayerda» deb
             so'rashadi; ilgari javob har buyurtmani ochib ko'rilardi. -->
-      <th>Qayerda</th><th>Holat</th><th></th></tr></thead>
+      <th>Qayerda</th><th data-s="holat">Holat</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
 </div>
@@ -343,9 +357,56 @@ function joylar(o) {
   return chiz.join('');
 }
 
+//  ★ YO'NALISHNI USTUNNING TURI HAL QILADI (ombor qoldig'i bilan bir
+//  xil qoida): RAQAM va SANADA birinchi bosish kattadan kichikka —
+//  savol «qaysi biri ko'p» yoki «oxirgi qaysi kuni», va eng kichik
+//  qatorni tepaga chiqarish javobni ikkinchi bosishga surardi;
+//  MATNDA A→Z. Ikkinchi bosish teskariga o'giradi.
+const MATN = ['order_no', 'customer_name', 'manager_name', 'holat'];
+let sort = '', sortDir = '';
+
+function sortBos(ust) {
+  if (!ust) return;
+  sortDir = sort === ust
+    ? (sortDir === 'asc' ? 'desc' : 'asc')
+    : (MATN.includes(ust) ? 'asc' : 'desc');
+  sort = ust;
+  load();
+}
+
+//  Belgi FAQAT tanlangan ustunda: har sarlavhada strelka tursa
+//  qaysi biri bo'yicha saralanganini topish uchun ko'z bilan qidirish
+//  kerak bo'lardi.
+//  Hodisa BITTA joyda — `thead` da: har sarlavhaga alohida
+//  `onclick` yozilsa qayta chizilgandan keyin eskilari osilib
+//  qolardi (panel grafiklaridagi bilan bir xil qoida).
+let sortUlangan = false;
+function sortUla() {
+  if (sortUlangan) return;
+  const head = $('tB')?.closest('table')?.querySelector('thead');
+  if (!head) return;
+  head.addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-s]');
+    if (th) sortBos(th.dataset.s);
+  });
+  sortUlangan = true;
+}
+
+function sortChiz() {
+  document.querySelectorAll('#tB')[0]?.closest('table')
+    ?.querySelectorAll('thead th[data-s]').forEach((th) => {
+      th.style.cursor = 'pointer';
+      th.title = 'Saralash';
+      const ok = th.dataset.s === sort;
+      th.innerHTML = th.innerHTML.replace(/\s*[\u2191\u2193]$/, '')
+        + (ok ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '');
+    });
+}
+
 async function load(){
   const q = new URLSearchParams();
   if (status) q.set('status', status);
+  if (sort) { q.set('sort', sort); q.set('dir', sortDir); }
   if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
   if ($('fMgr') && $('fMgr').value) q.set('manager_id', $('fMgr').value);
   const javob = await App.api('/api/sales/orders?' + q);
@@ -363,6 +424,10 @@ async function load(){
   //  Sarlavha ham, katak ham SHU o'zgaruvchidan chiqadi.
   const chiqqan = status === 'shipped';
   if ($('thShip')) $('thShip').hidden = !chiqqan;
+  //  Sarlavhalar har chizilganda qayta ulanadi: `innerHTML` bilan
+  //  strelka qo'yilgach eski hodisa yo'qoladi.
+  sortUla();
+  sortChiz();
   $('tB').innerHTML = rows.length ? rows.map(o => {
     // Muddat o'tgan va hali yopilmagan buyurtma qizarib turadi.
     const late = o.days_left != null && o.days_left < 0

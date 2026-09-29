@@ -7415,6 +7415,42 @@ test("xom ashyosiz bo'limdan o'tkazilmaydi", async () => {
   assert.equal((await stulUsta('POST', `/api/units/${u3.id}/no-material`)).status, 403);
 });
 
+//  ★ BUYURTMALAR RO'YXATI SARALANADI — SERVERDA (zavod qarori,
+//  2026-09). Ro'yxat 500 qator bilan cheklangan, ya'ni klientda
+//  tartiblash faqat ko'rinib turganini saralardi va «eng katta
+//  summa» degan savolga 501-buyurtmani hisobga olmagan javob
+//  berardi.
+test("buyurtmalar ro'yxati saralanadi", async () => {
+  const roy = (yol) => sotuvchi('GET', '/api/sales/orders' + yol);
+
+  const kamayib = (await roy('?sort=amount&dir=desc')).body.rows
+    .map((r) => Number(r.amount) || 0);
+  const osib = (await roy('?sort=amount&dir=asc')).body.rows
+    .map((r) => Number(r.amount) || 0);
+  assert.deepEqual(kamayib, [...kamayib].sort((a, b) => b - a), 'kattadan kichikka');
+  assert.deepEqual(osib, [...osib].sort((a, b) => a - b), 'kichikdan kattaga');
+
+  //  ★ USTUNLAR RO'YXATI YOPIQ: tashqaridan kelgan nom SQL ga yetib
+  //  bormaydi — noma'lum ustun standartga tushadi, xato bermaydi.
+  const yomon = await roy("?sort=o.id;DROP TABLE orders--&dir=desc");
+  assert.equal(yomon.status, 200);
+  const odatiy = await roy('');
+  assert.deepEqual(yomon.body.rows.map((r) => r.id),
+    odatiy.body.rows.map((r) => r.id), 'noma\'lum ustun — standart tartib');
+
+  //  ★ BO'SH KATAK HAR DOIM OXIRIDA, yo'nalishdan qat'i nazar:
+  //  chiqish sanasi yozilmagan buyurtmalar tepaga chiqsa javob
+  //  ko'rinmasdi (ombor qoldig'i bilan bir xil qoida).
+  for (const yon of ['asc', 'desc']) {
+    const sanalar = (await roy('?sort=due_on&dir=' + yon)).body.rows
+      .map((r) => r.due_on);
+    const birinchiBosh = sanalar.findIndex((d) => d == null);
+    if (birinchiBosh >= 0)
+      assert.ok(sanalar.slice(birinchiBosh).every((d) => d == null),
+        `bo'sh katak oxirida (${yon})`);
+  }
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
