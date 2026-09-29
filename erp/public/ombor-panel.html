@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ombor paneli · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/app.js"></script>
+<script src="/panel.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Ombor paneli</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="width:170px"><label>Sanadan</label>
+      <input id="dan" type="date" onchange="load()"></div>
+    <div style="width:170px"><label>Sanagacha</label>
+      <input id="gacha" type="date" onchange="load()"></div>
+    <div class="row" style="gap:8px" id="tez"></div>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    Oraliq faqat <b>kirim va chiqimga</b> tegishli. <b>Qoldiq</b> —
+    bugungi holat: «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
+    filtri bilan aralashtirib bo'lmaydi.</p>
+</div>
+
+<!--  ★ IKKI BO'LIM, IKKI XIL ODAM: T/M ombor mudiri konver
+      sanaydi, xom ashyo mudiri esa material. Ikkalasi ham bir
+      sahifada, lekin huquqi bo'lmagani UMUMAN chizilmaydi — bo'sh
+      blok «nega bo'sh» degan savol qoldirardi. -->
+<div id="fgBlok" hidden>
+  <h2 style="margin:0 0 10px">Tayyor mahsulot</h2>
+  <div class="grid g3" id="kpis"></div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Kirim va chiqim — oylar bo'yicha</h2>
+    <div id="oylar"></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h2>Omborlar bo'yicha qoldiq</h2><div id="omborlar"></div></div>
+    <div class="card"><h2>Javonda ko'p turgan mahsulot</h2><div id="mahsulot"></div></div>
+  </div>
+</div>
+
+<div id="matBlok" hidden>
+  <h2 style="margin:26px 0 10px">Xom ashyo</h2>
+  <div class="grid g3" id="mKpis"></div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h2>Omborlar bo'yicha qiymat</h2><div id="mOmbor"></div></div>
+    <div class="card"><h2>Ta'minotchilarga qarz</h2><div id="mQarz"></div></div>
+  </div>
+</div>
+
+<p id="bosh" class="muted" hidden>Sizga ochiq ombor yo'q.</p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = Panel.esc;
+
+const TEZ = [['Shu oy', 'oy'], ['Shu chorak', 'chorak'],
+             ['Shu yil', 'yil'], ['12 oy', '12']];
+
+function tezQoy(k) {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const kun = (x) => `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+  let dan;
+  if (k === 'oy')     dan = new Date(d.getFullYear(), d.getMonth(), 1);
+  if (k === 'chorak') dan = new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  if (k === 'yil')    dan = new Date(d.getFullYear(), 0, 1);
+  if (k === '12')     dan = new Date(d.getFullYear(), d.getMonth() - 11, 1);
+  $('dan').value = kun(dan);
+  $('gacha').value = kun(d);
+  load();
+}
+$('tez').innerHTML = TEZ.map(([t, k]) =>
+  `<button onclick="tezQoy('${k}')">${t}</button>`).join('');
+
+//  Ikkala so'rov ham ALOHIDA: birining huquqi yo'qligi ikkinchisini
+//  yiqitmasin (`Promise.all` emas — u birinchi rad javobida to'xtardi).
+async function load() {
+  const q = new URLSearchParams();
+  if ($('dan').value)   q.set('from', $('dan').value);
+  if ($('gacha').value) q.set('to', $('gacha').value);
+
+  const fg  = await App.api('/api/warehouse/dashboard?' + q).catch(() => null);
+  const mat = await App.api('/api/materials/dashboard').catch(() => null);
+
+  $('fgBlok').hidden = !fg;
+  $('matBlok').hidden = !mat;
+  $('bosh').hidden = !!(fg || mat);
+  if (fg) fgChiz(fg);
+  if (mat) matChiz(mat);
+}
+
+function fgChiz(d) {
+  if (!$('dan').value)   $('dan').value = d.dan;
+  if (!$('gacha').value) $('gacha').value = d.gacha;
+
+  //  ★ YIG'INDI O'LCHOV BIRLIGI BO'YICHA: stul DONA, penal
+  //  KOMPLEKT — qo'shib bo'lmaydi va bitta raqam yolg'on javob
+  //  bo'lardi. Shuning uchun har birlik o'z kartochkasida.
+  const kart = d.qoldiq.map((r) => ({
+    name: 'Qoldiq · ' + r.uom,
+    value: Panel.son(r.bosh) + ' ' + r.uom,
+    hint: `javonda ${Panel.son(r.jami)} · bronda ${Panel.son(r.bronda)}`,
+  }));
+  Panel.kpi($('kpis'), [...kart,
+    { name: 'Chiqarishni kutmoqda', value: Panel.son(d.kutmoqda) + ' ta',
+      tone: Number(d.kutmoqda) ? 'warn' : '',
+      hint: 'buyurtma · mudirning navbati' },
+  ]);
+
+  Panel.bars2($('oylar'), { rows: d.oylar,
+    a: { key: 'kirdi', name: 'Kirdi' },
+    b: { key: 'chiqdi', name: 'Chiqdi' },
+    fmt: (v) => Panel.son(v) + ' dona' });
+
+  Panel.rank($('omborlar'), { rows: d.omborlar, key: 'qty',
+    fmt: (v) => Panel.son(v) + ' dona' });
+  Panel.rank($('mahsulot'), { rows: d.mahsulot, key: 'qty',
+    fmt: (v) => Panel.son(v), hint: 'kun' });
+}
+
+function matChiz(d) {
+  Panel.kpi($('mKpis'), [
+    //  ★ NOMLAR SONI, DONA EMAS: bittasi kg, bittasi list, bittasi
+    //  rulon (ombor kartochkasi bilan bir xil qoida).
+    { name: 'Omborda', value: Panel.son(d.nom) + ' nom',
+      hint: Panel.pul(d.usd) + ' · o\'rtacha kirim narxida' },
+    //  ★ MINUS QOLDIQ — KIRIM HUJJATI YOZILMAGANINING BELGISI.
+    //  Nolga qisish yolg'on, yashirish esa xatoni ko'rinmas
+    //  qilardi.
+    { name: 'Minusga tushgan', value: Panel.son(d.minus) + ' ta',
+      tone: Number(d.minus) ? 'bad' : '',
+      hint: 'kirim hujjati yozilmagan' },
+    { name: 'Xarid zayavkasi', value: Panel.son(d.zayavka.yangi) + ' ta',
+      tone: Number(d.zayavka.yangi) ? 'warn' : '',
+      hint: Panel.son(d.zayavka.berilgan) + ' tasiga buyurtma berilgan' },
+    { name: 'Talabnoma', value: Panel.son(d.talab.yangi) + ' ta',
+      tone: Number(d.talab.yangi) ? 'warn' : '',
+      hint: Panel.son(d.talab.tayyor) + ' tasi tayyorlangan' },
+  ]);
+
+  Panel.rank($('mOmbor'), { rows: d.omborlar, key: 'usd', hint: 'nom' });
+  Panel.rank($('mQarz'), { rows: d.qarz, key: 'usd' });
+}
+
+App.start(() => tezQoy('12'),
+  'warehouse.view', 'warehouse.manage', 'materials.view', 'materials.manage');
+</script>
+</body>
+</html>

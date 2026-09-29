@@ -414,6 +414,16 @@ const App = (() => {
     // va zavod aytadigan boshqalari), shuning uchun bo'limga kirilganda
     // avval omborlar ro'yxati chiqadi — shu qator birinchi turgani
     // uchun yuqoridagi "Ombor" havolasi o'sha yerga olib boradi.
+    //  ★ PANEL IKKI MODULDA: T/M ombor mudiri bilan xom ashyo
+    //  mudiri IKKI xil odam va ularning huquqi ham boshqa. Sahifa
+    //  ikkalasini ham ko'rsatadi, lekin huquqi yo'q bloki UMUMAN
+    //  chizilmaydi — bo'sh blok «nega bo'sh» degan savol
+    //  qoldirardi.
+    { href: '/ombor-panel.html', mod: ['warehouse', 'materials'], nav: 'Panel',
+      title: 'Ombor paneli', lead: 'Javonda nima bor',
+      text: "T/M ombor va vitrinalar qoldig'i \u00b7 kirim-chiqim oylar bo'yicha \u00b7 javonda ko'p turgan mahsulot \u00b7 xom ashyo qiymati, minus qoldiq, zayavka va talabnoma \u00b7 ta'minotchilarga qarz",
+      perm: ['warehouse.view', 'warehouse.manage',
+             'materials.view', 'materials.manage'] },
     { href: '/omborlar.html', mod: 'warehouse', nav: 'Omborlar',
       title: 'Omborlar', lead: 'Zavod omborlari',
       text: "Har ombor alohida: tayyor mahsulot, xom ashyo \u00b7 qoldig'i yonida turadi",

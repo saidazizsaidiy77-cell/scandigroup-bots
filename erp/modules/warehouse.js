@@ -14,7 +14,7 @@
 //  (ishlab chiqarish boshlig'i va direktor ham qoldiqni ko'radi).
 // ============================================================================
 const express = require('express');
-const { db, wrap, audit } = require('../db');
+const { db, wrap, audit, today } = require('../db');
 const { need } = require('../auth');
 const { clonePart, scopeOf } = require('./units');
 const notify = require('../notify');
@@ -261,6 +261,103 @@ async function typeScope(req, asked) {
   //  doiradan tashqaridagini ochib berishdan halolroq.
   return kesishma.length ? kesishma.join(',') : '\u2014';
 }
+
+// ═══════════════════════════════════════════════════ OMBOR PANELI
+//
+//  ★ QOLDIQ VA AYLANMA — IKKI XIL SAVOL. «Javonda nechta turibdi»
+//  BUGUNGI holat, «nima keldi, nima chiqdi» esa ORALIQ bo'yicha.
+//  Ular bitta ekranda tursa ham aralashtirilmaydi: ombor qoldig'i
+//  sahifasidagi bilan AYNAN bir xil qoida va bir xil sabab —
+//  «1-sentabrdagi qoldiq» boshqa savol.
+//
+//  ★ YIG'INDI O'LCHOV BIRLIGI BO'YICHA: stul DONA, penal KOMPLEKT
+//  va ularni qo'shib bo'lmaydi. Bitta raqam chiqarish yolg'on javob
+//  bo'lardi.
+//
+//  Doira bu yerda ham CHEGARA (`whScope`): vitrina sotuvchisiga
+//  faqat o'z nuqtasi va T/M ombor, tsex doirasi borga esa faqat T/M.
+router.get('/dashboard', need(...READ), wrap(async (req, res) => {
+  const [perms, ids] = whScope(req);
+  const sana = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim())
+    ? String(v).trim() : null);
+  const to = sana(req.query.to) || today();
+  const { rows: [oraliq] } = await db.query(
+    `SELECT COALESCE($1::date, (date_trunc('month', $2::date)
+              - INTERVAL '11 months')::date) AS dan, $2::date AS gacha`,
+    [sana(req.query.from), to]);
+
+  //  Ko'rinadigan omborlar bir marta topiladi va hamma so'rovga SHU
+  //  tushadi: shart uch joyda takrorlansa bir kun ajralib ketardi.
+  const whs = (await db.query(
+    `SELECT w.id, w.name, w.code FROM warehouses w
+      WHERE w.kind = 'fg' AND w.is_active AND ${SCOPE}
+      ORDER BY w.sort, w.name`, [perms, ids])).rows;
+  const whIds = whs.map((w) => w.id);
+  const P = [oraliq.dan, oraliq.gacha, whIds];
+
+  const [qoldiq, oylar, omborlar, mahsulot, kutmoqda] = await Promise.all([
+    //  Qoldiq — o'lchov birligi bo'yicha. «Jami» javonda JISMONAN
+    //  turgani (bronda turgani bilan birga), «bo'sh» esa bronni
+    //  ayirgandagi — ombor qoldig'i sahifasidagi ikki ustunning
+    //  aynan o'zi.
+    db.query(
+      `SELECT COALESCE(uom, 'dona') AS uom,
+              SUM(qty)::int AS jami,
+              SUM(reserved_qty)::int AS bronda,
+              SUM(qty - reserved_qty)::int AS bosh
+         FROM v_fg_units
+        WHERE COALESCE(warehouse_id, (SELECT id FROM warehouses WHERE code = 'TM'))
+              = ANY($1)
+        GROUP BY 1 ORDER BY 1`, [whIds]),
+
+    //  Aylanma: kirim va chiqim oylar bo'yicha. Ikkalasi ham DONA
+    //  va bitta o'qda — o'lchovi bir xil.
+    db.query(
+      `WITH oy AS (
+         SELECT generate_series(date_trunc('month', $1::date),
+                                date_trunc('month', $2::date),
+                                INTERVAL '1 month')::date AS m)
+       SELECT to_char(oy.m, 'YYYY-MM') AS mon,
+              COALESCE(SUM(f.qty) FILTER (WHERE f.kind = 'in'), 0)::int AS kirdi,
+              COALESCE(SUM(f.qty) FILTER (WHERE f.kind = 'out'), 0)::int AS chiqdi
+         FROM oy
+         LEFT JOIN v_fg_moves f
+                ON date_trunc('month', f.on_date) = oy.m
+               AND f.warehouse_id = ANY($3)
+        GROUP BY oy.m ORDER BY oy.m`, P),
+
+    //  Omborlar kesimi — bugungi qoldiq.
+    db.query(
+      `SELECT w.name, COALESCE(SUM(u.qty), 0)::int AS qty
+         FROM warehouses w
+         LEFT JOIN v_fg_units u
+                ON COALESCE(u.warehouse_id,
+                     (SELECT id FROM warehouses WHERE code = 'TM')) = w.id
+        WHERE w.id = ANY($1)
+        GROUP BY w.name ORDER BY qty DESC`, [whIds]),
+
+    //  Javonda ko'p turgan mahsulot: «nima yotib qolgan» degan
+    //  savolning javobi.
+    db.query(
+      `SELECT u.product || ' · ' || COALESCE(u.uom, 'dona') AS name,
+              SUM(u.qty)::int AS qty,
+              MAX(u.days_in_stock)::int AS kun
+         FROM v_fg_units u
+        WHERE COALESCE(u.warehouse_id, (SELECT id FROM warehouses WHERE code = 'TM'))
+              = ANY($1)
+        GROUP BY 1 ORDER BY qty DESC LIMIT 8`, [whIds]),
+
+    //  Mudirning navbati: chiqarishni kutayotgan buyurtma.
+    db.query(
+      `SELECT COUNT(*)::int AS soni FROM orders WHERE status = 'to_ship'`),
+  ]);
+
+  res.json({
+    dan: oraliq.dan, gacha: oraliq.gacha, warehouses: whs,
+    qoldiq: qoldiq.rows, oylar: oylar.rows, omborlar: omborlar.rows,
+    mahsulot: mahsulot.rows, kutmoqda: kutmoqda.rows[0].soni,
+  });
+}));
 
 router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);

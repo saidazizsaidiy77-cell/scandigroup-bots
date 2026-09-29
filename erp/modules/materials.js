@@ -1330,6 +1330,77 @@ router.post('/requests', need('materials.request', ...MANAGE),
   } finally { client.release(); }
 }));
 
+// ═══════════════════════════════════════════════ XOM ASHYO PANELI
+//
+//  ★ OMBOR PANELI BILAN ALOHIDA YO'L, va bu ataylab: T/M ombor
+//  mudiri bilan xom ashyo mudiri IKKI xil odam va ikkinchisida
+//  `warehouse.view` yo'q. Bitta yo'lga qo'shilsa ulardan biri
+//  ekranni umuman ocha olmasdi — sahifa esa ikkalasini ham
+//  ko'rsatadi va qaysinisini ola olsa o'shani chizadi.
+//
+//  Doira CHEGARA: tsex boshlig'iga o'z tsexining ombori, xom ashyo
+//  xodimiga zavodniki — `whDoira` bilan bir xil shart.
+router.get('/dashboard', need(...VIEW), wrap(async (req, res) => {
+  const doira = whDoira(req);
+
+  const [qiymat, omborlar, minus, zayavka, talab, qarz] = await Promise.all([
+    //  ★ NOMLAR SONI, DONA EMAS: bittasi kg, bittasi list, bittasi
+    //  rulon va ularni qo'shib bo'lmaydi (ombor kartochkasidagi
+    //  bilan aynan bir xil qoida).
+    db.query(
+      `SELECT COUNT(DISTINCT material_id)::int AS nom,
+              COALESCE(SUM(amount), 0)::numeric AS usd
+         FROM v_material_stock s
+         JOIN warehouses w ON w.id = s.warehouse_id
+        WHERE ($1::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))`, [doira]),
+
+    db.query(
+      `SELECT w.name, COUNT(DISTINCT s.material_id)::int AS nom,
+              COALESCE(SUM(s.amount), 0)::numeric AS usd
+         FROM warehouses w
+         LEFT JOIN v_material_stock s ON s.warehouse_id = w.id
+        WHERE w.kind = 'material' AND w.is_active
+          AND ($1::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
+        GROUP BY w.name, w.sort ORDER BY usd DESC NULLS LAST, w.sort`, [doira]),
+
+    //  ★ MINUSGA TUSHGAN QOLDIQ — KIRIM HUJJATI YOZILMAGANINING
+    //  BELGISI (izoh: CLAUDE.md). Nolga qisish yolg'on bo'lardi,
+    //  yashirish esa xatoni ko'rinmas qilardi — shuning uchun u
+    //  panelda ALOHIDA raqam bo'lib turadi.
+    db.query(
+      `SELECT COUNT(*)::int AS soni
+         FROM v_material_stock s
+         JOIN warehouses w ON w.id = s.warehouse_id
+        WHERE s.qty < 0
+          AND ($1::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))`, [doira]),
+
+    db.query(
+      `SELECT COUNT(*) FILTER (WHERE status = 'new')::int AS yangi,
+              COUNT(*) FILTER (WHERE status = 'ordered')::int AS berilgan
+         FROM mat_orders`),
+
+    db.query(
+      `SELECT COUNT(*) FILTER (WHERE status = 'new')::int AS yangi,
+              COUNT(*) FILTER (WHERE status = 'ready')::int AS tayyor
+         FROM mat_requests`),
+
+    //  Ta'minotchiga qarz: «kimga qancha qarzmiz» — ta'minot
+    //  sahifasidagi birinchi savol.
+    db.query(
+      `SELECT name, balance::numeric AS usd FROM v_supplier_debt
+        WHERE balance > 0 ORDER BY balance DESC LIMIT 8`),
+  ]);
+
+  res.json({
+    nom: qiymat.rows[0].nom, usd: qiymat.rows[0].usd,
+    omborlar: omborlar.rows, minus: minus.rows[0].soni,
+    zayavka: zayavka.rows[0], talab: talab.rows[0], qarz: qarz.rows,
+  });
+}));
+
 // ═══════════════════════════════════════════ XARID ZAYAVKASI
 //
 //  Ro'yxat. Doira CHEGARA: zayavka OMBORGA bog'langan, ya'ni
