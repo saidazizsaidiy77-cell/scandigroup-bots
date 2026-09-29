@@ -51,7 +51,8 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  faqat «qo'yilganmi yoki yo'q» ko'rinadi. Unutilgan PIN topilmaydi,
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
-            w.can_release, w.can_request_unit, w.supply_reports,
+            w.can_release, w.can_request_unit, w.can_add_customer,
+            w.supply_reports,
             w.mat_scope,
             --  Inkassator: pulni hamma mijozdan u yig'adi
             --  (izoh: sql/cash.sql).
@@ -176,7 +177,8 @@ async function saveCashGroups(client, workerId, codes) {
 router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
-          can_request_unit, supply_reports, mat_scope, roles = [] } = req.body;
+          can_request_unit, can_add_customer, supply_reports,
+          mat_scope, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   const kod = req.body.pin ? String(req.body.pin) : null;
@@ -191,10 +193,10 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
     const w = (await client.query(
       `INSERT INTO workers (name, phone, pin, pin_hash, tg_id, can_hold_cash,
                             cash_all_customers, can_spend_cash, sees_warehouse,
-                            can_release, can_request_unit, supply_reports,
-                            mat_scope,
+                            can_release, can_request_unit, can_add_customer,
+                            supply_reports, mat_scope,
                             staff_group, shop_id, section_id, dept, position, hired_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
@@ -211,6 +213,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
        //  odam qolmay, ish birinchi kundanoq to'xtardi (izoh:
        //  sql/units.sql).
        can_request_unit !== false,
+       //  Standarti — QO'SHMAYDI: mijoz bazasi savdoning o'qi va uni
+       //  kim to'ldirishini zavod o'zi hal qiladi (izoh: sql/units.sql).
+       can_add_customer === true,
        //  Standarti — OLMAYDI: xabar qilinadigan ish emas, kuzatuv va
        //  uni kim o'qishini zavod o'zi hal qiladi (izoh:
        //  sql/materials.sql).
@@ -248,7 +253,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const id = Number(req.params.id);
   const { name, phone, tg_id, active, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
-          can_request_unit, supply_reports, mat_scope, roles } = req.body;
+          can_request_unit, can_add_customer, supply_reports,
+          mat_scope, roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -293,6 +299,9 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          --  Konver so'rovini yozadigan odam (izoh: sql/units.sql) —
          --  yuborilmasa tegilmaydi.
          can_request_unit = COALESCE($21, can_request_unit),
+         --  Mijoz qo'shadigan odam (izoh: sql/units.sql) —
+         --  yuborilmasa tegilmaydi.
+         can_add_customer = COALESCE($24, can_add_customer),
          --  Ta'minot xabarlarini oladigan odam (izoh:
          --  sql/materials.sql) — yuborilmasa tegilmaydi.
          supply_reports = COALESCE($22, supply_reports),
@@ -316,7 +325,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        typeof can_request_unit === 'boolean' ? can_request_unit : null,
        typeof supply_reports === 'boolean' ? supply_reports : null,
        mat_scope === undefined ? null
-         : (['all', 'factory'].includes(mat_scope) ? mat_scope : '')]);
+         : (['all', 'factory'].includes(mat_scope) ? mat_scope : ''),
+       typeof can_add_customer === 'boolean' ? can_add_customer : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {

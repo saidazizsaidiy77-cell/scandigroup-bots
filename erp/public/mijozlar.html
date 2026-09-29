@@ -20,8 +20,14 @@
 
 <div class="top">
   <div class="brand"><span class="dot"></span><h1>Mijozlar</h1></div>
-  <div class="row"><button class="primary" onclick="openForm()">Mijoz qo'shish</button>
-    <button onclick="openImport()">Ro'yxatni import qilish</button>
+  <!--  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (izoh: sql/units.sql). Mijoz
+        bazasi savdoning o'qi: bitta mijoz ikki-uch nom bilan kirsa
+        qarzi ham shuncha qismga bo'linib qolardi. Belgisi yo'q
+        xodimda ikkala tugma ham UMUMAN chizilmaydi va sababi yozilib
+        turadi — tugmani topolmagan odam uni qidirib yurmasin.
+        Tekshiruv baribir serverda: yashirish himoya emas.
+        Mijozni TAHRIRLASH ochiq qolaveradi (qatordagi ✎). -->
+  <div class="row"><span id="topBtn" style="display:contents"></span>
     <span class="row" id="erpUser"></span></div>
 </div>
 
@@ -105,6 +111,15 @@ async function load(){
   const [c, s] = await Promise.all([
     App.api('/api/units/customers'), App.api('/api/units/customers/stats')]);
   customers = c.customers; channels = c.channels; managers = c.managers;
+
+  //  `load()` qayta chaqiriladi (saqlangandan keyin), shuning uchun
+  //  qo'shib emas, QAYTA yoziladi — aks holda tugma har saqlashda
+  //  ikkilanib borardi.
+  $('topBtn').innerHTML = (App.me()?.can_add_customer
+    ? `<button class="primary" onclick="openForm()">Mijoz qo'shish</button>
+       <button onclick="openImport()">Ro'yxatni import qilish</button>`
+    : `<span class="muted" style="font-size:13px">Yangi mijozni savdo bo'lim
+         boshlig'i qo'shadi</span>`);
 
   //  ★ IKKI SUMMA. «Chiqdi» — mijoz OLGAN mahsulot, foyda-zarar bilan
   //  bir xil o'q; «Kutilmoqda» — hali zavodda turgani (tsexda yoki

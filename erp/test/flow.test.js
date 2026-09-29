@@ -484,9 +484,47 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   assert.equal((await savdo('POST', '/api/units/stock/accept',
     { items: [bor.id] })).status, 403, 'savdo omborga qabul qila olmaydi');
   assert.equal((await savdo('GET', '/api/units/stock/moves')).status, 403);
-  // Mijozlar spravochnigi esa o'zining ishi — ochiq qoladi
+  //  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (izoh: sql/units.sql): mijoz
+  //  bazasi savdoning o'qi va bitta mijoz ikki nom bilan kirsa qarzi
+  //  ham ikkiga bo'linib qolardi. Belgi XODIMDA — rol buni ajrata
+  //  olmaydi: `savdo_boshliq` ning huquqlari `sotuvchi` nikiga aynan
+  //  teng. Standarti BELGILANMAGAN, ya'ni menejerda tugma yo'q.
+  assert.equal((await savdo('POST', '/api/units/customers',
+    { name: 'Savdo qo\'shgan mijoz' })).status, 403,
+    'belgisi yo\'q xodim mijoz qo\'shmaydi');
+  //  Fayldan yuklash ham QO'SHISH yo'li — ikkinchi eshik ochiq
+  //  qolmaydi. Fayl CSV bo'lib boradi, shuning uchun yordamchi emas,
+  //  to'g'ridan-to'g'ri `fetch`.
+  {
+    const r = await fetch(base + '/api/import/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv',
+                 Authorization: 'Bearer ' + (await H.sessionFor('Sinov sotuvchi')) },
+      body: 'Nomi\nFayldan mijoz\n',
+    });
+    assert.equal(r.status, 403, 'fayldan yuklash ham yopiq');
+  }
+
+  //  Belgi qo'yilsa o'sha zahoti ochiladi — kodga na ism, na lavozim
+  //  yozilmaydi (4-qoida).
+  {
+    const { db } = require('../db');
+    await db.query(
+      `UPDATE workers SET can_add_customer = true WHERE name = 'Sinov sotuvchi'`);
+  }
   assert.equal((await savdo('POST', '/api/units/customers',
     { name: 'Savdo qo\'shgan mijoz' })).status, 200);
+  //  Mijozni TAHRIRLASH belgidan qat'i nazar ochiq: menejer o'z
+  //  mijozining telefonini to'g'rilaydi, yangi qator ochmaydi.
+  {
+    const { db } = require('../db');
+    await db.query(
+      `UPDATE workers SET can_add_customer = false WHERE name = 'Sinov sotuvchi'`);
+    const c = (await H.id(
+      `SELECT id FROM customers WHERE name = 'Savdo qo''shgan mijoz'`)).id;
+    assert.equal((await savdo('PATCH', '/api/units/customers/' + c,
+      { phone: '+998900000000' })).status, 200, 'tahrirlash ochiq qoladi');
+  }
 
   // Konverni omborga kiritamiz: rang va mato bilan, chunki jamlanma
   // aynan shular bo'yicha guruhlanadi.
@@ -1069,6 +1107,13 @@ test('savdo xodimiga faqat O\'Z mijozi va O\'Z buyurtmasi ko\'rinadi', async () 
 
   //  ★ Doirasi bor xodim yozgan mijoz O'ZINIKI bo'ladi — aks holda u
   //  mijozni kiritadi-yu, saqlangan zahoti ro'yxatdan yo'qolardi.
+  //
+  //  Ikki belgi bir-biridan MUSTAQIL: «Faqat o'zinikini» NIMANI
+  //  ko'rishini aytadi, «Mijoz qo'shadi» esa yangi qator ocha
+  //  oladimi (izoh: sql/units.sql) — zavod ikkalasini bitta odamga
+  //  ham qo'yishi mumkin.
+  await db.query(
+    `UPDATE workers SET can_add_customer = true WHERE name = 'Oz menejer bir'`);
   assert.equal((await m1('POST', '/api/units/customers',
     { name: 'Menejer yozgan mijoz' })).status, 200);
   assert.ok((await nomlar(m1)).includes('Menejer yozgan mijoz'));
@@ -7531,6 +7576,44 @@ test('KPI: reja qo\'yiladi, fakt o\'sha view\'lardan chiqadi', async () => {
       'tsex ustasiga moliya ko\'rinmaydi');
   assert.equal((await korpus('POST', '/api/kpi',
     { bolim: 'sales', metric: 'chiqdi', mon: oy, target: 1 })).status, 403);
+});
+
+//  ★ TO'RTALA PANEL HAM OCHILADI, doirasi bor xodimda ham (zavod
+//  qarori, 2026-09). Panel bosh sahifada turadi, ya'ni har kirgan odam
+//  uni birinchi bo'lib ochadi — bitta yiqilgan so'rov butun ekranni
+//  bo'sh qoldirardi. Doira alohida tekshiriladi: menejerda
+//  `channelsOf` va `ownOf` NULL emas, ya'ni so'rovga boshqa
+//  parametrlar tushadi va shart boshqa shoxdan o'tadi.
+test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
+  //  Bosh sahifa qaysi manzilni chaqirsa, test ham O'SHANI chaqiradi
+  //  (`erp/public/index.html`, `BLOK`) — `?from=` bilan kelgan so'rov
+  //  boshqa shoxdan o'tadi va bitta yiqilgani butun ekranni bo'sh
+  //  qoldirardi.
+  const oyBoshi = new Date().toISOString().slice(0, 8) + '01';
+  const YOL = ['/api/sales/dashboard?from=' + oyBoshi,
+               '/api/units/dashboard?from=' + oyBoshi,
+               '/api/cash/dashboard', '/api/warehouse/dashboard',
+               '/api/materials/dashboard'];
+  for (const y of YOL) {
+    const r = await admin('GET', y);
+    assert.equal(r.status, 200, y + ' — ' + r.text);
+    assert.ok(r.body && typeof r.body === 'object', y + ' javob bermadi');
+  }
+
+  //  Doirasi bor savdo menejeri: paneli o'ziniki bo'lib ochiladi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Panel menejer')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(
+    `INSERT INTO worker_roles (worker_id, role_code, scope_own, scope_channel)
+     SELECT id, 'sotuvchi', true, (SELECT code FROM customer_channels LIMIT 1)
+       FROM workers WHERE name = 'Panel menejer'
+     ON CONFLICT (worker_id, role_code) DO UPDATE
+        SET scope_own = true, scope_channel = EXCLUDED.scope_channel`);
+  const mng = H.api(base, await H.sessionFor('Panel menejer'));
+  const r = await mng('GET', '/api/sales/dashboard');
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.ozi, true, 'doirasi bor xodimda menejerlar bloki chizilmaydi');
 });
 
 test('yakun', async () => {

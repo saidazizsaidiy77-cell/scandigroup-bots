@@ -128,6 +128,59 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('savdo-oz-mijozi');
   END IF;
 END $$;
+--  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (`workers.can_add_customer`,
+--  zavod qarori, 2026-09).
+--
+--  Mijoz bazasi savdoning O'QI: balans, qarzdorlik, dalolatnoma va
+--  yo'nalish kesimi — hammasi shu qatordan o'qiladi. Har menejer
+--  o'zi qo'shaversa bitta mijoz ikki-uch nom bilan kirib ketardi
+--  («Qarshi Husan», «Husan Qarshi», «husan aka») va qarzi shuncha
+--  qismga bo'linib qolardi — buni keyin birlashtirib ham
+--  bo'lmasdi: har qismining o'z buyurtmasi va o'z yuk xati bor.
+--
+--  Rol buni ajrata olmaydi: `savdo_boshliq` ning huquqlari
+--  `sotuvchi` nikiga AYNAN teng (izoh: sql/core-seed.sql, eng
+--  oxirida) va rol huquqlari KODDA turadi — bitta odam uchun
+--  o'zgartirib bo'lmaydi. Shuning uchun belgi XODIMDA:
+--  `can_release`, `can_hold_cash` va `sees_warehouse` bilan bir xil
+--  idiom va bir xil sabab. Kodga na ism, na lavozim yoziladi
+--  (4-qoida): ertaga o'sha odam almashsa bitta katakcha ko'chadi.
+--
+--  ★ STANDARTI `false`, va bu ataylab — `can_release` bilan bir xil
+--  sabab: `true` bo'lsa qoida BUGUN ishlamasdi, ertaga ishga olingan
+--  menejer ham jim turib mijoz qo'shaverardi. Belgisi yo'q xodimda
+--  tugma UMUMAN chizilmaydi va SABABI ekranda yozilib turadi —
+--  tugmani topolmagan odam uni qidirib yurmasin.
+--
+--  Tekshiruv SERVERDA (`POST /api/units/customers` va fayldan
+--  yuklash): tugmani yashirish himoya emas. Mijozni TAHRIRLASH esa
+--  ochiq qolaveradi — menejer o'z mijozining telefonini
+--  to'g'rilaydi, yangi qator ochmaydi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_add_customer BOOLEAN NOT NULL DEFAULT false;
+
+--  Bir martalik: standarti `false` bo'lgani uchun deploy kuni belgi
+--  HECH KIMDA bo'lmasdi va mijoz qo'shadigan odam qolmasdi — shu
+--  jumladan fayldan yuklaydigan odam ham.
+--
+--  Belgi DOIRADAN chiqadi, lavozimdan emas (4-qoida): «Faqat
+--  o'zinikini» belgisi qo'yilgan xodim MENEJER — unga berilmaydi;
+--  doirasi bo'sh qolgani (savdo bo'lim boshlig'i, bosh ofis,
+--  rahbariyat, administrator) va ma'lumot kirituvchi esa oladi.
+--  Keyin zavod belgini kimga qo'yishni O'ZI hal qiladi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'mijoz-qoshish') THEN
+    UPDATE workers w SET can_add_customer = true
+     WHERE EXISTS (SELECT 1 FROM v_worker_permissions p
+                    WHERE p.worker_id = w.id
+                      AND p.permission_code IN ('production.units', 'sales.manage',
+                                                'production.manage'))
+       AND NOT EXISTS (SELECT 1 FROM worker_roles wr
+                        WHERE wr.worker_id = w.id AND wr.scope_own);
+    INSERT INTO migration_flags (key) VALUES ('mijoz-qoshish');
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_customers_country ON customers(country);
 CREATE INDEX IF NOT EXISTS idx_customers_region  ON customers(region);
 CREATE INDEX IF NOT EXISTS idx_customers_channel ON customers(channel);

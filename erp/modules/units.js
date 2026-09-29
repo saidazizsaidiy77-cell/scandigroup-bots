@@ -90,6 +90,16 @@ router.get('/customers/stats', need('production.view', 'sales.view'), wrap(async
 
 // Bitta mijoz yoki ro'yxatni birdan qabul qiladi (import uchun)
 router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
+  //  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (izoh: sql/units.sql). Mijoz
+  //  bazasi savdoning o'qi: bitta mijoz ikki-uch nom bilan kirsa qarzi
+  //  ham shuncha qismga bo'linib qolardi. Belgi XODIMDA, rolda emas —
+  //  `savdo_boshliq` va `sotuvchi` ning huquqlari AYNAN bir xil.
+  //  Tekshiruv SERVERDA: tugmani yashirish himoya emas.
+  if (!req.user.can_add_customer) {
+    const e = new Error('Mijoz qo\'shish huquqi yo\'q \u2014 Xodimlar sahifasida '
+      + '\u00abMijoz qo\'shadi\u00bb katagini belgilang');
+    e.status = 403; throw e;
+  }
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   const client = await db.connect();
   try {

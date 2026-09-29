@@ -414,6 +414,15 @@ const CFIELDS = {
 router.post('/customers', need('production.units', 'sales.manage', 'production.manage'),
   express.raw({ type: '*/*', limit: '10mb' }),
   wrap(async (req, res) => {
+    //  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (izoh: sql/units.sql). Fayldan
+    //  yuklash ham QO'SHISH yo'li — bitta so'rovda o'nlab qator. Belgisi
+    //  yo'q xodimga ikkinchi eshik ochiq qolsa qoida birinchi kundanoq
+    //  chetlab o'tilardi.
+    if (!req.user.can_add_customer) {
+      const e = new Error('Mijoz qo\'shish huquqi yo\'q \u2014 Xodimlar sahifasida '
+        + '\u00abMijoz qo\'shadi\u00bb katagini belgilang');
+      e.status = 403; throw e;
+    }
     const buf = req.body;
     if (!buf || !buf.length) { const e = new Error('Fayl bo\'sh'); e.status = 400; throw e; }
 
