@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="/style.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="/app.js"></script>
+<script src="/panel.js"></script>
 </head>
 <body>
 
@@ -25,6 +26,18 @@
 </div>
 
 <div id="kun"></div>
+
+<!--  ★ PANEL BOSH SAHIFADA, HAR KIMGA O'ZINIKI (zavod qarori,
+      2026-09). Xodim saytga kirganda birinchi ko'radigan narsa
+      modullar ro'yxati edi — u «qayerga borsam» degan savolga
+      javob beradi, «hozir ahvol qanday» degan savolga esa yo'q.
+      Endi tepada o'z bo'limining raqamlari turadi.
+
+      Faqat KARTOCHKALAR: grafiklar o'z panelida qoladi. Bosh
+      sahifa tez ochilishi kerak va bu yerda savol bitta — «nima
+      diqqat talab qiladi». Har guruh sarlavhasi o'z paneliga
+      olib boradi. -->
+<div id="panel"></div>
 
 <div id="pages"></div>
 
@@ -66,8 +79,124 @@ async function kunHisobi() {
     </div>`;
 }
 
+//  ★ FAQAT HUQUQI BOR YO'L SO'RALADI. 403 ni kutib, keyin blokni
+//  yashirish ham bo'lardi, lekin o'shanda tsex ustasi bosh sahifani
+//  ochganda beshta rad javobi ketardi — telefonda bu sezilarli
+//  kechikish.
+//
+//  Har guruh ALOHIDA so'raladi: birining huquqi yo'qligi
+//  ikkinchisini yiqitmasin (`Promise.all` birinchi rad javobida
+//  to'xtardi).
+const BLOK = [
+  { href: '/savdo-panel.html', nom: 'Savdo',
+    perm: ['sales.view', 'sales.manage'],
+    yol: () => '/api/sales/dashboard?from=' + oyBoshi(),
+    kart: (d) => [
+      { name: 'Shu oy chiqdi', value: Panel.pul(d.kpi.chiqdi),
+        hint: Panel.son(d.kpi.chiqdi_soni) + ' ta buyurtma' },
+      { name: 'Zavodda turibdi', value: Panel.pul(d.kpi.zavodda),
+        hint: Panel.son(d.kpi.zavodda_soni) + ' ta buyurtma' },
+      { name: 'Mijozlar qarzi', value: Panel.pul(d.kpi.qarz) },
+      { name: 'Kechikkan', value: Panel.son(d.kpi.kechikkan) + ' ta',
+        tone: Number(d.kpi.kechikkan) ? 'bad' : '' },
+    ] },
+  { href: '/ishlab-panel.html', nom: 'Ishlab chiqarish',
+    perm: ['production.reports', 'production.manage'],
+    yol: () => '/api/units/dashboard?from=' + oyBoshi(),
+    kart: (d) => [
+      { name: 'Shu oy chiqarildi',
+        value: Panel.son(d.oylar.reduce((a, r) => a + (Number(r.qty) || 0), 0))
+               + ' dona' },
+      { name: 'Yo\'lda', value: Panel.son(d.wip.yolda) + ' dona',
+        hint: Panel.son(d.wip.yolda_konver) + ' ta konver' },
+      { name: 'Boshlanmagan', value: Panel.son(d.wip.boshlanmagan_konver) + ' ta',
+        tone: Number(d.wip.boshlanmagan_konver) ? 'warn' : '' },
+      { name: 'Kechikkan', value: Panel.son(d.kech.konver) + ' ta',
+        tone: Number(d.kech.konver) ? 'bad' : '' },
+    ] },
+  { href: '/moliya-panel.html', nom: 'Moliya',
+    perm: ['cash.view', 'cash.manage'],
+    yol: () => '/api/cash/dashboard',
+    kart: (d) => {
+      const oy = d.oylar[d.oylar.length - 1] || {};
+      const kassa = d.kassa.reduce((a, r) => a + (Number(r.total_usd) || 0), 0);
+      return [
+        { name: 'Shu oy foyda', value: Panel.pul(oy.foyda),
+          tone: Number(oy.foyda) < 0 ? 'bad' : Number(oy.foyda) > 0 ? 'ok' : '',
+          hint: 'tannarxsiz' },
+        { name: 'Kassa va bank', value: Panel.pul(kassa),
+          tone: kassa < 0 ? 'bad' : '' },
+        { name: 'Xodimlar qo\'lida', value: Panel.pul(d.qolda) },
+        { name: 'Ta\'minotchilarga qarz', value: Panel.pul(d.taminot_qarzi),
+          tone: Number(d.taminot_qarzi) > 0 ? 'warn' : '' },
+      ];
+    } },
+  { href: '/ombor-panel.html', nom: 'Ombor',
+    perm: ['warehouse.view', 'warehouse.manage'],
+    yol: () => '/api/warehouse/dashboard',
+    kart: (d) => [
+      //  Yig'indi o'lchov birligi bo'yicha: stul DONA, penal
+      //  KOMPLEKT — qo'shib bo'lmaydi.
+      ...d.qoldiq.map((r) => ({ name: 'Qoldiq · ' + r.uom,
+        value: Panel.son(r.bosh) + ' ' + r.uom,
+        hint: 'javonda ' + Panel.son(r.jami) })),
+      { name: 'Chiqarishni kutmoqda', value: Panel.son(d.kutmoqda) + ' ta',
+        tone: Number(d.kutmoqda) ? 'warn' : '' },
+    ] },
+  { href: '/ombor-panel.html', nom: 'Xom ashyo',
+    perm: ['materials.view', 'materials.manage'],
+    yol: () => '/api/materials/dashboard',
+    kart: (d) => [
+      { name: 'Omborda', value: Panel.son(d.nom) + ' nom',
+        hint: Panel.pul(d.usd) },
+      { name: 'Minusga tushgan', value: Panel.son(d.minus) + ' ta',
+        tone: Number(d.minus) ? 'bad' : '', hint: 'kirim yozilmagan' },
+      { name: 'Xarid zayavkasi', value: Panel.son(d.zayavka.yangi) + ' ta',
+        tone: Number(d.zayavka.yangi) ? 'warn' : '' },
+      { name: 'Talabnoma', value: Panel.son(d.talab.yangi) + ' ta',
+        tone: Number(d.talab.yangi) ? 'warn' : '' },
+    ] },
+];
+
+//  Oy boshi — «shu oy» degan savol bosh sahifada eng ko'p
+//  beriladigani. Sanani matn qilib kesish soat mintaqasi bilan bir
+//  kun surilib ketardi, shuning uchun mahalliy qismlardan yig'iladi.
+function oyBoshi() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+async function panelChiz() {
+  const mos = BLOK.filter((b) => App.can(...b.perm));
+  if (!mos.length) return;
+
+  //  So'rovlar YONMA-YON ketadi: ketma-ket yuborilsa besh blokli
+  //  ekran besh marta kutardi. `allSettled` — rad javobi qolganini
+  //  yiqitmasin (huquqi yo'q blok shunchaki chizilmaydi).
+  const javob = await Promise.allSettled(mos.map((b) => App.api(b.yol())));
+  const bor = mos
+    .map((b, i) => ({ b, d: javob[i].status === 'fulfilled' ? javob[i].value : null }))
+    .filter((x) => x.d);
+  if (!bor.length) return;
+
+  $('panel').innerHTML = bor.map(({ b }) => `
+    <section style="margin-bottom:22px">
+      <a href="${b.href}" style="text-decoration:none;color:inherit">
+        <h2 style="margin-bottom:10px">${b.nom} \u2192</h2></a>
+      <div class="grid g3" data-k="${b.nom}"></div>
+    </section>`).join('');
+
+  //  Kartochkalar DOM qo'yilgandan KEYIN chiziladi: `Panel.kpi`
+  //  mavjud elementga yozadi.
+  for (const { b, d } of bor) {
+    const el = $('panel').querySelector(`[data-k="${b.nom}"]`);
+    if (el) try { Panel.kpi(el, b.kart(d)); } catch { el.remove(); }
+  }
+}
+
 App.start(async () => {
   kunHisobi();
+  panelChiz();
   // Bosh sahifa bo'limlar bo'yicha guruhlanadi — yuqoridagi qator bilan
   // bir xil tartibda, shunda xodim qayerda nima turishini bir marta eslab
   // qoladi. Faqat o'ziga ochiq bo'lim va sahifalar chiqadi.
