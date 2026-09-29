@@ -978,14 +978,22 @@ async function saldoYubor(client) {
 //  omborning hujjati ham ko'rinmasligi kerak.
 const talabDoira = whDoira;
 
-async function nextReqNo(client, kind) {
-  const prefix = `${kind === 'return' ? 'Q' : 'T'}`
-    + `${String(new Date().getFullYear()).slice(-2)}-`;
+//  Hujjat raqami BITTA joyda: harf + yilning ikki raqami +
+//  ketma-ketlik (talabnoma T, qaytarish Q, xarid zayavkasi X).
+//  Jadval nomi SQL da parametr bo'la olmaydi, shuning uchun ro'yxat
+//  YOPIQ — tashqaridan kelgan nom bu yerga yetib bormaydi.
+const HUJJAT = { mat_requests: true, mat_orders: true };
+async function nextDocNo(client, jadval, harf) {
+  if (!HUJJAT[jadval]) throw new Error("Noma'lum hujjat jadvali");
+  const prefix = `${harf}${String(new Date().getFullYear()).slice(-2)}-`;
   const { rows } = await client.query(
     `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
-       FROM mat_requests WHERE doc_no LIKE $1`, [`${prefix}%`]);
+       FROM ${jadval} WHERE doc_no LIKE $1`, [`${prefix}%`]);
   return prefix + String(rows[0].n).padStart(4, '0');
 }
+
+const nextReqNo = (client, kind) =>
+  nextDocNo(client, 'mat_requests', kind === 'return' ? 'Q' : 'T');
 
 //  Ro'yxat. Doira CHEGARA: tsex boshlig'i o'z tsexining hujjatini
 //  ko'radi, xom ashyo xodimi (doirasiz) hammasini.
@@ -1055,6 +1063,86 @@ async function manbaTop(client, idlar, tashqari) {
     xarita.set(r.material_id,
       bor.has(r.wh) ? zavod.find((w) => w.id === r.wh) : zavod[0]);
   return xarita;
+}
+
+//  ═════════════════════════════════════ YETMAGANI — XARID ZAYAVKASI
+//
+//  ★ ZAVOD QARORI (2026-09). Tsex 10 kg yelim so'radi, omborda 2 kg
+//  bor. Ilgari zanjir shu yerda UZILARDI: ombor xodimi 2 kg ni
+//  berib, qolgani haqida OG'ZAKI aytardi. Ta'minotchi eslab qolsa
+//  oldi, esidan chiqsa tsex ertaga yana so'rardi.
+//
+//  Endi farq HUJJAT bo'ladi — `X26-0001`. Qoida talabnomaning
+//  ombor bo'yicha guruhlanishi bilan AYNAN bir xil, faqat kalit
+//  boshqa: kimdan olamiz (`material_suppliers`).
+//
+//    bitta ta'minotchi     →  o'shaniki
+//    bir nechta yoki yo'q  →  BO'SH qoladi, keyin tanlanadi
+//
+//  Zavodda MDF to'rt odamdan keladi va qaysi biridan olish NARXGA
+//  qarab hal qilinadi — buni tizim taxmin qilmaydi (izoh:
+//  sql/materials.sql).
+//
+//  ★ NOL ZAYAVKA YOZILMAYDI: omborda yetarli bo'lsa hujjat umuman
+//  yasalmaydi. Har talabnomaga bittadan bo'sh zayavka qo'shilsa
+//  ro'yxat bir haftada ishlatib bo'lmaydigan bo'lardi.
+async function zayavkaYoz(client, req, { wh, qatorlar, request_id, need_on }) {
+  //  Omborda AYNAN SHU PAYTDA nechta bor. Yo'q material `v_material_stock`
+  //  da umuman qator bermaydi (`HAVING SUM <> 0`), shuning uchun
+  //  COALESCE bilan nolga tushiriladi.
+  const { rows } = await client.query(
+    `SELECT q.id AS material_id, m.name,
+            COALESCE(st.qty, 0)::numeric AS bor,
+            (SELECT COUNT(*) FROM material_suppliers ms
+              WHERE ms.material_id = q.id) AS sup_soni,
+            (SELECT MIN(ms.supplier_id) FROM material_suppliers ms
+              WHERE ms.material_id = q.id) AS sup_id
+       FROM UNNEST($1::int[]) AS q(id)
+       JOIN materials m ON m.id = q.id
+       LEFT JOIN v_material_stock st
+              ON st.material_id = q.id AND st.warehouse_id = $2`,
+    [qatorlar.map((x) => x.id), wh.id]);
+
+  const kamlar = [];
+  for (const r of rows) {
+    const kerak = Number(qatorlar.find((x) => x.id === r.material_id).qty);
+    const kam = kerak - Number(r.bor);
+    if (kam <= 0) continue;
+    kamlar.push({ id: r.material_id, name: r.name, qty: kam,
+                  //  Bitta ta'minotchi bo'lsagina biriktiriladi.
+                  sup: Number(r.sup_soni) === 1 ? r.sup_id : null });
+  }
+  if (!kamlar.length) return [];
+
+  const yigin = new Map();
+  for (const k of kamlar) {
+    const kalit = k.sup || 0;
+    if (!yigin.has(kalit)) yigin.set(kalit, { sup: k.sup, qatorlar: [] });
+    yigin.get(kalit).qatorlar.push(k);
+  }
+
+  const chiqdi = [];
+  for (const g of yigin.values()) {
+    const doc_no = await nextDocNo(client, 'mat_orders', 'X');
+    const o = (await client.query(
+      `INSERT INTO mat_orders (doc_no, supplier_id, warehouse_id, need_on,
+                               created_by)
+       VALUES ($1,$2,$3,$4::date,$5) RETURNING id`,
+      [doc_no, g.sup, wh.id, need_on || null, req.user.id])).rows[0];
+    for (const k of g.qatorlar)
+      await client.query(
+        `INSERT INTO mat_order_items (order_id, material_id, qty, request_id)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (order_id, material_id) DO UPDATE SET qty = $3`,
+        [o.id, k.id, k.qty, request_id]);
+    await audit(req, { module: 'materials', action: 'order-new',
+                       entity: 'mat_orders', entity_id: o.id,
+                       payload: { doc_no, lines: g.qatorlar.length } }, client);
+    chiqdi.push({ id: o.id, doc_no, lines: g.qatorlar.length,
+                  supplier_id: g.sup,
+                  qatorlar: g.qatorlar.map((k) => `${k.name} — ${k.qty}`) });
+  }
+  return chiqdi;
 }
 
 //  Manbani EKRAN ham ko'rsatadi: boshliq saqlashdan oldin har
@@ -1197,8 +1285,30 @@ router.post('/requests', need('materials.request', ...MANAGE),
                          entity: 'mat_requests', entity_id: r.id,
                          payload: { doc_no, kind, lines: g.qatorlar.length } },
                   client);
+      //  ★ YETMAGANI XARID ZAYAVKASIGA TUSHADI (izoh: `zayavkaYoz`).
+      //  Faqat TALABNOMADA: qaytarishda mol omborga KELADI, ya'ni
+      //  sotib olish haqida savol yo'q.
+      const zay = kind === 'return' ? []
+        : await zayavkaYoz(client, req, { wh: g.wh, qatorlar: g.qatorlar,
+                                          request_id: r.id,
+                                          need_on: SANA(req.body.need_on) });
+      for (const z of zay) {
+        //  ★ TA'MINOTGA AYTILADI. Ta'minotchi kun bo'yi zayavka
+        //  sahifasida o'tirmaydi va yozilgani kechgacha yotib
+        //  qolardi — mol esa ertaga ham kelmasdi.
+        await notify.queueWarehouse({
+          perms: ['materials.manage', 'purchasing.view'], module: 'materials',
+          title: `Xarid zayavkasi ${z.doc_no} · ${g.wh.name}`,
+          body: `${z.qatorlar.join('\n')}`
+                + `\n\nTalabnoma: ${doc_no} · ${tsexWh.name}`
+                + `\nKim yozdi: ${req.user.name}`,
+        }, client);
+      }
+
       hujjatlar.push({ id: r.id, doc_no, warehouse: g.wh.name,
-                       lines: g.qatorlar.length });
+                       lines: g.qatorlar.length,
+                       orders: zay.map((z) => ({ doc_no: z.doc_no,
+                                                 lines: z.lines })) });
     }
 
     await client.query('COMMIT');
@@ -1210,6 +1320,99 @@ router.post('/requests', need('materials.request', ...MANAGE),
     await client.query('ROLLBACK');
     return res.status(e.status || 400).json({ error: e.message });
   } finally { client.release(); }
+}));
+
+// ═══════════════════════════════════════════ XARID ZAYAVKASI
+//
+//  Ro'yxat. Doira CHEGARA: zayavka OMBORGA bog'langan, ya'ni
+//  talabnoma bilan bir xil qoida — ko'rinmaydigan omborning hujjati
+//  ham ko'rinmaydi.
+router.get('/orders', need('purchasing.view', ...MANAGE), wrap(async (req, res) => {
+  const doira = whDoira(req);
+  const { rows } = await db.query(
+    `SELECT * FROM v_mat_orders o
+      WHERE ($1::int[] IS NULL OR EXISTS (
+               SELECT 1 FROM warehouses w
+                WHERE w.id = o.warehouse_id
+                  AND COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1)))
+        AND ($2::text IS NULL OR o.status = $2)
+      ORDER BY o.id DESC LIMIT 500`,
+    [doira, trim(req.query.status)]);
+  res.json({ rows });
+}));
+
+//  ★ TA'MINOTCHI KEYIN TANLANADI. Bitta materialda bir nechta
+//  ta'minotchi bo'ladi (zavodda MDF to'rttasidan keladi) va qaysi
+//  biridan olish NARXGA qarab hal qilinadi — tizim taxmin qilmaydi.
+//  Bo'sh yuborilgani «tegma» emas, «yo'q» degani: xato tanlangan
+//  ta'minotchi olib tashlanadi.
+router.post('/orders/:id/supplier', need(...MANAGE), wrap(async (req, res) => {
+  const sup = Number(req.body.supplier_id) || null;
+  if (sup && !(await db.query(
+    `SELECT 1 FROM suppliers WHERE id = $1 AND active`, [sup])).rows[0])
+    return res.status(400).json({ error: "Ta'minotchi topilmadi" });
+  const { rows } = await db.query(
+    `UPDATE mat_orders SET supplier_id = $2
+      WHERE id = $1 AND status IN ('new', 'ordered') RETURNING doc_no`,
+    [req.params.id, sup]);
+  if (!rows[0]) return res.status(400).json({ error: 'Hujjat yopilgan' });
+  await audit(req, { module: 'materials', action: 'order-supplier',
+                     entity: 'mat_orders', entity_id: Number(req.params.id),
+                     payload: { doc_no: rows[0].doc_no, supplier_id: sup } });
+  res.json({ ok: true });
+}));
+
+//  ★ HOLATNI ODAM QO'YADI, kirim hujjati EMAS. Kirim boshqa
+//  sababdan ham bo'ladi (rejali zapas, boshqa tsexning ehtiyoji) va
+//  zayavka jimgina «keldi» bo'lib qolardi — mol esa kelmagan
+//  bo'lardi (izoh: sql/materials.sql).
+//
+//  «Buyurtma berdim» dan oldin TA'MINOTCHI tanlangan bo'lishi
+//  shart: kimga aytilganini bilmagan hujjat keyin javobsiz qolardi.
+router.post('/orders/:id/ordered', need(...MANAGE), wrap(async (req, res) => {
+  const o = (await db.query(
+    `SELECT id, doc_no, supplier_id, status FROM mat_orders WHERE id = $1`,
+    [req.params.id])).rows[0];
+  if (!o) return res.status(404).json({ error: 'Hujjat topilmadi' });
+  if (o.status !== 'new') return res.status(400).json({ error: 'Hujjat yopilgan' });
+  if (!o.supplier_id)
+    return res.status(400).json({ error: "Avval ta'minotchini tanlang" });
+  await db.query(
+    `UPDATE mat_orders SET status = 'ordered', decided_by = $2, decided_at = NOW()
+      WHERE id = $1`, [o.id, req.user.id]);
+  await audit(req, { module: 'materials', action: 'order-ordered',
+                     entity: 'mat_orders', entity_id: o.id,
+                     payload: { doc_no: o.doc_no } });
+  res.json({ ok: true });
+}));
+
+router.post('/orders/:id/done', need(...MANAGE), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `UPDATE mat_orders SET status = 'done', decided_by = $2, decided_at = NOW()
+      WHERE id = $1 AND status IN ('new', 'ordered') RETURNING doc_no`,
+    [req.params.id, req.user.id]);
+  if (!rows[0]) return res.status(400).json({ error: 'Hujjat yopilgan' });
+  await audit(req, { module: 'materials', action: 'order-done',
+                     entity: 'mat_orders', entity_id: Number(req.params.id),
+                     payload: { doc_no: rows[0].doc_no } });
+  res.json({ ok: true });
+}));
+
+//  Bekor qilishda SABAB so'raladi — talabnomani rad etish bilan bir
+//  xil idiom: nega olinmaganini bilmagan tsex ertaga yana so'rardi.
+router.post('/orders/:id/reject', need(...MANAGE), wrap(async (req, res) => {
+  const sabab = trim(req.body.note);
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const { rows } = await db.query(
+    `UPDATE mat_orders SET status = 'cancelled', decided_by = $2,
+            decided_at = NOW(), decide_note = $3
+      WHERE id = $1 AND status IN ('new', 'ordered') RETURNING doc_no`,
+    [req.params.id, req.user.id, sabab]);
+  if (!rows[0]) return res.status(400).json({ error: 'Hujjat yopilgan' });
+  await audit(req, { module: 'materials', action: 'order-cancel',
+                     entity: 'mat_orders', entity_id: Number(req.params.id),
+                     payload: { doc_no: rows[0].doc_no, note: sabab } });
+  res.json({ ok: true });
 }));
 
 //  «Tayyorladim» — javondan yig'ib qo'ydi. Material HALI ko'chmaydi:

@@ -964,3 +964,102 @@ BEGIN
       CHECK (mat_scope IS NULL OR mat_scope IN ('all', 'factory'));
   END IF;
 END $$;
+
+-- ═══════════════════════════════════════════════ XARID ZAYAVKASI
+--
+--  ★ ZAVOD QARORI (2026-09). Tsex 10 kg yelim so'radi, omborda esa
+--  2 kg bor. Ilgari bu yerda zanjir UZILARDI: ombor xodimi 2 kg ni
+--  berib, qolgan 8 kg haqida og'zaki aytardi — «tugab qolibdi, olib
+--  kelish kerak». Ta'minotchi uni eslab qolsa oldi, esidan chiqsa
+--  tsex ertaga yana so'rardi va javob yana o'sha bo'lardi.
+--
+--  Endi YETMAGANI hujjat bo'ladi: talabnoma yozilgan zahoti tizim
+--  qoldiq bilan solishtiradi va farqni XARID ZAYAVKASIGA yozadi.
+--  Hujjat raqami `X26-0001` (konver K, zakaz Z, pul P, kirim M,
+--  talabnoma T, qaytarish Q, vitrina V, omborlar aro H).
+--
+--  ★ TA'MINOTCHI BO'YICHA GURUHLANADI — talabnomaning ombor
+--  bo'yicha guruhlanishi bilan AYNAN bir xil idiom va bir xil
+--  sabab: bitta hujjatni bitta odam bajaradi. Kimdan olinishi
+--  `material_suppliers` da turadi:
+--
+--    bitta ta'minotchi   →  o'shaniki
+--    bir nechta yoki yo'q →  `supplier_id` BO'SH, ta'minotchi keyin
+--                            tanlanadi (zavodda MDF to'rt odamdan
+--                            keladi va qaysi biridan olish NARXGA
+--                            qarab hal qilinadi — buni tizim
+--                            taxmin qilmaydi)
+--
+--  ★ ZAYAVKA O'ZI YOPILMAYDI. Kirim hujjati kelganda uni avtomat
+--  yopish mumkin edi, lekin kirim boshqa sababdan ham bo'ladi
+--  (rejali zapas, boshqa tsexning ehtiyoji) va zayavka jimgina
+--  «keldi» bo'lib qolardi — ta'minotchi esa olib kelmagan bo'lardi.
+--  Shuning uchun holatni ODAM qo'yadi.
+CREATE TABLE IF NOT EXISTS mat_orders (
+  id       SERIAL PRIMARY KEY,
+  doc_no   TEXT UNIQUE,
+  --  Kimdan olamiz. BO'SH bo'lishi mumkin: ta'minotchi keyin
+  --  tanlanadi (yuqoridagi izoh).
+  supplier_id INT REFERENCES suppliers(id),
+  --  Qaysi omborga kerak — talabnomaning MANBASI. Mol shu yerga
+  --  keladi va shu yerdan tsexga beriladi.
+  warehouse_id INT NOT NULL REFERENCES warehouses(id),
+  --  'new'     — yozildi, hali buyurtma berilmagan
+  --  'ordered' — ta'minotchiga aytildi
+  --  'done'    — keldi (kirim hujjati bilan omborga kiritiladi)
+  status   TEXT NOT NULL DEFAULT 'new'
+           CHECK (status IN ('new', 'ordered', 'done', 'cancelled')),
+  need_on  DATE,
+  note     TEXT,
+  created_by  INT REFERENCES workers(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  decided_by  INT REFERENCES workers(id),
+  decided_at  TIMESTAMPTZ,
+  decide_note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mat_order_items (
+  id          SERIAL PRIMARY KEY,
+  order_id    INT NOT NULL REFERENCES mat_orders(id) ON DELETE CASCADE,
+  material_id INT NOT NULL REFERENCES materials(id),
+  qty         NUMERIC(14,3) NOT NULL CHECK (qty > 0),
+  --  ★ QAYSI TALABNOMADAN CHIQQANI SAQLANADI. Ta'minotchining
+  --  birinchi savoli «nega kerak» bo'ladi va javob shu yerda:
+  --  qaysi tsex, qaysi kuni so'ragan. Talabnoma o'chirilsa
+  --  bog'lanish uziladi, zayavkaning O'ZI qolaveradi — mol baribir
+  --  kerak edi.
+  request_id  INT REFERENCES mat_requests(id) ON DELETE SET NULL,
+  UNIQUE (order_id, material_id)
+);
+
+CREATE INDEX IF NOT EXISTS mat_orders_status_idx ON mat_orders (status, id DESC);
+
+--  Hujjat ro'yxati ICHIDA NIMA borligi bilan — talabnoma va kirim
+--  hujjati bilan bir xil qoida: buyurtma beradigan odam ro'yxatni
+--  ochmasdan turib nima kerakligini ko'radi.
+DROP VIEW IF EXISTS v_mat_orders;
+CREATE VIEW v_mat_orders AS
+SELECT o.*,
+       s.name AS supplier,
+       w.name AS warehouse, w.code AS warehouse_code,
+       cw.name AS created_by_name,
+       dw.name AS decided_by_name,
+       COALESCE(i.lines, 0)::int AS lines,
+       COALESCE(i.items, '[]'::json) AS items
+  FROM mat_orders o
+  LEFT JOIN suppliers s ON s.id = o.supplier_id
+  JOIN warehouses w ON w.id = o.warehouse_id
+  LEFT JOIN workers cw ON cw.id = o.created_by
+  LEFT JOIN workers dw ON dw.id = o.decided_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'material_id', x.material_id, 'material', m.name, 'uom', m.uom,
+             'qty', x.qty, 'request_id', x.request_id,
+             'request_no', r.doc_no, 'shop', sh.name) ORDER BY m.name) AS items
+      FROM mat_order_items x
+      JOIN materials m ON m.id = x.material_id
+      LEFT JOIN mat_requests r ON r.id = x.request_id
+      LEFT JOIN warehouses tw ON tw.id = r.to_warehouse_id
+      LEFT JOIN shops sh ON sh.id = COALESCE(tw.owner_shop_id, tw.shop_id)
+     WHERE x.order_id = o.id) i ON true;

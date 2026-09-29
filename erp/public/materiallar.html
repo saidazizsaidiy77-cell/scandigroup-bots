@@ -87,6 +87,19 @@
   </div>
 </div>
 
+<div class="card" id="cardZay" hidden>
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="min-width:170px"><label>Holat</label>
+      <select id="zStatus" onchange="load()">
+        <option value="">Hammasi</option>
+        <option value="new">Yozilgan</option>
+        <option value="ordered">Buyurtma berilgan</option>
+        <option value="done">Keldi</option>
+        <option value="cancelled">Bekor qilingan</option>
+      </select></div>
+  </div>
+</div>
+
 <div class="card" id="cardKirim" hidden>
   <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
     <div style="min-width:190px"><label>Ta'minotchi</label>
@@ -143,7 +156,8 @@ const boshqara = () => App.can('materials.manage', 'production.manage');
 //  «qaysi omborda nechta turibdi» (qoldiq). Alohida sahifa qilinmadi —
 //  ikkalasi bitta narsa haqida va xodim ular orasida kun bo'yi yuradi.
 const TABS = [['ref', 'Spravochnik'], ['stock', 'Qoldiq'],
-              ['kirim', 'Kirim'], ['talab', 'Talabnoma'], ['moves', 'Harakat']];
+              ['kirim', 'Kirim'], ['talab', 'Talabnoma'],
+              ['zay', 'Zayavka'], ['moves', 'Harakat']];
 
 function drawTabs() {
   $('tabs').innerHTML = TABS.map(([k, t]) =>
@@ -153,10 +167,12 @@ function drawTabs() {
   $('cardStock').hidden = tab !== 'stock';
   $('cardKirim').hidden = tab !== 'kirim';
   $('cardTalab').hidden = tab !== 'talab';
+  $('cardZay').hidden   = tab !== 'zay';
   $('h2').textContent = tab === 'ref' ? 'Materiallar'
     : tab === 'stock' ? 'Ombor qoldig\'i'
     : tab === 'kirim' ? 'Kirim hujjatlari'
-    : tab === 'talab' ? 'Talabnomalar' : 'Harakat';
+    : tab === 'talab' ? 'Talabnomalar'
+    : tab === 'zay'   ? 'Xarid zayavkalari' : 'Harakat';
 }
 
 function go(k) {
@@ -317,6 +333,9 @@ async function load() {
     if ($('tStatus').value) q.set('status', $('tStatus').value);
     if ($('tKind').value)   q.set('kind', $('tKind').value);
     rows = (await App.api('/api/materials/requests?' + q)).rows;
+  } else if (tab === 'zay') {
+    if ($('zStatus').value) q.set('status', $('zStatus').value);
+    rows = (await App.api('/api/materials/orders?' + q)).rows;
   } else {
     rows = (await App.api('/api/materials/moves')).rows;
   }
@@ -336,6 +355,7 @@ function draw() {
   if (tab === 'stock') return drawStock();
   if (tab === 'kirim') return drawKirim();
   if (tab === 'talab') return drawTalab();
+  if (tab === 'zay') return drawZay();
   if (tab === 'moves') return drawMoves();
   if (!rows.length) {
     $('body').innerHTML = `<p class="muted">Material yo'q.${
@@ -585,6 +605,138 @@ function drawTalab() {
       }).join('')
     + '</tbody></table></div>';
 }
+
+// ═══════════════════════════════════════════ XARID ZAYAVKASI
+//
+//  ★ ZAYAVKANI ODAM YOZMAYDI — tizim yozadi (zavod qarori,
+//  2026-09). Talabnoma kelganda omborda yetmagani shu yerda hujjat
+//  bo'lib turadi: «+ Zayavka» tugmasi yo'q va bo'lishi ham kerak
+//  emas — yetishmagan mol og'zaki aytilsa esdan chiqardi.
+const ZAY_HOLAT = {
+  new:       ['Yozilgan',           'warn'],
+  ordered:   ['Buyurtma berilgan',  ''],
+  done:      ['Keldi',              'ok'],
+  cancelled: ['Bekor qilingan',     'bad'],
+};
+
+function drawZay() {
+  if (!rows.length) {
+    $('body').innerHTML = "<p class=\"muted\">Zayavka yo'q — omborda "
+      + 'hammasi yetarli.</p>';
+    return;
+  }
+  $('body').innerHTML = '<div style="overflow-x:auto"><table>'
+    + "<thead><tr><th>Hujjat</th><th>Ta'minotchi</th><th>Ombor</th>"
+    + '<th>Nima kerak</th><th>Kerak</th><th>Holat</th></tr></thead><tbody>'
+    + rows.map((r) => {
+        const [nom, rang] = ZAY_HOLAT[r.status] || [r.status, ''];
+        const it = r.items || [];
+        //  ICHIDA NIMA BORLIGI RO'YXATDA TURADI — talabnoma va kirim
+        //  hujjati bilan bir xil qoida: buyurtma beradigan odam
+        //  hujjatni ochmasdan turib nima kerakligini ko'radi.
+        const nima = it.slice(0, 2).map((x) =>
+          esc(x.material) + ' <span class="muted">' + son(x.qty) + ' '
+          + esc(x.uom || '') + '</span>').join('<br>')
+          + (it.length > 2
+             ? '<br><span class="muted">+' + (it.length - 2) + ' ta</span>' : '');
+        return '<tr style="cursor:pointer" onclick="zayKor(' + r.id + ')">'
+          + '<td><b>' + esc(r.doc_no || '—') + '</b></td>'
+          //  ★ TA'MINOTCHISIZ ZAYAVKA — SAVOL, bo'sh katak emas.
+          //  Bitta materialda bir nechta ta'minotchi bo'ladi va
+          //  qaysi biridan olish narxga qarab hal qilinadi.
+          + '<td>' + (r.supplier ? esc(r.supplier)
+              : '<span class="tag warn">tanlanmagan</span>') + '</td>'
+          + '<td class="muted">' + esc(r.warehouse || '') + '</td>'
+          + '<td style="font-size:13px">' + (nima || '—') + '</td>'
+          + '<td class="muted">' + (r.need_on ? kun(r.need_on) : '—') + '</td>'
+          + '<td><span class="tag ' + rang + '">' + nom + '</span></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+function zayKor(id) {
+  const r = rows.find((x) => x.id === id);
+  if (!r) return;
+  const [nom, rang] = ZAY_HOLAT[r.status] || [r.status, ''];
+  const ochiq = ['new', 'ordered'].includes(r.status);
+  const it = r.items || [];
+  const sup = (ref.suppliers || []);
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:640px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Xarid zayavkasi ${esc(r.doc_no || '')}</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:12px">
+          ${esc(r.warehouse)} omboriga${r.need_on ? ' · kerak: ' + kun(r.need_on) : ''}
+          · <span class="tag ${rang}">${nom}</span></p>
+        ${boshqara() && ochiq ? `
+          <div style="margin-bottom:12px"><label>Ta'minotchi</label>
+            <select id="zSup" onchange="zaySup(${r.id}, this.value)">
+              <option value="">— tanlanmagan —</option>
+              ${sup.map((x) => `<option value="${x.id}"${
+                x.id === r.supplier_id ? ' selected' : ''
+                }>${esc(x.name)}</option>`).join('')}
+            </select></div>` : ''}
+        <table><thead><tr><th>Material</th><th class="num">Kerak</th>
+          <th>Nega</th></tr></thead><tbody>
+          ${it.map((x) => `<tr>
+            <td>${esc(x.material)} <span class="muted">${esc(x.uom || '')}</span></td>
+            <td class="num">${son(x.qty)}</td>
+            <td class="muted" style="font-size:12px">${
+              x.request_no ? esc(x.request_no) + (x.shop ? ' · ' + esc(x.shop) : '')
+                           : '—'}</td>
+          </tr>`).join('')}
+        </tbody></table>
+        ${r.decide_note ? `<p class="muted" style="margin-top:10px">
+          Sabab: ${esc(r.decide_note)}</p>` : ''}
+        <div class="row" style="gap:8px;margin-top:16px;flex-wrap:wrap">
+          ${boshqara() && r.status === 'new'
+            ? `<button class="primary" onclick="zayAmal(${r.id}, 'ordered')">
+                 Buyurtma berdim</button>` : ''}
+          ${boshqara() && ochiq
+            ? `<button onclick="zayAmal(${r.id}, 'done')">Keldi</button>` : ''}
+          ${boshqara() && ochiq
+            ? `<button onclick="zayRad(${r.id})">Bekor qilish</button>` : ''}
+        </div>
+        <div id="zActMsg"></div>
+      </div></div>`;
+}
+
+const zayYubor = async (yol, body) => {
+  try {
+    await App.api(yol, { method: 'POST', body: JSON.stringify(body || {}) });
+    yop(); toast('Bajarildi'); await load();
+  } catch (e) {
+    if ($('zActMsg'))
+      $('zActMsg').innerHTML = `<div class="tag bad" style="margin-top:10px;
+        display:inline-block;white-space:normal">${esc(e.message)}</div>`;
+    toast(e.message, true);
+  }
+};
+
+//  Ta'minotchi tanlanganda oyna YOPILMAYDI: keyin darrov «Buyurtma
+//  berdim» bosiladi va ikkinchi marta ochib o'tirish ortiqcha ish
+//  bo'lardi.
+async function zaySup(id, v) {
+  try {
+    await App.api(`/api/materials/orders/${id}/supplier`,
+      { method: 'POST', body: JSON.stringify({ supplier_id: Number(v) || null }) });
+    const r = rows.find((x) => x.id === id);
+    if (r) { r.supplier_id = Number(v) || null;
+             r.supplier = (ref.suppliers || []).find((x) => x.id === r.supplier_id)?.name
+                          || null; }
+    toast('Saqlandi');
+  } catch (e) { toast(e.message, true); }
+}
+
+const zayAmal = (id, holat) => zayYubor(`/api/materials/orders/${id}/${holat}`);
+
+const zayRad = (id) => {
+  const sabab = prompt('Sabab?');
+  if (!sabab) return;
+  return zayYubor(`/api/materials/orders/${id}/reject`, { note: sabab });
+};
 
 //  ★ OCHILMA EMAS, QIDIRUV — kirim va boshlang'ich qoldiq bilan
 //  bir xil qoida: zavodda to'qqiz yuz material bor.

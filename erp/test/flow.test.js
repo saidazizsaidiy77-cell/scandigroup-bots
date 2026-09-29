@@ -6797,6 +6797,68 @@ test('talabnoma: tsexga material zavod omboridan beriladi', async () => {
     royxat.find((x) => x.id === d.id).from_warehouse_id)).size, 2,
     'ikki hujjat ikki xil ombordan');
 
+  //  ★ YETMAGANI XARID ZAYAVKASIGA TUSHADI (zavod qarori, 2026-09).
+  //  Ilgari zanjir shu yerda uzilardi: ombor xodimi borini berib,
+  //  qolgani haqida OG'ZAKI aytardi va ta'minotchining esidan
+  //  chiqsa tsex ertaga yana so'rardi.
+  const m3 = (await xom('POST', '/api/materials',
+    { name: 'Sinov Zayavka Lak', uom: 'kg', category: 'BOSHQA' })).body;
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ material_id: m3.id, qty: 4, warehouse_id: zavod }] })).status, 200);
+
+  //  Omborda 4 bor, 10 so'raldi → 6 zayavkaga.
+  const kam = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, need_on: '2026-10-05',
+    items: [{ material_id: m3.id, qty: 10 }] });
+  assert.equal(kam.status, 200, kam.text);
+  assert.equal(kam.body.docs[0].orders.length, 1, 'bitta zayavka yasaldi');
+
+  const zayRoy = (await xom('GET', '/api/materials/orders')).body.rows;
+  const z = zayRoy.find((x) => x.doc_no === kam.body.docs[0].orders[0].doc_no);
+  assert.ok(z, 'zayavka ro\'yxatda');
+  assert.match(z.doc_no, /^X\d\d-\d{4}$/, 'raqam X26-0001 shaklida');
+  assert.equal(z.status, 'new');
+  assert.equal(z.warehouse_id, zavod, 'mol SHU omborga kerak');
+  assert.equal(Number(z.items[0].qty), 6, 'faqat YETMAGANI');
+  assert.equal(z.items[0].request_id, kam.body.docs[0].id,
+    'qaysi talabnomadan chiqqani saqlanadi');
+
+  //  Omborda YETARLI bo'lsa zayavka umuman yasalmaydi: har
+  //  talabnomaga bittadan bo'sh hujjat qo'shilsa ro'yxat bir haftada
+  //  ishlatib bo'lmaydigan bo'lardi.
+  const yetar = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, items: [{ material_id: m3.id, qty: 1 }] });
+  assert.equal(yetar.body.docs[0].orders.length, 0, 'yetarli — zayavka yo\'q');
+
+  //  ★ TA'MINOTCHISIZ «BUYURTMA BERDIM» BO'LMAYDI: kimga
+  //  aytilganini bilmagan hujjat keyin javobsiz qolardi.
+  assert.equal((await xom('POST',
+    `/api/materials/orders/${z.id}/ordered`)).status, 400);
+  const sup1 = (await H.id(`INSERT INTO suppliers (name)
+    VALUES ('Sinov Zayavka Lak Ta''minotchi') RETURNING id`)).id;
+  assert.equal((await xom('POST', `/api/materials/orders/${z.id}/supplier`,
+    { supplier_id: sup1 })).status, 200);
+  assert.equal((await xom('POST',
+    `/api/materials/orders/${z.id}/ordered`)).status, 200);
+  assert.equal((await xom('POST',
+    `/api/materials/orders/${z.id}/done`)).status, 200);
+  //  Yopilgan hujjat ikkinchi marta o'zgarmaydi.
+  assert.equal((await xom('POST',
+    `/api/materials/orders/${z.id}/done`)).status, 400);
+
+  //  ★ BITTA TA'MINOTCHI BO'LSA O'ZI BIRIKTIRILADI. Bir nechta yoki
+  //  yo'q bo'lsa bo'sh qoladi: zavodda MDF to'rt odamdan keladi va
+  //  qaysi biridan olish NARXGA qarab hal qilinadi — tizim taxmin
+  //  qilmaydi.
+  await db.query(
+    `INSERT INTO material_suppliers (material_id, supplier_id) VALUES ($1, $2)`,
+    [m3.id, sup1]);
+  const avtoSup = await boshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, items: [{ material_id: m3.id, qty: 99 }] });
+  const z2 = (await xom('GET', '/api/materials/orders')).body.rows
+    .find((x) => x.doc_no === avtoSup.body.docs[0].orders[0].doc_no);
+  assert.equal(z2.supplier_id, sup1, "bitta ta'minotchi — o'zi biriktiriladi");
+
   //  ── Rad etish: sabab SHART, aks holda boshliq nega
   //  bo'lmaganini bilmay, ertaga yana yozardi.
   const r3 = await boshliq('POST', '/api/materials/requests', {
