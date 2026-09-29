@@ -376,38 +376,10 @@ CREATE TABLE IF NOT EXISTS mat_request_items (
 
 CREATE INDEX IF NOT EXISTS mat_requests_status_idx ON mat_requests (status, id DESC);
 
---  Hujjat ro'yxati: ichida NIMA borligi bilan. Tayyorlaydigan odam
---  javondagi materialni AYNAN shu ro'yxat bilan solishtiradi —
---  vitrinadan qaytarish hujjati bilan bir xil qoida.
-DROP VIEW IF EXISTS v_mat_requests;
-CREATE VIEW v_mat_requests AS
-SELECT r.*,
-       fw.name AS from_warehouse, fw.code AS from_code, fw.shop_id AS from_shop,
-       tw.name AS to_warehouse,   tw.code AS to_code,   tw.shop_id AS to_shop,
-       COALESCE(sh.name, sh2.name) AS shop,
-       cw.name AS created_by_name,
-       rw.name AS ready_by_name,
-       dw.name AS done_by_name,
-       xw.name AS decided_by_name,
-       COALESCE(i.lines, 0)::int AS lines,
-       COALESCE(i.items, '[]'::json) AS items
-  FROM mat_requests r
-  JOIN warehouses fw ON fw.id = r.from_warehouse_id
-  JOIN warehouses tw ON tw.id = r.to_warehouse_id
-  LEFT JOIN shops sh  ON sh.id  = tw.shop_id
-  LEFT JOIN shops sh2 ON sh2.id = fw.shop_id
-  LEFT JOIN workers cw ON cw.id = r.created_by
-  LEFT JOIN workers rw ON rw.id = r.ready_by
-  LEFT JOIN workers dw ON dw.id = r.done_by
-  LEFT JOIN workers xw ON xw.id = r.decided_by
-  LEFT JOIN LATERAL (
-    SELECT COUNT(*) AS lines,
-           JSON_AGG(JSON_BUILD_OBJECT(
-             'material_id', x.material_id, 'material', m.name, 'uom', m.uom,
-             'qty', x.qty, 'issued_qty', x.issued_qty) ORDER BY m.name) AS items
-      FROM mat_request_items x
-      JOIN materials m ON m.id = x.material_id
-     WHERE x.request_id = r.id) i ON true;
+--  Hujjat ro'yxatining view'i PASTDA, `warehouses.owner_shop_id`
+--  ustuni qo'shilgandan KEYIN turadi: u o'sha ustunni o'qiydi va bu
+--  yerda toza bazada ustun hali yo'q — migratsiya yiqilardi, ya'ni
+--  sayt umuman ko'tarilmasdi (1-qoida).
 
 -- ═══════════════════════════════════════════ OMBORNING JAVOBGAR TSEXI
 --
@@ -425,6 +397,52 @@ SELECT r.*,
 --  aytadi, `owner_shop_id` esa KIM yuritayotganini. Bo'sh bo'lsa —
 --  eskicha: turgan joyining tsexi yuritadi.
 ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS owner_shop_id INT REFERENCES shops(id);
+
+--  Hujjat ro'yxati: ichida NIMA borligi bilan. Tayyorlaydigan odam
+--  javondagi materialni AYNAN shu ro'yxat bilan solishtiradi —
+--  vitrinadan qaytarish hujjati bilan bir xil qoida.
+DROP VIEW IF EXISTS v_mat_requests;
+CREATE VIEW v_mat_requests AS
+--  ★ TSEXI — JAVOBGARI BO'YICHA HAM (zavod qarori, 2026-09).
+--  «Qadoqlash ombori» ZAVOD ombori (`shop_id` yo'q), lekin uni
+--  QADOQLASH tsexi yuritadi (`owner_shop_id`). Ilgari bu yerda faqat
+--  `shop_id` olinardi va o'sha omborga yozilgan talabnoma `to_shop`
+--  si BO'SH bo'lib chiqardi: hujjat ro'yxatda tsex doirasi bilan
+--  filtrlanadi, ya'ni Qadoqlash boshlig'i O'ZI yozgan hujjatni
+--  ko'rmasdi va menyudagi navbat belgisi ham yonmasdi.
+--
+--  Shart `/ref` dagi doira bilan AYNAN bir xil
+--  (`COALESCE(owner_shop_id, shop_id)`) — ikki joyda boshqacha
+--  yozilsa ekranda ko'ringan ombor ro'yxatdan tushib qolardi.
+SELECT r.*,
+       fw.name AS from_warehouse, fw.code AS from_code,
+       COALESCE(fw.owner_shop_id, fw.shop_id) AS from_shop,
+       tw.name AS to_warehouse,   tw.code AS to_code,
+       COALESCE(tw.owner_shop_id, tw.shop_id) AS to_shop,
+       COALESCE(sh.name, sh2.name) AS shop,
+       cw.name AS created_by_name,
+       rw.name AS ready_by_name,
+       dw.name AS done_by_name,
+       xw.name AS decided_by_name,
+       COALESCE(i.lines, 0)::int AS lines,
+       COALESCE(i.items, '[]'::json) AS items
+  FROM mat_requests r
+  JOIN warehouses fw ON fw.id = r.from_warehouse_id
+  JOIN warehouses tw ON tw.id = r.to_warehouse_id
+  LEFT JOIN shops sh  ON sh.id  = COALESCE(tw.owner_shop_id, tw.shop_id)
+  LEFT JOIN shops sh2 ON sh2.id = COALESCE(fw.owner_shop_id, fw.shop_id)
+  LEFT JOIN workers cw ON cw.id = r.created_by
+  LEFT JOIN workers rw ON rw.id = r.ready_by
+  LEFT JOIN workers dw ON dw.id = r.done_by
+  LEFT JOIN workers xw ON xw.id = r.decided_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'material_id', x.material_id, 'material', m.name, 'uom', m.uom,
+             'qty', x.qty, 'issued_qty', x.issued_qty) ORDER BY m.name) AS items
+      FROM mat_request_items x
+      JOIN materials m ON m.id = x.material_id
+     WHERE x.request_id = r.id) i ON true;
 
 --  ★ QAROR QAYTARILDI (zavod qarori, 2026-09): «Lak karkas ombori»
 --  ni STUL tsexining boshlig'i yuritadi. Lak tsexiniki qilib

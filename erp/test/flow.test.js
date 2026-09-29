@@ -6712,6 +6712,49 @@ test('talabnoma: tsexga material zavod omboridan beriladi', async () => {
   assert.equal(await qoldiq(tsexWh), 15, 'tsexdan 10 qaytdi');
   assert.equal(await qoldiq(zavod), 85, 'zavodga qaytib keldi');
 
+  //  ★ «QADOQLASH OMBORI» — ZAVOD OMBORI, LEKIN TSEXNIKI (zavod
+  //  qarori, 2026-09). Ta'minotchidan mol to'g'ridan-to'g'ri unga
+  //  keladi (`shop_id` yo'q), lekin uni QADOQLASH tsexi yuritadi
+  //  (`owner_shop_id`). Ilgari talabnoma faqat `shop_id` bor omborga
+  //  yozilardi: o'sha tsexning boshlig'ida ro'yxat BUTUNLAY bo'sh
+  //  chiqar va u talabnoma umuman yoza olmasdi.
+  await xodim('Sinov qadoq boshliq', 'tsex_usta');
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = (SELECT id FROM shops WHERE code='QADOQ')
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov qadoq boshliq')`);
+  const qadBoshliq = H.api(base, await H.sessionFor('Sinov qadoq boshliq'));
+  const qadWh = (await H.id(`SELECT id FROM warehouses WHERE code = 'TSEX-QAD'`)).id;
+
+  //  Ekranda ko'rinadi: qabul qiladigan ro'yxat `shop_id` EMAS,
+  //  `COALESCE(owner_shop_id, shop_id)` bo'yicha quriladi.
+  const qadRef = (await qadBoshliq('GET', '/api/materials/ref')).body;
+  assert.ok(qadRef.warehouses.some((w) => w.id === qadWh),
+    'qadoqlash ombori o\'z boshlig\'iga ko\'rinadi');
+
+  const qt = await qadBoshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: qadWh, factory_warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 3 }] });
+  assert.equal(qt.status, 200, qt.text);
+
+  //  ★ O'ZI YOZGAN HUJJAT O'Z RO'YXATIDA TURADI. View `to_shop` ni
+  //  ham javobgar tsexdan oladi — aks holda u BO'SH bo'lib, hujjat
+  //  doira filtridan tushib qolardi va menyudagi navbat ham
+  //  yonmasdi.
+  assert.ok((await qadBoshliq('GET', '/api/materials/requests')).body.rows
+    .some((x) => x.id === qt.body.id), 'hujjat o\'z ro\'yxatida');
+
+  //  O'zidan o'ziga hujjat bo'lmaydi: «Qadoqlash ombori» ikkala
+  //  ro'yxatda ham turadi (zavodniki ham, tsexniki ham).
+  assert.equal((await qadBoshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: qadWh, factory_warehouse_id: qadWh,
+    items: [{ material_id: m.id, qty: 1 }] })).status, 400);
+
+  //  Boshqa tsexning ombori esa baribir yopiq — doira CHEGARA.
+  assert.equal((await qadBoshliq('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 1 }] })).status, 400);
+
   //  ── Rad etish: sabab SHART, aks holda boshliq nega
   //  bo'lmaganini bilmay, ertaga yana yozardi.
   const r3 = await boshliq('POST', '/api/materials/requests', {

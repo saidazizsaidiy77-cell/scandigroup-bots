@@ -589,15 +589,30 @@ function drawTalab() {
 //  ★ OCHILMA EMAS, QIDIRUV — kirim va boshlang'ich qoldiq bilan
 //  bir xil qoida: zavodda to'qqiz yuz material bor.
 let tQator = [];
+//  Manba (zavod ombori) ro'yxati: tanlangan qabul omboriga qarab
+//  qayta chiziladi, shuning uchun oyna ochilganda saqlab qo'yiladi.
+let tZavod = [];
 
 function talabOch(kind) {
   tQator = [];
-  const tsexlar = ref.warehouses.filter((w) => w.shop_id);
+  //  ★ QABUL QILADIGAN OMBOR — `shop_id` EMAS, «TSEXNIKI» (zavod
+  //  qarori, 2026-09). Ilgari faqat `shop_id` borlari olinardi va
+  //  «Qadoqlash ombori» ro'yxatdan tushib qolardi: u ZAVOD ombori
+  //  (ta'minotchidan mol to'g'ridan-to'g'ri unga keladi, ya'ni
+  //  `shop_id` yo'q), lekin uni QADOQLASH tsexi yuritadi
+  //  (`owner_shop_id`). Natijada o'sha tsexning boshlig'ida ro'yxat
+  //  BUTUNLAY bo'sh chiqardi va talabnoma umuman yozilmasdi.
+  //
+  //  Shart `/ref` dagi doira bilan bir xil manbadan: ombor
+  //  TSEXNIKI bo'lsa — joyi bo'yicha yoki javobgari bo'yicha —
+  //  unga talabnoma yoziladi. Xom ashyo, MDF va Furnitura
+  //  ikkalasida ham bo'sh, ya'ni ular faqat MANBA bo'lib qoladi.
+  const tsexlar = ref.warehouses.filter((w) => w.shop_id || w.owner_shop_id);
   //  Zavod omborlari ALOHIDA keladi: tsex boshlig'ining doirasi
   //  ko'radigan ro'yxatini cheklaydi va zavod ombori undan tushib
   //  qolardi — so'rash uchun joy qolmasdi (izoh: modules/materials.js).
-  const zavod   = ref.factory_warehouses || ref.warehouses.filter((w) => !w.shop_id);
-  const qaytar  = kind === 'return';
+  tZavod = ref.factory_warehouses || ref.warehouses.filter((w) => !w.shop_id);
+  const qaytar = kind === 'return';
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:720px">
@@ -612,11 +627,13 @@ function talabOch(kind) {
               `<option value="${w.id}">${esc(w.name)}${
                 joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}</select></div>
           <div style="flex:1;min-width:210px"><label>Zavod ombori</label>
-            <select id="tFactWh" onchange="talabYol()">${zavod.map((w) =>
-              `<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div>
+            <select id="tFactWh" onchange="talabYol()"></select></div>
           ${qaytar ? '' : `<div style="width:170px"><label>Qachon kerak</label>
             <input id="tNeed" type="date"></div>`}
         </div>
+        ${tsexlar.length ? '' : `<p class="tag bad" style="display:inline-block;
+          white-space:normal;margin-bottom:10px">Sizga biriktirilgan ombor yo'q —
+          Xodimlar sahifasida «Ombor doirasi» ni tekshiring.</p>`}
         <p id="tYol" style="margin-bottom:6px"></p>
         <p class="muted" style="margin-bottom:10px">${qaytar
           ? "Tsexdan ortib qolgan material zavod omboriga QAYTARILADI — "
@@ -647,6 +664,23 @@ function talabYol() {
   const nom = (id) => (ref.warehouses.find((w) => w.id === Number(id))
     || (ref.factory_warehouses || []).find((w) => w.id === Number(id))
     || {}).name || '—';
+
+  //  ★ O'ZIDAN O'ZIGA TALABNOMA BO'LMAYDI. «Qadoqlash ombori» ikkala
+  //  ro'yxatda ham turadi — u ZAVOD ombori (manba bo'la oladi) va
+  //  ayni paytda TSEXNIKI (qabul qila oladi). Ikkala katakda bir xil
+  //  ombor tanlansa hujjat o'zidan o'ziga yozilardi: qoldiq
+  //  o'zgarmasdi, hujjat esa navbatda turardi. Shuning uchun manba
+  //  ro'yxatidan tanlangan qabul ombori olib tashlanadi.
+  const f = $('tFactWh');
+  if (f) {
+    const qabul = Number($('tShopWh')?.value) || 0;
+    const eski = f.value;
+    const mos = tZavod.filter((w) => w.id !== qabul);
+    f.innerHTML = mos.map((w) =>
+      `<option value="${w.id}">${esc(w.name)}</option>`).join('');
+    if (mos.some((w) => String(w.id) === eski)) f.value = eski;
+  }
+
   const tsex  = nom($('tShopWh')?.value);
   const zavod = nom($('tFactWh')?.value);
   const qaytar = $('tKindNew').value === 'return';

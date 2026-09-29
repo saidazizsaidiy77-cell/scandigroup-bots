@@ -1023,9 +1023,22 @@ router.post('/requests', need('materials.request', ...MANAGE),
         WHERE id = $1 AND kind = 'material' AND is_active`,
       [req.body.shop_warehouse_id])).rows[0];
     if (!tsexWh) throw new Error('Tsex ombori tanlanmagan');
-    if (!tsexWh.shop_id)
-      throw new Error(`«${tsexWh.name}» zavod ombori — talabnoma tsex omboriga yoziladi`);
-    if (doira && !doira.includes(tsexWh.owner_shop_id || tsexWh.shop_id))
+    //  ★ «TSEXNIKI» — JOYI BO'YICHA YOKI JAVOBGARI BO'YICHA (zavod
+    //  qarori, 2026-09). Ilgari faqat `shop_id` qaralardi va
+    //  «Qadoqlash ombori» rad etilardi: u ZAVOD ombori
+    //  (ta'minotchidan mol to'g'ridan-to'g'ri unga keladi, ya'ni
+    //  `shop_id` yo'q), lekin uni QADOQLASH tsexi yuritadi
+    //  (`owner_shop_id`) va materialni o'sha tsex so'raydi. Natijada
+    //  o'sha tsexning boshlig'i talabnoma umuman yoza olmasdi.
+    //
+    //  Shart `/ref` dagi doira bilan BITTA manbadan
+    //  (`COALESCE(owner_shop_id, shop_id)`), aks holda ekranda
+    //  ko'ringan ombor serverda rad etilardi.
+    const tsexi = tsexWh.owner_shop_id || tsexWh.shop_id;
+    if (!tsexi)
+      throw new Error(`«${tsexWh.name}» hech bir tsexniki emas — `
+        + `talabnoma tsexning omboriga yoziladi`);
+    if (doira && !doira.includes(tsexi))
       throw new Error(`«${tsexWh.name}» sizning doirangizda emas`);
 
     const zavodWh = (await client.query(
@@ -1035,6 +1048,11 @@ router.post('/requests', need('materials.request', ...MANAGE),
     if (!zavodWh) throw new Error('Zavod ombori tanlanmagan');
     if (zavodWh.shop_id)
       throw new Error(`«${zavodWh.name}» tsex ombori — talabnoma zavod omboriga yoziladi`);
+    //  O'zidan o'ziga hujjat bo'lmaydi: «Qadoqlash ombori» ikkala
+    //  ro'yxatda ham turadi va ikki katakda bir xil tanlansa qoldiq
+    //  o'zgarmagan hujjat navbatda qolib ketardi.
+    if (zavodWh.id === tsexWh.id)
+      throw new Error(`«${tsexWh.name}» — ikkala katakda bir xil ombor tanlangan`);
 
     const doc_no = await nextReqNo(client, kind);
     const r = (await client.query(
