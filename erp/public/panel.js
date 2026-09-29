@@ -166,20 +166,39 @@ const Panel = (() => {
    *  Gorizontal ustun: nomi uzun bo'ladi va tik ustunda o'qilmasdi.
    *  Tartib kattadan kichikka — savol «kim ko'p» degan savol.
    */
-  function rank(el, { rows, key = 'amount', name = 'name', fmt = pul, hint }) {
+  //  ★ NOM YONIDA TURI (zavod qarori, 2026-09). Zavodda bitta nom
+  //  IKKI guruhda uchraydi — «Barocco» ham sp, ham penal bo'ladi —
+  //  va faqat nomi ko'rinsa ro'yxatda ikkita bir xil qator turardi:
+  //  qaysi biri qaysi ekani noaniq qolardi. Xuddi shu qoida
+  //  vitrinadan qaytarish hujjatida ham bor.
+  //
+  //  Turi MAYDA yozuvda, nomning yonida: u nomning bir qismi emas,
+  //  uni AJRATADIGAN belgi va qalin bo'lsa ko'z ikkalasini teng
+  //  o'qishga urinardi.
+  //
+  //  `birlik` — o'lchov birligi qatorning O'ZIDAN olinadi: stul
+  //  DONA, penal KOMPLEKT va bitta so'zni hammasiga yozib qo'yish
+  //  yolg'on bo'lardi.
+  function rank(el, { rows, key = 'amount', name = 'name', fmt = pul, hint,
+                      tur = 'product_type', birlik }) {
     if (!rows.length) {
       el.innerHTML = '<p class="muted" style="font-size:13px">Ma\'lumot yo\'q.</p>';
       return;
     }
     const max = Math.max(1, ...rows.map((r) => Number(r[key]) || 0));
+    const qiy = (r, aniq) => fmt(r[key], aniq)
+      + (birlik && r[birlik] ? ' ' + r[birlik] : '');
     el.innerHTML = `<div class="prank">${rows.map((r) => {
       const v = Number(r[key]) || 0;
-      return `<div class="prow" data-tip="<b>${esc(r[name])}</b><br>${
-        esc(fmt(v, true))}${hint && r[hint] != null
+      const t = tur && r[tur] ? r[tur] : '';
+      return `<div class="prow" data-tip="<b>${esc(r[name])}</b>${
+        t ? ' <span style=\'opacity:.75\'>\u00b7 ' + esc(t) + '</span>' : ''}<br>${
+        esc(qiy(r, true))}${hint && r[hint] != null
           ? '<br>' + esc(son(r[hint])) + ' ta' : ''}">
-        <div class="pname">${esc(r[name])}</div>
+        <div class="pname">${esc(r[name])}${t
+          ? ` <span class="muted" style="font-size:12px">\u00b7 ${esc(t)}</span>` : ''}</div>
         <div class="ptrack"><i style="width:${Math.max(2, v / max * 100)}%"></i></div>
-        <div class="pval">${esc(fmt(v))}</div>
+        <div class="pval">${esc(qiy(r))}</div>
       </div>`;
     }).join('')}</div>`;
     ulash(el);

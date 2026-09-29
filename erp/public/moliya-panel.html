@@ -116,7 +116,8 @@ async function load() {
     a: { key: 'tushum', name: 'Tushum' },
     b: { key: 'harajat', name: 'Harajat' } });
 
-  Panel.rank($('harajat'), { rows: d.harajat });
+  //  Harajat guruhi — mahsulot emas, tur chizilmaydi.
+  Panel.rank($('harajat'), { rows: d.harajat, tur: null });
 
   //  Kassa kartochkasi emas, REYTING: ikkita hisob bor va savol
   //  «qaysi birida ko'p» emas, «jami qancha» — lekin ikkalasini

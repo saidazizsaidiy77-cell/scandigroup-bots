@@ -2985,11 +2985,17 @@ router.get('/dashboard', need('production.reports', 'production.manage'),
     //  KOMPLEKT va ularni qo'shib bo'lmaydi.
     db.query(
       `WITH c AS (${CHIQDI})
-       SELECT p.name || ' · ' || COALESCE(g.uom, 'dona') AS name,
+       --  ★ NOM, TURI va O'LCHOV BIRLIGI — UCHTA ALOHIDA ustun.
+       --  Ilgari uchalasi bitta satrga yopishtirilardi va zavodda
+       --  bitta nom IKKI guruhda uchraydi («Barocco» ham sp, ham
+       --  penal): ro'yxatda ikkita bir xil qator turar, qaysi biri
+       --  qaysi ekani noaniq qolardi.
+       SELECT p.name, g.name AS product_type,
+              COALESCE(g.uom, 'dona') AS uom,
               SUM(c.qty)::int AS qty
          FROM c JOIN products p ON p.id = c.product_id
          LEFT JOIN product_groups g ON g.id = p.group_id
-        GROUP BY 1 ORDER BY qty DESC LIMIT 8`, P),
+        GROUP BY p.name, g.name, g.uom ORDER BY qty DESC LIMIT 8`, P),
 
     //  ★ HOZIR ISHLAB CHIQARISHDA — BUGUNGI holat, oraliqqa bog'liq
     //  emas (savdo panelidagi «zavodda turgani» bilan bir xil

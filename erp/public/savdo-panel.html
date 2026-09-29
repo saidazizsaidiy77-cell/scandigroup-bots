@@ -122,13 +122,19 @@ async function load() {
   ]);
 
   Panel.bars($('oylar'), { rows: d.oylar });
-  Panel.rank($('kanal'), { rows: d.kanal, hint: 'orders' });
+  //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur
+  //  chizilmaydi (`tur: null`).
+  Panel.rank($('kanal'), { rows: d.kanal, hint: 'orders', tur: null });
+  //  ★ MAHSULOTNING TURI YOZILADI: zavodda bitta nom ikki guruhda
+  //  uchraydi («Barocco» ham sp, ham penal) va faqat nomi ko'rinsa
+  //  ro'yxatda ikkita bir xil qator turardi.
   Panel.rank($('mahsulot'), { rows: d.mahsulot, hint: 'qty' });
 
   //  ★ DOIRASI BOR MENEJERGA BU BLOK CHIZILMAYDI: ro'yxatda baribir
   //  bitta ism turadi va «kim ko'p sotdi» degan savol u yerda yo'q.
   $('cardMgr').hidden = !!d.ozi;
-  if (!d.ozi) Panel.rank($('menejer'), { rows: d.menejer, hint: 'orders' });
+  if (!d.ozi) Panel.rank($('menejer'),
+    { rows: d.menejer, hint: 'orders', tur: null });
 
   Panel.share($('holat'), {
     rows: d.holat.map((r) => ({ name: HOLAT[r.status] || r.status,

@@ -339,13 +339,19 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
     //  Javonda ko'p turgan mahsulot: «nima yotib qolgan» degan
     //  savolning javobi.
     db.query(
-      `SELECT u.product || ' · ' || COALESCE(u.uom, 'dona') AS name,
+      //  ★ NOM, TURI va O'LCHOV BIRLIGI — UCHTA ALOHIDA ustun
+      //  (izoh: modules/units.js). Zavodda bitta nom ikki guruhda
+      //  uchraydi va faqat nomi ko'rinsa qaysi biri ekani noaniq
+      //  qolardi.
+      `SELECT u.product AS name, u.product_type,
+              COALESCE(u.uom, 'dona') AS uom,
               SUM(u.qty)::int AS qty,
               MAX(u.days_in_stock)::int AS kun
          FROM v_fg_units u
         WHERE COALESCE(u.warehouse_id, (SELECT id FROM warehouses WHERE code = 'TM'))
               = ANY($1)
-        GROUP BY 1 ORDER BY qty DESC LIMIT 8`, [whIds]),
+        GROUP BY u.product, u.product_type, u.uom
+        ORDER BY qty DESC LIMIT 8`, [whIds]),
 
     //  Mudirning navbati: chiqarishni kutayotgan buyurtma.
     db.query(

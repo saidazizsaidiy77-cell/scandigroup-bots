@@ -124,8 +124,12 @@ async function load() {
     fmt: (v) => Panel.son(v) + ' dona' });
   Panel.rank($('tsexlar'), { rows: d.tsexlar, key: 'qty',
     fmt: (v) => Panel.son(v) + ' dona' });
+  //  ★ O'LCHOV BIRLIGI QATORNING O'ZIDAN: stul DONA, penal
+  //  KOMPLEKT — bitta so'zni hammasiga yozib qo'yish yolg'on
+  //  bo'lardi. Turi ham yoziladi: zavodda bitta nom ikki guruhda
+  //  uchraydi.
   Panel.rank($('mahsulot'), { rows: d.mahsulot, key: 'qty',
-    fmt: (v) => Panel.son(v) });
+    fmt: (v) => Panel.son(v), birlik: 'uom' });
   Panel.rank($('bolimlar'), { rows: d.bolimlar, key: 'qty',
     fmt: (v) => Panel.son(v) + ' dona' });
 }

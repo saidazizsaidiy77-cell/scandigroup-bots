@@ -131,10 +131,14 @@ function fgChiz(d) {
     b: { key: 'chiqdi', name: 'Chiqdi' },
     fmt: (v) => Panel.son(v) + ' dona' });
 
-  Panel.rank($('omborlar'), { rows: d.omborlar, key: 'qty',
+  //  Omborlar ro'yxatida tur yo'q: qator OMBOR haqida, mahsulot
+  //  haqida emas (`tur: null`).
+  Panel.rank($('omborlar'), { rows: d.omborlar, key: 'qty', tur: null,
     fmt: (v) => Panel.son(v) + ' dona' });
+  //  O'lchov birligi qatorning o'zidan, turi esa nomning yonida —
+  //  ishlab chiqarish panelidagi bilan bir xil qoida.
   Panel.rank($('mahsulot'), { rows: d.mahsulot, key: 'qty',
-    fmt: (v) => Panel.son(v), hint: 'kun' });
+    fmt: (v) => Panel.son(v), birlik: 'uom', hint: 'kun' });
 }
 
 function matChiz(d) {
@@ -157,8 +161,9 @@ function matChiz(d) {
       hint: Panel.son(d.talab.tayyor) + ' tasi tayyorlangan' },
   ]);
 
-  Panel.rank($('mOmbor'), { rows: d.omborlar, key: 'usd', hint: 'nom' });
-  Panel.rank($('mQarz'), { rows: d.qarz, key: 'usd' });
+  Panel.rank($('mOmbor'), { rows: d.omborlar, key: 'usd', hint: 'nom',
+    tur: null });
+  Panel.rank($('mQarz'), { rows: d.qarz, key: 'usd', tur: null });
 }
 
 App.start(() => tezQoy('12'),
