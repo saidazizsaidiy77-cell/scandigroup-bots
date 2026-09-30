@@ -491,8 +491,24 @@ async function apply(ids, qty, planOn) {
 
 //  Ikkinchi yo'l ham SHU OYNADA: usta ekrandan chiqmasdan yo material
 //  biriktiradi, yo «bu bo'limda kerak emas» deb belgilaydi.
+//  ★ SAVOL BIR YO'LA BERILADI (zavod qarori, 2026-09). Ilgari oyna
+//  BIRINCHI to'xtagan konverning raqamini ko'rsatardi va «bu bo'limda
+//  biriktirilmaydi» faqat o'shanga belgi qo'yardi: o'tkazish yana
+//  to'xtardi, oyna yana ochilardi — endi boshqa raqam bilan. Yigirmata
+//  tanlangan konverda usta yigirma marta bir xil tugmani bosardi va
+//  ekranda hech narsa o'zgarmagandek ko'rinardi: «tugma ishlamayapti».
+//
+//  Endi server HAMMASINI qaytaradi (`units`) va bitta bosish hammasiga
+//  belgi qo'yadi. Ro'yxat ham turadi — usta nimaga javob berayotganini
+//  ko'rsin: o'ntasini ko'rmasdan belgilab yuborish nazorat emas.
 function xomYoq(e, ids, qty, planOn) {
   xyYop();
+  //  Eski server `units` yubormasligi mumkin — o'shanda bittasi bilan
+  //  ishlayveradi: deploy o'rtasida ekran qotib qolmasin.
+  const roy = Array.isArray(e.units) && e.units.length
+    ? e.units
+    : [{ id: e.unit_id, conveyor_no: '', section: '' }];
+  const kop = roy.length > 1;
   document.body.insertAdjacentHTML('beforeend', `
     <div class="overlay" id="xyBox" onclick="if(event.target===this)xyYop()">
       <div class="modal" style="max-width:460px">
@@ -500,18 +516,25 @@ function xomYoq(e, ids, qty, planOn) {
           <h2 style="margin:0">Xom ashyo biriktirilmagan</h2>
           <button onclick="xyYop()">Yopish</button></div>
         <p style="margin-bottom:10px">${esc(e.message)}</p>
+        ${kop ? `<div style="max-height:180px;overflow:auto;margin-bottom:10px;
+          border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+          ${roy.map((x) => `<div style="padding:3px 0"><b>${esc(x.conveyor_no)}</b>
+            <span class="muted" style="font-size:12px"> · ${esc(x.section || '')}</span>
+          </div>`).join('')}</div>` : ''}
         <p class="muted" style="font-size:13px;margin-bottom:16px">
           Konver bu bo'limdan ketgandan keyin bu yerda nima
           sarflangani boshqa yozilmaydi — tannarx o'sha yozuvlardan
           yig'iladi. Agar bu bo'limda material umuman sarflanmasa,
           shuni belgilang: kim va qachon aytgani yozib qo'yiladi.</p>
         <div class="row" style="gap:8px;flex-wrap:wrap">
-          <button class="primary" onclick="xyYop(); xomOch(${e.unit_id})"
-            >\u25a3 Xom ashyo biriktirish</button>
-          <button onclick='xomKerakmas(${e.unit_id}, ${JSON.stringify(ids)},
-            ${qty == null ? 'null' : qty}, ${planOn === undefined
-              ? 'undefined' : JSON.stringify(planOn)})'
-            >Bu bo'limda biriktirilmaydi</button>
+          ${kop ? '' : `<button class="primary" onclick="xyYop(); xomOch(${roy[0].id})"
+            >\u25a3 Xom ashyo biriktirish</button>`}
+          <button ${kop ? 'class="primary"' : ''}
+            onclick='xomKerakmas(${JSON.stringify(roy.map((x) => x.id))},
+            ${JSON.stringify(ids)}, ${qty == null ? 'null' : qty},
+            ${planOn === undefined ? 'undefined' : JSON.stringify(planOn)})'
+            >${kop ? `${roy.length} tasida ham biriktirilmaydi`
+                   : "Bu bo'limda biriktirilmaydi"}</button>
         </div>
         <div id="xyMsg"></div>
       </div></div>`);
@@ -521,9 +544,10 @@ const xyYop = () => { $('xyBox')?.remove(); };
 
 //  Belgilangach o'tkazish O'ZI qaytadan uriniladi: usta tugmani
 //  ikkinchi marta qidirib o'tirmasin.
-async function xomKerakmas(unitId, ids, qty, planOn) {
+async function xomKerakmas(unitIds, ids, qty, planOn) {
   try {
-    await App.api(`/api/units/${unitId}/no-material`, { method: 'POST' });
+    await App.api('/api/units/no-material', {
+      method: 'POST', body: JSON.stringify({ items: unitIds }) });
     xyYop();
     await apply(ids, qty, planOn);
   } catch (err) {

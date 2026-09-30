@@ -1975,6 +1975,66 @@ async function clonePart(client, req, u, n, { toSection = null, movedOn = null,
   return row;
 }
 
+//  ★ XOM ASHYOSIZ BO'LIMDAN O'TKAZILMAYDI (zavod qarori, 2026-09;
+//  izoh: sql/materials.sql). Konver ketgandan keyin o'sha bo'limda nima
+//  sarflangani BOSHQA hech qachon yozilmaydi: usta keyingi ishga o'tadi
+//  va kecha nima ishlatilgani esida qolmaydi. Tannarx esa aynan shu
+//  yozuvlardan yig'iladi.
+//
+//  Tekshiruv KELGAN bo'lim uchun emas, KETAYOTGAN bo'lim uchun: material
+//  konver TURGAN joyda sarflanadi. Shuning uchun boshlanmagan konverda
+//  (bo'limi yo'q) savol ham yo'q.
+//
+//  ★ QAYSI BO'LIMDA — BIR MARTA AYTILADI (`sections.needs_material`).
+//  Hamma bo'limga qo'yilsa usta yig'ish bo'limida har konverda
+//  «biriktirilmaydi» tugmasini bosib yurardi: u yerda material umuman
+//  sarflanmaydi va javob har safar bir xil.
+//
+//  Savol BITTA joyda — o'tkazish ham, o'tkazishdan oldingi tekshiruv ham
+//  shundan o'tadi: ikki nusxada bo'lsa ekranda so'ralgan konverlar
+//  ro'yxati server to'xtatganidan boshqacha bo'lib qolardi.
+async function xomYoqmi(client, unitId) {
+  const { rows } = await client.query(
+    `SELECT u.id, u.conveyor_no, s.id AS section_id, s.name AS section
+       FROM production_units u
+       JOIN sections s ON s.id = u.current_section_id
+      WHERE u.id = $1
+        AND COALESCE(s.needs_material, false)
+        AND NOT EXISTS (SELECT 1 FROM material_moves mm
+                         WHERE mm.to_kind = 'unit' AND mm.to_id = u.id
+                           AND mm.section_id = s.id AND mm.status = 'ok')
+        AND NOT EXISTS (SELECT 1 FROM unit_no_material nm
+                         WHERE nm.unit_id = u.id AND nm.section_id = s.id)`,
+    [unitId]);
+  return rows[0] || null;
+}
+
+//  ★ SAVOL BIR YO'LA BERILADI (zavod qarori, 2026-09). Ilgari xato
+//  BIRINCHI konverda to'xtardi va ekranda o'shaning raqami turardi:
+//  boshliq «bu bo'limda biriktirilmaydi» ni bosardi, belgi bittasiga
+//  tushardi va o'tkazish yana to'xtardi — endi ikkinchisida. Yigirmata
+//  tanlangan konverda bu yigirma bosish va har safar AYNAN bir xil
+//  ko'rinadigan oyna bo'lardi: usta tugma umuman ishlamayapti deb
+//  o'qirdi.
+//
+//  Shuning uchun xabarda HAMMASI keladi (`units`) va ekrandagi bitta
+//  bosish hammasiga belgi qo'yadi.
+function xomXato(royxat) {
+  const e = new Error(royxat.length === 1
+    ? `${royxat[0].conveyor_no}: «${royxat[0].section}» bo'limida ` +
+      'xom ashyo biriktirilmagan'
+    : `${royxat.length} ta konverda xom ashyo biriktirilmagan: ` +
+      royxat.map((x) => x.conveyor_no).join(', '));
+  //  Sahifa shu belgiga qarab «Bu bo'limda biriktirilmaydi» tugmasini
+  //  chizadi — xabar matnini o'qib chiqish emas (matn ertaga o'zgarsa
+  //  tugma yo'qolib qolardi).
+  e.code = 'xom-ashyo-yoq';
+  e.unit_id = royxat[0].id;
+  e.section_id = royxat[0].section_id;
+  e.units = royxat;
+  return e;
+}
+
 //  ★ KONVER BO'LAKLARI
 //
 //  Bitta o'tkazishda konverning HAMMASI emas, bir qismi ketishi mumkin:
@@ -2088,32 +2148,8 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
   //  bo'limida har konverda «biriktirilmaydi» tugmasini bosib
   //  yurardi: u yerda material umuman sarflanmaydi va javob har safar
   //  bir xil.
-  if (u.current_section_id) {
-    const bor = (await client.query(
-      `SELECT
-         (SELECT COALESCE(needs_material, false) FROM sections
-           WHERE id = $2) AS kerak,
-         EXISTS (SELECT 1 FROM material_moves mm
-                  WHERE mm.to_kind = 'unit' AND mm.to_id = $1
-                    AND mm.section_id = $2 AND mm.status = 'ok') AS sarf,
-         EXISTS (SELECT 1 FROM unit_no_material nm
-                  WHERE nm.unit_id = $1 AND nm.section_id = $2) AS belgi`,
-      [u.id, u.current_section_id])).rows[0];
-    if (bor.kerak && !bor.sarf && !bor.belgi) {
-      const nom = (await client.query(
-        `SELECT name FROM sections WHERE id = $1`, [u.current_section_id]))
-        .rows[0]?.name || 'Shu bo\'lim';
-      const e = new Error(
-        `${u.conveyor_no}: «${nom}» bo'limida xom ashyo biriktirilmagan`);
-      //  Sahifa shu belgiga qarab «Bu bo'limda biriktirilmaydi»
-      //  tugmasini chizadi — xabar matnini o'qib chiqish emas
-      //  (matn ertaga o'zgarsa tugma yo'qolib qolardi).
-      e.code = 'xom-ashyo-yoq';
-      e.unit_id = u.id;
-      e.section_id = u.current_section_id;
-      throw e;
-    }
-  }
+  const yoq = await xomYoqmi(client, u.id);
+  if (yoq) throw xomXato([yoq]);
 
   const defect = Number(qty_defect) || 0;
   if (defect > 0 && !defect_reason) throw new Error('Brak uchun sabab kodi majburiy');
@@ -2900,6 +2936,17 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    //  Xom ashyo savoli HAMMA konver uchun bir yo'la beriladi: birinchisida
+    //  to'xtalsa ekrandagi bitta bosish ham bittasini ochardi va o'tkazish
+    //  yana to'xtardi (izoh: `xomXato`). O'tkazishning O'ZIDAGI tekshiruv
+    //  joyida qoladi — u himoya, bu esa savolning to'liq ro'yxati.
+    const yoq = [];
+    for (const it of items) {
+      const r = await xomYoqmi(client, it.unit_id);
+      if (r) yoq.push(r);
+    }
+    if (yoq.length) throw xomXato(yoq);
+
     const moved = [];
     for (const it of items) moved.push(await moveOne(client, req, it));
     await client.query('COMMIT');
@@ -2909,7 +2956,8 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
     //  Xom ashyo tekshiruvi BELGI bilan qaytadi: sahifa unga qarab
     //  «Bu bo'limda biriktirilmaydi» tugmasini chizadi.
     return res.status(400).json({ error: e.message, code: e.code,
-                                  unit_id: e.unit_id, section_id: e.section_id });
+                                  unit_id: e.unit_id, section_id: e.section_id,
+                                  units: e.units });
   } finally {
     client.release();
   }
@@ -2923,35 +2971,75 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
 //  Bo'lim SO'RALMAYDI: konver hozir qaysi bo'limda tursa, belgi
 //  o'shanga qo'yiladi. Id ni qo'lda yuborib boshqa bo'limni
 //  belgilash yo'li yo'q.
-router.post('/:id/no-material', need('production.entry'), wrap(async (req, res) => {
-  const u = (await db.query(
+//  Belgi qo'yish BITTA joyda: bitta konver ham, to'dalab yuborilgani ham
+//  shundan o'tadi — ikki nusxada bo'lsa doira tekshiruvi bir kun
+//  ikkalasida bir xil bo'lmay qolardi.
+async function belgiQoy(client, req, id) {
+  const u = (await client.query(
     `SELECT u.id, u.conveyor_no, u.current_section_id, s.shop_id,
             g.owner_shop_id
        FROM production_units u
        LEFT JOIN sections s ON s.id = u.current_section_id
        JOIN products p ON p.id = u.product_id
        JOIN product_groups g ON g.id = p.group_id
-      WHERE u.id = $1 AND u.status <> 'cancelled'`, [req.params.id])).rows[0];
-  if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
+      WHERE u.id = $1 AND u.status <> 'cancelled'`, [id])).rows[0];
+  if (!u) throw Object.assign(new Error('Konver topilmadi'), { status: 404 });
   if (!u.current_section_id)
-    return res.status(400).json({ error: "Konver hali bo'limda emas" });
+    throw Object.assign(new Error("Konver hali bo'limda emas"), { status: 400 });
 
   //  Doira CHEGARA: boshqa tsexning konveriga belgi qo'yilmaydi.
   //  Javobgar tsex ustun — o'tkazishdagi bilan aynan bir xil qoida.
   const scope = scopeOf(req);
   const egasi = u.owner_shop_id || u.shop_id;
   if (scope && !scope.includes(egasi))
-    return res.status(403).json({ error: "Bu konver sizning doirangizda emas" });
+    throw Object.assign(new Error('Bu konver sizning doirangizda emas'),
+                        { status: 403 });
 
-  await db.query(
+  await client.query(
     `INSERT INTO unit_no_material (unit_id, section_id, worker_id)
      VALUES ($1,$2,$3) ON CONFLICT (unit_id, section_id) DO NOTHING`,
     [u.id, u.current_section_id, req.user.id]);
+  //  Tranzaksiya ichidan hovuzdan yangi ulanish so'ralmaydi (3-qoida).
   await audit(req, { module: 'production', action: 'no-material',
                      entity: 'production_units', entity_id: u.id,
                      payload: { conveyor_no: u.conveyor_no,
-                                section_id: u.current_section_id } });
-  res.json({ ok: true });
+                                section_id: u.current_section_id } }, client);
+  return u;
+}
+
+//  ★ BELGI TO'DALAB QO'YILADI. O'tkazish tanlangan konverlarning
+//  HAMMASINI bir yo'la to'xtatadi (izoh: `xomXato`), ya'ni javob ham bir
+//  yo'la berilishi kerak: aks holda usta bitta oynada yigirma marta bir
+//  xil tugmani bosardi va har safar boshqa raqam chiqardi.
+router.post('/no-material', need('production.entry'), wrap(async (req, res) => {
+  const items = (Array.isArray(req.body.items) ? req.body.items : [])
+    .map((x) => Number(x && x.unit_id != null ? x.unit_id : x))
+    .filter((x) => Number.isInteger(x));
+  if (!items.length) return res.status(400).json({ error: 'Konver tanlanmadi' });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    for (const id of items) await belgiQoy(client, req, id);
+    await client.query('COMMIT');
+    res.json({ ok: true, count: items.length });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+router.post('/:id/no-material', need('production.entry'), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await belgiQoy(client, req, Number(req.params.id));
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
 }));
 
 // ══════════════════════════════════ BO'LIMLAR ARO HARAKAT — TSEX EKRANI

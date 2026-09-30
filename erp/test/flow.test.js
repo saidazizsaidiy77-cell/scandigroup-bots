@@ -7510,6 +7510,40 @@ test("xom ashyosiz bo'limdan o'tkazilmaydi", async () => {
   const u3 = await newUnit();
   const stulUsta = H.api(base, await H.sessionFor('Stul ustasi'));
   assert.equal((await stulUsta('POST', `/api/units/${u3.id}/no-material`)).status, 403);
+
+  //  ★ SAVOL BIR YO'LA BERILADI (zavod qarori, 2026-09). Ilgari xato
+  //  BIRINCHI konverda to'xtardi: usta «bu bo'limda biriktirilmaydi» ni
+  //  bosardi, belgi bittasiga tushardi va o'tkazish yana to'xtardi —
+  //  endi ikkinchisida. Yigirmata tanlanganda bu yigirma bosish va har
+  //  safar AYNAN bir xil ko'rinadigan oyna bo'lardi.
+  const a = await newUnit();
+  const b = await newUnit();
+  const c = await newUnit();
+  const kop = await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: a.id }, { unit_id: b.id }, { unit_id: c.id }] });
+  assert.equal(kop.status, 400, kop.text);
+  assert.equal(kop.body.code, 'xom-ashyo-yoq');
+  assert.deepEqual(kop.body.units.map((x) => x.id).sort(), [a.id, b.id, c.id].sort(),
+    'hammasi qaytadi, birinchisi emas');
+  for (const x of kop.body.units) {
+    assert.ok(x.conveyor_no, 'raqami bilan');
+    assert.equal(x.section_id, arra);
+  }
+
+  //  Bitta bosish hammasiga belgi qo'yadi va o'tkazish o'tadi.
+  const belgi = await korpus('POST', '/api/units/no-material',
+    { items: [a.id, b.id, c.id] });
+  assert.equal(belgi.status, 200, belgi.text);
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: a.id }, { unit_id: b.id }, { unit_id: c.id }] })).status, 200,
+    'belgidan keyin uchalasi ham o\'tadi');
+
+  //  Doira to'dalab yuborilganda ham CHEGARA, va bittasi yiqilsa HECH
+  //  NARSA yozilmaydi: yarim belgi qo'yilgan to'da keyin qaysi biri
+  //  belgilanganini aytmasdi.
+  const d = await newUnit();
+  assert.equal((await stulUsta('POST', '/api/units/no-material',
+    { items: [d.id] })).status, 403);
 });
 
 //  ★ BUYURTMALAR RO'YXATI SARALANADI — SERVERDA (zavod qarori,
