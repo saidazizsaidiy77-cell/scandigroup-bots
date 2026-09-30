@@ -237,7 +237,19 @@ async function toggleFason(id, active){
 
 // ──────────────────────────────────────────────────────────────── KESISHMA
 function drawGrid(){
-  const groups = cat.groups.filter(g => g.active);
+  //  ★ PANJARADA FAQAT ZAVODDA YASALADIGAN GURUH (zavod qarori,
+  //  2026-09). Panjara «qaysi NOM qaysi guruhda» degan savolga javob
+  //  beradi: Milano penal ham bor, Milano stul ham. Sotib olinadigan
+  //  mahsulotda (matras) bu savolning javobi YO'Q — u ta'minotchidan
+  //  bitta nom bo'lib keladi va «Zara matras» degan narsa zavodda
+  //  uchramaydi. Ustun bo'lib turgani esa faqat chalg'itmasdi: katak
+  //  bosilsa o'sha yo'q mahsulot YARATILARDI.
+  //
+  //  Ajratadigan belgi — MARSHRUT: yasaladigan mahsulot bo'limlardan
+  //  o'tadi, sotib olinadigani esa omborda tug'iladi (izoh:
+  //  sql/warehouse.sql). Tekshiruv serverda ham (`POST /sku`) —
+  //  ustunni yashirish himoya emas.
+  const groups = cat.groups.filter(g => g.active && g.route_template_id);
   const fasons = cat.fasons.filter(f => f.active);
   if (!groups.length || !fasons.length){
     $('grid').innerHTML = `<tr><td class="muted" style="padding:16px">

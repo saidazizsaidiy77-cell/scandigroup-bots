@@ -149,7 +149,16 @@ async function boot(){
   ref = r; customers = c.customers; nextNo = nn; suggest = sg;
   fgHouses = w.rows.filter(x => x.kind === 'fg' && x.is_active);
 
-  for (const p of ref.products.filter(p => p.route_template_id)){
+  //  ★ MARSHRUTSIZ MAHSULOT HAM RO'YXATDA (matras: izoh CLAUDE.md,
+  //  «hamma mahsulot zavodda yasalmaydi»). Ilgari ro'yxat marshruti
+  //  borlar bilan cheklangan edi va matrasning boshlang'ich qoldig'ini
+  //  kiritadigan joy UMUMAN qolmasdi: kirim hujjati esa bu yerda
+  //  noto'g'ri yo'l — u ta'minotchining qarzini oshiradi, javonda
+  //  turgan eski mahsulot esa hech kimning qarzi emas.
+  //
+  //  Uning tsexi ham, bo'limi ham yo'q: qator faqat OMBORGA kiradi
+  //  (pastda, `fillShop`).
+  for (const p of ref.products){
     if (!byFason.has(p.name)) byFason.set(p.name, []);
     byFason.get(p.name).push(p);
   }
@@ -193,7 +202,8 @@ function addRow(k = 1){
           <option value="">— tanlang —</option>
           ${fasons.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}
         </select></td>
-        <td><select class="c-group" onchange="fillPrice(this.closest('tr'));sum()"></select></td>
+        <td><select class="c-group"
+          onchange="fillPrice(this.closest('tr'));fillShop(this.closest('tr'));sum()"></select></td>
         <td><input class="c-color" list="dlColor" placeholder="—"></td>
         <td><input class="c-fabric" list="dlFabric" placeholder="—"></td>
         <td><input class="c-qty" type="number" min="1" value="1" oninput="sum()"></td>
@@ -233,7 +243,38 @@ function fillGroup(sel){
     ? list.map(p => `<option value="${p.id}">${esc(p.group_name)}</option>`).join('')
     : '<option value="">—</option>';
   fillPrice(tr);
+  fillShop(tr);
   sum();
+}
+
+//  ★ TSEX RO'YXATI MAHSULOTGA QARAB QURILADI. Marshrutsiz mahsulotda
+//  (matras) tsex ham, «boshlanmagan» ham javobi yo'q savol bo'lardi:
+//  u zavodda yasalmaydi, ya'ni hech qachon bo'limda turmaydi va
+//  server baribir rad etardi («bu mahsulot marshrutida yo'q»).
+//  Shuning uchun unga FAQAT omborlar qoladi va T/M o'zi tanlanadi.
+//
+//  Raqam katagi ham tozalanadi: matrasda zavodning daftardagi raqami
+//  YO'Q — u ta'minotchidan keladi. Bo'sh katak tizimga `Q` raqamini
+//  qo'ydiradi, ya'ni «raqamni zavod emas, tizim qo'ygan» (izoh:
+//  CLAUDE.md).
+function fillShop(tr){
+  const sel  = tr.querySelector('.c-shop');
+  const prod = ref.products.find(p => p.id === +tr.querySelector('.c-group')?.value);
+  const yolsiz = !!prod && !prod.route_template_id;
+  if (sel.dataset.yolsiz === String(yolsiz)) return;
+  sel.dataset.yolsiz = String(yolsiz);
+
+  const uylar = fgHouses.map(w =>
+    `<option value="fg:${esc(w.code)}">${esc(w.name)}</option>`).join('');
+  sel.innerHTML = yolsiz ? uylar
+    : `<option value="">— boshlanmagan —</option>`
+      + ref.shops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')
+      + uylar;
+  if (yolsiz) {
+    sel.value = 'fg:TM';
+    tr.querySelector('.c-no').value = '';
+  }
+  fillSec(sel);
 }
 
 // Narx oldingi kiritilgan konverlardan olinadi: o'sha mahsulotning eng

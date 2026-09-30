@@ -207,6 +207,14 @@ router.post('/products', need('production.manage'), wrap(async (req, res) => {
       const g = (await client.query(
         `SELECT * FROM product_groups WHERE id = $1`, [it.group_id])).rows[0];
       if (!g) throw new Error('Guruh topilmadi');
+      //  ★ SOTIB OLINADIGAN GURUHDA FASON KESISHMASI YO'Q (zavod
+      //  qarori, 2026-09). Matras ta'minotchidan BITTA nom bo'lib
+      //  keladi va «Zara matras» degan narsa zavodda uchramaydi —
+      //  panjarada o'sha ustun chizilmaydi ham. Tekshiruv SHU YERDA:
+      //  ustunni yashirish himoya emas, id ni qo'lda yuborsa ham
+      //  qabul qilinmaydi.
+      if (!g.route_template_id) throw new Error(
+        `«${g.name}» zavodda yasalmaydi — unga mahsulot nomi biriktirilmaydi`);
       const f = (await client.query(
         `SELECT * FROM fasons WHERE id = $1`, [it.fason_id])).rows[0];
       if (!f) throw new Error('Mahsulot nomi topilmadi');

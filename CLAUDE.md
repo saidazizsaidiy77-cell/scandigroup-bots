@@ -409,6 +409,32 @@ bitta manbadan hisoblanishi kerak, aks holda hujjatda 10 ta, qoldiqda
 8 ta bo'lib qolardi. `v_supplier_debt` va `v_supplier_ledger` endi
 ikkala kirimni ham o'qiydi.
 
+**★ BOSHLANG'ICH QOLDIG'I ODDIY YO'LDAN KIRADI** (zavod qarori,
+2026-09; `/qoldiq.html`). Javonda tizim ishga tushishidan oldin turgan
+matras hech kimning qarzi emas — uni kirim hujjati bilan kiritish
+ta'minotchining qarzini yolg'on oshirardi. Shuning uchun u boshqa
+tayyor mahsulot bilan BIR XIL yo'ldan: «Boshlang'ich qoldiq»
+sahifasida «Tseh» ustunidan T/M ombor tanlanadi.
+
+Ilgari ro'yxat marshruti borlar bilan cheklangan edi va matras unga
+umuman tushmasdi — ya'ni uni kiritadigan joy QOLMAGAN edi. Endi
+marshrutsiz mahsulot ham ro'yxatda, lekin **tsex ham, «boshlanmagan»
+ham unga taklif qilinmaydi**: u zavodda yasalmaydi, ya'ni hech qachon
+bo'limda turmaydi va server baribir rad etardi («bu mahsulot
+marshrutida yo'q»). Ro'yxatda faqat omborlar qoladi va T/M o'zi
+tanlanadi. Raqam katagi ham tozalanadi: matrasda zavodning daftardagi
+raqami YO'Q va tizim `Q26-0007` beradi — qoldiqning umumiy qoidasi.
+
+**★ KATALOG PANJARASIGA TUSHMAYDI.** Panjara «qaysi NOM qaysi
+guruhda» degan savolga javob beradi: Milano penal ham bor, Milano
+stul ham. Sotib olinadigan mahsulotda bu savolning javobi yo'q —
+«Zara matras» degan narsa zavodda uchramaydi. Ustun bo'lib turgani
+faqat chalg'itmasdi: katak bosilsa o'sha yo'q mahsulot YARATILARDI.
+Ajratadigan belgi — MARSHRUT, va tekshiruv serverda ham
+(`POST /api/catalog/products`): ustunni yashirish himoya emas.
+Guruhlar ro'yxatida esa u o'z qatorida turaveradi — o'lchov birligi,
+harfi va savdo qoidalari o'sha yerda yoziladi.
+
 **Kirim FAQAT T/M OMBORGA**: mol ta'minotchidan ZAVODGA keladi,
 vitrinaga esa u T/M dan omborlar aro hujjat bilan boradi (xom
 ashyodagi «kirim faqat zavod omboriga» bilan bir xil qoida). Ombor

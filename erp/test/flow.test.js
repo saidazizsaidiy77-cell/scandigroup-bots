@@ -8451,6 +8451,38 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
   assert.equal(qoldiq.reduce((a, r) => a + Number(r.free), 0), 6,
     'oltitasi ham bo\'sh');
 
+
+  //  ★ PANJARAGA TUSHMAYDI: «Zara matras» degan narsa zavodda yo'q.
+  //  Ustun ekranda chizilmaydi, lekin tekshiruv SERVERDA — id ni
+  //  qo'lda yuborsa ham qabul qilinmaydi.
+  const guruh = (await H.id(
+    `SELECT id FROM product_groups WHERE code = 'MATRAS'`)).id;
+  const fason = (await H.id(`SELECT id FROM fasons ORDER BY id LIMIT 1`)).id;
+  const kesim = await admin('POST', '/api/catalog/products',
+    { group_id: guruh, fason_id: fason });
+  assert.equal(kesim.status, 400, kesim.text);
+  assert.match(kesim.body.error, /yasalmaydi/);
+
+  //  ★ BOSHLANG'ICH QOLDIQ — KIRIM HUJJATI EMAS. Javonda tizim ishga
+  //  tushishidan oldin turgan matras hech kimning qarzi emas: uni
+  //  kirim bilan kiritish ta'minotchining qarzini yolg'on oshirardi.
+  //  Yo'li oddiy qoldiq sahifasi: bo'limsiz, to'g'ridan-to'g'ri
+  //  omborga.
+  const qarzOldin = await qarz();
+  const oq = await admin('POST', '/api/units/', { items: [
+    { product_id: mat, qty: 3, is_opening: true,
+      fg_on: '2026-09-01', warehouse_code: 'TM' }] });
+  assert.equal(oq.status, 200, oq.text);
+  const q = oq.body.created[0];
+  //  Raqamni TIZIM qo'yadi: matrasda zavodning daftardagi raqami yo'q.
+  assert.match(q.conveyor_no, /^Q\d\d-\d{4}$/, 'raqami Q bilan');
+  const uq = await H.id(
+    `SELECT status || ' ' || COALESCE(current_section_id::text, '-') AS id
+       FROM production_units WHERE id = $1`, [q.id]);
+  assert.equal(uq.id, 'fg -', 'darrov omborda, bo\'limsiz');
+  //  Ta'minotchining qarzi OSHMAYDI — kirim hujjatidan farqi shu.
+  assert.equal(await qarz(), qarzOldin, 'qoldiq qarzga tegmaydi');
+
   //  Bekor qilish: sabab so'raladi, konverlar ham birga chiqadi.
   assert.equal((await admin('POST',
     `/api/warehouse/fg/receipts/${k.body.id}/cancel`)).status, 400, 'sababsiz');
