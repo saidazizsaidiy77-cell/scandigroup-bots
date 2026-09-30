@@ -1168,6 +1168,28 @@ ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS section_id INT
 CREATE INDEX IF NOT EXISTS material_moves_unit_section_idx
   ON material_moves (to_id, section_id) WHERE to_kind = 'unit';
 
+--  ★ KONVERNING O'SHA PAYTDAGI DONA SONI (zavod qarori, 2026-09).
+--  Sarf BIR paytda, ANIQ bir necha donaga qilinadi: 12 talikdan
+--  Zborkaga ketgan 4 tasi lakdan o'tsa, lak AYNAN o'sha to'rttasiga
+--  sepiladi — Shkurkada qolgan sakkiztasi hali lak ko'rmagan.
+--
+--  Donani keyin HISOBLAB BO'LMAYDI: qatorning `qty` si bo'linganda
+--  ham, birlashganda ham o'zgaradi, ya'ni ertaga o'qilgan raqam
+--  bugungi haqiqatni aytmaydi. Shuning uchun u sarf paytida YOZIB
+--  qo'yiladi — kursning operatsiya bilan qotib qolishi bilan bir xil
+--  idiom va bir xil sabab.
+--
+--  Busiz tannarx faqat konver TUGAGANDA to'g'ri chiqardi (hammasi
+--  hamma bo'limdan o'tgach jami ÷ umumiy dona). Yo'lda turganda esa
+--  bo'laklar har xil bo'ladi va ularning biri chiqib ketishi mumkin:
+--  lak sepilgan 4 ta mijozga ketsa, ularning tannarxiga butun
+--  partiyaning o'rtachasi yozilardi va lak puli lak ko'rmagan
+--  sakkiztaga taqsimlanardi.
+--
+--  Faqat KONVERGA sarfda ma'noga ega (`to_kind = 'unit'`); kirimda,
+--  ko'chirishda va boshlang'ich qoldiqda bo'sh qoladi.
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS unit_qty INT;
+
 CREATE TABLE IF NOT EXISTS unit_no_material (
   unit_id    INT NOT NULL REFERENCES production_units(id) ON DELETE CASCADE,
   section_id INT NOT NULL REFERENCES sections(id),

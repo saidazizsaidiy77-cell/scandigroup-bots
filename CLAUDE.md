@@ -3245,6 +3245,41 @@ o'zgarmaydi (zavod uni shunday yuritadi).
                                   SUM(qty × o'rtacha kirim narxi)
     donaga tannarx             =  jami ÷ raqamning umumiy donasi
 
+**★ LEKIN BU FORMULA KONVER TUGAGANDA to'g'ri** — hammasi hamma
+bo'limdan o'tgach. YO'LDA turganda bo'laklar bir xil emas: 12 talikdan
+Zborkaga ketgan 4 tasi lakdan o'tsa, lak AYNAN o'sha to'rttasiga
+sepiladi va Shkurkada qolgan sakkiztasi uni ko'rmagan. Jami ÷ 12 desa
+lak puli lak ko'rmagan sakkiztaga ham taqsimlanardi — va o'sha 4 tasi
+mijozga chiqib ketsa, ularning tannarxi kam bo'lib yozilardi.
+
+Shuning uchun **har sarf yozuvida o'sha paytdagi DONA SONI turadi**
+(`material_moves.unit_qty`). Donani keyin hisoblab bo'lmaydi:
+qatorning `qty` si bo'linganda ham, birlashganda ham o'zgaradi — bu
+kursning operatsiya bilan qotib qolishi bilan bir xil idiom va bir xil
+sabab. Faqat KONVERGA sarfda ma'noga ega; kirimda va ko'chirishda bo'sh
+qoladi.
+
+Shundan keyin ikkala savol ham javob topadi:
+
+    bo'lakning donaga tannarxi  =  Σ (o'sha bo'lak o'tgan har sarf
+                                      summasi ÷ o'sha sarfdagi dona)
+    konverning jami tannarxi    =  Σ (hamma sarf summasi)
+
+12 talik konverda Shkurkada 12 000 so'mlik shkurka, keyin 4 tasi
+Zborkaga o'tib 4 000 so'mlik yelim, keyin o'sha 4 tasiga 20 000 so'mlik
+lak:
+
+    ketgan 4 ta   1 000 + 1 000 + 5 000  =  donaga 7 000
+    qolgan 8 ta   1 000                  =  donaga 1 000
+    jami          4×7 000 + 8×1 000       =  36 000  ✓ (12+4+20 ming)
+
+Sakkiztasi keyin o'sha yo'ldan o'tib lak oladi va ikkala bo'lak
+tenglashadi — ya'ni tugagan konverda yuqoridagi soddaroq formula bilan
+BIR XIL javob chiqadi. Farq faqat YO'LDA ko'rinadi, va aynan o'sha
+paytda pul hisobiga kerak bo'ladi: tugallanmagan ishlab chiqarish
+qiymati (`/aylanma-kapital.html`) va bir qismi chiqib ketgan
+buyurtmaning tannarxi.
+
 12 ta stulga Zborkada 10 list LDSP berilgan bo'lsa (listi 250 000
 so'm, jami 2 500 000): donaga 208 333, ketgan 8 taga 1 666 667,
 qolgan 4 taga 833 333 — yozuv jismonan 4 talik qatorda tursa ham.

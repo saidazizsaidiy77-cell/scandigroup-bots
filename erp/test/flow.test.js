@@ -7538,6 +7538,30 @@ test("xom ashyosiz bo'limdan o'tkazilmaydi", async () => {
     { items: [{ unit_id: a.id }, { unit_id: b.id }, { unit_id: c.id }] })).status, 200,
     'belgidan keyin uchalasi ham o\'tadi');
 
+  //  ★ SARF PAYTIDAGI DONA SONI YOZILADI (`material_moves.unit_qty`).
+  //  12 talikdan 4 tasi Zborkaga ketib, o'sha to'rttasiga lak sepilsa,
+  //  lak AYNAN to'rttasiniki — Shkurkada qolgan sakkiztasi uni
+  //  ko'rmagan. Qatorning `qty` si keyin bo'linib yoki birlashib
+  //  o'zgaradi, ya'ni donani keyin hisoblab bo'lmaydi.
+  const dona = await newUnit({ qty: 12 });
+  const sarf = await korpus('POST', `/api/materials/unit/${dona.id}/consume`,
+    { items: [{ material_id: (await H.id(
+        `SELECT id FROM materials ORDER BY id LIMIT 1`)).id, qty: 3 }] });
+  assert.equal(sarf.status, 200, sarf.text);
+  assert.equal((await H.id(
+    `SELECT unit_qty::text AS id FROM material_moves
+      WHERE to_kind = 'unit' AND to_id = $1`, [dona.id])).id, '12');
+
+  //  Konver bo'lingandan keyin ham yozilgan raqam O'ZGARMAYDI: u
+  //  o'sha kunning haqiqati.
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: dona.id, qty: 4 }] })).status, 200);
+  assert.equal((await H.id(
+    `SELECT qty::text AS id FROM production_units WHERE id = $1`, [dona.id])).id, '8');
+  assert.equal((await H.id(
+    `SELECT unit_qty::text AS id FROM material_moves
+      WHERE to_kind = 'unit' AND to_id = $1`, [dona.id])).id, '12');
+
   //  Doira to'dalab yuborilganda ham CHEGARA, va bittasi yiqilsa HECH
   //  NARSA yozilmaydi: yarim belgi qo'yilgan to'da keyin qaysi biri
   //  belgilanganini aytmasdi.

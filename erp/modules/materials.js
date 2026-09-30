@@ -571,7 +571,7 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
   try {
     await client.query('BEGIN');
     const u = (await client.query(
-      `SELECT u.id, u.current_section_id AS section_id, s.shop_id
+      `SELECT u.id, u.qty, u.current_section_id AS section_id, s.shop_id
          FROM production_units u
          LEFT JOIN sections s ON s.id = u.current_section_id
         WHERE u.id = $1 AND u.status <> 'cancelled'`,
@@ -608,13 +608,17 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
         //  AYNAN shu ustundan chiqadi. Ombordan chiqarib bo'lmasdi:
         //  `warehouses.section_id` ixtiyoriy va tsexning umumiy ombori
         //  har doim bo'limsiz turadi.
+        //  ★ DONA SONI HAM YOZILADI (`unit_qty`, izoh: sql/materials.sql):
+        //  sarf AYNAN shu paytdagi donalarga qilingan va qatorning `qty`
+        //  si ertaga bo'linib yoki birlashib o'zgaradi — keyin
+        //  hisoblab bo'lmaydi.
         `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
                                      to_kind, to_id, moved_on, note, worker_id,
-                                     section_id)
+                                     section_id, unit_qty)
          VALUES ($1,$2,'warehouse',$3,'unit',$4,
-                 COALESCE($5::date, CURRENT_DATE), $6, $7, $8)`,
+                 COALESCE($5::date, CURRENT_DATE), $6, $7, $8, $9)`,
         [m.id, qty, wh.id, u.id, trim(req.body.on), trim(it.note), req.user.id,
-         u.section_id]);
+         u.section_id, u.qty]);
       n++;
     }
     if (!n) throw new Error('Birorta ham qator kiritilmadi');
