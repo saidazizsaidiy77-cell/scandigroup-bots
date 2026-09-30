@@ -361,6 +361,29 @@ CREATE TABLE IF NOT EXISTS mat_requests (
   decide_note TEXT
 );
 
+--  ★ OMBORLAR ARO KO'CHIRISH — UCHINCHI TUR, IKKINCHI MEXANIZM EMAS
+--  (zavod qarori, 2026-09).
+--
+--  Talabnoma zavod omboridan TSEXGA beradi, qaytarish esa tsexdan
+--  zavodga. Uchinchi savol ham bor va u ikkalasiga ham to'g'ri
+--  kelmaydi: material bir tsexdan IKKINCHI tsexga, yoki zavod
+--  omborlari orasida ko'chadi (MDF ombori to'lib qolsa, xom ashyo
+--  omboriga).
+--
+--  ★ YANGI JADVAL YOZILMADI. Hujjatning shakli AYNAN bir xil:
+--  qayerdan, qayerga, qatorlar va ikki bosqich (yozildi → chiqarildi).
+--  Ikkinchi jadval bo'lsa ro'yxat, bekor qilish, doira va qoldiq
+--  hisobi ikki nusxada yozilardi va bir kun ular ajralib ketardi —
+--  vitrinadan qaytarish hujjati ikki tomonlama qilingani bilan
+--  AYNAN bir xil sabab (izoh: sql/warehouse.sql).
+--
+--  Yo'nalishni `kind` emas, `from_warehouse_id` va `to_warehouse_id`
+--  ning O'ZI aytadi. `kind` esa savolni aytadi: talabnomami,
+--  qaytarishmi yoki ko'chirish.
+ALTER TABLE mat_requests DROP CONSTRAINT IF EXISTS mat_requests_kind_check;
+ALTER TABLE mat_requests ADD CONSTRAINT mat_requests_kind_check
+  CHECK (kind IN ('issue', 'return', 'move'));
+
 CREATE TABLE IF NOT EXISTS mat_request_items (
   id          SERIAL PRIMARY KEY,
   request_id  INT NOT NULL REFERENCES mat_requests(id) ON DELETE CASCADE,

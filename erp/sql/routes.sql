@@ -182,3 +182,49 @@ UPDATE products p SET route_template_id = (SELECT id FROM route_templates WHERE 
   FROM product_groups g
  WHERE g.id = p.group_id AND g.code = 'STL'
    AND p.route_template_id = (SELECT id FROM route_templates WHERE code='L1-FULL');
+
+-- ═══════════════ ★ JAVOBGAR TSEX TOZALANADI (zavod qarori, 2026-09)
+--
+--  `product_groups.owner_shop_id` konverni KIM boshqarayotganini
+--  aytadi: begona tsexning bo'limida turgan konver o'z boshlig'ining
+--  ekranida ustun bo'lib ko'rinadi va topshirish so'ralmaydi. Bo'sh
+--  bo'lsa — turgan joyining tsexi boshqaradi.
+--
+--  ★ HOZIR ZAVODDA BUNDAY MARSHRUT YO'Q: stul ko'chgach hammasi o'z
+--  tsexida yuradi (izoh: CLAUDE.md). Belgi esa STOL guruhida qolib
+--  ketgan edi va oqibati jimgina edi:
+--
+--    · stol konveri QAYERDA tursa ham — qadoqlashda ham — o'sha
+--      tsexning emas, BELGIDAGI tsexning ekranida chiqardi;
+--    · qadoqlash boshlig'i o'z konverini o'z ekranida ko'rmasdi;
+--    · chiqish bo'limidagi «T/M omborga jo'natish» tugmasini begona
+--      tsexning boshlig'i bosardi va tashqaridan bu «qadoqlashdan
+--      sakrab o'tildi» bo'lib ko'rinardi;
+--    · «oy boshidan beri nima chiqarildi» hisobi ham o'sha tsexga
+--      yozilardi.
+--
+--  ★ HAMMASI EMAS, FAQAT MARSHRUTGA ZID BO'LGANI tozalanadi: belgi
+--  marshrutni BOSHLAYDIGAN qadamning tsexiga teng bo'lsa u
+--  ortiqcha, lekin zararsiz — o'sha tsex baribir boshqaradi. Zid
+--  bo'lgani esa aynan yuqoridagi holat.
+--
+--  MEXANIZM OLIB TASHLANMAYDI: ustun joyida qoladi va kerak bo'lganda
+--  bitta katakcha to'ldiriladi (4-qoida). Bir martalik: saytdan
+--  qo'yilgani keyingi deployda qaytarib tozalanmasin.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'javobgar-tsex-tozalash') THEN
+    UPDATE product_groups g SET owner_shop_id = NULL
+     WHERE g.owner_shop_id IS NOT NULL
+       AND EXISTS (
+         SELECT 1
+           FROM route_steps rs
+           JOIN sections sc ON sc.id = rs.section_id
+          WHERE rs.template_id = g.route_template_id
+            AND rs.sort = (SELECT MIN(rs2.sort) FROM route_steps rs2
+                            WHERE rs2.template_id = g.route_template_id)
+            AND sc.shop_id IS DISTINCT FROM g.owner_shop_id);
+
+    INSERT INTO migration_flags (key) VALUES ('javobgar-tsex-tozalash');
+  END IF;
+END $$;
