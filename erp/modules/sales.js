@@ -474,7 +474,38 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
       WHERE i.order_id = $1 AND u.status <> 'cancelled'
       ORDER BY u.conveyor_no`, [req.params.id])).rows;
 
-  res.json({ order: o, items, units, keeper: await keeperOf() });
+  //  ★ CHIQIB KETGANDA BRON YO'Q — KONVER RAQAMI `order_no` DAN
+  //  O'QILADI (zavod qarori, 2026-09). Chiqarishda bron o'chiriladi
+  //  (mahsulot ketdi, kutadigan narsa qolmadi) va yuqoridagi so'rov
+  //  yopilgan buyurtmada BO'SH qaytardi: «qaysi konver ketdi» degan
+  //  savolga buyurtmada javob yo'q edi. Uni bilish uchun ombor
+  //  tarixini ochib, mijoz yoki zakaz raqami bo'yicha qidirish kerak
+  //  edi — savdo xodimida esa o'sha sahifa yo'q.
+  //
+  //  Bog'lanish `production_units.order_no` matnida qoladi va u
+  //  buyurtma raqami o'zgarganda ham ko'chadi (izoh: PATCH
+  //  /orders/:id) — ya'ni ikkalasi hech qachon ajralmaydi. `order_no`
+  //  UNIQUE, shuning uchun raqam bitta buyurtmani anglatadi.
+  //
+  //  Shakli yuqoridagi bilan BIR XIL: sahifa ikkala holatni ham bitta
+  //  kartochka bilan chizadi (`trackCard`) — ikki nusxa yozilsa biri
+  //  ertaga ikkinchisidan orqada qolardi.
+  const shipped = o.status === 'shipped' ? (await db.query(
+    `SELECT u.id, NULL::int AS order_item_id, u.conveyor_no,
+            u.qty, u.qty AS unit_qty, u.color, u.fabric, u.status, u.is_stock,
+            NULL::text AS section, NULL::text AS shop,
+            NULL::text AS warehouse, NULL::text AS warehouse_code,
+            u.ship_on, w.name AS ship_by_name,
+            p.name AS product, g.name AS product_type
+       FROM production_units u
+       JOIN products p       ON p.id = u.product_id
+       JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN workers w   ON w.id = u.ship_by
+      WHERE u.order_no = $1 AND u.status = 'shipped'
+      ORDER BY u.conveyor_no`, [o.order_no])).rows : [];
+
+  res.json({ order: o, items, units: units.length ? units : shipped,
+             keeper: await keeperOf() });
 }));
 
 // ─────────────────────────────────────────────────────── YARATISH / TAHRIR

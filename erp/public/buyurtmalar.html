@@ -683,7 +683,15 @@ async function chegirma(ok) {
 
 function trackCard(o) {
   const list = cur.units || [];
-  if (!list.length || o.status === 'shipped' || o.status === 'cancelled') return '';
+  if (!list.length || o.status === 'cancelled') return '';
+  //  ★ CHIQIB KETGANDA SAVOL BOSHQA: «qayerda» emas, «QAYSI konver
+  //  ketdi». Mahsulot zavodda yo'q, ya'ni joyini ko'rsatish ma'nosiz
+  //  — lekin RAQAM kerak bo'lib qolaveradi: mijoz shikoyat qilsa,
+  //  brak chiqsa yoki «qaysi partiyadan edi» deb so'ralsa javob shu
+  //  raqamda. Ilgari kartochka umuman chizilmasdi va raqamni bilish
+  //  uchun ombor tarixini ochib qidirish kerak edi — savdo xodimida
+  //  esa o'sha sahifa yo'q.
+  const chiqqan = o.status === 'shipped';
   //  Qatorning O'ZI olinadi, faqat nomi emas: zavodda bitta nom bir
   //  nechta guruhda uchraydi — «Zero» ham penal, ham kamod, ham stul
   //  bo'ladi va faqat nomi yozilsa uchta qator bir xil ko'rinardi
@@ -692,25 +700,38 @@ function trackCard(o) {
   //  orqada qolgandi.
   const qat = (id) => cur.items.find(x => x.id === id) || {};
   return `<div class="card no-print">
-    <h2>Konverlar qayerda</h2>
+    <h2>${chiqqan ? 'Qaysi konver chiqdi' : 'Konverlar qayerda'}</h2>
     <p class="muted" style="font-size:12px;margin:-6px 0 14px">
-      ish uchun \u2014 yuk xatiga chiqmaydi \u00b7 o'zi yangilanib turadi</p>
+      ish uchun \u2014 yuk xatiga chiqmaydi${chiqqan
+        ? ' \u00b7 raqam bosilsa konverning butun tarixi ochiladi'
+        : ' \u00b7 o\'zi yangilanib turadi'}</p>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>K&#8470;</th><th>Mahsulot</th><th>Qayerda</th>
-        <th class="num">Soni</th><th>Omborga</th></tr></thead>
+      <thead><tr><th>K&#8470;</th><th>Mahsulot</th>
+        <th>${chiqqan ? 'Kim chiqargan' : 'Qayerda'}</th>
+        <th class="num">Soni</th>
+        <th>${chiqqan ? 'Chiqqan kun' : 'Omborga'}</th></tr></thead>
       <tbody>${list.map(u => `<tr>
-        <td><strong>${esc(u.conveyor_no)}</strong></td>
-        <td>${(() => { const it = qat(u.order_item_id);
+        <td><a href="/konver.html?no=${encodeURIComponent(u.conveyor_no)}"
+          target="_blank"><strong>${esc(u.conveyor_no)}</strong></a></td>
+        <td>${(() => {
+          //  Chiqib ketganda qator bog'lanishi yo'q (bron o'chgan),
+          //  shuning uchun nom KONVERNING o'zidan keladi — server
+          //  o'sha ustunlarni ham beradi.
+          const it = u.product ? u : qat(u.order_item_id);
           return `${esc(it.product || '')}${it.product_type
               ? ` <span class="muted">\u00b7 ${esc(it.product_type)}</span>` : ''}${
-            u.color ? `<div class="muted" style="font-size:11px">${esc(u.color)}</div>`
-                    : ''}`; })()}</td>
-        <td>${u.status === 'fg'
+            u.color ? `<div class="muted" style="font-size:11px">${esc(u.color)}${
+              u.fabric ? ' \u00b7 ' + esc(u.fabric) : ''}</div>` : ''}`; })()}</td>
+        <td>${chiqqan
+          ? (u.ship_by_name ? esc(u.ship_by_name)
+                            : '<span class="muted">\u2014</span>')
+          : u.status === 'fg'
           ? `<span class="tag ok">${esc(joyOf(u))}</span>`
           : `<span class="tag">${esc(joyOf(u))}</span>${u.is_stock
               ? ' <span class="tag">zahira</span>' : ''}`}</td>
         <td class="num"><b>${u.qty}</b></td>
-        <td>${u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
+        <td>${chiqqan ? d8(u.ship_on) || '<span class="muted">\u2014</span>'
+          : u.status === 'fg' ? '<span class="tag ok">turibdi</span>'
           : u.eta ? `${d8(u.eta)}${u.eta_src && u.eta_src !== 'fakt'
               ? `<div class="muted" style="font-size:11px">${esc(u.eta_src)}</div>` : ''}`
           : '<span class="muted">\u2014</span>'}</td>
@@ -751,6 +772,7 @@ function draw(){
       </div>
 
       ${chegirmaCard(o)}
+      ${tuzat ? trackCard(o) : ''}
       ${ro ? docHtml(o) + trackCard(o) : `
       <div class="card"><div class="fields">
         <!--  Zakaz raqami qo'lda ham yoziladi: zavod o'z daftarida raqam

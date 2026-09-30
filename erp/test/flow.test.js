@@ -8661,6 +8661,57 @@ test('chiqib ketgan buyurtmani faqat administrator tuzatadi', async () => {
   assert.equal(await bal(ikki) - ikki0, 500, 'yangi mijozga o\'tdi');
 });
 
+//  ★ CHIQIB KETGAN BUYURTMADA KONVER RAQAMI KO'RINADI (izoh:
+//  modules/sales.js, `GET /orders/:id`). Chiqarishda bron o'chiriladi
+//  va buyurtma «qaysi konver ketdi» degan savolga javob bermay
+//  qolardi: raqamni bilish uchun ombor tarixini ochib qidirish kerak
+//  edi, savdo xodimida esa o'sha sahifa yo'q.
+test('chiqib ketgan buyurtmada konver raqami ko\'rinadi', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: 'Sut', unit_price: 90,
+      is_opening: true, fg_on: '2026-09-03' }] })).body.created[0];
+
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90),
+    items: [{ product_id: PENAL, qty: 1, color: 'Sut', unit_price: 90 }] })).body;
+  const q = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u.id, qty: 1 })).status, 200);
+
+  //  Chiqmasdan oldin — bron orqali, joyi bilan.
+  const oldin = (await admin('GET', '/api/sales/orders/' + z.id)).body.units;
+  assert.equal(oldin.length, 1);
+  assert.equal(oldin[0].conveyor_no, u.conveyor_no);
+  assert.equal(oldin[0].status, 'fg');
+
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: '2026-10-06' })).status, 200);
+
+  //  Chiqqandan KEYIN bron yo'q, lekin raqam baribir keladi —
+  //  `production_units.order_no` matnidan.
+  const keyin = (await admin('GET', '/api/sales/orders/' + z.id)).body.units;
+  assert.equal(keyin.length, 1, 'chiqib ketgach ham ro\'yxat bo\'sh emas');
+  const k = keyin[0];
+  assert.equal(k.conveyor_no, u.conveyor_no);
+  assert.equal(k.status, 'shipped');
+  assert.equal(k.qty, 1);
+  //  Nomi KONVERDAN keladi: qator bog'lanishi yo'q, ekran esa
+  //  mahsulotni yozishi kerak.
+  assert.ok(k.product, 'mahsulot nomi konverdan');
+  assert.ok(k.product_type, 'turi ham');
+  assert.equal(String(k.ship_on).slice(0, 10), '2026-10-06');
+  assert.ok(k.ship_by_name, 'kim chiqargani ham yoziladi');
+  //  Bron o'chgan — raqam AYNAN order_no dan kelgani shundan bilinadi.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::text AS id FROM unit_reservations r
+       JOIN order_items i ON i.id = r.order_item_id
+      WHERE i.order_id = $1`, [z.id])).id, '0');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

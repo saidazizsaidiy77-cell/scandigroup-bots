@@ -1401,11 +1401,37 @@ shuning uchun o'sha ma'lumot **«Konverlar qayerda»** kartochkasiga
 ko'chadi (`trackCard`): har konver, turgan bo'limi va tsexi, soni va
 omborga tushish sanasi. Omborga tushgach bo'lim yozilmaydi — «T/M
 ombor · turibdi» bo'lib qoladi: konver endi tsexda emas, javonda.
-Kartochka `.no-print` — yuk xatiga chiqmaydi, u ish quroli. Chiqib
-ketgan va bekor qilingan buyurtmada ko'rsatilmaydi: mahsulot zavodda
-yo'q. Shusiz savdo «mahsulotim qayerda» degan savolga javob topolmasdi:
-ombor sahifasida faqat omborga TUSHGANI ko'rinadi, tsexda yurgani
-qoldiqda yo'q.
+Kartochka `.no-print` — yuk xatiga chiqmaydi, u ish quroli. Bekor
+qilingan buyurtmada ko'rsatilmaydi: mahsulot zavodda yo'q. Shusiz
+savdo «mahsulotim qayerda» degan savolga javob topolmasdi: ombor
+sahifasida faqat omborga TUSHGANI ko'rinadi, tsexda yurgani qoldiqda
+yo'q.
+
+**★ CHIQIB KETGANDA HAM CHIZILADI, LEKIN SAVOL BOSHQA** (zavod qarori,
+2026-09): «qayerda» emas, **«QAYSI konver chiqdi»**. Mahsulot zavodda
+yo'q, ya'ni joyini ko'rsatish ma'nosiz — lekin RAQAM kerak bo'lib
+qolaveradi: mijoz shikoyat qilsa, brak chiqsa yoki «qaysi partiyadan
+edi» deb so'ralsa javob o'sha raqamda. Ilgari kartochka umuman
+chizilmasdi va raqamni bilish uchun OMBOR TARIXINI ochib, mijoz yoki
+zakaz raqami bo'yicha qidirish kerak edi — savdo xodimida esa u
+sahifa yo'q.
+
+Ikki ustun almashadi: «Qayerda» → **kim chiqargan**, «Omborga» →
+**chiqqan kun**. Raqam bosilsa **konver pasporti** ochiladi
+(`/konver.html?no=`) — «qaysi partiyadan edi» degan savolning
+davomi o'sha yerda.
+
+**Bog'lanish `production_units.order_no` MATNIDAN o'qiladi**, brondan
+emas: chiqarishda bron o'chiriladi (mahsulot ketdi, kutadigan narsa
+qolmadi) va eski so'rov yopilgan buyurtmada BO'SH qaytarardi. Matn
+buyurtma raqami o'zgarganda ham ko'chadi (izoh: `PATCH /orders/:id`),
+ya'ni ikkalasi hech qachon ajralmaydi; `order_no` UNIQUE, shuning
+uchun raqam bitta buyurtmani anglatadi.
+
+Mahsulot nomi ham KONVERDAN keladi: qator bog'lanishi yo'q va ekran
+nomni baribir yozishi kerak. Shakl ikkala holatda ham BIR XIL, ya'ni
+kartochka bitta (`trackCard`) — ikki nusxa yozilsa biri ertaga
+ikkinchisidan orqada qolardi.
 
 **Ro'yxatda ham shu ustun bor** (`joylar`, `/api/sales/orders` dagi
 `places`): har buyurtmaning konverlari joyi bo'yicha guruhlangan holda
