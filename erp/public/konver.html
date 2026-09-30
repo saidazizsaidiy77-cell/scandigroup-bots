@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Konver · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+/*  Uchta yig'indi — sarlavhadagi bitta gap: nechtasi hali tsexda,
+    nechtasi javonda, nechtasi mijozda. Kartochka bo'lib turadi, chunki
+    savolning javobi shu uch raqam; qatorlar esa tafsilot. */
+.k-sum{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  margin-bottom:16px}
+.k-sum .b{background:var(--surface-2);border-radius:var(--radius);padding:12px 14px}
+.k-sum .t{font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--muted)}
+.k-sum .n{font-size:24px;font-weight:600;margin-top:4px}
+/*  Joy — javobning O'ZI, shuning uchun qalin. Yonidagi mayda yozuv
+    uni to'ldiradi (sana, zakaz), almashtirmaydi. */
+.k-joy{font-weight:600}
+</style>
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Konver</h1></div>
+  <span class="row" id="erpUser"></span>
+</div>
+<div id="erpNav"></div>
+
+<div class="card" style="margin-bottom:16px">
+  <!--  BITTA katak: savol ham bitta — «shu raqam qayerda». Filtr
+        ro'yxati qo'shilmadi, u boshqa savolga javob beradi va u
+        jurnalda allaqachon bor. -->
+  <label>Konveyer raqami</label>
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    <input id="q" placeholder="S26-474" style="max-width:260px"
+      onkeydown="if(event.key==='Enter')qidir()">
+    <button class="primary" onclick="qidir()">Qidirish</button>
+  </div>
+  <div class="hint">Raqam bo'yicha: nechta yasalgan, hozir qayerda va
+    kimga chiqib ketgan</div>
+</div>
+
+<div id="body"></div>
+
+<script>
+// ============================================================================
+//  KONVER PASPORTI — bitta raqam, butun tarix
+//
+//  Zavodning eng ko'p beriladigan savoli: «S26-474 qayerda?». Javobi
+//  esa bitta joyda emas edi — konver BO'LINADI va bo'laklari uch xil
+//  joyda turadi: bir qismi tsexda, bir qismi javonda, bir qismi
+//  allaqachon mijozda. Buni bilish uchun jurnalni, ombor qoldig'ini va
+//  buyurtmalar ro'yxatini birin-ketin ochib chiqish kerak edi.
+//
+//  ★ HOLAT SAHIFADA HISOBLANMAYDI: `joy` ustunini SERVER beradi
+//  (buyurtmalar ro'yxatidagi `HOLAT` bilan bir xil qoida) — ikki joyda
+//  yozilgan shart bir kun ajralib ketardi va ekran jurnaldagidan
+//  boshqa javob berib qolardi.
+//
+//  Narx YO'Q: ishlab chiqarish jurnali bilan bir xil qoida — u savdo
+//  va kassaniki.
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const d8 = v => !v ? '' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+
+async function qidir() {
+  const no = $('q').value.trim();
+  if (!no) return;
+  history.replaceState(null, '', '?no=' + encodeURIComponent(no));
+  $('body').innerHTML = `<p class="muted">Yuklanmoqda…</p>`;
+  try {
+    chiz(await App.api('/api/units/track?no=' + encodeURIComponent(no)));
+  } catch (e) {
+    $('body').innerHTML = `<div class="card"><p class="muted">${esc(e.message)}</p></div>`;
+  }
+}
+
+function chiz(d) {
+  //  Topilmagani ham JAVOB: raqam noto'g'ri yozilgani yoki konver
+  //  hali ochilmagani — ikkalasida ham keyingi qadam bitta.
+  if (!d.found) {
+    $('body').innerHTML = `<div class="card">
+      <h2 style="margin-bottom:6px">${esc(d.conveyor_no)} — topilmadi</h2>
+      <p class="muted" style="font-size:13px">Bunday raqamli konver yo'q.
+        Raqamni tekshiring: harfi ham muhim (S — stul, K — korpus,
+        C — stol, MT — matras).</p></div>`;
+    return;
+  }
+  const u = d.uom || 'dona';
+  $('body').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;
+        margin-bottom:14px">
+        <div>
+          <h2 style="margin:0">${esc(d.conveyor_no)}</h2>
+          <div style="margin-top:4px">${esc(d.product)}
+            <span class="muted">· ${esc(d.product_type || '')}</span></div>
+          <div class="muted" style="font-size:13px;margin-top:2px">${
+            [d.color, d.fabric].filter(Boolean).map(esc).join(' · ')
+            || 'rangi tanlanmagan'}</div>
+        </div>
+        <div class="muted" style="font-size:13px;text-align:right">
+          Boshlangan<div style="font-size:15px;color:var(--text)">${
+            d8(d.started_on) || '—'}</div></div>
+      </div>
+
+      <!--  Yig'indi TO'RTTA raqam va ular bir-birini to'ldiradi:
+            jami = tsexda + omborda + chiqdi. Bo'sh bo'lgani ham
+            yoziladi (nol), chunki bo'sh katak savol qoldirardi. -->
+      <div class="k-sum">
+        <div class="b"><div class="t">Jami yasalgan</div>
+          <div class="n">${d.total} <span class="muted"
+            style="font-size:14px">${esc(u)}</span></div></div>
+        <div class="b"><div class="t">Ishlab chiqarishda</div>
+          <div class="n">${d.tsexda}</div></div>
+        <div class="b"><div class="t">Omborda</div>
+          <div class="n">${d.omborda}</div></div>
+        <div class="b"><div class="t">Mijozga chiqdi</div>
+          <div class="n">${d.chiqdi}</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:10px">Qayerda turibdi</h2>
+      <div class="tbox"><table>
+        <thead><tr><th>Joy</th><th class="num">Soni</th>
+          <th>Hujjat</th><th>Sana</th></tr></thead>
+        <tbody>${d.rows.map(qator).join('')}</tbody></table></div>
+    </div>`;
+}
+
+function qator(r) {
+  //  Hujjat ustuni har holatda BOSHQA savolga javob beradi va shu
+  //  sababdan bitta ustun: chiqib ketganida «qaysi yuk xati bilan»,
+  //  omborda turganida «kim kutmoqda», tsexda esa «jo'natilganmi».
+  const hujjat =
+    r.status === 'shipped'
+      ? (r.order_id
+          ? `<a href="/yukxati.html?id=${r.order_id}" target="_blank"
+               >${esc(r.order_no || 'yuk xati')}</a>`
+          : esc(r.order_no || ''))
+    : r.booked
+      ? (r.bron || []).map((b) => `${esc(b.customer)} — ${b.qty} ta${
+          b.order_no ? ` <span class="muted">${esc(b.order_no)}</span>` : ''}`)
+          .join('<br>')
+    : r.status === 'production' && r.handover_on
+      ? `<span class="tag warn">jo'natilgan</span>`
+    : r.is_stock ? `<span class="muted">zahira</span>` : '';
+
+  const sana = r.status === 'shipped' ? r.ship_on
+             : r.status === 'fg'      ? r.fg_on : null;
+  return `<tr${r.status === 'cancelled' ? ' style="opacity:.55"' : ''}>
+    <td class="k-joy">${esc(r.joy)}</td>
+    <td class="num">${r.qty}</td>
+    <td>${hujjat}</td>
+    <td>${d8(sana) || '<span class="muted">—</span>'}</td></tr>`;
+}
+
+App.start(async () => {
+  const no = new URLSearchParams(location.search).get('no');
+  if (no) { $('q').value = no; await qidir(); }
+  else $('q').focus();
+}, 'production.view', 'production.entry', 'warehouse.view', 'sales.view');
+</script>
+</body>
+</html>

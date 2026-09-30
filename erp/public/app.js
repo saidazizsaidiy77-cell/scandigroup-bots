@@ -193,6 +193,15 @@ const App = (() => {
       title: 'Ishlab chiqarish jurnali', lead: 'Konveyer raqami bo\'yicha',
       text: "Har mahsulot: bosh sana, K\u2116, Z\u2116, rang, mato, tsex, bo'lim, mijoz, narx, muddatlar",
       perm: ['production.view'] },
+    //  Konver pasporti: bitta raqam bo'yicha BUTUN manzara — nechta
+    //  yasalgan, bo'laklari qayerda, kimga qaysi yuk xati bilan chiqqan.
+    //  Jurnal ro'yxat beradi, bu esa BITTA konverning tarixini: savol
+    //  ("mening mahsulotim qayerda") savdoda ham, omborda ham, tsexda
+    //  ham bir xil, shuning uchun sahifa to'rtala huquqqa ham ochiq.
+    { href: '/konver.html', mod: 'production', nav: 'Konver qidirish',
+      title: 'Konver', lead: "Raqam bo'yicha",
+      text: "Nechta yasalgan \u00b7 qaysi tsexda, qaysi omborda \u00b7 kimga, qaysi yuk xati bilan chiqib ketgan",
+      perm: ['production.view', 'production.entry', 'warehouse.view', 'sales.view'] },
     //  Konver so'rovi: tsex boshlig'i yozadi, direktor tasdiqlaydi
     //  (izoh: sql/units.sql). Ikkala huquq ham shu sahifani ochadi —
     //  biri yozish, ikkinchisi tasdiqlash uchun.

@@ -207,6 +207,39 @@ qo'shilgan qatorga ko'chadi), shuning uchun donama-dona o'tkazilsa ham
 qatorlar ko'paymaydi. Yagona joy: `placePieces()` — o'tkazish ham,
 qaytarish ham shundan o'tadi.
 
+**★ BITTA RAQAM — BUTUN MANZARA** (zavod qarori, 2026-09;
+`GET /api/units/track`, `/konver.html`). Konver bo'lingani uchun
+zavodning eng ko'p beriladigan savoliga — «S26-474 qayerda?» — javob
+BITTA joyda yo'q edi: bir qismi tsexda, bir qismi javonda, bir qismi
+allaqachon mijozda. Buni bilish uchun jurnalni, ombor qoldig'ini va
+buyurtmalar ro'yxatini birin-ketin ochib chiqish, ustiga bo'laklarni
+ko'z bilan qo'shish kerak edi — va uchala sahifa uch xil huquqda
+turadi, ya'ni savdo xodimi javobning yarmini umuman ko'rmasdi.
+
+Endi raqam yoziladi va javob bitta ekranda: 10 tadan 4 tasi tsexda,
+2 tasi T/M omborda, 4 tasi Qarshi Husanga Z26-0117 yuk xati bilan
+chiqib ketgan. Yig'indi ham shu yerda — **jami = tsexda + omborda +
+chiqdi**, bekor qilinganisiz (u yasalmagan, lekin qatori ro'yxatda
+turadi: «nega 12 emas, 10 ta» degan savolga javob o'sha qatorda).
+
+**Joy nomini SERVER qo'yadi** (`joy` ustuni) — buyurtmalar
+ro'yxatidagi `HOLAT` bilan AYNAN bir xil qoida va bir xil sabab: ikki
+joyda yozilgan shart bir kun ajralib ketardi va ekran jurnaldagidan
+boshqa javob berib qolardi. Ombor nomi ham BAZADAN keladi (4-qoida):
+zavod uni qayta nomlasa ekrandagi yozuv o'zi o'zgaradi.
+
+Hujjat ustuni bitta, lekin har holatda BOSHQA savolga javob beradi:
+chiqib ketganida «qaysi yuk xati bilan» (bosilsa ochiladi — ombor
+tarixidagi zakaz raqami bilan bir xil idiom), omborda turganida «kim
+kutmoqda», tsexda esa «jo'natilganmi».
+
+**Doira bu yerda CHEGARA EMAS**, jurnal bilan bir xil: sotuvchi o'z
+buyurtmasi qayerda turganini, tsex boshlig'i esa o'zi yasagan
+konverni ko'rishi kerak, ombor mudiri esa javonga nima kelishini —
+savol uchalasida ham bir xil, shuning uchun sahifa to'rtala huquqqa
+ham ochiq. **Narx YO'Q**: ishlab chiqarish jurnali bilan bir xil
+qoida — u savdo va kassaniki.
+
 **Topshirish ikki bosqich.** Tsexdan tsexga o'tish:
 jo'natuvchi «jo'natdim» (`production_units.handover_*`) → qabul qiluvchi
 o'tkazadi. Jo'natilmagan konverni qabul qilib bo'lmaydi. Jo'natish —

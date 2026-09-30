@@ -399,6 +399,112 @@ router.get('/export', need('production.view'), wrap(async (req, res) => {
   res.send('\uFEFF' + [head, ...body].join('\r\n') + '\r\n');
 }));
 
+// ══════════════════ KONVER PASPORTI — RAQAM BO'YICHA QIDIRUV ═══════════════
+//
+//  ★ BITTA RAQAM — BUTUN TARIX (zavod qarori, 2026-09). Zavodning eng
+//  ko'p beriladigan savoli: «S26-474 qayerda?». Javobi esa bitta joyda
+//  emas edi — konver BO'LINADI va bo'laklari uch xil joyda turadi:
+//  bir qismi tsexda, bir qismi javonda, bir qismi allaqachon mijozda.
+//  Buni bilish uchun jurnalni, ombor qoldig'ini va buyurtmalar
+//  ro'yxatini birin-ketin ochib chiqish kerak edi, ustiga bo'laklarni
+//  ko'z bilan qo'shish.
+//
+//  Endi javob BITTA ekranda: 10 tadan 4 tasi T/M omborda, 3 tasi
+//  Qarshi Husanga Z26-0117 yuk xati bilan chiqib ketgan, 3 tasi
+//  vitrinada. Yig'indi ham shu yerda.
+//
+//  Sahifa HOLATNI O'ZI HISOBLAMAYDI — server `joy` va `holat`
+//  ustunlarini beradi (buyurtmalar ro'yxatidagi `HOLAT` bilan bir xil
+//  qoida): ikki joyda yozilgan shart bir kun ajralib ketardi va ekran
+//  jurnaldagidan boshqa javob berib qolardi.
+//
+//  Doira bu yerda CHEGARA EMAS, jurnal bilan bir xil: sotuvchi o'z
+//  buyurtmasi qayerda turganini, tsex boshlig'i esa o'zi yasagan
+//  konverni ko'rishi kerak. Narx YO'Q — u savdo va kassaniki.
+router.get('/track', need('production.view', 'production.entry',
+                          'warehouse.view', 'sales.view'),
+  wrap(async (req, res) => {
+  const no = String(req.query.no || '').trim();
+  if (!no) return res.status(400).json({ error: 'Konver raqami yozilmagan' });
+
+  const { rows } = await db.query(
+    `SELECT u.id, u.conveyor_no, u.part, u.qty, u.status, u.is_stock,
+            u.started_on, u.color, u.fabric, u.fg_on, u.ship_on,
+            u.handover_on, u.order_no,
+            sc.name AS section, sh.name AS shop,
+            w.name  AS warehouse, w.code AS warehouse_code,
+            c.name  AS customer, o.id AS order_id,
+            p.name  AS product, g.name AS product_type, g.uom,
+            COALESCE(b.qty, 0)::int AS booked,
+            COALESCE(b.rows, '[]'::json) AS bron
+       FROM production_units u
+       JOIN products p        ON p.id = u.product_id
+       JOIN product_groups g  ON g.id = p.group_id
+       LEFT JOIN sections sc  ON sc.id = u.current_section_id
+       LEFT JOIN shops sh     ON sh.id = sc.shop_id
+       --  Ombor faqat mahsulot OMBORDA turganda o'qiladi. Ustuni
+       --  bo'sh bo'lsa T/M: ustun qo'shilgunga qadar kiritilgan
+       --  konverlar shu yerda deb o'qiladi (izoh: CLAUDE.md).
+       LEFT JOIN warehouses w ON w.id = COALESCE(u.warehouse_id,
+                                  (SELECT id FROM warehouses WHERE code = 'TM'))
+                             AND u.status IN ('fg', 'shipped')
+       LEFT JOIN customers c  ON c.id = u.customer_id
+       --  Chiqib ketgan konverda zakaz raqami MATN bo'lib yoziladi —
+       --  yuk xatini ochish uchun buyurtmaning id si kerak.
+       LEFT JOIN orders o     ON o.order_no = u.order_no
+       LEFT JOIN LATERAL (
+         SELECT SUM(r.qty)::int AS qty,
+                JSON_AGG(JSON_BUILD_OBJECT(
+                  'customer', cc.name, 'qty', r.qty,
+                  'order_no', oo.order_no, 'order_id', oo.id,
+                  'due_on', oo.due_on) ORDER BY oo.due_on NULLS LAST) AS rows
+           FROM unit_reservations r
+           JOIN order_items oi ON oi.id = r.order_item_id
+           JOIN orders oo      ON oo.id = oi.order_id
+           JOIN customers cc   ON cc.id = oo.customer_id
+          WHERE r.unit_id = u.id) b ON true
+      WHERE upper(u.conveyor_no) = upper($1)
+      ORDER BY CASE u.status WHEN 'production' THEN 1 WHEN 'fg' THEN 2
+                             WHEN 'shipped' THEN 3 ELSE 4 END, u.id`, [no]);
+
+  if (!rows.length) return res.json({ found: false, conveyor_no: no });
+
+  //  ★ JOY NOMINI SERVER QO'YADI. Bitta qator to'rt xil javobning
+  //  bittasi bo'ladi va qaysi biri ekani USTUNLARDAN emas, HOLATDAN
+  //  chiqadi — sahifada takrorlansa bir kun ikkalasi ajralib ketardi.
+  const joy = (r) => {
+    if (r.status === 'cancelled') return 'Bekor qilingan';
+    if (r.status === 'shipped')   return `Mijozda — ${r.customer || 'nomsiz'}`;
+    if (r.status === 'fg')        return r.warehouse || 'T/M ombor';
+    //  Ishlab chiqarishda: bo'limi bo'lsa tsexi bilan, bo'lmasa
+    //  «Boshlanmagan» — buyurtmalar ro'yxatidagi bilan bir xil so'z.
+    if (!r.section) return 'Boshlanmagan';
+    return `${r.section}${r.shop ? ' · ' + r.shop : ''}`;
+  };
+
+  const tirik = rows.filter((r) => r.status !== 'cancelled');
+  const b = rows[0];
+  res.json({
+    found: true,
+    conveyor_no: b.conveyor_no,
+    product: b.product, product_type: b.product_type, uom: b.uom,
+    color: b.color, fabric: b.fabric, started_on: b.started_on,
+    //  Jami — BEKOR QILINGANISIZ: u yasalmagan va hech qayerda yo'q.
+    //  Bekor qilingan qator baribir ro'yxatda turadi: «nega 12 emas,
+    //  10 ta» degan savolga javob o'sha qatorda.
+    total: tirik.reduce((a, r) => a + Number(r.qty || 0), 0),
+    //  Uch yig'indi — sarlavhadagi bitta gap: nechtasi hali zavodda,
+    //  nechtasi javonda, nechtasi mijozda.
+    tsexda: tirik.filter((r) => r.status === 'production')
+                 .reduce((a, r) => a + Number(r.qty || 0), 0),
+    omborda: tirik.filter((r) => r.status === 'fg')
+                  .reduce((a, r) => a + Number(r.qty || 0), 0),
+    chiqdi: tirik.filter((r) => r.status === 'shipped')
+                 .reduce((a, r) => a + Number(r.qty || 0), 0),
+    rows: rows.map((r) => ({ ...r, joy: joy(r) })),
+  });
+}));
+
 router.get('/orders', need('production.view'), wrap(async (_req, res) => {
   const { rows } = await db.query(`SELECT * FROM v_orders ORDER BY started_on DESC`);
   res.json(rows);

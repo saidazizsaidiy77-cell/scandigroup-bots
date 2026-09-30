@@ -540,11 +540,34 @@ SELECT r.id, r.doc_no, r.status, r.note,
 --
 --  Guruh bo'lib turishining sababi: raqamning harfi, o'lchov birligi
 --  va savdo qoidalari guruhda yoziladi — matras uchun ham shu joy.
-INSERT INTO product_groups (code, name, line_id, is_set, sort, route_template_id)
-SELECT 'MATRAS', 'Matras', (SELECT id FROM lines WHERE code = 'L1'),
-       false, 6, NULL
- WHERE EXISTS (SELECT 1 FROM lines WHERE code = 'L1')
+--  ★ O'Z YO'NALISHIDA, KORPUS MEBELDA EMAS (zavod qarori, 2026-09).
+--  Matras — stol ham, stul ham, penal ham, kamod ham emas: u zavodda
+--  YASALMAYDI, ta'minotchidan keladi va yotoqxona to'plamiga qo'shib
+--  sotiladi. Korpus yo'nalishiga (`L1`) qo'yilsa u yerdagi to'rtta
+--  guruh bilan bir qatorda turardi va hisobotda «korpus mebel qancha
+--  ishlab chiqarildi» degan javobga qo'shilib ketardi — holbuki zavod
+--  uni umuman yasamaydi.
+INSERT INTO lines (code, name, sort) VALUES
+  ('L3', 'Sotib olinadigan tayyor mahsulot', 3)
 ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO product_groups (code, name, line_id, is_set, sort, route_template_id)
+SELECT 'MATRAS', 'Matras', (SELECT id FROM lines WHERE code = 'L3'),
+       false, 6, NULL
+ WHERE EXISTS (SELECT 1 FROM lines WHERE code = 'L3')
+ON CONFLICT (code) DO NOTHING;
+
+--  Ilgari `L1` ga qo'yilgan bo'lsa o'z yo'nalishiga ko'chiriladi. Faqat
+--  o'sha holatda: zavod uni saytdan boshqa yo'nalishga olsa keyingi
+--  deploy qaytarib qo'ymaydi.
+UPDATE product_groups g SET line_id = (SELECT id FROM lines WHERE code = 'L3')
+ WHERE g.code = 'MATRAS'
+   AND g.line_id = (SELECT id FROM lines WHERE code = 'L1');
+
+--  Matras DONA bilan sanaladi — komplekt emas: mijoz bittasini ham
+--  oladi. Standarti ham shu, lekin yozib qo'yilgani aniqroq.
+UPDATE product_groups SET uom = 'dona'
+ WHERE code = 'MATRAS' AND uom IS DISTINCT FROM 'dona';
 
 --  Raqami `MT26-0001`: «M» band (xom ashyo kirimi `M26-0001`) va bitta
 --  harf ikki xil hujjatni atasa ekrandagi raqam qaysi biri ekani

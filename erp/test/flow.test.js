@@ -8464,6 +8464,88 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
     'konverlar ham bekor bo\'ldi');
 });
 
+//  ★ KONVER PASPORTI — BITTA RAQAM, BUTUN MANZARA (izoh: modules/units.js).
+//  Konver BO'LINADI va bo'laklari uch xil joyda turadi: bir qismi tsexda,
+//  bir qismi javonda, bir qismi allaqachon mijozda. Zavodning savoli esa
+//  bitta: «S26-474 qayerda?» — javobi ham bitta ekranda bo'lishi kerak.
+test('konver raqami bo\'yicha qidiruv: bo\'laklari qayerdaligini aytadi', async () => {
+  const mudir   = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const mijoz   = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
+
+  //  10 talik konver qadoqlashga keladi.
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Sut', unit_price: 250,
+      section_id: QADOYNA }] })).body.created[0];
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
+  await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  assert.equal((await qad('POST', '/api/units/handover', { items: [u.id] })).status, 200);
+
+  //  Oltitasi javonga qo'yiladi — to'rttasi tsexda qoladi.
+  const qabul = await mudir('POST', '/api/units/stock/accept',
+    { items: [{ unit_id: u.id, qty: 6 }] });
+  assert.equal(qabul.status, 200, qabul.text);
+  const omborda = qabul.body.done[0].unit_id || qabul.body.done[0].id;
+
+  //  To'rttasi mijozga chiqib ketadi — javonda ikkitasi qoladi.
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90),
+    items: [{ product_id: PENAL, qty: 4, color: 'Sut', unit_price: 250 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: omborda, qty: 4 })).status, 200);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: '2026-10-04' })).status, 200);
+
+  //  ★ ENDI BITTA SO'ROV BUTUN JAVOBNI BERADI.
+  const t = await admin('GET', '/api/units/track?no=' + u.conveyor_no);
+  assert.equal(t.status, 200, t.text);
+  assert.equal(t.body.found, true);
+  assert.equal(t.body.conveyor_no, u.conveyor_no);
+  assert.equal(t.body.total, 10, 'nechta yasalgan');
+  assert.equal(t.body.tsexda, 4);
+  assert.equal(t.body.omborda, 2);
+  assert.equal(t.body.chiqdi, 4);
+  assert.equal(t.body.uom, 'komplekt', 'o\'lchov birligi guruhdan');
+
+  //  Tartib: avval tsexda turgani, keyin javondagi, oxirida chiqqani.
+  const r = t.body.rows;
+  assert.equal(r.length, 3, 'uch bo\'lak');
+  assert.equal(r[0].status, 'production');
+  assert.match(r[0].joy, /Qadoqlash/, 'bo\'limi tsexi bilan yoziladi');
+  assert.equal(r[1].status, 'fg');
+  //  Ombor nomi BAZADAN keladi, kodda yozilmaydi (4-qoida): zavod
+  //  uni qayta nomlasa ekrandagi yozuv o'zi o'zgaradi.
+  assert.equal(r[1].joy, 'Tayyor mahsulot ombori');
+  assert.equal(r[1].warehouse_code, 'TM');
+  assert.equal(r[2].status, 'shipped');
+  assert.equal(r[2].joy, 'Mijozda — Kanalsiz mijoz');
+  //  ★ CHIQIB KETGAN BO'LAKDA YUK XATI OCHILADI: «kimga» degan
+  //  savoldan keyingi savol «qaysi hujjat bilan» bo'ladi.
+  assert.equal(r[2].order_no, z.order_no);
+  assert.equal(r[2].order_id, z.id, 'yuk xatining id si');
+
+  //  Katta-kichik harfga qaramaydi: usta raqamni qanday yozsa shunday.
+  const kichik = await admin('GET',
+    '/api/units/track?no=' + u.conveyor_no.toLowerCase());
+  assert.equal(kichik.body.found, true, 'kichik harf bilan ham topiladi');
+
+  //  Yo'q raqam — XATO EMAS: qidiruv natijasi bo'sh bo'lishi mumkin.
+  const yoq = await admin('GET', '/api/units/track?no=K99-9999');
+  assert.equal(yoq.status, 200);
+  assert.equal(yoq.body.found, false);
+  assert.equal((await admin('GET', '/api/units/track')).status, 400, 'raqamsiz');
+
+  //  Sahifa savdoga ham, omborga ham, tsexga ham ochiq: «mahsulotim
+  //  qayerda» degan savol uchalasida ham bir xil.
+  assert.equal((await mudir('GET', '/api/units/track?no=' + u.conveyor_no))
+    .status, 200, 'ombor mudiri ham ko\'radi');
+  assert.equal((await korpus('GET', '/api/units/track?no=' + u.conveyor_no))
+    .status, 200, 'tsex ustasi ham ko\'radi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
