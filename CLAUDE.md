@@ -3227,6 +3227,48 @@ Huquqi **`materials.request`** — nomi shuni aytadi: «talabnoma yozish
 va SARFNI yozish». Tsex boshlig'ida u allaqachon bor; huquqi yo'q
 xodimda tugma umuman chizilmaydi va tekshiruv serverda.
 
+**★ TANNARX QATOR BO'YICHA EMAS, KONVEYER RAQAMI BO'YICHA YIG'ILADI**
+(zavod qarori, 2026-09). Modulning o'zi hali yozilmagan, lekin qoida
+HOZIR kerak: bugun yozilayotgan sarf ertaga shu formulaga tushadi va
+noto'g'ri yig'ilsa buni faqat oy oxirida, pul hisobida bilinardi.
+
+Sarf yozuvi konverning O'SHA QATORIGA ilinadi (`material_moves`,
+`to_kind = 'unit'`). Konver esa bo'linadi: 12 talikdan 8 tasi keyingi
+bo'limga o'tsa, sarf ESKI qatorda — qolgan 4 tada — qoladi va ketgan
+8 tada material yozuvi UMUMAN bo'lmaydi. Qaysi bo'lakda turishi
+TASODIF, shuning uchun «shu qatorning tannarxi» degan savolning javobi
+yo'q. Raqam esa bo'linmaydi: bo'lak — joylashuv yozuvi, mahsulot emas,
+u bo'linadi va qayta qo'shiladi; raqam mahsulotning USTIGA yozilgan va
+o'zgarmaydi (zavod uni shunday yuritadi).
+
+    konverning jami materiali  =  o'sha RAQAMNING hamma qatori bo'yicha
+                                  SUM(qty × o'rtacha kirim narxi)
+    donaga tannarx             =  jami ÷ raqamning umumiy donasi
+
+12 ta stulga Zborkada 10 list LDSP berilgan bo'lsa (listi 250 000
+so'm, jami 2 500 000): donaga 208 333, ketgan 8 taga 1 666 667,
+qolgan 4 taga 833 333 — yozuv jismonan 4 talik qatorda tursa ham.
+
+Yig'indi shu sababdan BO'LAKLARNI BIRLASHTIRIB o'qiladi: bo'laklar
+uchrashganda qator birlashadi va bo'shab qolgani o'chiriladi, o'sha
+paytda sarf tirik qatorga ko'chadi (`birlashtir`, `modules/units.js`)
+— ya'ni raqam bo'yicha yig'indi bo'linishdan ham, qayta qo'shilishdan
+ham o'zgarmaydi. Ilgari ko'chirilmasdi va yozuv yo'q konverga ilinib
+qolardi: formula ishlagan bo'lardi-yu, javobi kam chiqardi.
+
+Har bo'lim ALOHIDA yoziladi va takror bo'lmaydi: ketgan 8 ta keyingi
+bo'limda o'z materialini yozadi, Zborkanikini ikkinchi marta emas
+(`sections.needs_material` bo'lim bo'yicha so'raydi). Narx esa O'RTACHA
+kirim narxi (`v_material_stock`) — oxirgi kirimniki butun qoldiqning
+bahosini o'zgartirib yuborardi.
+
+**Hali hal bo'lmagani — BRAK.** 12 tadan 1 tasi brak bo'lsa material
+baribir 12 taga ketgan. Donaga tannarx CHIQQAN donaga bo'linsa raqam
+to'g'ri (brak ham pul yegan), SARFLANGAN donaga bo'linsa tannarx
+pasayib ko'rinadi va brak hech qayerda ko'rinmaydi. Ikkisining farqi
+zavodning qarori: brak tannarxga kiradimi yoki alohida zarar bo'ladimi.
+Javob kelmaguncha formula yozilmaydi.
+
 **★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI** (`material_suppliers`,
 zavod qarori 2026-09). Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF
 materiali to'rtta odamdan keladi («Mdf Eman · Mdf Dilmurod aka · Mdf
