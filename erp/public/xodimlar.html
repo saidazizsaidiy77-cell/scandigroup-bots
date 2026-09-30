@@ -96,6 +96,20 @@ const SURFACE = { web:'Sayt', miniapp:'Telegram ilova', bot:'Bot xabari' };
 
 let meta = null, workers = [];
 
+//  Xabar turlari SERVERDAN keladi (`erp/notify.js`, TURLAR) — sahifada
+//  ikkinchi ro'yxat yozilsa ertaga qo'shilgan xabar turi kartochkada
+//  ko'rinmay qolardi. Bu yerda faqat BO'LIM bo'yicha guruhlanadi:
+//  o'n to'qqizta katakcha bir to'da bo'lib tursa kerakligini topib
+//  bo'lmasdi. Tartib SERVERNIKI — sahifa uni qayta saralamaydi.
+const BOLIMLAR = () => {
+  const m = new Map();
+  for (const t of (meta?.notify_kinds || [])) {
+    if (!m.has(t.bolim)) m.set(t.bolim, []);
+    m.get(t.bolim).push(t);
+  }
+  return [...m];
+};
+
 async function load(){
   [meta, workers] = await Promise.all([
     App.api('/api/admin/roles'), App.api('/api/admin/workers')]);
@@ -516,6 +530,40 @@ function openForm(id){
                       : ''}</span></span>
             </div></div>
 
+          <!--  ★ QAYSI TELEGRAM XABARI KELADI (izoh: sql/core.sql).
+                Xabar HUQUQ bo'yicha boradi va bu ko'pchilik uchun
+                to'g'ri. Lekin ADMINISTRATORDA barcha huquq bor —
+                ya'ni unga zavodning hamma xabari kelardi: talabnoma
+                ham, xarid zayavkasi ham, T/M omborga qabul ham.
+                Huquq bilan tuzatib bo'lmaydi (huquqlar kodda), shuning
+                uchun belgi XODIMDA.
+
+                Bazada «O'CHIRILGANLAR» yotadi: qator yo'q = hammasi
+                keladi, ya'ni ertaga yangi xabar turi qo'shilsa u o'zi
+                keladi. Ekranda esa YOQILGANLAR belgilanadi — odam
+                «qaysi xabar keladi» deb o'ylaydi, «qaysi kelmaydi» deb
+                emas. Aylantirish serverda, bitta joyda. -->
+          <div><label>Telegram xabarlari</label>
+            ${w && !w.tg_id ? `<p class="muted" style="font-size:12px;margin:0 0 6px">
+              <b>Telegram ID yozilmagan</b> — hech qanday xabar bormaydi.</p>` : ''}
+            ${BOLIMLAR().map(([bolim, turlar]) => `
+              <div style="margin-bottom:8px">
+                <div class="muted" style="font-size:12px;margin-bottom:4px"
+                  >${esc(bolim)}</div>
+                <div class="row" style="gap:8px;flex-wrap:wrap">
+                  ${turlar.map(t => `
+                    <label class="tag" style="cursor:pointer;display:inline-flex;
+                      align-items:center;gap:6px;padding:6px 10px">
+                      <input type="checkbox" class="ntf" value="${esc(t.kod)}"
+                        style="width:auto"
+                        ${(w?.notify_off || []).includes(t.kod) ? '' : 'checked'}>
+                      ${esc(t.nom)}</label>`).join('')}
+                </div>
+              </div>`).join('')}
+            <p class="muted" style="font-size:12px;margin-top:6px">Belgilanmagani
+              o'sha xodimga BORMAYDI. Xabar baribir huquq va doira bo'yicha
+              ketadi — bu ro'yxat uni faqat toraytiradi.</p></div>
+
           <div><label>Rollar</label>
             <div class="stack" style="gap:8px">
               ${meta.roles.map(r => `
@@ -618,6 +666,8 @@ async function save(id){
     can_request_unit: $('wReq').checked,
     supply_reports: $('wSup').checked,
     daily_digest: $('wDig').checked,
+    notify_on: [...document.querySelectorAll('.ntf')]
+      .filter(c => c.checked).map(c => c.value),
     mat_scope: $('wMatScope').value,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),

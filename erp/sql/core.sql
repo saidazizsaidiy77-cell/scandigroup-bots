@@ -121,6 +121,50 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notif_pending ON notifications(sent_at) WHERE sent_at IS NULL;
 
+-- ═══════════════════════ ★ KIMGA QAYSI XABAR BORADI — XODIMDA
+--
+--  ZAVOD QARORI (2026-09). Xabar HUQUQ bo'yicha boradi va bu
+--  ko'pchilik uchun to'g'ri: talabnomani xom ashyo xodimi oladi,
+--  konver qabulini tsex boshlig'i. Lekin ADMINISTRATORDA barcha
+--  huquq bor — ya'ni unga zavodning HAMMA xabari kelardi: talabnoma
+--  ham, xarid zayavkasi ham, T/M omborga qabul ham. Direktor
+--  telefonini ochib, o'ziga tegishli bitta xabarni o'ntasi orasidan
+--  qidirib o'tirardi va oxiri hammasini o'qimay qo'yardi.
+--
+--  Huquq bilan tuzatib bo'lmaydi: huquqlar KODDA turadi
+--  (`sql/core-seed.sql`) va administratordan `materials.manage` ni
+--  olib tashlash uning ishini to'xtatardi. Shuning uchun belgi
+--  XODIMDA — `supply_reports` va `daily_digest` bilan bir xil idiom
+--  va bir xil sabab: kodga na ism, na lavozim yoziladi (4-qoida).
+--
+--  ★ BU «O'CHIRILGANLAR» RO'YXATI, «YOQILGANLAR» EMAS, va bu
+--  ataylab. Qator yo'q = HAMMASI keladi, ya'ni:
+--
+--    · deploy kuni hech kimning xabari jimgina yo'qolmaydi;
+--    · ertaga yangi xabar turi qo'shilsa u O'ZI keladi — har
+--      xodimga qo'lda yoqib chiqish kerak emas va unutilgan
+--      xodim xabarsiz qolmaydi.
+--
+--  Teskarisi («faqat belgilangani keladi») ikkala joyda ham jim
+--  ishlamasdi: birinchi deployda hamma xabar to'xtardi, keyin esa
+--  har yangi tur uchun oltmish oltita kartochka ochish kerak
+--  bo'lardi.
+--
+--  Turlar ro'yxati KODDA (`erp/notify.js`, TURLAR) — u jadval, zavod
+--  ma'lumoti emas: yangi xabar yozilganda o'sha ro'yxatga bitta qator
+--  qo'shiladi va kartochkada o'zi paydo bo'ladi (menyudagi `PAGES`
+--  bilan bir xil idiom).
+CREATE TABLE IF NOT EXISTS worker_notify_off (
+  worker_id INT  NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+  kind      TEXT NOT NULL,
+  PRIMARY KEY (worker_id, kind)
+);
+
+--  Xabarning TURI yozib qo'yiladi: huquq bo'yicha ketadigan xabar
+--  kimga borishi YUBORISH paytida hal qilinadi (`sendPending`), ya'ni
+--  filtr o'sha yerda ham kerak bo'ladi.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS kind TEXT;
+
 -- -------------------------------------------------- BIR MARTALIK KO'CHIRISH
 -- Migratsiya har deploy'da qaytadan ishlaydi, shuning uchun ma'lumotni
 -- ko'chiradigan UPDATE'lar xavfli: saytdan qilingan o'zgarish ikkinchi

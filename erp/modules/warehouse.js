@@ -843,7 +843,7 @@ router.post('/fg/returns', need('sales.manage'), wrap(async (req, res) => {
     await notify.queueWarehouse({
       warehouse_id: whId, scoped_only: true, except: req.user.id,
       perms: [...RET, 'warehouse.view', 'warehouse.move'],
-      module: 'warehouse',
+      module: 'warehouse', kind: 'wh_return',
       title: 'Qaytarish hujjati tasdiqlashni kutmoqda',
       body: `${doc.doc_no} · ${nomi ? nomi.name : ''}`
             + `\n${saved.length} ta konver — T/M omborga`
@@ -1016,7 +1016,7 @@ router.post('/fg/returns/:id/confirm', need(...RET, 'warehouse.view'),
         [r.id])).rows[0].n;
       if (man) {
         const umumiy = {
-          module: 'warehouse',
+          module: 'warehouse', kind: 'wh_return',
           title: 'Hujjat yo\'lga chiqdi — qabul qilinadi',
           body: `${r.doc_no} · ${man.name}`
                 + `\n${nechta} ta konver`

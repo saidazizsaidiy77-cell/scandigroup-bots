@@ -682,7 +682,7 @@ async function saveItems(client, req, orderId, items) {
         WHERE o.id = $1`, [orderId])).rows[0];
     await notify.queue({
       permission_code: 'sales.discount',
-      module: 'sales',
+      module: 'sales', kind: 'order_discount',
       title: 'Chegirma tasdiq kutmoqda',
       body: `${o.order_no} · ${o.customer}\n`
             + pastlar.join('\n')
@@ -1053,7 +1053,7 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
       )).rows[0];
       if (eg?.owner_shop_id)
         await notify.queueShop({
-          shop_id: eg.owner_shop_id,
+          shop_id: eg.owner_shop_id, kind: 'unit_bron',
           perms: ['production.entry', 'production.view'],
           module: 'production',
           title: 'Konverga yangi buyurtma',
@@ -1163,7 +1163,7 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
 
     await notify.queue({
       permission_code: 'production.approve',
-      module: 'production',
+      module: 'production', kind: 'unit_request',
       title: '1 ta konver tasdiq kutmoqda — buyurtmadan',
       body: `${q.no} · ${qty} ta · ${it.product}`
             + `\nBuyurtma: ${o.order_no}`
@@ -1376,7 +1376,7 @@ async function sendOne(req, id) {
         WHERE o.id = $1`, [o.id])).rows[0];
     await notify.queueWarehouse({
       perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
-      module: 'warehouse',
+      module: 'warehouse', kind: 'order_to_ship',
       title: 'Buyurtma chiqarishga berildi',
       body: `${o.order_no} · ${mij ? mij.name : ''}`
             + (mij?.qayerga ? `\n${mij.qayerga}` : '')
@@ -1882,7 +1882,7 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
            JOIN customers c ON c.id = o2.customer_id
           WHERE o2.id = $1`, [o.id])).rows[0];
       await notify.queue({
-        worker_id: o.manager_id, module: 'sales',
+        worker_id: o.manager_id, module: 'sales', kind: 'order_shipped',
         title: 'Buyurtma chiqib ketdi',
         body: `${o.order_no} · ${mij ? mij.name : ''}`
               + `\n${bron.length} ta konver`
@@ -2104,7 +2104,7 @@ async function tayyorXabar(client, orderIds) {
         WHERE id = $1 AND ready_notified_at IS NULL`, [o.id]);
     if (!upd.rowCount) continue;
     await notify.queue({
-      worker_id: o.manager_id, module: 'sales',
+      worker_id: o.manager_id, module: 'sales', kind: 'order_ready',
       title: `Buyurtma tayyor — ${o.order_no}`,
       body: `${o.customer}`
             + `\nHammasi T/M omborda · ${notify.pul(o.amount)} $`
@@ -2164,7 +2164,7 @@ async function qarzYubor(client) {
   let n = 0;
   for (const [mgr, list] of kimga) {
     await notify.queue({
-      worker_id: mgr, module: 'sales',
+      worker_id: mgr, module: 'sales', kind: 'sales_debt',
       title: `Mijozlaringiz saldosi · ${notify.kun(new Date())}`,
       body: await mijozSaldoMatni(list),
     }, c);

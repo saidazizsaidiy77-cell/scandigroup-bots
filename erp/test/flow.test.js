@@ -7803,6 +7803,93 @@ test('buyurtma tayyor bo\'lganda menejerga bir marta xabar ketadi', async () => 
     'ikkinchi marta yozilmaydi');
 });
 
+//  ★ KIMGA QAYSI XABAR BORADI — XODIMDA (zavod qarori, 2026-09).
+//
+//  Xabar huquq bo'yicha boradi, ADMINISTRATORDA esa barcha huquq bor:
+//  unga zavodning hamma xabari kelardi — talabnoma ham, xarid
+//  zayavkasi ham, T/M omborga qabul ham. Huquq bilan tuzatib
+//  bo'lmaydi (huquqlar kodda turadi), shuning uchun belgi xodimda.
+//
+//  Ro'yxat «O'CHIRILGANLAR» niki: qator yo'q = HAMMASI keladi —
+//  deploy kuni hech kimning xabari jimgina yo'qolmaydi va ertaga
+//  yangi tur qo'shilsa u o'zi keladi.
+test('xodim qaysi Telegram xabarini olishi kartochkadan qo\'yiladi', async () => {
+  const { db } = require('../db');
+  const notify = require('../notify');
+  const belgi = async () => Number((await H.id(
+    `SELECT COALESCE(MAX(id), 0)::int AS n FROM notifications`)).n);
+  const sanoq = async (dan, tur) => Number((await H.id(
+    `SELECT COUNT(*)::int AS n FROM notifications
+      WHERE id > $1 AND kind = $2`, [dan, tur])).n);
+
+  const admId = (await H.id(`SELECT id FROM workers WHERE name='Administrator'`)).id;
+  await db.query(`DELETE FROM worker_notify_off WHERE worker_id = $1`, [admId]);
+
+  //  ── Qator yo'q = keladi.
+  const b1 = await belgi();
+  await notify.queue({ worker_id: admId, module: 'materials',
+                       kind: 'mat_request', title: 'Sinov talabnoma' });
+  assert.equal(await sanoq(b1, 'mat_request'), 1, 'belgisiz — keladi');
+
+  //  ── O'chirilsa YOZILMAYDI ham: qator umuman qo'yilmaydi, ya'ni
+  //  navbat ham to'lib ketmaydi.
+  await db.query(
+    `INSERT INTO worker_notify_off (worker_id, kind) VALUES ($1,'mat_request')`,
+    [admId]);
+  const b2 = await belgi();
+  assert.equal(await notify.queue({ worker_id: admId, module: 'materials',
+                                    kind: 'mat_request', title: 'Sinov 2' }),
+               false, 'yozilmadi deb aytadi');
+  assert.equal(await sanoq(b2, 'mat_request'), 0, 'o\'chirilgan tur kelmaydi');
+
+  //  Boshqa tur TEGILMAYDI: ro'yxat tur bo'yicha, xodim bo'yicha emas.
+  const b3 = await belgi();
+  await notify.queue({ worker_id: admId, module: 'materials',
+                       kind: 'mat_order', title: 'Sinov zayavka' });
+  assert.equal(await sanoq(b3, 'mat_order'), 1, 'boshqa tur keladi');
+
+  //  ── HUQUQ bo'yicha ketadigan xabarda kimga borishi YUBORISH
+  //  paytida hal qilinadi, ya'ni filtr `sendPending` da ham bo'lishi
+  //  shart: navbatga qo'yishda qilinsa administratorning huquqi
+  //  baribir qatorni yozib qo'yardi.
+  await db.query(`UPDATE workers SET tg_id = 777001 WHERE id = $1`, [admId]);
+  await db.query(
+    `INSERT INTO worker_notify_off (worker_id, kind) VALUES ($1,'cash_pending')
+     ON CONFLICT DO NOTHING`, [admId]);
+  await db.query(`DELETE FROM notifications WHERE sent_at IS NULL`);
+  await notify.queue({ permission_code: 'cash.manage', module: 'cash',
+                       kind: 'cash_pending', title: 'Sinov pul' });
+  const ketgan = [];
+  await notify.sendPending(async (tg) => { ketgan.push(Number(tg)); });
+  assert.ok(!ketgan.includes(777001), 'o\'chirilgan tur huquq orqali ham kelmaydi');
+
+  //  Tozalab qo'yamiz: keyingi testlar shu xodimdan xabar kutadi.
+  await db.query(`DELETE FROM worker_notify_off WHERE worker_id = $1`, [admId]);
+  await db.query(`UPDATE workers SET tg_id = NULL WHERE id = $1`, [admId]);
+
+  //  ── Kartochka TO'LIQ ro'yxat yuboradi, ayirmani SERVER chiqaradi.
+  const meta = await admin('GET', '/api/admin/roles');
+  assert.ok(Array.isArray(meta.body.notify_kinds) && meta.body.notify_kinds.length,
+    'turlar ro\'yxati serverdan keladi');
+  const hammasi = meta.body.notify_kinds.map((t) => t.kod);
+
+  const w = (await admin('POST', '/api/admin/workers',
+    { name: 'Xabar sinovi', notify_on: hammasi.filter((k) => k !== 'mat_request') }));
+  assert.equal(w.status, 200, w.text);
+  const roy = (await admin('GET', '/api/admin/workers')).body;
+  const qator = roy.find((r) => r.name === 'Xabar sinovi');
+  assert.deepEqual(qator.notify_off, ['mat_request'],
+    'belgilanmagani o\'chirilganlar ro\'yxatiga tushadi');
+
+  //  Hammasi belgilansa ro'yxat BO'SHAYDI — «qator yo'q = hammasi».
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + qator.id,
+    { notify_on: hammasi })).status, 200);
+  assert.deepEqual(
+    (await admin('GET', '/api/admin/workers')).body
+      .find((r) => r.id === qator.id).notify_off, [],
+    'hammasi yoqilsa qator qolmaydi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

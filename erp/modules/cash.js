@@ -567,7 +567,7 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     //  ko'rmasa, pul kechgacha o'sha qo'lda qolib ketardi.
     if (status === 'pending')
       await notify.queue({
-        permission_code: 'cash.manage', module: 'cash',
+        permission_code: 'cash.manage', module: 'cash', kind: 'cash_pending',
         title: 'Pul topshirildi — qabul qilinmagan',
         body: `${doc_no} · ${amount} ${currency}`
               + `\n\nKim topshirdi: ${req.user.name}`,

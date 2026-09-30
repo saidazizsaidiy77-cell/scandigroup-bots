@@ -268,7 +268,7 @@ const KUNLIK = [
       for (const x of xabarlar) {
         if (!x) continue;
         n += await notify.queueDigest(
-          { module: 'sales', title: x.title, body: x.body });
+          { module: 'sales', kind: 'digest', title: x.title, body: x.body });
       }
       return n;
     } },

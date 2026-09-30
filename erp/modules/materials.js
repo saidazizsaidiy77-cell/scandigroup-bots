@@ -836,7 +836,7 @@ router.post('/receipts', need(...MANAGE), wrap(async (req, res) => {
     const qarz = (await client.query(
       `SELECT balance FROM v_supplier_debt WHERE id = $1`, [sup.id])).rows[0];
     await notify.queueSupply({
-      module: 'materials',
+      module: 'materials', kind: 'mat_receipt',
       title: `Kirim ${doc_no} · ${sup.name}`,
       body: [
         `${kun(hujjat.doc_on)} · ${wh.name}`,
@@ -948,7 +948,8 @@ async function saldoYubor(client) {
   const x = await saldoXabari(client);
   if (!x) return 0;
   return notify.queueSupply(
-    { module: 'materials', title: x.title, body: x.body }, client);
+    { module: 'materials', kind: 'supply_saldo',
+      title: x.title, body: x.body }, client);
 }
 
 // ═══════════════════════════════════════════════════ TALABNOMA
@@ -1265,7 +1266,11 @@ router.post('/requests', need('materials.request', ...MANAGE),
       //  sahifasida o'tirmaydi va ertalab yozilgani kechgacha yotib
       //  qolardi — tsex esa materialsiz turardi.
       await notify.queueWarehouse({
-        perms: ['materials.manage'], module: 'materials',
+        //  `kind:` — XABARNING turi (izoh: erp/notify.js); pastdagi
+        //  `kind === 'return'` esa HUJJATNING turi. Ikkalasi boshqa
+        //  narsa va bir-birini to'sib qo'ymaydi: biri obyektning
+        //  maydoni, ikkinchisi tashqaridagi o'zgaruvchi.
+        perms: ['materials.manage'], module: 'materials', kind: 'mat_request',
         title: kind === 'return'
           ? `Qaytarish ${doc_no} · ${tsexWh.name}`
           : `Talabnoma ${doc_no} · ${tsexWh.name}`,
@@ -1291,7 +1296,8 @@ router.post('/requests', need('materials.request', ...MANAGE),
         //  sahifasida o'tirmaydi va yozilgani kechgacha yotib
         //  qolardi — mol esa ertaga ham kelmasdi.
         await notify.queueWarehouse({
-          perms: ['materials.manage', 'purchasing.view'], module: 'materials',
+          perms: ['materials.manage', 'purchasing.view'],
+          module: 'materials', kind: 'mat_order',
           title: `Xarid zayavkasi ${z.doc_no} · ${g.wh.name}`,
           body: `${z.qatorlar.join('\n')}`
                 + `\n\nTalabnoma: ${doc_no} · ${tsexWh.name}`
@@ -1562,7 +1568,7 @@ router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
     const qaytar = r.kind === 'return';
     if (r.created_by)
       await notify.queue({
-        worker_id: r.created_by, module: 'materials',
+        worker_id: r.created_by, module: 'materials', kind: 'mat_done',
         title: `${qaytar ? 'Qaytarish' : 'Talabnoma'} ${r.doc_no}`
              + ` — ${qaytar ? 'qabul qilindi' : 'chiqarildi'}`,
         body: `${n} ta material\n\n`

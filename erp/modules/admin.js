@@ -73,6 +73,13 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
             COALESCE((SELECT array_agg(g.group_code ORDER BY g.group_code)
                         FROM worker_expense_groups g
                        WHERE g.worker_id = w.id), '{}') AS cash_groups,
+            --  ★ QAYSI TELEGRAM XABARI KELMAYDI (izoh: sql/core.sql).
+            --  Ro'yxat «o'chirilganlar» niki: qator yo'q = HAMMASI
+            --  keladi, ya'ni ertaga yangi xabar turi qo'shilsa u o'zi
+            --  keladi va unutilgan xodim xabarsiz qolmaydi.
+            COALESCE((SELECT array_agg(o.kind ORDER BY o.kind)
+                        FROM worker_notify_off o
+                       WHERE o.worker_id = w.id), '{}') AS notify_off,
             COALESCE(json_agg(json_build_object(
               'code', wr.role_code, 'name', r.name, 'surface', r.surface,
               'scope_shop_id', wr.scope_shop_id, 'scope_shop', sh.name,
@@ -136,7 +143,13 @@ router.get('/roles', need('admin.users'), wrap(async (_req, res) => {
   res.json({ roles: roles.rows, shops: shops.rows, channels: channels.rows,
              warehouses: houses.rows, expense_groups: eg.rows,
              sections: secs.rows,
-             staff_groups: sgroups.rows.map(r => r.g) });
+             staff_groups: sgroups.rows.map(r => r.g),
+             //  ★ XABAR TURLARI RO'YXATI KODDAN KELADI
+             //  (`erp/notify.js`, TURLAR): sahifada ikkinchi nusxa
+             //  yozilsa ertaga qo'shilgan xabar turi kartochkada
+             //  ko'rinmay qolardi — menyudagi `PAGES` bilan bir xil
+             //  qoida va bir xil sabab.
+             notify_kinds: require('../notify').TURLAR });
 }));
 
 // Telegram ID — RAQAM, @nom emas (bazada bigint). Bot ichida /myid
@@ -162,6 +175,31 @@ function tgId(v) {
 //  Qaysi harajat guruhlariga sarflay oladi. Yuborilmasa TEGILMAYDI:
 //  kartochka boshqa maydon uchun saqlansa cheklov o'chib qolmasin.
 //  Bo'sh ro'yxat esa ataylab: «hamma guruh» degani (izoh: sql/cash.sql).
+//  ★ TELEGRAM XABARLARI — KARTOCHKA TO'LIQ RO'YXAT YUBORADI, AYIRMANI
+//  SERVER CHIQARADI (izoh: sql/core.sql). «Qo'sh» va «olib tashla»
+//  degan ikkita yo'l yozilsa ekrandagi belgi bilan bazadagi ro'yxat
+//  bir kun ajralib ketardi — material ta'minotchilari kartochkasi
+//  bilan bir xil idiom.
+//
+//  Ekranda YOQILGANLAR belgilanadi (odam «qaysi xabar keladi» deb
+//  o'ylaydi), bazada esa O'CHIRILGANLAR yotadi: qator yo'q = hammasi.
+//  Aylantirish SHU YERDA, bitta joyda.
+//
+//  Notanish kod JIMGINA tashlanadi: ro'yxat kodda turadi va ertaga
+//  bir turi olib tashlansa eski kartochka uni yuborishi mumkin.
+async function saveNotify(client, workerId, yoqilgan) {
+  if (!Array.isArray(yoqilgan)) return;
+  const bor = new Set(yoqilgan.map(String));
+  await client.query(`DELETE FROM worker_notify_off WHERE worker_id = $1`,
+                     [workerId]);
+  for (const kod of require('../notify').KODLAR) {
+    if (bor.has(kod)) continue;
+    await client.query(
+      `INSERT INTO worker_notify_off (worker_id, kind) VALUES ($1,$2)
+       ON CONFLICT DO NOTHING`, [workerId, kod]);
+  }
+}
+
 async function saveCashGroups(client, workerId, codes) {
   if (!Array.isArray(codes)) return;
   await client.query(`DELETE FROM worker_expense_groups WHERE worker_id = $1`,
@@ -239,6 +277,7 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
          r.price_kind === 'retail' ? 'retail' : null]);
     }
     await saveCashGroups(client, w.id, req.body.cash_groups);
+    await saveNotify(client, w.id, req.body.notify_on);
     await audit(req, { module: 'admin', action: 'create', entity: 'worker',
                        entity_id: w.id, payload: { name, roles } }, client);
     await client.query('COMMIT');
@@ -347,6 +386,7 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
       }
     }
     await saveCashGroups(client, id, req.body.cash_groups);
+    await saveNotify(client, id, req.body.notify_on);
     // Rol yoki holat o'zgarsa sessiyalar bekor qilinadi — huquq darhol kuchga kiradi
     if (Array.isArray(roles) || active === false)
       await client.query(`DELETE FROM sessions WHERE worker_id = $1`, [id]);

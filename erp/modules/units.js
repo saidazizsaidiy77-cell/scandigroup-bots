@@ -892,7 +892,7 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
     //  to'lib turaveradi va hech narsa buzilmaydi.
     await notify.queue({
       permission_code: 'production.approve',
-      module: 'production',
+      module: 'production', kind: 'unit_request',
       title: `${created.length} ta konver tasdiq kutmoqda`,
       body: created.map((c) => `${c.no} · ${c.qty} ta`).join('\n')
             + `\n\nKim so'radi: ${req.user.name}`,
@@ -1011,7 +1011,7 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
           [tsex])).rows;
         for (const k of kimga)
           await notify.queue({
-            worker_id: k.id, module: 'production',
+            worker_id: k.id, module: 'production', kind: 'unit_new',
             title: 'Yangi konver — boshlanmagan',
             body: `${u.conveyor_no} · ${q.qty} ta`
                   + `\nBo'limlar ekranidan yo'lga chiqaring.`,
@@ -2505,7 +2505,7 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
       for (const [shopId, qatorlar] of tsexga)
         await notify.queueShop({
           shop_id: shopId, perms: ['production.entry', 'production.view'],
-          module: 'production',
+          module: 'production', kind: 'unit_inbox',
           title: `${qatorlar.length} ta konver qabul qilishingizni kutmoqda`,
           body: qatorlar.join('\n')
                 + `\n\nKim jo'natdi: ${req.user.name}`,
@@ -2513,7 +2513,7 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
       if (omborga.length)
         await notify.queueWarehouse({
           perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
-          module: 'warehouse',
+          module: 'warehouse', kind: 'fg_inbox',
           title: `${omborga.length} ta konver T/M omborga qabul qilishni kutmoqda`,
           body: omborga.join('\n')
                 + `\n\nKim jo'natdi: ${req.user.name}`,
@@ -3496,7 +3496,7 @@ async function muddatYubor(client) {
   for (const [shopId, qatorlar] of tsexga)
     n += await notify.queueShop({
       shop_id: shopId, perms: ['production.entry', 'production.view'],
-      module: 'production',
+      module: 'production', kind: 'unit_due',
       title: `Ertaga topshiriladi: ${qatorlar.length} ta konver`,
       body: qatorlar.join('\n'),
     }, c);
