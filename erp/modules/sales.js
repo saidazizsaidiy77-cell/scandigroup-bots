@@ -691,6 +691,93 @@ async function saveItems(client, req, orderId, items) {
   }
 }
 
+// ═══════════════ CHIQIB KETGAN BUYURTMANI TUZATISH — FAQAT ADMINISTRATOR ════
+//
+//  ★ JO'NATILGAN BUYURTMA YOPIQ, LEKIN XATO TUZATILADI (zavod qarori,
+//  2026-09; `sales.fix`). Chiqib ketgan buyurtma savdo uchun yopiladi
+//  va shunday qolishi kerak: uning qatorlari mijoz IMZOLAGAN yuk xati,
+//  summasi esa uning qarzi. Lekin xato bo'ladi — mijoz adashib
+//  tanlanadi, narx boshqa yoziladi — va tuzatadigan yo'l umuman yo'q
+//  edi: konver jurnaldan ham chiqib ketgan, ya'ni na buyurtmadan, na
+//  jurnaldan tegib bo'lmasdi. Yagona chora bazaga qo'lda kirish
+//  bo'lardi.
+//
+//  Huquqi FAQAT administratorda va tekshiruv SERVERDA: sahifada
+//  tugmani yashirish himoya emas.
+//
+//  ★ NIMA O'ZGARADI VA NIMA O'ZGARMAYDI — chegara MAHSULOTNING
+//  qayerdaligidan chiqadi, qulaylikdan emas:
+//
+//    o'zgaradi     mijoz · menejer · sanalar · qayerga · manzil ·
+//                  kutib oluvchi · izoh · zakaz raqami · QATOR NARXI
+//    o'zgarmaydi   qator SONI, mahsuloti, rangi, matosi va qatorlar
+//                  ro'yxati — mahsulot zavoddan chiqib bo'lgan va
+//                  qog'ozdagi dona haqiqatda ketgani
+//    umuman yo'q   holatni qaytarish: chiqib ketganni «tayyor» ga
+//                  surish mahsulotni omborga qaytarmaydi, faqat
+//                  qoldiqni yolg'on qilardi
+//
+//  ★ NARX KONVERGA HAM KO'CHADI, aks holda tuzatishning MA'NOSI
+//  yo'qolardi: mijozning qarzi konverdan hisoblanadi
+//  (`v_customer_sales`), yuk xati esa buyurtma qatoridan. Bittasi
+//  o'zgarib, ikkinchisi qolsa hujjat balansdan yana farq qilardi —
+//  ya'ni tuzatish o'z sababini buzardi.
+//
+//  Konver qaysi qatorniki ekani SAQLANMAGAN: bron chiqarishda
+//  o'chiriladi va bog'lanish faqat `production_units.order_no` matni
+//  bo'lib qoladi. Shuning uchun `sotilgan-narx` bir martalik
+//  ko'chirishi bilan AYNAN bir xil qoida: narx faqat ANIQ holatda
+//  ko'chadi — buyurtmada shu mahsulotdan BITTA qator bo'lsa. Ikkita
+//  bo'lsa (bir xil mahsulot ikki rangda, ikki narxda) qaysi biri
+//  ekanini bilib bo'lmaydi va taxmin qilingan narx yolg'on qarz
+//  yozardi, shuning uchun tizim taxmin qilmaydi — rad etadi.
+async function fixShipped(client, req, o, items, orderNo) {
+  if (!Array.isArray(items)) return;
+  const eski = (await client.query(
+    `SELECT i.id, i.qty, i.unit_price, i.product_id, i.color, i.fabric,
+            p.name AS product
+       FROM order_items i JOIN products p ON p.id = i.product_id
+      WHERE i.order_id = $1`, [o.id])).rows;
+  const byId = new Map(eski.map((r) => [r.id, r]));
+
+  //  Qatorlar ro'yxati QOTIB turadi: qo'shish ham, o'chirish ham
+  //  yo'q. Yuk xatining qatorlari mijozda turgan qog'oz bilan bir xil
+  //  bo'lishi kerak va yangi qator ortida chiqib ketgan mahsulot yo'q.
+  if (items.length !== eski.length || items.some((i) => !i.id || !byId.has(i.id)))
+    throw new Error('Chiqib ketgan buyurtmada qator qo\'shilmaydi va '
+      + 'o\'chirilmaydi — mahsulot zavoddan chiqib bo\'lgan');
+
+  for (const it of items) {
+    const e = byId.get(it.id);
+    const teng = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
+    if (Number(it.product_id) !== e.product_id || Number(it.qty) !== Number(e.qty)
+        || !teng(it.color, e.color) || !teng(it.fabric, e.fabric))
+      throw new Error(`${e.product}: chiqib ketgan qatorda faqat NARX `
+        + 'tuzatiladi — mahsulot, soni, rangi va matosi o\'zgarmaydi');
+
+    const narx = it.unit_price === '' || it.unit_price == null
+      ? null : Number(it.unit_price);
+    if (Number(narx) === Number(e.unit_price)
+        || (narx == null && e.unit_price == null)) continue;
+
+    if (eski.filter((x) => x.product_id === e.product_id).length > 1)
+      throw new Error(`${e.product}: buyurtmada bu mahsulotdan ikkita qator `
+        + 'bor — qaysi konverning narxi ekanini tizim bilmaydi. '
+        + 'Narxni konver kartochkasidan tuzating');
+
+    await client.query(
+      `UPDATE order_items SET unit_price = $2 WHERE id = $1 AND order_id = $3`,
+      [it.id, narx, o.id]);
+    //  Konverga ham: mijozning qarzi shundan hisoblanadi. Narx
+    //  BO'SHATILSA konverdagisi ham bo'shaydi — bo'sh yuborilgani
+    //  «tegma» emas, «yo'q» degani (butun tizimda bir xil idiom).
+    await client.query(
+      `UPDATE production_units SET unit_price = $2
+        WHERE order_no = $1 AND status = 'shipped' AND product_id = $3`,
+      [orderNo, narx, e.product_id]);
+  }
+}
+
 router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
   const { customer_id, manager_id, ordered_on, due_on, note, status, items,
           ship_to, address, receiver_phone } = req.body;
@@ -713,7 +800,19 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
     //  sahifada tugmani yashirish himoya emas.
     if (cur.status === 'to_ship' && status !== 'reserved')
       throw new Error("Chiqarishga berilgan — avval qaytarib oling");
-    if (cur.status === 'shipped') throw new Error("Buyurtma jo'natilgan");
+
+    //  ★ CHIQIB KETGANNI FAQAT ADMINISTRATOR TUZATADI (izoh:
+    //  `fixShipped`). Qolgan hamma uchun buyurtma yopiq bo'lib
+    //  qolaveradi: uning summasi mijozning qarzi va u hujjat bilan
+    //  bir xil turishi kerak.
+    const tuzatadi = cur.status === 'shipped';
+    if (tuzatadi && !req.user.permissions.includes('sales.fix'))
+      throw new Error("Buyurtma jo'natilgan");
+    //  Holat QAYTARILMAYDI: chiqib ketganni «tayyor» ga surish
+    //  mahsulotni omborga qaytarmaydi — u mijozda — faqat qoldiqni
+    //  yolg'on qilardi. Qaytib kelgani alohida ish (hali yozilmagan).
+    if (tuzatadi && status && status !== cur.status)
+      throw new Error('Chiqib ketgan buyurtmaning holati qaytarilmaydi');
 
     //  Bekor qilishdan oldin konverlar ajratiladi: aks holda ombordagi
     //  mahsulot bekor qilingan buyurtmada band bo'lib qolardi va uni
@@ -774,8 +873,26 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
         [cur.order_no, yangiNo]);
     }
 
-    if (Array.isArray(items)) await saveItems(client, req, Number(req.params.id), items);
-    await audit(req, { module: 'sales', action: 'update', entity: 'order',
+    //  Chiqib ketganda `saveItems` YO'Q: u qatorni o'chiradi, qayta
+    //  yozadi va chegirma tasdig'ini qaytadan hisoblaydi — yopilgan
+    //  hujjatda uchalasi ham noto'g'ri bo'lardi. Narx esa konverga ham
+    //  ko'chishi kerak, ya'ni yo'l boshqa (izoh: `fixShipped`).
+    if (tuzatadi) {
+      await fixShipped(client, req, cur, items, yangiNo || cur.order_no);
+      //  ★ MIJOZ ALMASHSA KONVER HAM KO'CHADI. Balans konverdan
+      //  hisoblanadi: buyurtmada mijozni almashtirib, konverni eski
+      //  mijozda qoldirish qarzni IKKI odamda yolg'on qilardi —
+      //  yangisida ko'rinmas, eskisida turib qolardi.
+      if (customer_id && Number(customer_id) !== cur.customer_id)
+        await client.query(
+          `UPDATE production_units SET customer_id = $2
+            WHERE order_no = $1 AND status = 'shipped'`,
+          [yangiNo || cur.order_no, customer_id]);
+    } else if (Array.isArray(items)) {
+      await saveItems(client, req, Number(req.params.id), items);
+    }
+    await audit(req, { module: 'sales',
+                       action: tuzatadi ? 'fix' : 'update', entity: 'order',
                        entity_id: Number(req.params.id),
                        payload: { order_no: cur.order_no } }, client);
     await client.query('COMMIT');

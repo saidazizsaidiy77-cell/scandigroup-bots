@@ -245,12 +245,17 @@ let rows = [], customers = [], managers = [], products = [], dests = [];
 let stock = [];
 //  Zavodda ishlatilgan rang va matolar — zahiraga tanlash uchun.
 let palette = { colors: [], fabrics: [] };
-let status = '', canWrite = false;
+let status = '', canWrite = false, canFix = false;
 // Ochiq buyurtma: sarlavha, qatorlar va biriktirilgan konverlar.
 let cur = null;
 
 async function boot(){
   canWrite = App.can('sales.manage');
+  //  ★ CHIQIB KETGANNI FAQAT ADMINISTRATOR TUZATADI (izoh:
+  //  modules/sales.js, `fixShipped`). Huquq boshqa hech kimda yo'q,
+  //  ya'ni qolganlar uchun yopilgan buyurtma hujjat bo'lib qolaveradi.
+  //  Bu KO'RINISH: tekshiruv baribir serverda.
+  canFix = App.can('sales.fix');
   $('btnNew').innerHTML = canWrite
     ? `<button class="primary" onclick="openOrder(null)">Yangi buyurtma</button>` : '';
   const [c, p, d, sg, st] = await Promise.all([
@@ -434,7 +439,7 @@ async function load(){
       && o.status !== 'shipped' && o.status !== 'cancelled';
     //  Qatorning O'ZI bosiladi: buyurtmani ochish uchun kichkina
     //  qalamchani nishonga olish shart emas.
-    const yopiq = o.status === 'shipped' || o.status === 'cancelled'
+    const yopiq = (o.status === 'shipped' ? !canFix : o.status === 'cancelled')
                || o.status === 'to_ship' || !canWrite;
     //  ★ ERTALABKI TO'DA: «Tayyor» buyurtmani ochmasdan chiqarishga
     //  berish. Ruxsat beradigan odam ertalab o'nta buyurtmani ko'zdan
@@ -717,9 +722,16 @@ function draw(){
   const o = cur.order, isNew = !o.id;
   //  Chiqarishga berilgandan keyin ham yopiladi: mudir ko'rib turgan
   //  buyurtma ostidan o'zgarib ketmasin. Qaytarib olinsa yana ochiladi.
-  const ro = !canWrite || o.status === 'shipped' || o.status === 'cancelled'
-          || o.status === 'to_ship';
+  //  ★ CHIQIB KETGAN — ADMINISTRATORGA TUZATISH KO'RINISHI. Qolgan
+  //  hamma uchun u hujjat bo'lib ochiladi va shunday qolishi kerak:
+  //  summasi mijozning qarzi.
+  const tuzat = o.status === 'shipped' && canWrite && canFix;
+  const ro = !canWrite || o.status === 'cancelled' || o.status === 'to_ship'
+          || (o.status === 'shipped' && !tuzat);
   const dis = ro ? 'disabled' : '';
+  //  `drawItems` alohida funksiya va shu belgini o'qiydi — ikkinchi
+  //  marta hisoblansa bir kun ikkalasi ajralib ketardi.
+  cur.tuzat = tuzat;
   $('modalRoot').innerHTML = `
     <div class="order-view"><div class="order-in">
       <div class="order-top">
@@ -800,6 +812,10 @@ function draw(){
 
       <div class="card">
       <h2>Qatorlar</h2>
+      ${!tuzat ? '' : `<p class="muted no-print" style="margin:-4px 0 12px;font-size:13px">
+        Mahsulot zavoddan chiqib bo'lgan — qatorda faqat <b>narx</b>
+        tuzatiladi. Yangi narx konverga ham ko'chadi va mijozning
+        qarzi o'sha zahoti to'g'rilanadi.</p>`}
       <div style="overflow-x:auto"><table style="table-layout:fixed;min-width:940px">
         <!--  Ustunlar bir xil o'lchamda: kataklar tekis tursin. -->
         <colgroup>
@@ -820,12 +836,13 @@ function draw(){
         <tbody id="tI"></tbody>
         <tfoot id="tIf"></tfoot>
       </table></div>
-      <button style="margin-top:12px" onclick="addItem()">+ Qator qo'shish</button>
+      ${tuzat ? '' : `<button style="margin-top:12px"
+        onclick="addItem()">+ Qator qo'shish</button>`}
       </div>`}
 
       ${ro ? '' : `<div class="row" style="gap:10px;margin-top:26px">
         <button class="primary" onclick="save()">Saqlash</button>
-        ${isNew ? '' : `
+        ${isNew || tuzat ? '' : `
           <!--  ★ RUXSATNI BITTA ODAM BERADI (izoh: sql/sales.sql):
                 buyurtmani har menejer yozadi, lekin chiqish kunini
                 bitta odam nazorat qiladi. Belgisi yo'q xodimda tugma
@@ -1089,7 +1106,11 @@ function drawItems(){
   //  Yopilgan buyurtmada jadval YO'Q — uning o'rnida yuk xati turadi
   //  (`docHtml`), qatorlari ham o'sha yerda chiziladi.
   if (!$('tI')) return;
-  const dis = '';
+  //  ★ TUZATISH KO'RINISHIDA FAQAT NARX OCHIQ (izoh: draw). Mahsulot,
+  //  rangi, matosi va soni QOTIB turadi: qog'ozdagi dona haqiqatda
+  //  ketgani va yangi qator ortida chiqib ketgan mahsulot yo'q.
+  //  Tekshiruv baribir serverda — katakni yopish himoya emas.
+  const dis = cur.tuzat ? 'disabled' : '';
   $('tI').innerHTML = cur.items.length ? cur.items.map((it, i) => {
     const p = products.find(x => x.id === Number(it.product_id));
     const z = rangTanlanadi(it);
@@ -1105,7 +1126,7 @@ function drawItems(){
           esc(srcHint(it))}</div>` : ''}</td>
       <td>${cell(i, 'color',  rowsFor(it, 2), it.color, dis, z)}</td>
       <td>${cell(i, 'fabric', rowsFor(it, 3), it.fabric, dis, z)}</td>
-      <td class="num"><input type="number" min="1" value="${it.qty ?? 1}"
+      <td class="num"><input type="number" min="1" value="${it.qty ?? 1}" ${dis}
             style="text-align:right" oninput="setField(${i},'qty',this.value)">
         ${p ? `<div class="muted" style="font-size:11px">${esc(p.uom || '')}</div>` : ''}</td>
       <td class="num"><input type="number" step="0.01" value="${it.unit_price ?? ''}"
@@ -1119,9 +1140,9 @@ function drawItems(){
       <!--  Tugmalar ikki qatorga tushishi mumkin: tor ekranda ham
             jadvaldan chiqib ketmasin. -->
       <td class="num"><div class="row" style="gap:6px;justify-content:flex-end;
-           flex-wrap:wrap">${it.id
+           flex-wrap:wrap">${cur.tuzat ? '' : `${it.id
           ? `<button onclick="openPick(${it.id})">Konver</button>` : ''}
-        <button onclick="delItem(${i})">✕</button></div></td>
+        <button onclick="delItem(${i})">✕</button>`}</div></td>
     </tr>`;
   }).join('') : `<tr><td class="muted" colspan="8">Qator qo\'shilmagan</td></tr>`;
 

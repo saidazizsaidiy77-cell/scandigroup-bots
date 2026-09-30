@@ -8578,6 +8578,89 @@ test('konver raqami bo\'yicha qidiruv: bo\'laklari qayerdaligini aytadi', async 
     .status, 200, 'tsex ustasi ham ko\'radi');
 });
 
+//  ★ CHIQIB KETGAN BUYURTMANI FAQAT ADMINISTRATOR TUZATADI (izoh:
+//  modules/sales.js, `fixShipped`). Jo'natilgan buyurtma savdo uchun
+//  yopiq bo'lib qolaveradi: uning summasi mijozning qarzi va u mijoz
+//  imzolagan hujjat bilan bir xil turishi kerak. Lekin xato bo'ladi
+//  va tuzatadigan yo'l umuman yo'q edi.
+test('chiqib ketgan buyurtmani faqat administrator tuzatadi', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const ikki  = (await H.id(`SELECT id FROM customers WHERE name='B2B mijozi'`)).id;
+
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Sut', unit_price: 100,
+      is_opening: true, fg_on: '2026-09-02' }] })).body.created[0];
+
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90),
+    items: [{ product_id: PENAL, qty: 2, color: 'Sut', unit_price: 300 }] })).body;
+  const q = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u.id, qty: 2 })).status, 200);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
+    { ship_on: '2026-10-05' })).status, 200);
+
+  const bal = async (id) => Number((await H.id(
+    `SELECT COALESCE(balance, 0) AS id FROM v_customer_sales WHERE id = $1`,
+    [id])).id);
+  //  Balans MIJOZNING butun tarixidan yig'iladi — boshqa testlar ham
+  //  shu mijozga chiqargan, shuning uchun AYIRMA qaraladi.
+  const bal0 = await bal(mijoz), ikki0 = await bal(ikki);
+
+  const qator = (n, extra = {}) => ({
+    items: [{ id: q.id, product_id: PENAL, qty: 2, color: 'Sut', unit_price: n }],
+    ...extra });
+
+  //  Savdo menejeriga yopiq: huquq FAQAT administratorda.
+  const sot = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  const yopiq = await sot('PATCH', '/api/sales/orders/' + z.id, qator(250));
+  assert.equal(yopiq.status, 400, yopiq.text);
+  assert.match(yopiq.body.error, /jo'natilgan/);
+
+  //  ★ NARX TUZATILADI va KONVERGA ham ko'chadi — aks holda
+  //  tuzatishning ma'nosi yo'qolardi: hujjat balansdan yana farq
+  //  qilib qolardi.
+  const ok = await admin('PATCH', '/api/sales/orders/' + z.id, qator(250));
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(Number((await H.id(
+    `SELECT unit_price AS id FROM order_items WHERE id = $1`, [q.id])).id), 250);
+  assert.equal(Number((await H.id(
+    `SELECT unit_price AS id FROM production_units
+      WHERE order_no = $1 AND status = 'shipped'`, [z.order_no])).id), 250,
+    'konverga ham ko\'chdi');
+  //  2 × 300 → 2 × 250: qarz 100 dollarga kamaydi.
+  assert.equal(await bal(mijoz) - bal0, -100, 'balans o\'sha zahoti to\'g\'rilandi');
+
+  //  Soni, mahsuloti, rangi va qatorlar ro'yxati QOTIB turadi:
+  //  mahsulot zavoddan chiqib bo'lgan.
+  const son = await admin('PATCH', '/api/sales/orders/' + z.id, {
+    items: [{ id: q.id, product_id: PENAL, qty: 5, color: 'Sut', unit_price: 250 }] });
+  assert.equal(son.status, 400, son.text);
+  assert.match(son.body.error, /faqat NARX/);
+
+  const yangi = await admin('PATCH', '/api/sales/orders/' + z.id, {
+    items: [{ id: q.id, product_id: PENAL, qty: 2, color: 'Sut', unit_price: 250 },
+            { product_id: PENAL, qty: 1, color: 'Sut', unit_price: 100 }] });
+  assert.equal(yangi.status, 400, yangi.text);
+  assert.match(yangi.body.error, /qator qo'shilmaydi/);
+
+  //  Holat QAYTARILMAYDI: mahsulot mijozda, omborga qaytmaydi.
+  const orqa = await admin('PATCH', '/api/sales/orders/' + z.id,
+    { status: 'reserved' });
+  assert.equal(orqa.status, 400, orqa.text);
+  assert.match(orqa.body.error, /holati qaytarilmaydi/);
+
+  //  ★ MIJOZ ALMASHSA KONVER HAM KO'CHADI — aks holda qarz IKKI
+  //  odamda yolg'on bo'lardi: yangisida ko'rinmas, eskisida turib
+  //  qolardi.
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { customer_id: ikki })).status, 200);
+  assert.equal(await bal(mijoz) - bal0, -600, 'eski mijozdan chiqdi');
+  assert.equal(await bal(ikki) - ikki0, 500, 'yangi mijozga o\'tdi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

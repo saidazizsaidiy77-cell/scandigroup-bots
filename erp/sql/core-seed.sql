@@ -61,6 +61,18 @@ INSERT INTO permissions (code, module, name) VALUES
   --  boshlig'i emas: narx siyosati uning ishi. Ismi kodga
   --  yozilmaydi (4-qoida) — bu huquq, lavozim emas.
   ('sales.discount',    'sales',      'Narxdan past sotishga ruxsat'),
+  --  ★ CHIQIB KETGAN BUYURTMANI TUZATISH (zavod qarori, 2026-09).
+  --  Jo'natilgan buyurtma savdo uchun YOPIQ va shunday qolishi kerak:
+  --  uning qatorlari mijoz imzolagan yuk xati, summasi esa uning
+  --  qarzi. Lekin xato bo'ladi — mijoz adashib tanlanadi, narx
+  --  boshqa yoziladi — va tuzatadigan yo'l umuman yo'q edi: konver
+  --  jurnaldan ham chiqib ketgan.
+  --
+  --  Huquq ALOHIDA va u FAQAT administratorda: `sales.manage` bor
+  --  har menejer chiqib ketgan hujjatni qayta yoza olsa, qarz
+  --  jimgina o'zgarib turardi. Ro'yxatda hech kimga berilmaydi —
+  --  administrator uni «hamma huquq» qatori bilan oladi (pastda).
+  ('sales.fix',         'sales',      'Chiqib ketgan buyurtmani tuzatish'),
   -- Kassa (rejada)
   ('cash.view',         'cash',       'Kassa hisobotlarini ko''rish'),
   ('cash.entry',        'cash',       'Kirim / chiqim kiritish'),

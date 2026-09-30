@@ -1586,6 +1586,58 @@ qoldig'idan chiqadi va mijoz balansiga qo'shiladi. Konverning faqat
 BRON QILINGAN qismi chiqadi: qolgani boshqa mijozniki bo'lishi mumkin,
 shuning uchun kerak bo'lsa shu yerda bo'linadi.
 
+**★ CHIQIB KETGANNI FAQAT ADMINISTRATOR TUZATADI** (`sales.fix`, zavod
+qarori 2026-09; `fixShipped`, `modules/sales.js`). Jo'natilgan
+buyurtma savdo uchun yopiq va shunday qolishi kerak: uning qatorlari
+mijoz IMZOLAGAN yuk xati, summasi esa uning qarzi. Lekin xato bo'ladi
+— mijoz adashib tanlanadi, narx boshqa yoziladi — va tuzatadigan yo'l
+UMUMAN yo'q edi: konver jurnaldan ham chiqib ketgan, ya'ni na
+buyurtmadan, na jurnaldan tegib bo'lmasdi. Yagona chora bazaga qo'lda
+kirish bo'lardi.
+
+Huquq **ALOHIDA va faqat administratorda**: `sales.manage` bor har
+menejer yopilgan hujjatni qayta yoza olsa, mijozning qarzi jimgina
+o'zgarib turardi. Ro'yxatda hech kimga berilmaydi — administrator uni
+«hamma huquq» qatori bilan oladi (`sql/core-seed.sql`).
+
+**Chegara MAHSULOTNING qayerdaligidan chiqadi, qulaylikdan emas:**
+
+    o'zgaradi     mijoz · menejer · sanalar · qayerga · manzil ·
+                  kutib oluvchi · izoh · zakaz raqami · qator NARXI
+    o'zgarmaydi   qator soni, mahsuloti, rangi, matosi va qatorlar
+                  ro'yxati — mahsulot zavoddan chiqib bo'lgan va
+                  qog'ozdagi dona haqiqatda ketgani
+    umuman yo'q   holatni qaytarish: chiqib ketganni «tayyor» ga
+                  surish mahsulotni omborga qaytarmaydi — u mijozda —
+                  faqat qoldiqni yolg'on qilardi
+
+**★ NARX KONVERGA HAM KO'CHADI**, aks holda tuzatishning MA'NOSI
+yo'qolardi: mijozning qarzi konverdan hisoblanadi
+(`v_customer_sales`), yuk xati esa buyurtma qatoridan — bittasi
+o'zgarib, ikkinchisi qolsa hujjat balansdan YANA farq qilardi.
+
+Konver qaysi qatorniki ekani SAQLANMAGAN: bron chiqarishda o'chiriladi
+va bog'lanish faqat `production_units.order_no` matni bo'lib qoladi.
+Shuning uchun `sotilgan-narx` bir martalik ko'chirishi bilan AYNAN bir
+xil qoida: narx faqat ANIQ holatda ko'chadi — buyurtmada shu
+mahsulotdan BITTA qator bo'lsa. Ikkita bo'lsa qaysi biri ekanini bilib
+bo'lmaydi va taxmin qilingan narx yolg'on qarz yozardi, shuning uchun
+tizim taxmin qilmaydi — RAD ETADI va sababini yozadi.
+
+**Mijoz almashsa konver ham ko'chadi** (`production_units.customer_id`):
+buyurtmada mijozni almashtirib, konverni eskisida qoldirish qarzni IKKI
+odamda yolg'on qilardi — yangisida ko'rinmas, eskisida turib qolardi.
+
+**`saveItems` bu yo'lda ishlatilmaydi**: u qatorni o'chiradi, qayta
+yozadi va chegirma tasdig'ini qaytadan hisoblaydi — yopilgan hujjatda
+uchalasi ham noto'g'ri bo'lardi. Audit jurnalida yozuv `fix` deb
+turadi, `update` emas: «kim yopilgan hujjatga tegdi» degan savol
+alohida javob talab qiladi.
+
+Ekranda qator kataklari QOTIB turadi va faqat narx ochiq qoladi,
+ro'yxatda esa tugma yana ✎ bo'ladi. Bu KO'RINISH — tekshiruv
+**serverda**: qatorni qo'lda yuborsa ham qabul qilinmaydi.
+
 **Zahira** (`is_stock`) — buyurtmasiz, oldindan ishlangan mahsulot. U
 `sections.is_hold` belgili bo'limda buyurtma kutadi (korpus → Rang sepish,
 stul → Lak karkas). Zahiraga muddat bashorat qilinmaydi.
@@ -2457,7 +2509,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `xom_ombor` | `materials.view`, `materials.manage`, `purchasing.view` | xom ashyo spravochnigi, material omborlari va ularning boshlang'ich qoldig'i — narx bilan. T/M ombor unga ochilmaydi |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
 | `savdo_boshliq` | `sotuvchi` bilan AYNAN bir xil | savdo bo'lim boshlig'i: farqi faqat **doirasida** — yo'nalish ham, «Faqat o'zinikini» ham bo'sh qoladi, ya'ni butun savdoni ko'radi |
-| `admin` | barchasi | hammasi |
+| `admin` | barchasi | hammasi. **`sales.fix` faqat unda**: chiqib ketgan buyurtmani tuzatish |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
 ko'rinishi va panelni.** Ikkisi alohida: sotuvchi o'z buyurtmasi qaysi
