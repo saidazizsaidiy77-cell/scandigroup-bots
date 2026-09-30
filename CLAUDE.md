@@ -343,6 +343,65 @@ yo'ldan (`/reject`), lekin holati boshqa: `rejected` — boshqaniki,
 `cancelled` — o'zinikidir; sabab ikkalasida ham so'raladi (konver
 so'rovi bilan bir xil idiom).
 
+**★ HAMMA MAHSULOT ZAVODDA YASALMAYDI — MATRAS** (zavod qarori,
+2026-09; `fg_receipts`, `sql/warehouse.sql`, T/M omborning **«Kirim»**
+tabi). Matras ta'minotchidan TAYYOR holda keladi va do'konda alohida
+sotiladi: yotoqxona to'plamiga qo'shib ham beriladi, yakka o'zi ham
+ketadi. Tizimda esa bunday tur yo'q edi — har konver marshrutdan
+o'tardi.
+
+**Alohida jadval YOZILMADI**: matras ham KONVER, faqat u tsexda emas,
+OMBORDA tug'iladi. Marshruti yo'q (`route_template_id IS NULL`), ya'ni
+tsex ekranida ko'rinmaydi, muddat hisoblanmaydi va topshirish
+so'ralmaydi — lekin ombor qoldig'i, bron, yuk xati va mijoz balansi
+ESKICHA ishlaydi, chunki ularning hammasi konverni o'qiydi. Teskarisi
+qilinsa savdo, bron, hisobot va balans IKKI manbadan o'qishi kerak
+bo'lardi va bitta esdan chiqqan joy matrasni hisobotdan tushirib
+qoldirardi.
+
+Guruh bo'lib turishining sababi: raqamning harfi, o'lchov birligi va
+savdo qoidalari GURUHda yoziladi. Raqami **`MT26-0001`** — «M» band
+(xom ashyo kirimi `M26-0001`) va bitta harf ikki xil hujjatni atasa
+ekrandagi raqam qaysi biri ekani noaniq qolardi. Zavodda matrasning
+bitta turi sotiladi; o'lcham bo'yicha ajratish kerak bo'lsa har
+o'lcham ALOHIDA mahsulot bo'ladi — xom ashyodagi «har rang alohida
+material» bilan bir xil qoida.
+
+**Mol HUJJAT bilan kiradi** (`F26-0001`) va hujjat IKKI ishni birga
+qiladi: omborni to'ldiradi va **ta'minotchining oldidagi qarzni
+oshiradi** — xom ashyo kirimi bilan aynan bir xil sabab. Qatorlari
+alohida jadvalda emas, KONVERLARNING O'ZIDA
+(`production_units.fg_receipt_id`): «omborda nechta bor» degan savol
+bitta manbadan hisoblanishi kerak, aks holda hujjatda 10 ta, qoldiqda
+8 ta bo'lib qolardi. `v_supplier_debt` va `v_supplier_ledger` endi
+ikkala kirimni ham o'qiydi.
+
+**Kirim FAQAT T/M OMBORGA**: mol ta'minotchidan ZAVODGA keladi,
+vitrinaga esa u T/M dan omborlar aro hujjat bilan boradi (xom
+ashyodagi «kirim faqat zavod omboriga» bilan bir xil qoida). Ombor
+ro'yxatda so'ralmaydi ham — javobi bitta bo'lgan savol.
+
+**Ta'minotchi ham, narx ham MAJBURIY**: ta'minotchisiz kirim omborni
+to'ldirib, qarzni jimgina tashlab ketardi; narx esa kirimda QARZNING
+O'ZI. Valyuta va kurs hujjat bo'yicha bitta, kurs qator bilan qotadi.
+
+**★ OLINGAN NARX `unit_price` GA YOZILMAYDI**, va bu muhim.
+`unit_price` — SOTUV narxi: chiqarishda buyurtma qatoridan
+ko'chiriladi va qatorda narx bo'lmasa kartochkadagisi qoladi. Sotib
+olingan narx o'sha katakka yozilsa matras mijozga TANNARXIDA chiqib
+ketardi. Shuning uchun alohida ustun — **`buy_price`** (dollarda), va
+u sotib olinadigan tayyor mahsulotning tannarxi: uning material sarfi
+ham, ishbay oyligi ham yo'q. Yasaladigan konverda bu katak bo'sh
+qoladi.
+
+**O'chirilmaydi, bekor qilinadi**: hujjat ham, uning konverlari ham
+BIRGA — ikkinchisi qolib ketsa hujjat qarzdan chiqar, mahsulot esa
+omborda turaverardi. Bronda turgani yoki chiqib ketgani bo'lsa
+bekor qilinmaydi (ombordagi konverni bekor qilish bilan bir xil
+qoida). Huquqi **`warehouse.manage`**: molni T/M ombor mudiri qabul
+qiladi va hujjatni ham o'zi yozadi — javonni u sanaydi; xom ashyo
+kirimi esa `materials.manage` da qolaveradi.
+
 Kiritishda adashilsa — ombor o'rniga tsex tanlanib ketsa — konverni
 o'sha zahoti omborga o'tkazadigan tuzatish bor:
 `POST /api/units/:id/to-warehouse` (faqat `production.manage`). Bu

@@ -8441,6 +8441,16 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
   assert.equal(lenta.length, 1, 'lentada bitta qator');
   assert.equal(Number(lenta[0].credit), 350, 'haqdor tomonda');
 
+  //  ★ VA ENG MUHIMI — SOTILADI. Matrasning butun ma'nosi shu:
+  //  savdo uni T/M ombordagi oddiy qoldiq bo'lib ko'radi va buyurtmaga
+  //  biriktiradi. Alohida jadval yozilganda bu ro'yxat ikkinchi
+  //  manbadan ham o'qishi kerak bo'lardi.
+  const qoldiq = (await admin('GET', '/api/sales/stock')).body.rows
+    .filter((r) => r.product_id === mat && r.src === 'fg');
+  assert.ok(qoldiq.length, 'matras savdoning qoldig\'ida turibdi');
+  assert.equal(qoldiq.reduce((a, r) => a + Number(r.free), 0), 6,
+    'oltitasi ham bo\'sh');
+
   //  Bekor qilish: sabab so'raladi, konverlar ham birga chiqadi.
   assert.equal((await admin('POST',
     `/api/warehouse/fg/receipts/${k.body.id}/cancel`)).status, 400, 'sababsiz');
