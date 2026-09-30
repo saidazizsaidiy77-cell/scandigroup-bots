@@ -95,6 +95,7 @@
         <option value="">Hammasi</option>
         <option value="issue">Talabnoma</option>
         <option value="return">Qaytarish</option>
+        <option value="move">Ko'chirish</option>
       </select></div>
     <div class="row" style="gap:8px" id="talabTools"></div>
   </div>
@@ -594,7 +595,8 @@ const yozadi = () => App.can('materials.request', 'materials.manage',
 function drawTalab() {
   $('talabTools').innerHTML = yozadi()
     ? `<button class="primary" onclick="talabOch('issue')">+ Talabnoma</button>
-       <button onclick="talabOch('return')">Qaytarish</button>` : '';
+       <button onclick="talabOch('return')">Qaytarish</button>
+       <button onclick="talabOch('move')">Ko'chirish</button>` : '';
   if (!rows.length) {
     $('body').innerHTML = "<p class=\"muted\">Talabnoma yo'q."
       + (yozadi() ? " «+ Talabnoma» bilan yozing." : '') + '</p>';
@@ -619,8 +621,12 @@ function drawTalab() {
              ? '<br><span class="muted">+' + (it.length - 2) + ' ta</span>' : '');
         return '<tr style="cursor:pointer" onclick="talabKor(' + r.id + ')">'
           + '<td><b>' + esc(r.doc_no || '—') + '</b>'
-          + (r.kind === 'return'
-             ? '<div class="muted" style="font-size:12px">qaytarish</div>' : '')
+          //  Turi raqam ostida yoziladi: hujjatlar bitta ro'yxatda
+          //  turadi va qaysi biri ekanini ochib ko'rmasdan bilish
+          //  kerak. Talabnomada yozilmaydi — u odatiy hol.
+          + (r.kind === 'issue' ? ''
+             : '<div class="muted" style="font-size:12px">'
+               + (r.kind === 'move' ? "ko'chirish" : 'qaytarish') + '</div>')
           + '</td>'
           + '<td class="muted">' + esc(r.from_warehouse) + '</td>'
           + '<td class="muted">' + esc(r.to_warehouse) + '</td>'
@@ -790,15 +796,38 @@ function talabOch(kind) {
   //  qolardi — so'rash uchun joy qolmasdi (izoh: modules/materials.js).
   tZavod = ref.factory_warehouses || ref.warehouses.filter((w) => !w.shop_id);
   const qaytar = kind === 'return';
+  //  ★ KO'CHIRISHDA IKKALA OMBOR HAM QO'LDA TANLANADI (izoh:
+  //  modules/materials.js). Talabnomada manbani tizim topadi —
+  //  savol «bu material qaysi zavod omborida bor». Ko'chirishda
+  //  savol boshqa va javobni faqat ODAM biladi: MDF ombori to'lib
+  //  qoldi, qolganini xom ashyoga olib qo'yamiz.
+  //
+  //  Ro'yxat DOIRA bilan cheklangan (`ref.warehouses`), ya'ni tsex
+  //  boshlig'i faqat o'z tsexining omborlarini ko'radi va zavod
+  //  omboriga ko'chira olmaydi — uning yo'li TALABNOMA. Tekshiruv
+  //  baribir serverda.
+  const kochir = kind === 'move';
+  const hammasi = ref.warehouses;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:720px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
-          <h1>${qaytar ? 'Omborga qaytarish' : 'Talabnoma'}</h1>
+          <h1>${kochir ? "Omborlar aro ko'chirish"
+            : qaytar ? 'Omborga qaytarish' : 'Talabnoma'}</h1>
           <button onclick="yop()">Yopish</button></div>
         <input type="hidden" id="tKindNew" value="${kind}">
         <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
           margin-bottom:12px">
+          ${kochir ? `
+            <div style="flex:1;min-width:210px"><label>Qayerdan</label>
+              <select id="tFrom" onchange="talabYol()">${hammasi.map((w) =>
+                `<option value="${w.id}">${esc(w.name)}${
+                  joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}</select></div>
+            <div style="flex:1;min-width:210px"><label>Qayerga</label>
+              <select id="tTo" onchange="talabYol()">${hammasi.map((w) =>
+                `<option value="${w.id}">${esc(w.name)}${
+                  joyi(w) ? ' · ' + esc(joyi(w)) : ''}</option>`).join('')}</select></div>`
+          : `
           <div style="flex:1;min-width:210px"><label>Tsex ombori</label>
             <select id="tShopWh" onchange="talabYol()">${tsexlar.map((w) =>
               `<option value="${w.id}">${esc(w.name)}${
@@ -807,13 +836,17 @@ function talabOch(kind) {
             <label>Zavod ombori</label>
             <select id="tFactWh" onchange="talabYol()"></select></div>` : ''}
           ${qaytar ? '' : `<div style="width:170px"><label>Qachon kerak</label>
-            <input id="tNeed" type="date"></div>`}
+            <input id="tNeed" type="date"></div>`}`}
         </div>
-        ${tsexlar.length ? '' : `<p class="tag bad" style="display:inline-block;
+        ${kochir || tsexlar.length ? '' : `<p class="tag bad" style="display:inline-block;
           white-space:normal;margin-bottom:10px">Sizga biriktirilgan ombor yo'q —
           Xodimlar sahifasida «Ombor doirasi» ni tekshiring.</p>`}
         <p id="tYol" style="margin-bottom:6px"></p>
-        <p class="muted" style="margin-bottom:10px">${qaytar
+        <p class="muted" style="margin-bottom:10px">${kochir
+          ? "Material bir javondan ikkinchisiga ko'chadi. Ikkala ombor ham "
+            + "qo'lda tanlanadi — qayerga ko'chirishni faqat siz bilasiz. "
+            + "Sotib olish haqida savol yo'q, zayavka yozilmaydi."
+          : qaytar
           ? "Tsexdan ortib qolgan material zavod omboriga QAYTARILADI — "
             + "tsex qoldig'i kamayadi. Material so'rash uchun «+ Talabnoma»."
           : "Kerakli materialni yozing — qaysi ombordan kelishini tizim "
@@ -860,6 +893,18 @@ function talabYol() {
     f.innerHTML = mos.map((w) =>
       `<option value="${w.id}">${esc(w.name)}</option>`).join('');
     if (mos.some((w) => String(w.id) === eski)) f.value = eski;
+  }
+
+  //  Ko'chirishda yo'nalish ikkala katakdan o'qiladi va o'zidan
+  //  o'ziga tanlangani SAQLASHDAN OLDIN aytiladi: server ham rad
+  //  etadi, lekin xato saqlashda emas, tanlashda ko'rinsin.
+  if ($('tFrom') && $('tTo')) {
+    const a = Number($('tFrom').value), b = Number($('tTo').value);
+    $('tYol').innerHTML = a && a === b
+      ? '<span class="tag bad">Ikkala katakda bir xil ombor tanlangan</span>'
+      : '<b>' + esc(nom(a)) + '</b> <span class="muted">&rarr;</span> <b>'
+        + esc(nom(b)) + '</b>';
+    return;
   }
 
   const tsex   = nom($('tShopWh')?.value);
@@ -967,7 +1012,10 @@ async function talabSaqla() {
     const r = await App.api('/api/materials/requests', { method: 'POST',
       body: JSON.stringify({
         kind: $('tKindNew').value,
-        shop_warehouse_id: Number($('tShopWh').value) || null,
+        shop_warehouse_id: $('tShopWh') ? (Number($('tShopWh').value) || null) : null,
+        //  Ko'chirishda ikkala ombor ham qo'lda tanlanadi.
+        from_warehouse_id: $('tFrom') ? (Number($('tFrom').value) || null) : null,
+        to_warehouse_id:   $('tTo')   ? (Number($('tTo').value)   || null) : null,
         //  Talabnomada ombor YUBORILMAYDI — manbani server topadi va
         //  qatorlarni o'sha bo'yicha guruhlaydi (izoh: `manbaTop`,
         //  modules/materials.js). Qaytarishda esa manzil bitta va uni
@@ -1009,7 +1057,8 @@ async function talabKor(id) {
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:640px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
-          <h1>${r.kind === 'return' ? 'Qaytarish' : 'Talabnoma'} ${esc(r.doc_no || '')}</h1>
+          <h1>${r.kind === 'move' ? "Ko'chirish"
+            : r.kind === 'return' ? 'Qaytarish' : 'Talabnoma'} ${esc(r.doc_no || '')}</h1>
           <button onclick="yop()">Yopish</button></div>
         <p class="muted" style="margin-bottom:12px">
           ${esc(r.from_warehouse)} → ${esc(r.to_warehouse)}
@@ -1038,9 +1087,15 @@ async function talabKor(id) {
         <div class="row" style="gap:8px;margin-top:16px;flex-wrap:wrap">
           ${boshqara() && r.status === 'new' && r.kind === 'issue'
             ? `<button onclick="talabReady(${r.id})">Tayyorladim</button>` : ''}
-          ${boshqara() && ochiq
+          <!--  ★ KO'CHIRISHNI MANBA OMBORNING EGASI BAJARADI (izoh:
+                modules/materials.js): tsexdan tsexga ko'chirishda xom
+                ashyo xodimi umuman qatnashmaydi — materialni
+                javonidan olib beradigan odam tsex boshlig'ining o'zi.
+                Tekshiruv baribir serverda. -->
+          ${(boshqara() || (r.kind === 'move' && yozadi())) && ochiq
             ? `<button class="primary" onclick="talabDone(${r.id})">
-                 ${qaytar ? 'Qabul qildim' : 'Chiqardim'}</button>` : ''}
+                 ${r.kind === 'move' ? "Ko'chirdim"
+                   : qaytar ? 'Qabul qildim' : 'Chiqardim'}</button>` : ''}
           ${ochiq ? `<button onclick="talabRad(${r.id})">Bekor qilish</button>` : ''}
         </div>
         <div id="tActMsg"></div>

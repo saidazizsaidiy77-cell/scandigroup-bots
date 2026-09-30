@@ -1043,8 +1043,10 @@ async function nextDocNo(client, jadval, harf) {
   return prefix + String(rows[0].n).padStart(4, '0');
 }
 
+//  Talabnoma T, qaytarish Q, omborlar aro ko'chirish N.
 const nextReqNo = (client, kind) =>
-  nextDocNo(client, 'mat_requests', kind === 'return' ? 'Q' : 'T');
+  nextDocNo(client, 'mat_requests',
+    kind === 'return' ? 'Q' : kind === 'move' ? 'N' : 'T');
 
 //  Ro'yxat. Doira CHEGARA: tsex boshlig'i o'z tsexining hujjatini
 //  ko'radi, xom ashyo xodimi (doirasiz) hammasini.
@@ -1220,7 +1222,8 @@ router.post('/requests', need('materials.request', ...MANAGE),
   wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
-  const kind = req.body.kind === 'return' ? 'return' : 'issue';
+  const kind = ['return', 'move'].includes(req.body.kind)
+    ? req.body.kind : 'issue';
 
   const client = await db.connect();
   try {
@@ -1230,7 +1233,43 @@ router.post('/requests', need('materials.request', ...MANAGE),
     //  Tsex ombori — hujjatning TSEX tomoni; zavod ombori — ZAVOD
     //  tomoni. `kind` yo'nalishni aytadi, ustunlar esa qayerdan
     //  qayerga ekanini.
-    const tsexWh = (await client.query(
+    //  ★ OMBORLAR ARO KO'CHIRISH — IKKALA OMBOR HAM QO'LDA
+    //  TANLANADI (zavod qarori, 2026-09).
+    //
+    //  Talabnomada manbani tizim topadi (`manbaTop`): savol «bu
+    //  material qaysi zavod omborida bor». Ko'chirishda esa savol
+    //  boshqa va javobni faqat ODAM biladi: MDF ombori to'lib qoldi,
+    //  qolganini xom ashyoga olib qo'yamiz. Tizim buni taxmin qila
+    //  olmaydi, shuning uchun taxmin ham qilmaydi.
+    //
+    //  Ikkala ombor ham DOIRADA bo'lishi shart va bu ikki tomonlama:
+    //  tsex boshlig'i o'z tsexidan boshqa tsexga ko'chira olmaydi —
+    //  manzil uning doirasida emas. Zavod omborlari (tsexsiz)
+    //  orasidagi ko'chirish esa doirasi YO'Q xodimniki: xom ashyo
+    //  xodimi va administrator.
+    const kochir = kind === 'move' ? await (async () => {
+      const olish = async (id, nomi) => {
+        const w = (await client.query(
+          `SELECT id, name, shop_id, owner_shop_id FROM warehouses
+            WHERE id = $1 AND kind = 'material' AND is_active`, [id])).rows[0];
+        if (!w) throw new Error(`${nomi} ombor tanlanmagan`);
+        const tsexi = w.owner_shop_id || w.shop_id;
+        //  Zavod ombori (tsexsiz) — doirasi bor xodimga yopiq: uning
+        //  yo'li TALABNOMA, ko'chirish emas.
+        if (doira && !(tsexi && doira.includes(tsexi)))
+          throw new Error(`«${w.name}» sizning doirangizda emas`);
+        return w;
+      };
+      const from = await olish(req.body.from_warehouse_id, 'Qayerdan');
+      const to   = await olish(req.body.to_warehouse_id,   'Qayerga');
+      //  O'zidan o'ziga hujjat bo'lmaydi: qoldiq o'zgarmasdi, hujjat
+      //  esa navbatda turardi (vitrinadan qaytarish bilan bir xil).
+      if (from.id === to.id)
+        throw new Error(`«${from.name}» — ikkala katakda bir xil ombor tanlangan`);
+      return { from, to };
+    })() : null;
+
+    const tsexWh = kochir ? kochir.to : (await client.query(
       `SELECT id, name, shop_id, owner_shop_id FROM warehouses
         WHERE id = $1 AND kind = 'material' AND is_active`,
       [req.body.shop_warehouse_id])).rows[0];
@@ -1246,12 +1285,18 @@ router.post('/requests', need('materials.request', ...MANAGE),
     //  Shart `/ref` dagi doira bilan BITTA manbadan
     //  (`COALESCE(owner_shop_id, shop_id)`), aks holda ekranda
     //  ko'ringan ombor serverda rad etilardi.
+    //  Ko'chirishda ikkala ombor ham yuqorida tekshirilgan: quyidagi
+    //  shartlar TALABNOMAniki — manzil tsexning ombori bo'lishi
+    //  kerakligini aytadi, ko'chirishda esa ikkala tomon ham zavod
+    //  ombori bo'lishi mumkin.
     const tsexi = tsexWh.owner_shop_id || tsexWh.shop_id;
-    if (!tsexi)
-      throw new Error(`«${tsexWh.name}» hech bir tsexniki emas — `
-        + `talabnoma tsexning omboriga yoziladi`);
-    if (doira && !doira.includes(tsexi))
-      throw new Error(`«${tsexWh.name}» sizning doirangizda emas`);
+    if (!kochir) {
+      if (!tsexi)
+        throw new Error(`«${tsexWh.name}» hech bir tsexniki emas — `
+          + `talabnoma tsexning omboriga yoziladi`);
+      if (doira && !doira.includes(tsexi))
+        throw new Error(`«${tsexWh.name}» sizning doirangizda emas`);
+    }
 
     //  Qatorlar avval TOZALANADI: soni yozilmagani hujjatga ham,
     //  guruhlashga ham tushmasin.
@@ -1273,7 +1318,10 @@ router.post('/requests', need('materials.request', ...MANAGE),
     //  IKKI xodim chiqarishi kerak bo'lardi — biri o'z javonidagini
     //  berar, qolgani esa «berilmadi» bo'lib osilib qolardi.
     let guruhlar;
-    if (req.body.factory_warehouse_id) {
+    if (kochir) {
+      //  Manba bitta va qo'lda tanlangan — guruhlash kerak emas.
+      guruhlar = [{ wh: kochir.from, qatorlar: toza }];
+    } else if (req.body.factory_warehouse_id) {
       const zavodWh = (await client.query(
         `SELECT id, name, shop_id FROM warehouses
           WHERE id = $1 AND kind = 'material' AND is_active`,
@@ -1306,9 +1354,12 @@ router.post('/requests', need('materials.request', ...MANAGE),
                                    to_warehouse_id, need_on, note, created_by)
          VALUES ($1,$2,$3,$4,$5::date,$6,$7) RETURNING id`,
         [doc_no, kind,
+         //  Yo'nalishni USTUNLAR aytadi, `kind` emas: qaytarishda
+         //  tsex beradi, talabnomada zavod, ko'chirishda esa
+         //  ikkalasi ham qo'lda tanlangan.
          kind === 'return' ? tsexWh.id : g.wh.id,
          kind === 'return' ? g.wh.id : tsexWh.id,
-         kind === 'return' ? null : SANA(req.body.need_on),
+         kind === 'issue' ? SANA(req.body.need_on) : null,
          trim(req.body.note), req.user.id])).rows[0];
 
       for (const q of g.qatorlar)
@@ -1329,6 +1380,8 @@ router.post('/requests', need('materials.request', ...MANAGE),
         perms: ['materials.manage'], module: 'materials', kind: 'mat_request',
         title: kind === 'return'
           ? `Qaytarish ${doc_no} · ${tsexWh.name}`
+          : kind === 'move'
+          ? `Ko'chirish ${doc_no} · ${tsexWh.name}`
           : `Talabnoma ${doc_no} · ${tsexWh.name}`,
         body: `${g.wh.name}${SANA(req.body.need_on)
                   ? ' · kerak: ' + SANA(req.body.need_on) : ''}`
@@ -1343,7 +1396,10 @@ router.post('/requests', need('materials.request', ...MANAGE),
       //  ★ YETMAGANI XARID ZAYAVKASIGA TUSHADI (izoh: `zayavkaYoz`).
       //  Faqat TALABNOMADA: qaytarishda mol omborga KELADI, ya'ni
       //  sotib olish haqida savol yo'q.
-      const zay = kind === 'return' ? []
+      //  Xarid zayavkasi FAQAT talabnomada: qaytarishda mol omborga
+      //  keladi, ko'chirishda esa zavod ichida yuradi — ikkalasida
+      //  ham sotib olish haqida savol yo'q.
+      const zay = kind !== 'issue' ? []
         : await zayavkaYoz(client, req, { wh: g.wh, qatorlar: g.qatorlar,
                                           request_id: r.id,
                                           need_on: SANA(req.body.need_on) });
@@ -1568,7 +1624,8 @@ router.post('/requests/:id/ready', need(...MANAGE), wrap(async (req, res) => {
 //  oladi — qolgani hali kelmagan. Ko'chadigani AYNAN berilgani,
 //  so'ralgani emas: aks holda yo'q material tsex qoldig'iga tushib
 //  qolardi.
-router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
+router.post('/requests/:id/done', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -1579,6 +1636,31 @@ router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
     if (r.status === 'done') throw new Error('Allaqachon chiqarilgan');
     if (!['new', 'ready'].includes(r.status))
       throw new Error('Hujjat yopilgan');
+
+    //  ★ KO'CHIRISHNI MANBA OMBORNING EGASI BAJARADI (zavod qarori,
+    //  2026-09). Talabnomani xom ashyo xodimi chiqaradi
+    //  (`materials.manage`) va bu to'g'ri: mol ZAVOD omboridan
+    //  beriladi. Ko'chirish esa tsexdan tsexga ham bo'ladi va u
+    //  yerda xom ashyo xodimi umuman qatnashmaydi — materialni
+    //  javonidan OLIB BERADIGAN odam tsex boshlig'ining o'zi.
+    //
+    //  Shuning uchun yo'l `materials.request` ga ham ochildi, lekin
+    //  FAQAT ko'chirish uchun va FAQAT manba ombor o'z doirasida
+    //  bo'lganda: talabnoma eskicha xom ashyo xodiminiki bo'lib
+    //  qoladi. Tekshiruv SERVERDA — tugmani yashirish himoya emas.
+    if (!req.user.permissions.some((x) => MANAGE.includes(x))) {
+      if (r.kind !== 'move')
+        throw Object.assign(new Error('Talabnomani xom ashyo xodimi chiqaradi'),
+                            { status: 403 });
+      const doira = talabDoira(req);
+      const w = (await client.query(
+        `SELECT name, COALESCE(owner_shop_id, shop_id) AS tsexi
+           FROM warehouses WHERE id = $1`, [r.from_warehouse_id])).rows[0];
+      if (doira && !(w?.tsexi && doira.includes(w.tsexi)))
+        throw Object.assign(
+          new Error(`«${w?.name || 'Manba ombor'}» sizning doirangizda emas`),
+          { status: 403 });
+    }
 
     const berilgan = new Map(
       (Array.isArray(req.body.items) ? req.body.items : [])
@@ -1628,14 +1710,19 @@ router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
     //  QABUL QILADI — yo'nalish teskari. Ekrandagi tugma bilan bir xil
     //  so'z bo'lishi shart, aks holda xabarni o'qigan tsex boshlig'i
     //  hujjat teskari ketganini sezmasdi.
-    const qaytar = r.kind === 'return';
+    //  Ko'chirishda ham so'z boshqa: material bir javondan
+    //  ikkinchisiga KO'CHADI — chiqarilmaydi ham, qabul qilinmaydi
+    //  ham. Ekrandagi tugma bilan bir xil so'z bo'lishi shart.
+    const NOM = { return: 'Qaytarish', move: "Ko'chirish" };
+    const FEL = { return: 'qabul qilindi', move: 'bajarildi' };
+    const KIM = { return: 'Kim qabul qildi', move: "Kim ko'chirdi" };
     if (r.created_by)
       await notify.queue({
         worker_id: r.created_by, module: 'materials', kind: 'mat_done',
-        title: `${qaytar ? 'Qaytarish' : 'Talabnoma'} ${r.doc_no}`
-             + ` — ${qaytar ? 'qabul qilindi' : 'chiqarildi'}`,
+        title: `${NOM[r.kind] || 'Talabnoma'} ${r.doc_no}`
+             + ` — ${FEL[r.kind] || 'chiqarildi'}`,
         body: `${n} ta material\n\n`
-             + `${qaytar ? 'Kim qabul qildi' : 'Kim chiqardi'}: ${req.user.name}`,
+             + `${KIM[r.kind] || 'Kim chiqardi'}: ${req.user.name}`,
       }, client);
 
     await audit(req, { module: 'materials', action: 'request-done',

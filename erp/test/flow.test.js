@@ -8102,6 +8102,113 @@ test('zavod kalitlari: ko\'radi hamma, yoqadi administrator', async () => {
     { on: true })).status, 403);
 });
 
+//  ★ OMBORLAR ARO MATERIAL KO'CHIRISH (zavod qarori, 2026-09).
+//
+//  Talabnoma zavod omboridan TSEXGA beradi, qaytarish esa tsexdan
+//  zavodga. Uchinchi savol ikkalasiga ham to'g'ri kelmaydi: material
+//  bir tsexdan IKKINCHI tsexga, yoki zavod omborlari orasida
+//  ko'chadi.
+//
+//  Yangi jadval yozilmadi — hujjatning shakli AYNAN bir xil, faqat
+//  `kind = 'move'`. Ikkinchi mexanizm bo'lsa ro'yxat, bekor qilish,
+//  doira va qoldiq hisobi ikki nusxada yozilardi.
+test('omborlar aro material ko\'chiriladi', async () => {
+  const { db } = require('../db');
+  const xom = (await H.id(`SELECT id FROM warehouses WHERE code='XOM'`)).id;
+  const mdf = (await H.id(
+    `SELECT id FROM warehouses WHERE kind='material' AND shop_id IS NULL
+       AND owner_shop_id IS NULL AND id <> $1 AND is_active
+     ORDER BY sort LIMIT 1`, [xom])).id;
+  const mat = (await H.id(
+    `INSERT INTO materials (name, uom) VALUES ('Ko''chirish sinovi', 'dona')
+     ON CONFLICT (lower(name)) DO UPDATE SET uom = 'dona' RETURNING id`)).id;
+
+  //  Manbaga 50 dona qo'yamiz.
+  await db.query(
+    `INSERT INTO material_moves (material_id, from_kind, from_id,
+                                 to_kind, to_id, qty, moved_on, status)
+     VALUES ($1, 'opening', NULL, 'warehouse', $2, 50, CURRENT_DATE, 'ok')`,
+    [mat, xom]);
+  const qoldiq = async (w) => Number((await H.id(
+    `SELECT COALESCE(SUM(CASE WHEN to_id = $2 THEN qty ELSE -qty END), 0) AS n
+       FROM material_moves
+      WHERE material_id = $1 AND status = 'ok'
+        AND (to_id = $2 OR from_id = $2)
+        AND (to_kind = 'warehouse' OR from_kind = 'warehouse')`, [mat, w])).n);
+  assert.equal(await qoldiq(xom), 50);
+
+  //  ── O'ZIDAN O'ZIGA HUJJAT BO'LMAYDI ─────────────────────────────
+  const ozi = await admin('POST', '/api/materials/requests', {
+    kind: 'move', from_warehouse_id: xom, to_warehouse_id: xom,
+    items: [{ material_id: mat, qty: 10 }] });
+  assert.equal(ozi.status, 400, ozi.text);
+  assert.match(ozi.body.error, /bir xil ombor/);
+
+  //  ── HUJJAT YOZILADI ─────────────────────────────────────────────
+  const zayOldin = Number((await H.id(
+    `SELECT COUNT(*)::int AS n FROM mat_orders`)).n);
+  const d = await admin('POST', '/api/materials/requests', {
+    kind: 'move', from_warehouse_id: xom, to_warehouse_id: mdf,
+    items: [{ material_id: mat, qty: 20 }] });
+  assert.equal(d.status, 200, d.text);
+  const doc = d.body.rows ? d.body.rows[0] : d.body;
+  const id = doc.id || d.body.id;
+  assert.ok(id, d.text);
+
+  //  Raqami ALOHIDA harf bilan: talabnoma T, qaytarish Q, ko'chirish N.
+  const h = await H.id(
+    `SELECT doc_no, kind, from_warehouse_id, to_warehouse_id, need_on
+       FROM mat_requests WHERE id = $1`, [id]);
+  assert.match(h.doc_no, /^N\d{2}-\d{4}$/, h.doc_no);
+  assert.equal(h.kind, 'move');
+  assert.equal(h.from_warehouse_id, xom);
+  assert.equal(h.to_warehouse_id, mdf);
+  //  «Qachon kerak» faqat TALABNOMADA: ko'chirish zavod ichida yuradi.
+  assert.equal(h.need_on, null);
+
+  //  ★ XARID ZAYAVKASI YOZILMAYDI: mol zavod ichida ko'chadi, sotib
+  //  olish haqida savol yo'q.
+  //  Zayavka hujjat raqami bilan bog'lanadi; ko'chirishda u umuman
+  //  yozilmaydi, shuning uchun SHU hujjatdan keyin yangi zayavka
+  //  paydo bo'lmagani tekshiriladi.
+  assert.equal(zayOldin, Number((await H.id(
+    `SELECT COUNT(*)::int AS n FROM mat_orders`)).n),
+    'ko\'chirishga zayavka yozilmaydi');
+
+  //  Hujjat yozilgani bilan material QIMIRLAMAYDI.
+  assert.equal(await qoldiq(xom), 50, 'hali ko\'chmagan');
+  assert.equal(await qoldiq(mdf), 0);
+
+  //  ── BAJARILADI: material SHUNDA ko'chadi ────────────────────────
+  const ok = await admin('POST', `/api/materials/requests/${id}/done`, {});
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(await qoldiq(xom), 30, 'manbadan ayrildi');
+  assert.equal(await qoldiq(mdf), 20, 'manzilga qo\'shildi');
+
+  //  ── DOIRA CHEGARA: tsex boshlig'iga zavod ombori yopiq ──────────
+  //  Uning yo'li TALABNOMA, ko'chirish emas.
+  const usta = H.api(base, await H.sessionFor('Korpus ustasi'));
+  const yoq = await usta('POST', '/api/materials/requests', {
+    kind: 'move', from_warehouse_id: xom, to_warehouse_id: mdf,
+    items: [{ material_id: mat, qty: 5 }] });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /doirangizda emas/);
+
+  //  ── QOLDIQ KALITI: yoqilganda qoldiqdan ko'p ko'chirilmaydi ─────
+  await db.query(
+    `INSERT INTO app_settings (key, val) VALUES ('minus_material','1')
+     ON CONFLICT (key) DO UPDATE SET val = '1'`);
+  const k = await admin('POST', '/api/materials/requests', {
+    kind: 'move', from_warehouse_id: xom, to_warehouse_id: mdf,
+    items: [{ material_id: mat, qty: 999 }] });
+  assert.equal(k.status, 200, k.text);
+  const kid = k.body.rows ? k.body.rows[0].id : k.body.id;
+  const rad = await admin('POST', `/api/materials/requests/${kid}/done`, {});
+  assert.equal(rad.status, 400, rad.text);
+  assert.match(rad.body.error, /Ko'chirish sinovi/);
+  await db.query(`UPDATE app_settings SET val = '' WHERE key = 'minus_material'`);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
