@@ -174,3 +174,55 @@ CREATE TABLE IF NOT EXISTS migration_flags (
   key        TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ═══════════════════════════════════ ★ ZAVOD KALITLARI (SOZLAMALAR)
+--
+--  `migration_flags` bilan ADASHTIRMASLIK kerak, garchi ikkalasi ham
+--  kalit-qiymat bo'lsa ham: bayroq O'TMISHDAGI ma'lumot tuzatilganini
+--  yozib qo'yadi va bir marta o'qiladi, bu esa BUGUNGI qoida —
+--  zavod uni istagan payt yoqadi va o'chiradi, kod tegilmaydi
+--  (4-qoida: kodga qaror yozilmaydi).
+--
+--  ★ QIYMAT MATN. Hozir ikkalasi ham «1» yoki bo'sh, lekin ertaga
+--  soni yoki sanasi bo'lgan kalit qo'shilsa jadval o'zgarmaydi:
+--  ustun turi bir marta tanlanadi va keyin uni almashtirish butun
+--  jadvalni ko'chirishni talab qilardi.
+--
+--  Kim va qachon o'zgartirgani yoziladi: «buni kim o'chirib qo'ydi»
+--  degan savol pulga va ombor qoldig'iga tegadigan kalitda
+--  albatta paydo bo'ladi.
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  val        TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by INT REFERENCES workers(id)
+);
+
+--  ★ QOLDIQDAN KO'P CHIQARIB BO'LMAYDI (zavod qarori, 2026-09).
+--
+--  Ilgari to'siq YO'Q edi va bu ataylab edi: material allaqachon
+--  kesilgan, sarfni rad etish taxtani qaytarmaydi — faqat yozuvni
+--  yo'qotadi. Ustiga talabnoma moduli yozilmagan edi va tsex
+--  omborlari bo'sh turardi, ya'ni to'siq birinchi kundanoq hamma
+--  ishni to'xtatardi.
+--
+--  Ikkala sabab ham o'tdi: talabnoma yozildi, kirim hujjati yozildi
+--  va omborlar to'la boshladi. Endi minus qoldiq — xato.
+--
+--  ★ STANDARTI O'CHIQ, va bu ham ataylab. Deploy kuni o'ttizga yaqin
+--  material allaqachon minusda turibdi (kirim hujjati yozilmagani
+--  uchun): to'siq darrov yoqilsa ertaga o'sha materiallardan sarf
+--  yozib bo'lmasdi va tsex to'xtardi. Zavod avval o'sha qatorlarni
+--  kirim yoki boshlang'ich qoldiq bilan tuzatadi, keyin kalitni
+--  yoqadi.
+--
+--  ★ IKKI KALIT, BITTA EMAS: kassa qoldig'i toza, ombor esa hali
+--  emas. Bitta kalit bo'lsa kassani yoqish uchun ombor tuzatilishini
+--  kutish kerak bo'lardi.
+--
+--  Qator YO'Q = o'chiq (`COALESCE`), ya'ni jadval bo'sh bo'lsa ham
+--  hech narsa buzilmaydi.
+INSERT INTO app_settings (key, val) VALUES
+  ('minus_cash',     ''),
+  ('minus_material', '')
+ON CONFLICT (key) DO NOTHING;

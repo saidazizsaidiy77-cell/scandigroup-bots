@@ -17,7 +17,7 @@
 //  Tekshiruv SERVERDA: tugmani yashirish himoya emas.
 // ============================================================================
 const express = require('express');
-const { db, wrap, audit } = require('../db');
+const { db, wrap, audit, kalit } = require('../db');
 //  Tsex doirasi — ishlab chiqarishniki bilan BITTA joyda (`scopeOf`,
 //  modules/units.js). Ombor qoldig'i ham o'shani o'qiydi: doira ikki
 //  joyda yozilsa bir kun bir-biridan ajralib ketardi.
@@ -545,6 +545,50 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
         `SELECT 1 FROM workers WHERE id = $1 AND active AND can_hold_cash`, [to_id]);
       if (!ok.rowCount)
         throw new Error('Bu xodimga pul berilmaydi — Xodimlar sahifasidan belgilang');
+    }
+
+    //  ★ QOLDIQDAN KO'P PUL CHIQARIB BO'LMAYDI (zavod qarori,
+    //  2026-09; kalit `minus_cash`, izoh: sql/core.sql).
+    //
+    //  Kassa va xodimning qo'li — PUL TURADIGAN joy: undan turganidan
+    //  ko'pini chiqarish mumkin emas, chunki javonda o'sha pul yo'q.
+    //  Minusga tushgan kassa qoldig'i xato bo'lganini aytadi, lekin
+    //  aytish kech bo'ladi: pul allaqachon yozilgan va uni kim,
+    //  qayerdan olganini keyin topish kerak bo'lardi.
+    //
+    //  ★ MIJOZ VA TA'MINOTCHI QARZIGA TEGILMAYDI — ular joy emas,
+    //  QARZ hisobi va minus u yerda NORMAL holat: oldindan to'lov
+    //  aynan shunday ko'rinadi (izoh: CLAUDE.md, «boshlang'ich qarz
+    //  ISHORALI»). Harajat moddasining ham qoldig'i yo'q.
+    //
+    //  ★ VALYUTA ALOHIDA sanaladi: kassada dollar ham, so'm ham
+    //  yuradi va ular ikki xil pul — biri ikkinchisining
+    //  aylantirilgani emas (izoh: sql/cash.sql). Dollari bor kassadan
+    //  so'm chiqarib bo'lmaydi.
+    //
+    //  ★ TOPSHIRISHGA QO'YILGAN PUL HAM BAND. `pending` yozuv hech
+    //  qaysi qoldiqda turmaydi (`v_cash_flow` faqat `ok` ni o'qiydi)
+    //  — ya'ni faqat qoldiqqa qaralsa xodim bitta pulni ikki marta
+    //  topshira olardi: birinchisi kassirni kutib turganda,
+    //  ikkinchisi yozilaverardi.
+    if ((from_kind === 'account' || from_kind === 'worker')
+        && await kalit('minus_cash', client)) {
+      const manba = from_kind === 'account' ? 'v_cash_balance' : 'v_worker_cash';
+      const bor = (await client.query(
+        `SELECT name, COALESCE(CASE WHEN $2 = 'UZS' THEN uzs ELSE usd END, 0) AS qoldiq
+           FROM ${manba} WHERE id = $1`, [from_id, currency])).rows[0];
+      const band = Number((await client.query(
+        `SELECT COALESCE(SUM(amount), 0) AS n FROM cash_ops
+          WHERE status = 'pending' AND from_kind = $1 AND from_id = $2
+            AND currency = $3`, [from_kind, from_id, currency])).rows[0].n);
+      const ochiq = Number(bor?.qoldiq || 0) - band;
+      if (Number(amount) > ochiq) {
+        const belgi = currency === 'UZS' ? 'so\'m' : '$';
+        throw new Error(
+          `${bor?.name || 'Qoldiq'}: ${notify.pul(ochiq)} ${belgi} bor, `
+          + `${notify.pul(amount)} ${belgi} chiqarilmoqda`
+          + (band ? `\n${notify.pul(band)} ${belgi} topshirishga qo'yilgan` : ''));
+      }
     }
 
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('cash_doc_no'))`);

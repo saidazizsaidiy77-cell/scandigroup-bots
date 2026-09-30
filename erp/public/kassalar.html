@@ -54,6 +54,11 @@
 </div>
 
 <div id="body"></div>
+<!--  ★ QOIDA O'ZI TEGADIGAN JOYDA TURADI (izoh: sql/core.sql):
+      alohida «Sozlamalar» sahifasi qilinmadi — kassir qoidani
+      kassa ekranida ko'radi va nega rad etilganini o'sha yerda
+      o'qiydi. Chizish `App.kalitlar` da, bitta joyda. -->
+<div id="qoida" style="margin-top:14px"></div>
 
 <script>
 // ============================================================================
@@ -214,6 +219,7 @@ async function boot() {
   //  bir xil qoida).
   if (!d.rows.length) { location.replace(d.me.href); return; }
   draw(d);
+  App.kalitlar($('qoida'), ['minus_cash']);
 }
 
 App.start(boot, 'cash.view', 'cash.entry', 'cash.manage');

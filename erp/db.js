@@ -89,4 +89,22 @@ async function audit(req, { module, action, entity, entity_id, payload }, client
      req.headers['x-forwarded-for'] || req.socket.remoteAddress || null]);
 }
 
-module.exports = { db, wrap, today, daysAgo, audit };
+//  ★ ZAVOD KALITI (izoh: sql/core.sql). Qaror KODDA emas, BAZADA
+//  turadi: zavod uni istagan payt yoqadi va o'chiradi (4-qoida).
+//
+//  Qator YO'Q ham, bo'sh qiymat ham — O'CHIQ. Ikkalasi bir xil javob
+//  berishi kerak: jadval hali to'lmagan baza ham, kalit o'chirib
+//  qo'yilgan baza ham bir xil ishlasin.
+//
+//  Qiymat ESLAB QOLINMAYDI: kalit yoqilgan zahoti ishlashi kerak va
+//  xotirada turgan eski javob serverni qayta ishga tushirishni talab
+//  qilardi. So'rov PRIMARY KEY bo'yicha, ya'ni arzon.
+//
+//  Tranzaksiya ichidan chaqirilsa `client` uzatiladi (3-qoida).
+async function kalit(key, client) {
+  const { rows } = await (client || db).query(
+    `SELECT val FROM app_settings WHERE key = $1`, [key]);
+  return String(rows[0]?.val || '').trim() !== '';
+}
+
+module.exports = { db, wrap, today, daysAgo, audit, kalit };

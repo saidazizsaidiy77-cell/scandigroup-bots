@@ -7936,6 +7936,132 @@ test('minusga tushgan qoldiq: kartochkadagi raqam ro\'yxatga teng', async () => 
     'filtrsiz ro\'yxat qisqarmaydi');
 });
 
+//  ★ QOLDIQDAN KO'P CHIQARIB BO'LMAYDI — KALIT BILAN (zavod qarori,
+//  2026-09; izoh: sql/core.sql).
+//
+//  Ilgari to'siq yo'q edi va bu ataylab edi: material allaqachon
+//  kesilgan, sarfni rad etish taxtani qaytarmaydi. Talabnoma va kirim
+//  hujjati yozilgach sabab o'tdi — endi minus qoldiq xato.
+//
+//  ★ KALIT STANDARTI O'CHIQ: deploy kuni o'ttizga yaqin material
+//  minusda turibdi va to'siq darrov yoqilsa tsex to'xtardi. Test
+//  IKKALA holatni ham tekshiradi: o'chiq — eskicha ishlaydi,
+//  yoqilgan — rad etiladi.
+test('kalit yoqilsa kassa va ombor qoldig\'i minusga tushmaydi', async () => {
+  const { db } = require('../db');
+  const yoq = async (kod, on) => db.query(
+    `INSERT INTO app_settings (key, val) VALUES ($1,$2)
+     ON CONFLICT (key) DO UPDATE SET val = $2`, [kod, on ? '1' : '']);
+
+  // ── KASSA ────────────────────────────────────────────────────────
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code = 'MAIN'`)).id;
+  const item = (await H.id(
+    `SELECT id FROM expense_items WHERE active ORDER BY id LIMIT 1`)).id;
+  const oy = new Date().toISOString().slice(0, 7) + '-01';
+  const chiqim = (summa) => admin('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense', to_id: item,
+    currency: 'USD', amount: summa, rate: 12000, pl_month: oy,
+    expense_item_id: item });
+
+  //  Kalit O'CHIQ — eskicha: qoldiqdan ko'p chiqsa ham yoziladi.
+  await yoq('minus_cash', false);
+  //  Sinov bazasida kassa ALLAQACHON minusda: oldingi testlar
+  //  qoldiqdan ko'p sarflagan — aynan shu narsa endi yopiladi.
+  //  Shuning uchun summa qoldiqdan emas, qat'iy olinadi.
+  const erkin = await chiqim(5000);
+  assert.equal(erkin.status, 200, erkin.text);
+
+  //  Kalit YOQILGAN — rad etiladi va SABABI yoziladi: qancha bor va
+  //  qancha chiqarilmoqda.
+  await yoq('minus_cash', true);
+  const rad = await chiqim(999999);
+  assert.equal(rad.status, 400, rad.text);
+  assert.match(rad.body.error, /chiqarilmoqda/, rad.text);
+
+  //  Qoldiq yetsa o'tadi: to'siq hammasini yopmaydi.
+  const qoldiq = Number((await H.id(
+    `SELECT COALESCE(usd, 0) AS n FROM v_cash_balance WHERE id = $1`, [kassa])).n);
+  if (qoldiq > 1) {
+    const oz = await chiqim(1);
+    assert.equal(oz.status, 200, oz.text);
+  }
+
+  //  ★ MIJOZ QARZIGA TEGILMAYDI: u joy emas, QARZ hisobi va minus
+  //  u yerda normal holat (oldindan to'lov).
+  const mij = (await H.id(`SELECT id FROM customers ORDER BY id LIMIT 1`)).id;
+  const tolov = await admin('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: mij, to_kind: 'account', to_id: kassa,
+    currency: 'USD', amount: 50, rate: 12000 });
+  assert.equal(tolov.status, 200, tolov.text);
+
+  await yoq('minus_cash', false);
+
+  // ── OMBOR ────────────────────────────────────────────────────────
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const mat = (await H.id(
+    `INSERT INTO materials (name, uom) VALUES ('Kalit sinov material', 'dona')
+     ON CONFLICT (lower(name)) DO UPDATE SET uom = 'dona' RETURNING id`)).id;
+  const u = await newUnit();
+  const sarf = (n) => admin('POST', `/api/materials/unit/${u.id}/consume`, {
+    warehouse_id: wh, items: [{ material_id: mat, qty: n }] });
+
+  //  Kalit O'CHIQ — bo'sh ombordan ham sarf yoziladi (eski qoida).
+  await yoq('minus_material', false);
+  const eski = await sarf(5);
+  assert.equal(eski.status, 200, eski.text);
+
+  //  Kalit YOQILGAN — rad etiladi, xabarda NOMI va raqamlar turadi.
+  await yoq('minus_material', true);
+  const yopiq = await sarf(5);
+  assert.equal(yopiq.status, 400, yopiq.text);
+  assert.match(yopiq.body.error, /Kalit sinov material/, yopiq.text);
+  assert.match(yopiq.body.error, /so'ralmoqda/, yopiq.text);
+
+  //  Kirim yozilsa o'sha zahoti ochiladi — to'siqning YO'LI shu:
+  //  «avval kirim yozing» degan xabar bo'sh va'da emas.
+  await db.query(
+    `INSERT INTO material_moves (material_id, from_kind, from_id,
+                                 to_kind, to_id, qty, moved_on, status)
+     VALUES ($1, 'opening', NULL, 'warehouse', $2, 20, CURRENT_DATE, 'ok')`,
+    [mat, wh]);
+  const ochildi = await sarf(5);
+  assert.equal(ochildi.status, 200, ochildi.text);
+
+  //  Qolganidan ko'pi baribir yopiq.
+  const kop = await sarf(999);
+  assert.equal(kop.status, 400, kop.text);
+
+  await yoq('minus_material', false);
+});
+
+//  Kalit SAHIFADAN qo'yiladi va faqat administrator yoza oladi:
+//  qoida pulga va ombor qoldig'iga tegadi.
+test('zavod kalitlari: ko\'radi hamma, yoqadi administrator', async () => {
+  const r = await admin('GET', '/api/admin/settings');
+  assert.equal(r.status, 200, r.text);
+  const kodlar = r.body.rows.map((x) => x.kod);
+  assert.ok(kodlar.includes('minus_cash') && kodlar.includes('minus_material'));
+  for (const k of r.body.rows) assert.ok(k.nom && k.izoh, `${k.kod}: izohsiz`);
+
+  assert.equal((await admin('PATCH', '/api/admin/settings/minus_cash',
+    { on: true })).status, 200);
+  assert.equal((await admin('GET', '/api/admin/settings')).body.rows
+    .find((x) => x.kod === 'minus_cash').on, true);
+  assert.equal((await admin('PATCH', '/api/admin/settings/minus_cash',
+    { on: false })).status, 200);
+
+  //  Notanish kalit qabul qilinmaydi: aks holda jadvalda hech kim
+  //  o'qimaydigan qator yotib qolardi.
+  assert.equal((await admin('PATCH', '/api/admin/settings/yoq-kalit',
+    { on: true })).status, 404);
+
+  //  Savdo xodimi ko'ra oladi (nega rad etilganini bilishi kerak),
+  //  lekin yoza olmaydi.
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await savdo('PATCH', '/api/admin/settings/minus_cash',
+    { on: true })).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

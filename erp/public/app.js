@@ -647,7 +647,47 @@ const App = (() => {
     onReady(me);
   }
 
+  //  ★ ZAVOD KALITLARI — BITTA JOYDA CHIZILADI (izoh: sql/core.sql).
+  //
+  //  Kalit ikki sahifada turadi (kassa va xom ashyo) va u yerda
+  //  ikki nusxa yozilsa bir kun ular ajralib ketardi: bir ekranda
+  //  belgi yoqilgan, ikkinchisida sababi boshqacha yozilgan bo'lib
+  //  qolardi.
+  //
+  //  ★ KO'RADI HAMMA, YOQADI ADMINISTRATOR. Qoida pulga va ombor
+  //  qoldig'iga tegadi, ya'ni uni kim yoqqani muhim; lekin RAD
+  //  ETILGAN odam nega rad etilganini bilishi kerak, shuning uchun
+  //  holat hammaga ko'rinadi. Tekshiruv baribir serverda —
+  //  katakchani yashirish himoya emas.
+  async function kalitlar(el, kodlar) {
+    if (!el) return;
+    let r;
+    try { r = await api('/api/admin/settings'); } catch { return; }
+    const mos = r.rows.filter((k) => !kodlar || kodlar.includes(k.kod));
+    if (!mos.length) return;
+    const yoza = can('admin.users');
+    el.innerHTML = `<div class="card"><h2>Qoidalar</h2>${mos.map((k) => `
+      <div class="row" style="gap:10px;align-items:flex-start;margin-top:8px">
+        <input type="checkbox" style="width:auto;margin-top:3px"
+          ${k.on ? 'checked' : ''} ${yoza ? '' : 'disabled'}
+          onchange="App.kalitYoz('${k.kod}', this)">
+        <span style="flex:1">${k.nom}
+          <span class="muted" style="font-size:12px;display:block">${k.izoh}${
+            yoza ? '' : ' · o\'zgartirishni administrator qiladi'}</span></span>
+      </div>`).join('')}</div>`;
+  }
+
+  //  Xato bo'lsa katakcha ESKI holatiga qaytariladi: belgilangan
+  //  bo'lib turib, aslida saqlanmagan kalit eng yomoni — odam qoida
+  //  ishlayapti deb o'ylardi.
+  async function kalitYoz(kod, el) {
+    const yangi = el.checked;
+    try { await api('/api/admin/settings/' + kod, { method: 'PATCH', body: { on: yangi } }); }
+    catch (e) { el.checked = !yangi; alert(e.message || 'Saqlanmadi'); }
+  }
+
   return { api, download, upload, can, start, logout, me: () => me, pages, inMod, hrefFor,
+           kalitlar, kalitYoz,
            modules: () => MODULES
              .filter((m) => !m.perm.length || can(...m.perm))
              .map((m) => ({ ...m,

@@ -12,7 +12,7 @@
 //  ombori xodimi yuritadi.
 // ============================================================================
 const express = require('express');
-const { db, wrap, audit } = require('../db');
+const { db, wrap, audit, kalit } = require('../db');
 const { need } = require('../auth');
 const notify = require('../notify');
 
@@ -271,6 +271,46 @@ router.patch('/:id', need(...MANAGE), wrap(async (req, res) => {
 //  va qaysi biri javob ekani noaniq qolardi (menyudagi navbat belgisi
 //  bilan bir xil qoida va bir xil sabab).
 const MINUS = 's.qty < 0';
+
+//  ★ QOLDIQDAN KO'P SARFLAB BO'LMAYDI (zavod qarori, 2026-09; kalit
+//  `minus_material`, izoh: sql/core.sql).
+//
+//  Ilgari to'siq YO'Q edi va bu ataylab edi: material allaqachon
+//  kesilgan, sarfni rad etish taxtani qaytarmaydi — faqat yozuvni
+//  yo'qotadi va tannarx butunlay ko'rinmay qoladi. Ustiga talabnoma
+//  moduli yozilmagan edi va tsex omborlari bo'sh turardi, ya'ni
+//  to'siq birinchi kundanoq hamma ishni to'xtatardi.
+//
+//  Ikkala sabab ham o'tdi: talabnoma ham, kirim hujjati ham yozildi
+//  va omborlar to'la boshladi — endi minus qoldiq xato.
+//
+//  ★ TEKSHIRUV HAR QATOR UCHUN ALOHIDA va AYNAN yozishdan oldin:
+//  bitta so'rovda bir xil material ikki marta uchrasa, ikkinchisi
+//  birinchisi ayirilgan qoldiqni ko'radi (tranzaksiya o'z yozuvini
+//  o'qiydi). Hammasini oldindan yig'ib tekshirish ikkinchi hisob
+//  bo'lardi va bir kun qoldiqdan ajralib ketardi.
+//
+//  Xato xabarida NOMI, omborda nechta borligi va nechta so'ralgani
+//  yoziladi: «yetmaydi» degan xabar qaysi qator ekanini aytmasdi va
+//  boshliq hujjatni birma-bir ochib chiqardi.
+async function yetarlimi(client, whId, materialId, qty, nomi) {
+  if (!await kalit('minus_material', client)) return;
+  const r = (await client.query(
+    `SELECT COALESCE(s.qty, 0) AS bor, COALESCE(s.uom, m.uom) AS uom,
+            m.name
+       FROM materials m
+       LEFT JOIN v_material_stock s
+              ON s.material_id = m.id AND s.warehouse_id = $2
+      WHERE m.id = $1`, [materialId, whId])).rows[0];
+  const bor = Number(r?.bor || 0);
+  if (Number(qty) <= bor) return;
+  const e = new Error(
+    `«${r?.name || nomi || 'Material'}» — omborda ${son(bor)} ${r?.uom || ''}`
+    + ` bor, ${son(qty)} so'ralmoqda.`
+    + ` Avval kirim yoki boshlang'ich qoldiq yozing.`);
+  e.status = 400;
+  throw e;
+}
 
 router.get('/stock', need(...VIEW), wrap(async (req, res) => {
   const doira = whDoira(req);
@@ -556,6 +596,7 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
         `SELECT id, name FROM materials WHERE id = $1 AND active`,
         [it.material_id])).rows[0];
       if (!m) throw new Error('Material topilmadi');
+      await yetarlimi(client, wh.id, m.id, qty, m.name);
       //  Narx yozilmaydi: sarflangan materialning bahosi KIRIMLARDAN
       //  hisoblanadi (o'rtacha narx, izoh: sql/materials.sql). Boshliq
       //  har qatorda narx terib o'tirsa bitta xato raqam butun
@@ -1559,6 +1600,10 @@ router.post('/requests/:id/done', need(...MANAGE), wrap(async (req, res) => {
       await client.query(
         `UPDATE mat_request_items SET issued_qty = $2 WHERE id = $1`, [q.id, v]);
       if (!v) continue;
+      //  Talabnomada manba ZAVOD ombori: undan turganidan ko'pini
+      //  berib bo'lmaydi va yetmagani allaqachon xarid zayavkasiga
+      //  tushgan (izoh: `zayavkaYoz`).
+      await yetarlimi(client, r.from_warehouse_id, q.material_id, v, q.name);
       await client.query(
         `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
                                      to_kind, to_id, moved_on, doc_kind,

@@ -411,4 +411,66 @@ router.get('/audit', need('admin.audit'), wrap(async (_req, res) => {
   res.json(rows);
 }));
 
+/* ============================================================================
+ *  ★ ZAVOD KALITLARI (izoh: sql/core.sql)
+ *
+ *  Qaror KODDA emas, BAZADA turadi va uni zavod istagan payt yoqadi
+ *  (4-qoida). Hozir ikkitasi: kassa va ombor qoldig'i minusga
+ *  tushmasin.
+ *
+ *  ★ O'QISH KENG, YOZISH TOR. Kalitni har sahifa o'qiydi — kassa
+ *  sahifasi tugmani chizishdan oldin «yoqilganmi» deb biladi va
+ *  odamga sababini ekranda aytadi. Yozish esa `admin.users` da:
+ *  qoida pulga va ombor qoldig'iga tegadi.
+ *
+ *  Ro'yxat KODDA (`KALITLAR`): bu jadval, zavod ma'lumoti emas —
+ *  ertaga uchinchi kalit qo'shilsa shu yerga bitta qator yoziladi va
+ *  ekranda o'zi paydo bo'ladi. Notanish kalit qabul qilinmaydi: aks
+ *  holda kartochka xato yozsa jadvalda hech kim o'qimaydigan qator
+ *  yotib qolardi.
+ * ========================================================================== */
+const KALITLAR = [
+  { kod: 'minus_cash', nom: 'Kassa qoldig\'i minusga tushmasin',
+    izoh: 'Kassadan va xodimning qo\'lidan turganidan ko\'p pul '
+        + 'chiqarib bo\'lmaydi. Mijoz va ta\'minotchi qarziga tegilmaydi — '
+        + 'u yerda minus oldindan to\'lov degani.' },
+  { kod: 'minus_material', nom: 'Ombor qoldig\'i minusga tushmasin',
+    izoh: 'Omborda turganidan ko\'p material sarflab bo\'lmaydi. '
+        + 'Yoqishdan OLDIN minusga tushgan qatorlarni kirim yoki '
+        + 'boshlang\'ich qoldiq bilan tuzating — aks holda o\'sha '
+        + 'materiallardan sarf yozib bo\'lmaydi.' },
+];
+
+//  O'qish — qoida TEGADIGAN sahifalarning huquqlari: kassa va xom
+//  ashyo. Sahifa kalitni tugmani chizishdan oldin biladi va odamga
+//  sababini ekranda aytadi («tugmani topolmagan odam uni qidirib
+//  yurmasin» bilan bir xil qoida).
+const KALIT_OQISH = ['cash.view', 'cash.manage', 'cash.entry',
+                     'materials.view', 'materials.manage', 'materials.request',
+                     'admin.users'];
+
+router.get('/settings', need(...KALIT_OQISH), wrap(async (_req, res) => {
+  const { rows } = await db.query(`SELECT key, val FROM app_settings`);
+  const bor = new Map(rows.map((r) => [r.key, String(r.val || '').trim() !== '']));
+  res.json({ rows: KALITLAR.map((k) => ({ ...k, on: bor.get(k.kod) === true })) });
+}));
+
+router.patch('/settings/:key', need('admin.users'), wrap(async (req, res) => {
+  const k = KALITLAR.find((x) => x.kod === req.params.key);
+  if (!k) return res.status(404).json({ error: 'Bunday kalit yo\'q' });
+  const on = req.body.on === true;
+  await db.query(
+    `INSERT INTO app_settings (key, val, updated_at, updated_by)
+     VALUES ($1,$2, NOW(), $3)
+     ON CONFLICT (key) DO UPDATE
+        SET val = $2, updated_at = NOW(), updated_by = $3`,
+    [k.kod, on ? '1' : '', req.user.id]);
+  //  Kim yoqqani audit jurnalida qoladi: qoida pulga va ombor
+  //  qoldig'iga tegadi va «buni kim o'chirib qo'ydi» degan savol
+  //  albatta paydo bo'ladi.
+  await audit(req, { module: 'admin', action: 'setting', entity: 'app_settings',
+                     payload: { key: k.kod, on } });
+  res.json({ ok: true, on });
+}));
+
 module.exports = router;

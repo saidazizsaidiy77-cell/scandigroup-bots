@@ -137,6 +137,8 @@
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
 </div>
 
+<div id="qoida" style="margin-top:14px"></div>
+
 <div id="modalRoot"></div>
 
 <script>
@@ -299,6 +301,10 @@ async function boot() {
   if (boshqara() || yozadi()) barcha = (await App.api('/api/materials')).rows;
   drawTabs();
   await load();
+  //  ★ QOIDA O'ZI TEGADIGAN JOYDA (izoh: sql/core.sql): alohida
+  //  «Sozlamalar» sahifasi qilinmadi — sarfni yozadigan odam qoidani
+  //  shu ekranda ko'radi va nega rad etilganini o'sha yerda o'qiydi.
+  App.kalitlar($('qoida'), ['minus_material']);
 }
 
 //  Ombor nomi yonida QAYSI BO'LIMNIKI ekani turadi — bo'sh bo'lsa
