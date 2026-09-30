@@ -3657,6 +3657,49 @@ test('menejer mijozdan pul oladi, kassa esa kassir qabul qilgach to\'ladi', asyn
     `SELECT balance FROM v_customer_sales WHERE id=$1`, [mijoz])).balance), oldin - 1000);
 });
 
+//  ★ KURSDA TIYIN BOR, SUMMADA YO'Q (zavod qarori, 2026-09). Bank
+//  ko'chirmasida ikki raqam turadi: 9 000 000 so'm va 762 $. Butun
+//  kurs (11 811) bilan javob 762,26 bo'lib chiqadi va mijozning
+//  qarzidan yigirma olti tiyin ortiq ayriladi — hujjat balansdan farq
+//  qiladi. Kurs BO'LUVCHI, ya'ni uning tiyinlari javobning tiyinlarini
+//  hal qiladi; ustun boshidanoq to'rt xonali va ekrandagi katak ham
+//  endi shuni oladi (kursHisobla, public/kassa-form.js).
+test("kurs to'rt xonali — dollardagi raqam butun chiqadi", async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const mijoz = (await H.id(`SELECT id FROM customers ORDER BY id LIMIT 1`)).id;
+  const acc = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const yon = { from_kind: 'customer', from_id: mijoz,
+                to_kind: 'account', to_id: acc, currency: 'UZS' };
+  const saldo = () => H.id(
+    `SELECT balance AS id FROM v_customer_sales WHERE id=$1`, [mijoz]);
+  const oldin = Number((await saldo()).id);
+
+  //  Butun kurs: 9 000 000 / 11 807 = 762,26 — ortiqcha yigirma olti tiyin.
+  const yalpi = await kassir('POST', '/api/cash/ops',
+    { ...yon, amount: 9000000, rate: 11807 });
+  assert.equal(yalpi.status, 200, yalpi.text);
+  assert.equal(Number(yalpi.body.amount_usd), 762.26);
+
+  //  Dollardan chiqarilgan kurs: 9 000 000 / 762 = 11 811,0236.
+  const kurs = Number((9000000 / 762).toFixed(4));
+  assert.equal(kurs, 11811.0236);
+  const aniq = await kassir('POST', '/api/cash/ops',
+    { ...yon, amount: 9000000, rate: kurs });
+  assert.equal(aniq.status, 200, aniq.text);
+  assert.equal(Number(aniq.body.amount_usd), 762, 'bank yozgan raqamning ozi');
+
+  //  Kurs QOTIB qoladi — tiyinlari bilan: ertaga kurs o'zgarsa kechagi
+  //  to'lov qayta hisoblanmaydi (izoh: sql/cash.sql).
+  assert.equal(Number((await H.id(
+    `SELECT rate AS id FROM cash_ops WHERE id = $1`, [aniq.body.id])).id), 11811.0236);
+
+  //  Sinov o'zidan keyin iz qoldirmaydi: ikkala to'lov ham bekor
+  //  qilinadi va mijozning saldosi joyiga qaytadi.
+  for (const r of [yalpi, aniq])
+    assert.equal((await kassir('PATCH', '/api/cash/ops/' + r.body.id)).status, 200);
+  assert.equal(Number((await saldo()).id), oldin, 'saldo joyiga qaytdi');
+});
+
 test('menejer boshqa operatsiya yoza olmaydi', async () => {
   const menejer = H.api(base, await H.sessionFor('Sinov menejer'));
   const acc = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;

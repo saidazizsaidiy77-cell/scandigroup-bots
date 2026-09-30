@@ -1888,6 +1888,35 @@ kurs chiqardi va butun hisob shunga qurilardi. Boshlang'ich qoldiq
 oynasida esa **jami dollarda** saqlashdan OLDIN ko'rinadi: bir nol
 ortiqcha yozilgani shu yerda bilinadi.
 
+**★ KURSDA TIYIN BOR, SUMMADA YO'Q** (zavod qarori, 2026-09). Bank
+ko'chirmasida ikki raqam turadi: **9 000 000 so'm** va **762 $**.
+Kassirda esa faqat kurs katagi bor edi va u o'sha ikki raqamdan
+uchinchisini qo'lda chiqarishi kerak bo'lardi. Butun kurs yozsa javob
+to'g'ri chiqmaydi: `9 000 000 / 11 807 = 762,26` — mijozning qarzidan
+yigirma olti tiyin ortiq ayriladi va u imzolagan hujjat balansdan farq
+qiladi. Kurs BO'LUVCHI, ya'ni uning tiyinlari javobning tiyinlarini hal
+qiladi; bazada u boshidanoq to'rt xonali (`cash_ops.rate`,
+`NUMERIC(14,4)`) va endi ekrandagi katak ham shuni oladi.
+
+**Dollardagi raqam KO'RSATILMAYDI, YOZILADI ham.** Ikkinchi katak
+qo'shilmadi — `.ord-sum` dagi yirik raqamning O'ZI katak bo'ldi
+(`kursHisobla`, `public/kassa-form.js`): savol bitta («bank qancha
+dollar deb yozgan») va javob o'sha yozilgan joyda turadi. Kassir 762 ni
+yozadi, kurs esa `11 811,0236` bo'lib O'ZI chiqadi va operatsiya bilan
+qotib qoladi.
+
+Yo'nalish ikki tomonli, lekin **summa ustun**: summa yoki kurs
+o'zgarsa dollar qayta hisoblanadi, dollar yozilsa kurs chiqadi —
+ko'chirmada turgan birlamchi fakt summa. Dollarda yozilayotgan
+operatsiyada katak faqat o'qiladi: u yerda kurs yo'q va raqam
+summaning o'zi.
+
+**Bu «kursni o'ylab topish» EMAS** va yuqoridagi qoidani buzmaydi.
+Boshlang'ich qoldiqda so'm va dollar ikkita ALOHIDA pul — ularni
+bo'lish haqiqatda bo'lmagan kurs berardi, shuning uchun u oynada bu
+yo'q va qo'shilmaydi. Bu yerda esa BITTA pul ikki xil yozilgan: bank
+o'sha to'lovni 9 000 000 so'm ham, 762 $ ham deb ko'rsatgan.
+
 **Kirim va chiqim ro'yxatida XODIM YO'Q** (zavod qarori): korxonaga pul
 mijozdan keladi, ta'minotchiga va harajatga ketadi. Xodimning qo'lidagi
 pul korxonaning O'Z puli — uning kassaga kelishi kirim emas,

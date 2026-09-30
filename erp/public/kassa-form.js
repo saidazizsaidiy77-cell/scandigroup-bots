@@ -456,11 +456,20 @@ function openForm(kind) {
 
           <!--  Kurs HAR OPERATSIYADA: pulni kiritayotgan odam o'sha
                 to'lovning kursini yozadi va u operatsiya bilan birga
-                qotib qoladi. -->
+                qotib qoladi.
+
+                ★ KURSDA TIYIN BOR, SUMMADA YO'Q (zavod qarori,
+                2026-09). Bank 9 000 000 so'm yozadi va uni 762 $ deb
+                ko'rsatadi — butun kurs bunday chiqmaydi: 11 807 bilan
+                762,26 bo'lib qoladi va mijozning qarzidan yigirma olti
+                tiyin ortiq ayriladi. Kurs BO'LUVCHI, ya'ni uning
+                tiyinlari javobning tiyinlarini hal qiladi; bazada u
+                boshidanoq to'rt xonali (cash_ops.rate, NUMERIC(14,4))
+                va endi katak ham shuni oladi. -->
           <div id="fRateBox"><label>Kurs, 1$ = so'm</label>
-            <input id="fRate" type="number" min="0" step="0.01" inputmode="decimal"
+            <input id="fRate" type="number" min="0" step="0.0001" inputmode="decimal"
               value="${refs.rate || ''}" oninput="calc()">
-            <div class="hint">${refs.rate ? 'oxirgi kurs' : ''}</div></div>
+            <div class="hint" id="fRateHint">${refs.rate ? 'oxirgi kurs' : ''}</div></div>
 
           <!--  ★ QAYSI OYNING FOYDA-ZARARIGA: to'lov bugun ketadi,
                 harajat esa boshqa oyniki bo'lishi mumkin. -->
@@ -472,9 +481,29 @@ function openForm(kind) {
             <input id="fNote" placeholder="ixtiyoriy"></div>
         </div>
 
+        <!--  ★ DOLLARDAGI RAQAM HAM YOZILADI, faqat ko'rsatilmaydi
+              (zavod qarori, 2026-09). Bank ko'chirmasida ikki raqam
+              turadi: 9 000 000 so'm va 762 $. Kassirda esa faqat
+              KURS katagi bor edi va u o'sha ikki raqamdan uchinchisini
+              QO'LDA chiqarishi kerak bo'lardi — butun kurs yozsa
+              javob 762,26 bo'lib chiqar, mijozning qarzidan ortiqcha
+              ayrilardi va farqni hech narsa tushuntirmasdi.
+
+              Ikkinchi katak qo'shilmadi: yirik raqamning O'ZI katak
+              bo'ldi. Savol bitta — «bank qancha dollar deb yozgan» —
+              va javob o'sha yozilgan joyda turadi.
+
+              Yo'nalish IKKI TOMONLI, lekin oddiy: summa yoki kurs
+              o'zgarsa dollar qayta hisoblanadi, dollar yozilsa KURS
+              chiqadi. Summa — birlamchi fakt (bank ko'chirmasida
+              turgan raqam), shuning uchun u ustun. -->
         <div class="ord-sum">
           <div><span class="muted" style="font-size:13px">Dollarda</span>
-            <div class="big" id="fSum">—</div></div>
+            <div class="row" style="gap:6px;align-items:baseline">
+              <input id="fSum" class="big" type="number" min="0" step="0.01"
+                inputmode="decimal" placeholder="—" oninput="kursHisobla()">
+              <span class="muted" style="font-size:20px">$</span></div>
+            <div class="hint" id="fSumHint"></div></div>
           <div class="row" style="gap:10px">
             <button class="primary" onclick="saveOp()">Saqlash</button>
             <button onclick="closeForm()">Bekor qilish</button></div>
@@ -509,8 +538,31 @@ function calc() {
   const a = Number($('fAmt').value) || 0;
   const r = Number($('fRate').value) || 0;
   const d = so ? (r > 0 ? a / r : 0) : a;
-  $('fSum').innerHTML = d ? `${usd(d)} <span class="muted">$</span>`
-    : '<span class="muted">—</span>';
+  //  Dollarda kurs yo'q: raqam summaning O'ZI va uni tahrirlash
+  //  summani ikki joydan yozish bo'lardi.
+  $('fSum').readOnly = !so;
+  $('fSum').value = d ? d.toFixed(2) : '';
+  $('fSumHint').textContent = so
+    ? 'bank qancha dollar yozgan bo\'lsa shuni yozing — kurs o\'zi chiqadi'
+    : '';
+}
+
+//  ★ KURSNI DOLLARDAN CHIQARISH (izoh: yuqorida). Bu «kursni o'ylab
+//  topish» EMAS: boshlang'ich qoldiqda so'm va dollar ikkita ALOHIDA
+//  pul va ularni bo'lish o'ylab topilgan kurs berardi — shuning uchun
+//  boshlang'ich qoldiq oynasida bu YO'Q va qo'shilmaydi ham. Bu yerda
+//  esa BITTA pul ikki xil yozilgan: bank o'sha to'lovni 9 000 000 so'm
+//  ham, 762 $ ham deb ko'rsatgan, ya'ni kurs — haqiqat, taxmin emas.
+function kursHisobla() {
+  if (!$('fCur') || $('fCur').value !== 'UZS') return;
+  const a = Number($('fAmt').value) || 0;
+  const d = Number($('fSum').value) || 0;
+  if (!(a > 0 && d > 0)) return;
+  //  To'rt xona — bazadagi ustun bilan bir xil (NUMERIC(14,4)).
+  //  Ortiqcha nol qirqiladi: 11811,0236 ham, 12000 ham o'qiladigan
+  //  bo'lib tursin.
+  $('fRate').value = String(Number((a / d).toFixed(4)));
+  $('fRateHint').textContent = 'dollardagi raqamdan hisoblandi';
 }
 
 async function saveOp() {
