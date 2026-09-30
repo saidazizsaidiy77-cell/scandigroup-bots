@@ -1147,10 +1147,29 @@ router.post('/fg/returns/:id/reject', need(...RET, 'warehouse.view'),
     if (r.status === 'rejected' || r.status === 'cancelled')
       return res.status(400).json({ error: 'Hujjat allaqachon yopilgan' });
 
+    //  ★ QABUL QILADIGAN TOMON HAM RAD ETADI (zavod qarori, 2026-09).
+    //
+    //  Hujjat yo'lga chiqdi, mashina keldi — lekin javonda hujjatda
+    //  yozilgani yo'q yoki mahsulot boshqa. Ilgari qabul qiladigan
+    //  odamda BITTA tugma bor edi: «Qabul qilish». Kelmagan
+    //  mahsulotni qabul qilish esa uni qoldiqqa yozib qo'yardi va
+    //  farqni keyin hech narsa tushuntirmasdi; bosmay qo'yilsa
+    //  hujjat navbatda muzlab qolardi va menyudagi raqam hech
+    //  qachon nolga tushmasdi (tsexga qaytarish bilan bir xil
+    //  sabab).
+    //
+    //  Doira IKKI TOMONLI bo'ldi: jo'natadigan MANBA omborni
+    //  ko'radigan odam, qabul qiladigan esa MANZILni — ekrandagi
+    //  `canConfirm` va `canAccept` bilan aynan bir xil hisob.
+    //  Ilgari faqat manba qaralardi va vitrinaga biriktirilgan
+    //  sotuvchi o'ziga kelayotgan hujjatni rad eta olmasdi: manba
+    //  T/M, uning doirasida esa faqat o'z nuqtasi turardi.
     const ozi = r.created_by === req.user.id;
     const ids = req.user.scope_warehouse_ids || [];
-    if (!ozi && ids.length && !ids.includes(r.from_warehouse_id))
-      return res.status(403).json({ error: 'Bu vitrina sizga biriktirilmagan' });
+    if (!ozi && ids.length
+        && !ids.includes(r.from_warehouse_id)
+        && !ids.includes(r.to_warehouse_id))
+      return res.status(403).json({ error: 'Bu ombor sizga biriktirilmagan' });
 
     await db.query(
       `UPDATE wh_returns SET status = $2, decided_by = $3, decided_at = NOW(),

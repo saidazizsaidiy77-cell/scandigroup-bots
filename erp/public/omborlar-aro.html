@@ -157,7 +157,15 @@ function qator(r) {
     ? `<button class="primary" onclick="amal(${r.id},'confirm')">Jo'natdim</button>
        <button onclick="rad(${r.id})">Bekor qilish</button>`
     : canAccept(r)
-    ? `<button class="primary" onclick="amal(${r.id},'accept')">Qabul qilish</button>`
+    //  ★ QABUL QILADIGAN TOMONDA HAM RAD ETISH (zavod qarori,
+    //  2026-09). Mashina keldi, lekin javonda hujjatda yozilgani
+    //  yo'q: ilgari bitta tugma bor edi va ikki yomon yo'ldan birini
+    //  tanlash kerak edi — kelmagan mahsulotni qoldiqqa yozib qo'yish
+    //  yoki umuman bosmay, hujjatni navbatda muzlatib qo'yish.
+    //  Sabab majburiy: nega qabul qilinmaganini jo'natgan odam
+    //  bilishi kerak.
+    ? `<button class="primary" onclick="amal(${r.id},'accept')">Qabul qilish</button>
+       <button onclick="rad(${r.id})">Rad etish</button>`
     : r.status === 'new' && r.created_by === App.me()?.id
     ? `<button onclick="rad(${r.id})">Bekor qilish</button>` : '';
   //  Kim ustuni oxirgi harakatni aytadi: hujjat qayerda turganini
@@ -194,7 +202,7 @@ async function rad(id) {
   try {
     await App.api(`/api/warehouse/fg/returns/${id}/reject`,
       { method: 'POST', body: JSON.stringify({ note: sabab }) });
-    toast('Yopildi');
+    toast('Rad etildi');
     await load();
   } catch (e) { toast(e.message, true); }
 }

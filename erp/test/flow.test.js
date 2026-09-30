@@ -4289,6 +4289,46 @@ test('T/M dan vitrinaga hujjat bilan ko\'chiriladi', async () => {
     `SELECT COUNT(*)::int AS n FROM warehouse_moves
       WHERE conveyor_no = $1 AND from_warehouse_id = $2 AND to_warehouse_id = $3`,
     [u.conveyor_no, tm, vitr.id])).n, 1);
+
+  //  ★ QABUL QILADIGAN TOMON RAD HAM ETADI (zavod qarori, 2026-09).
+  //  Mashina keldi, lekin javonda hujjatda yozilgani yo'q. Ilgari
+  //  qabul qiluvchida BITTA tugma bor edi va doira ham faqat MANBA
+  //  omborni qarardi: vitrinaga biriktirilgan sotuvchi o'ziga
+  //  kelayotgan hujjatni rad eta olmasdi — manba T/M, uning
+  //  doirasida esa faqat o'z nuqtasi turardi.
+  const d2 = await mudir('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 1 }] });
+  assert.equal(d2.status, 200, d2.text);
+  assert.equal((await mudir('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/confirm`)).status, 200);
+
+  //  Sabab MAJBURIY: nega qabul qilinmaganini jo'natgan odam
+  //  bilishi kerak (konver so'rovi bilan bir xil qoida).
+  assert.equal((await sotuvchi2('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/reject`, {})).status, 400);
+
+  const rad = await sotuvchi2('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/reject`,
+    { note: 'Javonda yo\'q edi' });
+  assert.equal(rad.status, 200, rad.text);
+
+  //  Holati «rad etildi» — «bekor qilindi» emas: hujjatni boshqa odam
+  //  yopdi (konver so'rovi bilan bir xil idiom).
+  const h2 = await H.id(
+    `SELECT status, decide_note FROM wh_returns WHERE id = $1`, [d2.body.id]);
+  assert.equal(h2.status, 'rejected');
+  assert.match(h2.decide_note, /Javonda/);
+
+  //  Mahsulot QIMIRLAMAYDI: rad etilgan hujjat qoldiqqa tegmaydi.
+  assert.equal((await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no = $1 AND warehouse_id = $2 AND status='fg'`,
+    [u.conveyor_no, vitr.id])).n, 4, 'vitrinada baribir 4 ta');
+
+  //  Yopilgan hujjat ikkinchi marta yopilmaydi.
+  assert.equal((await sotuvchi2('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/reject`,
+    { note: 'yana' })).status, 400);
 });
 
 test('bronda turgan konverning BO\'SH donasi ko\'chadi', async () => {
