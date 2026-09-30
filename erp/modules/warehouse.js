@@ -1181,4 +1181,203 @@ router.post('/fg/returns/:id/reject', need(...RET, 'warehouse.view'),
     res.json({ ok: true });
   }));
 
+// ══════════════════ TAYYOR MAHSULOT KIRIMI — TA'MINOTCHIDAN ═════════════════
+//
+//  Matras zavodda yasalmaydi: u ta'minotchidan TAYYOR holda keladi va
+//  do'konda alohida sotiladi (izoh: sql/warehouse.sql). Kirim IKKI
+//  ishni birga qiladi — omborni to'ldiradi va ta'minotchining oldidagi
+//  qarzni oshiradi; biri ishlab, ikkinchisi jim qolsa farq faqat oy
+//  oxirida, solishtirma dalolatnomada bilinardi.
+//
+//  Huquqi `warehouse.manage`: molni T/M ombor mudiri qabul qiladi va
+//  hujjatni ham o'zi yozadi — javonni u sanaydi. Xom ashyo kirimi
+//  `materials.manage` da qolaveradi: u boshqa qoldiq va boshqa odam.
+const FGRECEIPT = ['warehouse.manage', 'production.manage'];
+
+//  Raqam SAQLASHDA beriladi (kassa orderi bilan bir xil qoida):
+//  oldindan band qilib qo'yilsa bekor qilingan oynadan bo'sh raqam
+//  qolardi. `F` — tayyor mahsulot kirimi; xom ashyoniki `M`.
+async function nextFgNo(client) {
+  const prefix = `F${String(new Date().getFullYear()).slice(-2)}-`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
+       FROM fg_receipts WHERE doc_no LIKE $1`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(4, '0');
+}
+
+router.get('/fg/receipts', need(...READ), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM v_fg_receipts ORDER BY doc_on DESC, id DESC LIMIT 200`);
+  res.json({ rows });
+}));
+
+//  Qaysi mahsulot sotib olinadi — marshruti YO'Q guruhlar: ular
+//  zavodda yasalmaydi, ya'ni omborga faqat shu yo'ldan kiradi.
+//  Ro'yxat BAZADAN chiqadi: ertaga zavod ikkinchi bunday mahsulot
+//  qo'shsa kodga tegilmaydi (4-qoida).
+router.get('/fg/buyable', need(...READ), wrap(async (_req, res) => {
+  const { rows } = await db.query(
+    `SELECT p.id, p.name, g.name AS product_type, g.uom
+       FROM products p
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE p.active AND g.active
+        AND g.route_template_id IS NULL AND p.route_template_id IS NULL
+      ORDER BY g.sort, p.name`);
+  //  Ta'minotchilar va kurs SHU so'rovda keladi: oyna ochilishi uchun
+  //  ikkinchi so'rov yozilsa u boshqa modulning huquqini talab qilardi
+  //  (ta'minotchilar ro'yxati `materials.*` da) va ombor mudiriga
+  //  ochilmasdi. Bu SPRAVOCHNIK — unda na qarz bor, na to'lov.
+  const suppliers = (await db.query(
+    `SELECT id, name FROM suppliers WHERE active ORDER BY name`)).rows;
+  //  Kurs oldindan to'ldiriladi — oxirgi ishlatilgani (kassa va xom
+  //  ashyo kirimidagi bilan bir xil idiom).
+  const rate = (await db.query(
+    `SELECT rate FROM (
+       SELECT rate, created_at FROM fg_receipts WHERE rate IS NOT NULL
+       UNION ALL
+       SELECT rate, created_at FROM cash_ops
+        WHERE rate IS NOT NULL AND status = 'ok') t
+      ORDER BY created_at DESC LIMIT 1`)).rows[0]?.rate || null;
+  res.json({ rows, suppliers, rate });
+}));
+
+//  { supplier_id, doc_on, supplier_doc, ccy, rate, note,
+//    items: [{ product_id, qty, price, color }] }
+router.post('/fg/receipts', need(...FGRECEIPT), wrap(async (req, res) => {
+  const b = req.body || {};
+  const items = (Array.isArray(b.items) ? b.items : [])
+    .filter((x) => x && x.product_id && Number(x.qty) > 0);
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const sup = (await client.query(
+      `SELECT id, name FROM suppliers WHERE id = $1 AND active`,
+      [b.supplier_id])).rows[0];
+    //  ★ TA'MINOTCHI MAJBURIY (izoh: sql/warehouse.sql).
+    if (!sup) throw new Error("Ta'minotchi tanlanmagan");
+
+    //  ★ KIRIM FAQAT T/M OMBORGA (zavod qarori, 2026-09). Mol
+    //  ta'minotchidan ZAVODGA keladi; vitrinaga esa u boshqa yo'ldan
+    //  boradi — T/M dan omborlar aro hujjat bilan. Ikkala yo'l ochiq
+    //  qolsa mahsulot T/M qoldig'idan UMUMAN o'tmagan holda do'konda
+    //  paydo bo'lardi va «ombordan bugun nima chiqdi» degan savol
+    //  javobsiz qolardi.
+    const wh = (await client.query(
+      `SELECT id, name FROM warehouses
+        WHERE code = 'TM' AND kind = 'fg' AND is_active`)).rows[0];
+    if (!wh) throw new Error("T/M ombor topilmadi");
+
+    const ccy  = b.ccy === 'UZS' ? 'UZS' : 'USD';
+    const rate = b.rate == null || b.rate === '' ? null : Number(b.rate);
+    //  Kursi yo'q so'm dollarga aylanmaydi va qator qiymatsiz qolardi
+    //  (material kirimi bilan bir xil qoida).
+    if (ccy === 'UZS' && !(rate > 0)) throw new Error('So\'m uchun kurs kiritilmagan');
+
+    const doc = (await client.query(
+      `INSERT INTO fg_receipts (doc_no, supplier_id, warehouse_id, doc_on,
+                                supplier_doc, ccy, rate, note, created_by)
+       VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), $5,$6,$7,$8,$9)
+       RETURNING id, doc_no`,
+      [await nextFgNo(client), sup.id, wh.id, b.doc_on || null,
+       (b.supplier_doc || '').trim() || null, ccy, rate,
+       (b.note || '').trim() || null, req.user.id])).rows[0];
+
+    //  Konver ODATDAGI yo'ldan ochiladi (`createOne`): raqami, jamlanma
+    //  hisoboti va audit yozuvi bir xil bo'lsin — ikkinchi nusxa
+    //  yozilsa bir kun ular bir-biridan ajralib ketardi.
+    const { createOne } = require('./units');
+    for (const it of items) {
+      //  ★ NARX MAJBURIY: kirimda narx — QARZNING O'ZI. Boshlang'ich
+      //  qoldiqda u ixtiyoriy, bu yerda esa yo'q.
+      const narx = Number(it.price);
+      if (!(narx > 0)) throw new Error('Har qatorda narx yozilishi kerak');
+      //  Dollarga o'sha hujjatning kursi bilan aylanadi va u qator
+      //  bilan QOTIB qoladi: ertaga kurs o'zgarsa kechagi kirim qayta
+      //  hisoblanmaydi (kassadagi idiom).
+      const usd = ccy === 'USD' ? narx : Math.round((narx / rate) * 100) / 100;
+      const u = await createOne(client, req, {
+        product_id: Number(it.product_id),
+        qty: Number(it.qty),
+        color: (it.color || '').trim() || null,
+        //  Omborga kirgan kun — hujjatning sanasi: konver darrov `fg`
+        //  bo'ladi va qoldiqqa tushadi (izoh: `createOne`).
+        fg_on: b.doc_on || today(),
+        started_on: b.doc_on || today(),
+        warehouse_code: 'TM',
+      });
+      //  Sotib olingan narx `unit_price` ga YOZILMAYDI: u sotuv narxi
+      //  va matras mijozga tannarxida chiqib ketardi (izoh:
+      //  sql/warehouse.sql).
+      await client.query(
+        `UPDATE production_units SET fg_receipt_id = $2, buy_price = $3
+          WHERE id = $1`, [u.id, doc.id, usd]);
+    }
+
+    await audit(req, { module: 'warehouse', action: 'fg-receipt',
+                       entity: 'fg_receipts', entity_id: doc.id,
+                       payload: { doc_no: doc.doc_no, supplier: sup.name,
+                                  lines: items.length } }, client);
+    await client.query('COMMIT');
+    const row = (await db.query(
+      `SELECT * FROM v_fg_receipts WHERE id = $1`, [doc.id])).rows[0];
+    res.json(row);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  O'CHIRILMAYDI, bekor qilinadi: hujjat ham, uning konverlari ham
+//  BIRGA — ikkinchisi qolib ketsa hujjat qarzdan chiqar, mahsulot esa
+//  omborda turaverardi. Sabab so'raladi.
+//
+//  Bronda turgan yoki chiqib ketgan konveri bo'lsa bekor qilinmaydi:
+//  birinchisi mijozga va'da qilingan, ikkinchisi esa allaqachon uning
+//  balansida (ombordagi konverni bekor qilish bilan bir xil qoida).
+router.post('/fg/receipts/:id/cancel', need(...FGRECEIPT), wrap(async (req, res) => {
+  const sabab = (req.body?.note || '').trim();
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const r = (await client.query(
+      `SELECT id, doc_no, status FROM fg_receipts WHERE id = $1 FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!r) throw Object.assign(new Error('Hujjat topilmadi'), { status: 404 });
+    if (r.status !== 'ok') throw new Error('Hujjat allaqachon bekor qilingan');
+
+    const band = (await client.query(
+      `SELECT u.conveyor_no,
+              EXISTS (SELECT 1 FROM unit_reservations x WHERE x.unit_id = u.id) AS bron
+         FROM production_units u
+        WHERE u.fg_receipt_id = $1 AND u.status <> 'cancelled'
+          AND (u.status = 'shipped'
+               OR EXISTS (SELECT 1 FROM unit_reservations x WHERE x.unit_id = u.id))
+        LIMIT 1`, [r.id])).rows[0];
+    if (band) throw new Error(
+      `${band.conveyor_no}: ${band.bron ? 'buyurtmada turibdi' : 'chiqib ketgan'}` +
+      ' — hujjat bekor qilinmaydi');
+
+    await client.query(
+      `UPDATE production_units SET status = 'cancelled'
+        WHERE fg_receipt_id = $1 AND status <> 'cancelled'`, [r.id]);
+    await client.query(
+      `UPDATE fg_receipts SET status = 'cancelled', cancelled_by = $2,
+              cancelled_at = NOW(), cancel_note = $3 WHERE id = $1`,
+      [r.id, req.user.id, sabab]);
+    await audit(req, { module: 'warehouse', action: 'fg-receipt-cancel',
+                       entity: 'fg_receipts', entity_id: r.id,
+                       payload: { doc_no: r.doc_no, note: sabab } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 module.exports = router;

@@ -8368,6 +8368,92 @@ test("bo'laklar birlashganda so'rov va sarf tirik qatorga ko'chadi", async () =>
       WHERE to_kind = 'unit' AND to_id = $1`, [tirik])).id, '1');
 });
 
+//  ★ HAMMA MAHSULOT ZAVODDA YASALMAYDI (zavod qarori, 2026-09).
+//  Matras ta'minotchidan TAYYOR holda keladi va do'konda alohida
+//  sotiladi. U ham KONVER, faqat tsexda emas, OMBORDA tug'iladi:
+//  marshruti yo'q, ya'ni tsex ekranida ko'rinmaydi va muddat
+//  hisoblanmaydi — lekin ombor qoldig'i, bron va yuk xati eskicha
+//  ishlaydi (izoh: sql/warehouse.sql).
+test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
+  const { db } = require('../db');
+
+  //  Guruh va mahsulot migratsiyadan keladi, marshrutsiz.
+  const mat = (await H.id(`SELECT id FROM products WHERE sku = 'MATRAS'`)).id;
+  assert.equal((await H.id(
+    `SELECT COALESCE(route_template_id::text, 'yoq') AS id
+       FROM products WHERE sku = 'MATRAS'`)).id, 'yoq', 'marshruti yo\'q');
+  //  Sotib olinadigan mahsulotlar ro'yxati BAZADAN chiqadi.
+  const ol = await admin('GET', '/api/warehouse/fg/buyable');
+  assert.equal(ol.status, 200, ol.text);
+  assert.ok(ol.body.rows.some((r) => r.id === mat), 'matras ro\'yxatda');
+
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Matras Zavodi', category: 'BOSHQA' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Sinov Matras Zavodi'`)).id;
+  const qarz = async () => Number((await H.id(
+    `SELECT balance AS id FROM v_supplier_debt WHERE id = $1`, [tam])).id);
+  const oldin = await qarz();
+
+  //  Ta'minotchisiz ham, narxsiz ham o'tmaydi: kirimda narx —
+  //  QARZNING O'ZI.
+  assert.equal((await admin('POST', '/api/warehouse/fg/receipts',
+    { items: [{ product_id: mat, qty: 2, price: 50 }] })).status, 400);
+  assert.equal((await admin('POST', '/api/warehouse/fg/receipts',
+    { supplier_id: tam, items: [{ product_id: mat, qty: 2 }] })).status, 400);
+
+  const k = await admin('POST', '/api/warehouse/fg/receipts', {
+    supplier_id: tam, doc_on: '2026-09-20', supplier_doc: 'NAK-77',
+    items: [{ product_id: mat, qty: 4, price: 60 },
+            { product_id: mat, qty: 2, price: 55, color: 'Oq' }] });
+  assert.equal(k.status, 200, k.text);
+  assert.match(k.body.doc_no, /^F\d\d-\d{4}$/, 'hujjat raqami F bilan');
+  assert.equal(k.body.lines, 2);
+  assert.equal(k.body.qty, 6);
+  //  4 × 60 + 2 × 55 = 350
+  assert.equal(Number(k.body.amount), 350);
+
+  //  Konverlar T/M omborda va raqami MT bilan.
+  const rows = (await db.query(
+    `SELECT u.conveyor_no, u.status, u.qty, u.buy_price,
+            u.unit_price, w.code AS wh
+       FROM production_units u
+       LEFT JOIN warehouses w ON w.id = u.warehouse_id
+      WHERE u.fg_receipt_id = $1 ORDER BY u.id`, [k.body.id])).rows;
+  assert.equal(rows.length, 2);
+  for (const r of rows) {
+    assert.match(r.conveyor_no, /^MT\d\d-\d{4}$/, 'raqami MT bilan');
+    assert.equal(r.status, 'fg', 'darrov omborda');
+    assert.equal(r.wh, 'TM', 'faqat T/M ombor');
+    //  ★ SOTIB OLINGAN NARX `unit_price` GA YOZILMAYDI: u sotuv
+    //  narxi va matras mijozga TANNARXIDA chiqib ketardi.
+    assert.equal(r.unit_price, null, 'sotuv narxi bo\'sh qoladi');
+    assert.ok(Number(r.buy_price) > 0, 'olingan narx yozildi');
+  }
+
+  //  Ta'minotchining qarzi o'sha zahoti oshdi — xom ashyo kirimi
+  //  bilan bir xil: kirim omborni to'ldiradi VA qarzni oshiradi.
+  assert.equal(await qarz(), oldin + 350, 'qarz kirimga oshdi');
+  //  Lentada ham hujjat raqami bilan turadi.
+  const lenta = (await db.query(
+    `SELECT kind, credit, doc_no FROM v_supplier_ledger
+      WHERE supplier_id = $1 AND doc_no = $2`, [tam, k.body.doc_no])).rows;
+  assert.equal(lenta.length, 1, 'lentada bitta qator');
+  assert.equal(Number(lenta[0].credit), 350, 'haqdor tomonda');
+
+  //  Bekor qilish: sabab so'raladi, konverlar ham birga chiqadi.
+  assert.equal((await admin('POST',
+    `/api/warehouse/fg/receipts/${k.body.id}/cancel`)).status, 400, 'sababsiz');
+  assert.equal((await admin('POST',
+    `/api/warehouse/fg/receipts/${k.body.id}/cancel`,
+    { note: 'adashib yozildi' })).status, 200);
+  assert.equal(await qarz(), oldin, 'qarz joyiga qaytdi');
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::text AS id FROM production_units
+      WHERE fg_receipt_id = $1 AND status <> 'cancelled'`, [k.body.id])).id, '0',
+    'konverlar ham bekor bo\'ldi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

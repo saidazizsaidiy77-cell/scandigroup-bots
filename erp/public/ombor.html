@@ -104,6 +104,10 @@ const jamiUstun = () => isTM() && !faqatQoldiq();
 //  uchun. Savdoga qoldiq yetarli: unga nima sotishga tayyor turgani
 //  kerak, o'sha mahsulot omborga qachon kirgani emas.
 let rows = [], tab = 'stock', canAccept = false, canLedger = false;
+//  canBuy — ta'minotchidan keladigan TAYYOR mahsulot (matras) kirimi.
+//  Molni T/M ombor mudiri qabul qiladi va hujjatni o'zi yozadi: javonni
+//  u sanaydi (izoh: sql/warehouse.sql).
+let canBuy = false, buyRef = null, buyRows = [], buyLines = [];
 //  Chiqariladigan buyurtmalar: savdo «mijozga chiqarilsin» deganlari.
 //  Boshqa buyurtmalar bu yerda UMUMAN ko'rinmaydi — ular hali
 //  savdoning qo'lida va mudirning ishi emas. Mudir
@@ -127,13 +131,18 @@ const money = v => v == null ? ''
 // Qabul qilish yonida nechta kutayotgani turadi, aks holda ombor
 // qoldiqni ochib, kutayotgan mahsulotni ko'rmay qolishi mumkin.
 const ALL_TABS = [['stock', 'Qoldiq'], ['inbox', 'Qabul qilish'],
-                  ['ship', "Jo'natish"], ['moves', 'Harakat']];
+                  ['ship', "Jo'natish"], ['buy', 'Kirim'], ['moves', 'Harakat']];
 //  «Qabul qilish» faqat T/M omborda: ishlab chiqarish vitrinaga
 //  to'g'ridan-to'g'ri topshirmaydi, mahsulot u yerga T/M ombordan
 //  ko'chiriladi.
 const isTM = () => !WH || WH === 'TM';
 const tabs = () => ALL_TABS.filter(([k]) => (k !== 'inbox' || (canAccept && isTM()))
                                          && (k !== 'ship' || (canShip && isTM()))
+                                         //  Kirim faqat T/M omborda: mol
+                                         //  ta'minotchidan ZAVODGA keladi,
+                                         //  vitrinaga esa u T/M dan
+                                         //  omborlar aro hujjat bilan boradi.
+                                         && (k !== 'buy' || (canBuy && isTM()))
                                          && (k !== 'moves' || canLedger));
 function drawTabs() {
   // Bitta tab — tab emas: tanlash imkoni yo'q qator faqat joy egallaydi.
@@ -150,6 +159,7 @@ async function go(k) {
   if (k === 'inbox') return load();
   if (k === 'stock') return loadStock();
   if (k === 'ship') return loadShip();
+  if (k === 'buy') return loadBuy();
   return loadMoves();
 }
 
@@ -1198,6 +1208,212 @@ async function loadMoves() {
   if (mQ && $('mQ')) { $('mQ').focus(); $('mQ').setSelectionRange(9999, 9999); }
 }
 
+// ═══════════════════ KIRIM — TA'MINOTCHIDAN TAYYOR MAHSULOT ═════════════════
+//
+//  Matras zavodda yasalmaydi: u ta'minotchidan TAYYOR holda keladi va
+//  do'konda alohida sotiladi (izoh: sql/warehouse.sql). Hujjat IKKI
+//  ishni birga qiladi — omborni to'ldiradi va ta'minotchining oldidagi
+//  qarzni oshiradi.
+async function loadBuy() {
+  if (!buyRef) buyRef = await App.api('/api/warehouse/fg/buyable');
+  buyRows = (await App.api('/api/warehouse/fg/receipts')).rows;
+  drawBuy();
+}
+
+function drawBuy() {
+  //  Ro'yxat bo'sh bo'lsa sababi YOZILADI: «— bo'sh —» degan yozuv
+  //  mudirni nima qilish kerakligi haqida savol bilan qoldirardi.
+  const bor = buyRows.length;
+  $('body').innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;
+        flex-wrap:wrap;gap:8px">
+        <div>
+          <h2 style="margin:0">Ta'minotchidan kirim</h2>
+          <p class="muted" style="font-size:13px;margin-top:4px">
+            Zavodda yasalmaydigan tayyor mahsulot — matras. Kirim omborni
+            to'ldiradi va ta'minotchining oldidagi qarzni oshiradi.</p>
+        </div>
+        <button class="primary" onclick="buyOpen()">+ Yangi kirim</button>
+      </div>
+      ${bor ? `<div class="tbox"><table>
+        <thead><tr><th>Hujjat</th><th>Sana</th><th>Ta'minotchi</th>
+          <th>Nima keldi</th><th class="num">Soni</th>
+          <th class="num">Summa, $</th><th></th></tr></thead>
+        <tbody>${buyRows.map(buyRow).join('')}</tbody></table></div>`
+      : `<p class="muted" style="font-size:13px">Hali kirim yozilmagan.</p>`}
+    </div>`;
+}
+
+const buyRow = (r) => `<tr${r.status === 'cancelled'
+    ? ' style="opacity:.55"' : ''}>
+  <td><b>${esc(r.doc_no || '')}</b>${r.supplier_doc
+    ? `<div class="muted" style="font-size:12px">${esc(r.supplier_doc)}</div>` : ''}</td>
+  <td>${d8(r.doc_on)}</td>
+  <td>${esc(r.supplier || '')}</td>
+  <!--  NIMA kelgani ro'yxatda turadi, qatorlar SONI emas: «2 qator»
+        degan yozuv nima kelganini aytmasdi va hujjatni ochib
+        ko'rishdan boshqa yo'l qolmasdi (vitrina hujjati bilan bir
+        xil qoida). -->
+  <td>${(r.items || []).map((x) => `${esc(x.product)}${x.color
+    ? ` <span class="muted">${esc(x.color)}</span>` : ''} · ${x.qty}`)
+    .join('<br>')}</td>
+  <td class="num">${r.qty}</td>
+  <td class="num">${money(r.amount)}</td>
+  <td>${r.status === 'cancelled'
+    ? `<span class="tag bad">bekor</span>`
+    : (canBuy ? `<button onclick="buyCancel(${r.id}, '${esc(r.doc_no)}')"
+        >Bekor qilish</button>` : '')}</td></tr>`;
+
+//  Bekor qilishda sabab SO'RALADI: pulga tegadigan hujjat izsiz
+//  yo'qolmaydi (kassadagi operatsiya bilan bir xil qoida).
+async function buyCancel(id, no) {
+  const sabab = prompt(`${no} — nega bekor qilinmoqda?`);
+  if (sabab === null) return;
+  if (!sabab.trim()) return toast('Sabab yozilmadi', true);
+  try {
+    await App.api(`/api/warehouse/fg/receipts/${id}/cancel`,
+      { method: 'POST', body: JSON.stringify({ note: sabab.trim() }) });
+    toast('Bekor qilindi');
+    await loadBuy();
+  } catch (e) { toast(e.message, true); }
+}
+
+//  Oyna xom ashyo kirimi bilan BIR XIL shaklda: kimdan, qachon, qaysi
+//  valyutada — ostida qatorlar, eng pastda jami. Jami saqlashdan OLDIN
+//  ko'rinadi: bir nol ortiqcha yozilgani aynan shu yerda bilinadi,
+//  ta'minotchining qarzida emas.
+function buyOpen() {
+  buyLines = [{ product_id: '', qty: '', price: '', color: '' }];
+  const bugun = isoDay(new Date());
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="buyBox" onclick="if(event.target===this)buyClose()">
+      <div class="modal" style="max-width:720px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h2 style="margin:0">Ta'minotchidan kirim</h2>
+          <button onclick="buyClose()">Yopish</button></div>
+
+        <!--  Maydonlar bir xil kenglikdagi panjarada. Uslub SHU YERDA,
+              inline: `.grid2` kassa sahifasining o'z uslubi va uni bu
+              yerga ko'chirish ikkinchi nusxa bo'lardi. -->
+        <div style="display:grid;gap:12px;
+          grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+          <div><label>Ta'minotchi</label>
+            <select id="bSup">
+              <option value="">— tanlang —</option>
+              ${(buyRef.suppliers || []).map((x) =>
+                `<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+            </select>
+            ${(buyRef.suppliers || []).length ? '' :
+              `<div class="hint">Ta'minot bo'limida ta'minotchi qo'shing</div>`}</div>
+          <div><label>Sana</label>
+            <input id="bDate" type="date" value="${bugun}"></div>
+          <div><label>Ta'minotchining hujjati</label>
+            <input id="bDoc" placeholder="nakladnoy raqami — ixtiyoriy"></div>
+          <div><label>Valyuta</label>
+            <select id="bCcy" onchange="buyCalc()">
+              <option value="USD">Dollar</option><option value="UZS">So'm</option>
+            </select></div>
+          <div id="bRateBox" hidden><label>Kurs, 1$ = so'm</label>
+            <input id="bRate" type="number" min="0" step="0.0001" inputmode="decimal"
+              value="${buyRef.rate || ''}" oninput="buyCalc()">
+            <div class="hint">${buyRef.rate ? 'oxirgi kurs' : ''}</div></div>
+        </div>
+
+        <div id="bLines" style="margin-top:14px"></div>
+        <button onclick="buyAdd()" style="margin-top:8px">+ Qator</button>
+
+        <div class="row" style="justify-content:space-between;align-items:baseline;
+          gap:12px;flex-wrap:wrap;margin-top:18px;padding-top:16px;
+          border-top:1px solid var(--line)">
+          <div><span class="muted" style="font-size:13px">Jami</span>
+            <div id="bSum" style="font-size:26px;font-weight:600">—</div></div>
+          <div class="row" style="gap:10px">
+            <button class="primary" onclick="buySave()">Saqlash</button>
+            <button onclick="buyClose()">Bekor qilish</button></div>
+        </div>
+      </div></div>`);
+  buyDraw();
+}
+
+const buyClose = () => { $('buyBox')?.remove(); };
+const buyAdd = () => { buyLines.push({ product_id: '', qty: '', price: '', color: '' });
+                       buyDraw(); };
+
+function buyDraw() {
+  $('bLines').innerHTML = buyLines.map((l, i) => `
+    <div class="row" style="gap:8px;align-items:flex-end;margin-bottom:8px;
+      flex-wrap:wrap">
+      <div style="flex:2;min-width:160px">
+        ${i ? '' : '<label>Mahsulot</label>'}
+        <select onchange="buySet(${i},'product_id',this.value)">
+          <option value="">— tanlang —</option>
+          ${(buyRef.rows || []).map((p) => `<option value="${p.id}"${
+            String(l.product_id) === String(p.id) ? ' selected' : ''
+          }>${esc(p.name)}</option>`).join('')}
+        </select></div>
+      <div style="flex:1;min-width:90px">
+        ${i ? '' : '<label>Rangi</label>'}
+        <input value="${esc(l.color || '')}" placeholder="ixtiyoriy"
+          oninput="buySet(${i},'color',this.value)"></div>
+      <div style="flex:1;min-width:80px">
+        ${i ? '' : '<label>Soni</label>'}
+        <input type="number" min="1" step="1" inputmode="numeric"
+          value="${l.qty}" oninput="buySet(${i},'qty',this.value)"></div>
+      <div style="flex:1;min-width:100px">
+        ${i ? '' : '<label>Narxi</label>'}
+        <input type="number" min="0" step="0.01" inputmode="decimal"
+          value="${l.price}" oninput="buySet(${i},'price',this.value)"></div>
+      <button class="ic" title="Qatorni olib tashlash"
+        onclick="buyDel(${i})">&times;</button>
+    </div>`).join('');
+  buyCalc();
+}
+
+function buySet(i, k, v) { buyLines[i][k] = v; if (k !== 'color') buyCalc(); }
+function buyDel(i) {
+  //  Oxirgi qator o'chirilmaydi: bo'sh hujjatda saqlaydigan narsa yo'q
+  //  va ekranda «+ Qator» dan boshqa hech narsa qolmasdi.
+  if (buyLines.length < 2) return;
+  buyLines.splice(i, 1); buyDraw();
+}
+
+function buyCalc() {
+  if (!$('bCcy')) return;
+  const so = $('bCcy').value === 'UZS';
+  $('bRateBox').hidden = !so;
+  const r = Number($('bRate')?.value) || 0;
+  let jami = 0;
+  for (const l of buyLines) {
+    const n = Number(l.qty) || 0, p = Number(l.price) || 0;
+    jami += n * (so ? (r > 0 ? p / r : 0) : p);
+  }
+  $('bSum').innerHTML = jami
+    ? `${money(Math.round(jami * 100) / 100)} <span class="muted">$</span>`
+    : '<span class="muted">—</span>';
+}
+
+async function buySave() {
+  const items = buyLines
+    .filter((l) => l.product_id && Number(l.qty) > 0)
+    .map((l) => ({ product_id: Number(l.product_id), qty: Number(l.qty),
+                   price: Number(l.price), color: l.color }));
+  if (!items.length) return toast("Qator to'ldirilmadi", true);
+  try {
+    const r = await App.api('/api/warehouse/fg/receipts', {
+      method: 'POST', body: JSON.stringify({
+        supplier_id: Number($('bSup').value) || null,
+        doc_on: $('bDate').value || null,
+        supplier_doc: $('bDoc').value,
+        ccy: $('bCcy').value,
+        rate: $('bRate')?.value || null,
+        items }) });
+    buyClose();
+    toast(`${r.doc_no} · ${money(r.amount)} $`);
+    await loadBuy();
+  } catch (e) { toast(e.message, true); }
+}
+
 App.start(async () => {
   canAccept = App.can('warehouse.move', 'production.manage');
   canMove = App.can('warehouse.move', 'warehouse.manage', 'production.manage');
@@ -1213,6 +1429,7 @@ App.start(async () => {
   }
   canLedger = App.can('warehouse.move', 'warehouse.manage',
                       'production.manage', 'production.reports');
+  canBuy = App.can('warehouse.manage', 'production.manage');
   //  Savdo — omborni faqat O'QIYDIGAN odam: unga aylanma emas, qoldiq
   //  kerak (izoh: `faqatQoldiq`).
   savdoKoz = App.can('sales.view', 'sales.manage')

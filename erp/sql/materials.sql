@@ -848,9 +848,16 @@ SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
        --  Ta'minotchi OLUVCHI tomon: `v_cash_flow` da unga ketgan pul
        --  musbat bo'lib turadi.
        pay.paid,
-       got.received,
-       (COALESCE(s.opening_debt, 0) + got.received - pay.paid)::numeric(16,2)
-         AS balance
+       --  ★ KELGAN MOL IKKI XIL BO'LADI: xom ashyo (`v_mat_receipts`) va
+       --  ta'minotchidan TAYYOR holda keladigan mahsulot — matras
+       --  (`v_fg_receipts`, izoh: sql/warehouse.sql). Ikkalasi ham bir xil
+       --  ish qiladi: omborni to'ldiradi va bizning qarzimizni oshiradi;
+       --  qoldig'i esa boshqa jadvalda sanaladi, shuning uchun manba ikkita
+       --  va ular SHU YERDA qo'shiladi. Bittasi unutilsa oy oxirida
+       --  solishtirma dalolatnoma zavodnikidan kam chiqardi.
+       (got.received + gotfg.received)::numeric(16,2) AS received,
+       (COALESCE(s.opening_debt, 0) + got.received + gotfg.received
+        - pay.paid)::numeric(16,2) AS balance
   FROM suppliers s
   LEFT JOIN LATERAL (
     SELECT COALESCE(SUM(f.amount_usd), 0)::numeric(16,2) AS paid
@@ -861,6 +868,10 @@ SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
     SELECT COALESCE(SUM(r.amount), 0)::numeric(16,2) AS received
       FROM v_mat_receipts r
      WHERE r.supplier_id = s.id AND r.status = 'ok') got ON true
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(r.amount), 0)::numeric(16,2) AS received
+      FROM v_fg_receipts r
+     WHERE r.supplier_id = s.id AND r.status = 'ok') gotfg ON true
  WHERE s.active;
 
 -- ══════════════════════════ TA'MINOTCHI QARZI — HARAKATLAR LENTASI
@@ -928,6 +939,23 @@ SELECT r.supplier_id,
        r.amount,
        r.doc_no, NULL::int, r.id
   FROM v_mat_receipts r
+ WHERE r.status = 'ok' AND r.amount <> 0
+UNION ALL
+--  ★ TAYYOR MAHSULOT KIRIMI ham HAQDOR tomonda: matras ta'minotchidan
+--  tayyor holda keladi va qarzimiz xuddi xom ashyodagidek oshadi
+--  (izoh: sql/warehouse.sql). Lentada hujjat raqami yoziladi — «bu
+--  3 400 dollar qayerdan chiqdi» degan savolga jadvaldagi raqamning
+--  o'zi javob bermaydi.
+SELECT r.supplier_id,
+       r.doc_on,
+       'receipt'::text,
+       ('Tayyor mahsulot — ' || r.doc_no || ' · ' || r.warehouse
+         || CASE WHEN r.supplier_doc IS NOT NULL AND r.supplier_doc <> ''
+                 THEN ' · ' || r.supplier_doc ELSE '' END)::text,
+       0::numeric(16,2),
+       r.amount,
+       r.doc_no, NULL::int, NULL::int
+  FROM v_fg_receipts r
  WHERE r.status = 'ok' AND r.amount <> 0;
 
 -- ═══════════════════════════ TA'MINOT XABARLARI — XODIM BELGISI

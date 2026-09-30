@@ -518,3 +518,143 @@ SELECT r.id, r.doc_no, r.status, r.note,
       LEFT JOIN products p          ON p.id  = pu.product_id
       LEFT JOIN product_groups g    ON g.id  = p.group_id
      WHERE x.return_id = r.id) i ON true;
+
+-- ═════════════════ SOTIB OLINADIGAN TAYYOR MAHSULOT — MATRAS ════════════════
+--
+--  ★ HAMMA MAHSULOT ZAVODDA YASALMAYDI (zavod qarori, 2026-09). Matras
+--  ta'minotchidan TAYYOR holda keladi va do'konda alohida sotiladi:
+--  yotoqxona to'plamiga qo'shib ham beriladi, yakka o'zi ham ketadi.
+--  Tizimda esa bunday tur yo'q edi — har konver marshrutdan o'tardi.
+--
+--  Ikki yo'l bor edi. Birinchisi — matrasni ALOHIDA jadval qilish:
+--  o'z qoldig'i, o'z sotuvi, o'z hujjati. O'shanda savdo, bron, yuk
+--  xati, mijoz balansi va ombor qoldig'i — hammasi IKKI manbadan
+--  o'qishi kerak bo'lardi va bitta esdan chiqqan joy matrasni
+--  hisobotdan tushirib qoldirardi.
+--
+--  Ikkinchisi — SHU: matras ham KONVER, faqat u tsexda emas, OMBORDA
+--  tug'iladi. Marshruti yo'q (`route_template_id IS NULL`), ya'ni tsex
+--  ekranida ko'rinmaydi, muddat hisoblanmaydi va topshirish
+--  so'ralmaydi — lekin ombor qoldig'i, bron, yuk xati va balans
+--  eskicha ishlaydi, chunki ular konverni o'qiydi.
+--
+--  Guruh bo'lib turishining sababi: raqamning harfi, o'lchov birligi
+--  va savdo qoidalari guruhda yoziladi — matras uchun ham shu joy.
+INSERT INTO product_groups (code, name, line_id, is_set, sort, route_template_id)
+SELECT 'MATRAS', 'Matras', (SELECT id FROM lines WHERE code = 'L1'),
+       false, 6, NULL
+ WHERE EXISTS (SELECT 1 FROM lines WHERE code = 'L1')
+ON CONFLICT (code) DO NOTHING;
+
+--  Raqami `MT26-0001`: «M» band (xom ashyo kirimi `M26-0001`) va bitta
+--  harf ikki xil hujjatni atasa ekrandagi raqam qaysi biri ekani
+--  noaniq qolardi. Dona bilan sanaladi — matras komplekt emas.
+--
+--  Faqat BO'SH katak to'ldiriladi: saytdan o'zgartirilgani keyingi
+--  deploy'da qaytarib qo'yilmaydi (guruh nomi bilan bir xil qoida).
+UPDATE product_groups SET no_prefix = 'MT' WHERE code = 'MATRAS' AND no_prefix IS NULL;
+UPDATE product_groups SET no_width  = 4    WHERE code = 'MATRAS' AND no_width  IS NULL;
+
+--  Zavodda matrasning bitta turi sotiladi (zavod qarori): o'lcham
+--  bo'yicha ajratish kerak bo'lsa har o'lcham ALOHIDA mahsulot bo'ladi
+--  — xom ashyodagi «har rang alohida material» bilan bir xil qoida.
+INSERT INTO products (sku, name, group_id, route_template_id)
+SELECT 'MATRAS', 'Matras', g.id, NULL
+  FROM product_groups g WHERE g.code = 'MATRAS'
+ON CONFLICT (sku) DO NOTHING;
+
+-- ───────────────────────────────────────── TAYYOR MAHSULOT KIRIMI ───────────
+--
+--  ★ MOL HUJJAT BILAN KIRADI — xom ashyodagi bilan AYNAN bir xil
+--  sabab: kirim IKKI ishni birga qiladi, omborni to'ldiradi va
+--  ta'minotchining oldidagi qarzni oshiradi. Biri ishlab, ikkinchisi
+--  jim qolsa farq faqat oy oxirida, solishtirma dalolatnomada
+--  bilinardi.
+--
+--  Alohida QATOR jadvali yozilmadi: qator — konverning O'ZI
+--  (`production_units.fg_receipt_id`). Sabab qoldiq bilan bir xil:
+--  «omborda nechta bor» degan savol BITTA manbadan hisoblanishi kerak
+--  va u manba konver. Qatorlar ikkinchi jadvalda tursa hujjatda 10 ta,
+--  qoldiqda 8 ta bo'lib qolardi.
+--
+--  Raqami `F26-0001` — xom ashyo kirimi `M26-0001` dan ajralib tursin:
+--  ikkalasi ham «kirim», lekin biri materialni, ikkinchisi tayyor
+--  mahsulotni kiritadi va ikki xil qoldiqqa tushadi.
+CREATE TABLE IF NOT EXISTS fg_receipts (
+  id           SERIAL PRIMARY KEY,
+  doc_no       TEXT UNIQUE,
+  --  ★ TA'MINOTCHI MAJBURIY: ta'minotchisiz kirim omborni to'ldirib,
+  --  qarzni jimgina tashlab ketardi. Ta'minotchisiz tayyor mahsulot
+  --  omborga faqat BOSHLANG'ICH QOLDIQ bo'lib kiradi (uning
+  --  «qayerdan» i yo'q).
+  supplier_id  INT  NOT NULL REFERENCES suppliers(id),
+  warehouse_id INT  NOT NULL REFERENCES warehouses(id),
+  doc_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  supplier_doc TEXT,
+  ccy          TEXT NOT NULL DEFAULT 'USD' CHECK (ccy IN ('USD', 'UZS')),
+  rate         NUMERIC(14,4),
+  note         TEXT,
+  status       TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'cancelled')),
+  created_by   INT REFERENCES workers(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  cancelled_by INT REFERENCES workers(id),
+  cancelled_at TIMESTAMPTZ,
+  cancel_note  TEXT,
+  --  So'mdagi narxning kursi SHART: kursi yo'q so'm dollarga
+  --  aylanmaydi va qator qiymatsiz qolardi (material kirimi bilan
+  --  bir xil qoida).
+  CONSTRAINT fg_receipts_rate_check CHECK (ccy = 'USD' OR rate IS NOT NULL)
+);
+
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS fg_receipt_id INT
+  REFERENCES fg_receipts(id);
+CREATE INDEX IF NOT EXISTS idx_units_fg_receipt ON production_units(fg_receipt_id)
+  WHERE fg_receipt_id IS NOT NULL;
+
+--  ★ OLINGAN NARX `unit_price` GA YOZILMAYDI, va bu muhim.
+--  `unit_price` — SOTUV narxi: chiqarishda buyurtma qatoridan
+--  ko'chiriladi va mijozning balansiga o'sha summa tushadi; qatorda
+--  narx yozilmagan bo'lsa kartochkadagisi qoladi. Sotib olingan narx
+--  o'sha katakka yozilsa matras mijozga TANNARXIDA chiqib ketardi.
+--
+--  `buy_price` esa qancha TO'LANGANI, dollarda — ya'ni sotib
+--  olinadigan tayyor mahsulotning tannarxi. Yasaladigan konverda u
+--  bo'sh qoladi: uning tannarxi sarflangan xom ashyo va ishbay
+--  oylikdan yig'iladi (izoh: CLAUDE.md, «Tannarx»).
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS buy_price NUMERIC(14,2);
+
+--  Hujjat va uning ichi bitta so'rovdan: qatorlar KONVERLAR bo'lib
+--  chiqadi — raqami, soni va narxi bilan. Bekor qilingan konver
+--  hujjatdan ham chiqadi: u qoldiqda ham yo'q.
+DROP VIEW IF EXISTS v_fg_receipts CASCADE;
+CREATE VIEW v_fg_receipts AS
+SELECT r.*,
+       s.name  AS supplier,
+       s.phone AS supplier_phone,
+       w.name  AS warehouse,
+       w.code  AS warehouse_code,
+       cw.name AS created_by_name,
+       xw.name AS cancelled_by_name,
+       COALESCE(i.lines, 0)::int            AS lines,
+       COALESCE(i.qty, 0)::int              AS qty,
+       COALESCE(i.amount, 0)::numeric(16,2) AS amount,
+       COALESCE(i.items, '[]'::json)        AS items
+  FROM fg_receipts r
+  JOIN suppliers  s ON s.id = r.supplier_id
+  JOIN warehouses w ON w.id = r.warehouse_id
+  LEFT JOIN workers cw ON cw.id = r.created_by
+  LEFT JOIN workers xw ON xw.id = r.cancelled_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines, SUM(u.qty) AS qty,
+           SUM(u.qty * COALESCE(u.buy_price, 0)) AS amount,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'unit_id', u.id, 'conveyor_no', u.conveyor_no,
+             'product_id', u.product_id, 'product', p.name,
+             'product_type', g.name, 'color', u.color,
+             'qty', u.qty, 'buy_price', u.buy_price,
+             'amount', ROUND(u.qty * COALESCE(u.buy_price, 0), 2))
+             ORDER BY u.id) AS items
+      FROM production_units u
+      JOIN products p       ON p.id = u.product_id
+      JOIN product_groups g ON g.id = p.group_id
+     WHERE u.fg_receipt_id = r.id AND u.status <> 'cancelled') i ON true;
