@@ -149,8 +149,11 @@ const BLOK = [
     kart: (d) => [
       { name: 'Omborda', value: Panel.son(d.nom) + ' nom',
         hint: Panel.pul(d.usd) },
+      //  Raqam bosilsa AYNAN o'sha qatorlar chiqadi: «qaysilari?»
+      //  degan keyingi savol javobni qidirishni talab qilmasin.
       { name: 'Minusga tushgan', value: Panel.son(d.minus) + ' ta',
-        tone: Number(d.minus) ? 'bad' : '', hint: 'kirim yozilmagan' },
+        tone: Number(d.minus) ? 'bad' : '', hint: 'kirim yozilmagan',
+        yol: Number(d.minus) ? '/materiallar.html?minus=1' : '' },
       { name: 'Xarid zayavkasi', value: Panel.son(d.zayavka.yangi) + ' ta',
         tone: Number(d.zayavka.yangi) ? 'warn' : '' },
       { name: 'Talabnoma', value: Panel.son(d.talab.yangi) + ' ta',

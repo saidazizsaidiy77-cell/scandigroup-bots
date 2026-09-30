@@ -264,6 +264,14 @@ router.patch('/:id', need(...MANAGE), wrap(async (req, res) => {
 //  Doira CHEGARA: tsexi biriktirilgan xodim FAQAT o'z tsexining
 //  omborlarini ko'radi. Ombor xodimi va rahbariyatda doira yo'q —
 //  ularga hammasi ochiq.
+//  ★ MINUSGA TUSHGAN QATOR — SHART BITTA JOYDA (zavod qarori,
+//  2026-09). Panelda ularning SONI turadi, qoldiq ro'yxatida esa
+//  o'zlari; shart ikki joyda yozilsa bir kun ajralib ketardi —
+//  kartochkada «30» turib, ro'yxat yigirma sakkiztasini ko'rsatardi
+//  va qaysi biri javob ekani noaniq qolardi (menyudagi navbat belgisi
+//  bilan bir xil qoida va bir xil sabab).
+const MINUS = 's.qty < 0';
+
 router.get('/stock', need(...VIEW), wrap(async (req, res) => {
   const doira = whDoira(req);
   const { rows } = await db.query(
@@ -276,10 +284,17 @@ router.get('/stock', need(...VIEW), wrap(async (req, res) => {
              OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
         AND ($2::int IS NULL OR s.warehouse_id = $2)
         AND ($3::text IS NULL OR s.material ILIKE '%' || $3 || '%')
+        --  ★ FAQAT MINUSGA TUSHGANI. Zavodda o'n to'rtta ombor va uch
+        --  yuzdan ortiq nom bor — minusga tushgan o'ttiztasini ko'z
+        --  bilan terib olish uchun har omborni birma-bir ochish kerak
+        --  edi. Ular ALLAQACHON qizil bo'lib turadi, lekin faqat
+        --  o'sha omborning ichida.
+        AND (NOT $4::boolean OR ${MINUS})
       ORDER BY w.sort, c.code NULLS LAST, s.material
       LIMIT 3000`,
     [doira,
-     Number(req.query.warehouse_id) || null, trim(req.query.q)]);
+     Number(req.query.warehouse_id) || null, trim(req.query.q),
+     req.query.minus === '1']);
   res.json({ rows });
 }));
 
@@ -1361,11 +1376,14 @@ router.get('/dashboard', need(...VIEW), wrap(async (req, res) => {
     //  BELGISI (izoh: CLAUDE.md). Nolga qisish yolg'on bo'lardi,
     //  yashirish esa xatoni ko'rinmas qilardi — shuning uchun u
     //  panelda ALOHIDA raqam bo'lib turadi.
+    //  Shart `MINUS` da, bitta joyda: kartochkadagi raqam qoldiq
+    //  ro'yxatidagi qatorlar soniga TENG bo'lishi shart — test ham
+    //  shuni solishtiradi.
     db.query(
       `SELECT COUNT(*)::int AS soni
          FROM v_material_stock s
          JOIN warehouses w ON w.id = s.warehouse_id
-        WHERE s.qty < 0
+        WHERE ${MINUS}
           AND ($1::int[] IS NULL
                OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))`, [doira]),
 

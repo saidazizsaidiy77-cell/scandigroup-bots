@@ -81,14 +81,26 @@ const Panel = (() => {
    *  Raqam — javobning O'ZI, shuning uchun u yirik turadi; nomi
    *  ustida, izohi ostida mayda yozuvda.
    */
+  //  ★ KARTOCHKA HAVOLA HAM BO'LADI (`yol`). Raqam savolga javob
+  //  beradi, lekin keyingi savol darrov keladi: «qaysilari?». Javob
+  //  allaqachon bir sahifada turgan bo'lsa, uni qidirib yurish
+  //  o'rniga raqamning O'ZI o'sha yerga olib borishi kerak.
+  //
+  //  Havolasi yo'q kartochka eskicha `div` bo'lib qoladi: bosiladigan
+  //  ko'rinib turib, hech qayerga olib bormaydigan katak eng yomoni.
   function kpi(el, items) {
-    el.innerHTML = items.filter(Boolean).map((k) => `
-      <div class="card pkpi${k.tone ? ' ' + k.tone : ''}">
+    el.innerHTML = items.filter(Boolean).map((k) => {
+      const ich = `
         <div class="plabel">${esc(k.name)}</div>
         <div class="kpi">${esc(k.value)}</div>
         ${k.hint ? `<div class="muted" style="font-size:12px;margin-top:4px"
-          >${esc(k.hint)}</div>` : ''}
-      </div>`).join('');
+          >${esc(k.hint)}</div>` : ''}`;
+      const cls = `card pkpi${k.tone ? ' ' + k.tone : ''}`;
+      return k.yol
+        ? `<a class="${cls}" href="${esc(k.yol)}"
+             style="text-decoration:none;color:inherit">${ich}</a>`
+        : `<div class="${cls}">${ich}</div>`;
+    }).join('');
   }
 
   /* ------------------------------------------------- VAQT BO'YICHA

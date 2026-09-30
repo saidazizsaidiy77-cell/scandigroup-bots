@@ -150,9 +150,13 @@ function matChiz(d) {
     //  ★ MINUS QOLDIQ — KIRIM HUJJATI YOZILMAGANINING BELGISI.
     //  Nolga qisish yolg'on, yashirish esa xatoni ko'rinmas
     //  qilardi.
+    //  Raqam bosilsa AYNAN o'sha qatorlar chiqadi (`?minus=1`):
+    //  ular qizil bo'lib turardi, lekin faqat o'sha omborning
+    //  ichida va o'n to'rtta omborni birma-bir ochish kerak edi.
     { name: 'Minusga tushgan', value: Panel.son(d.minus) + ' ta',
       tone: Number(d.minus) ? 'bad' : '',
-      hint: 'kirim hujjati yozilmagan' },
+      hint: 'kirim hujjati yozilmagan',
+      yol: Number(d.minus) ? '/materiallar.html?minus=1' : '' },
     { name: 'Xarid zayavkasi', value: Panel.son(d.zayavka.yangi) + ' ta',
       tone: Number(d.zayavka.yangi) ? 'warn' : '',
       hint: Panel.son(d.zayavka.berilgan) + ' tasiga buyurtma berilgan' },

@@ -7890,6 +7890,52 @@ test('xodim qaysi Telegram xabarini olishi kartochkadan qo\'yiladi', async () =>
     'hammasi yoqilsa qator qolmaydi');
 });
 
+//  ★ KARTOCHKADAGI RAQAM RO'YXAT BILAN BIR XIL BO'LISHI SHART.
+//
+//  Panelda «Minusga tushgan N ta» turadi va raqam bosilsa qoldiq
+//  ro'yxati `?minus=1` bilan ochiladi. Shart ikki joyda yozilsa bir
+//  kun ajralib ketardi: kartochkada «30» turib, ro'yxat yigirma
+//  sakkiztasini ko'rsatardi va qaysi biri javob ekani noaniq
+//  qolardi — menyudagi navbat belgisi bilan bir xil qoida va bir
+//  xil sabab. Shuning uchun test raqamni RO'YXATNING uzunligi bilan
+//  solishtiradi.
+test('minusga tushgan qoldiq: kartochkadagi raqam ro\'yxatga teng', async () => {
+  const { db } = require('../db');
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`));
+  const mat = (await H.id(
+    `INSERT INTO materials (name, uom) VALUES ('Sinov minus material', 'dona')
+     ON CONFLICT (lower(name)) DO UPDATE SET uom = 'dona' RETURNING id`));
+
+  //  Omborga kirmasdan sarflangan material: kirim hujjati yozilmagan
+  //  degani va qoldiq minusga tushadi. Zavod qarori: to'xtatilmaydi,
+  //  lekin AYTILADI (izoh: CLAUDE.md).
+  await db.query(
+    `INSERT INTO material_moves (material_id, from_kind, from_id, to_kind, to_id,
+                                 qty, moved_on, status)
+     VALUES ($1, 'warehouse', $2, 'unit', NULL, 7, CURRENT_DATE, 'ok')`,
+    [mat.id, wh.id]);
+
+  const kart = await admin('GET', '/api/materials/dashboard');
+  assert.equal(kart.status, 200, kart.text);
+  const roy = await admin('GET', '/api/materials/stock?minus=1');
+  assert.equal(roy.status, 200, roy.text);
+
+  assert.equal(roy.body.rows.length, Number(kart.body.minus),
+    'kartochkadagi raqam ro\'yxat uzunligiga teng');
+  assert.ok(Number(kart.body.minus) > 0, 'minusga tushgan qator bor');
+  //  Ro'yxatda FAQAT manfiylari turadi va qaysi omborda ekani ham.
+  for (const r of roy.body.rows) {
+    assert.ok(Number(r.qty) < 0, `${r.material}: manfiy emas`);
+    assert.ok(r.warehouse_id, 'qaysi omborda ekani ham keladi');
+  }
+  assert.ok(roy.body.rows.some((r) => r.material === 'Sinov minus material'));
+
+  //  Filtrsiz ro'yxat KENGROQ: musbat qoldiqlar ham turadi.
+  const hammasi = await admin('GET', '/api/materials/stock');
+  assert.ok(hammasi.body.rows.length >= roy.body.rows.length,
+    'filtrsiz ro\'yxat qisqarmaydi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

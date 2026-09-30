@@ -48,6 +48,19 @@
       <select id="sWh" onchange="load()"></select></div>
     <div style="min-width:200px"><label>Qidiruv</label>
       <input id="sQ" placeholder="material nomi" oninput="deb()"></div>
+    <!--  ★ MINUSGA TUSHGANLARNI BIR JOYDA KO'RISH (zavod qarori,
+          2026-09). Manfiy qator ALLAQACHON qizil bo'lib turadi,
+          lekin faqat O'SHA omborning ichida: zavodda o'n to'rtta
+          ombor va uch yuzdan ortiq nom bor, ya'ni o'ttizta qizil
+          qatorni topish uchun har omborni birma-bir ochish kerak
+          edi. Paneldagi «Minusga tushgan» kartochkasi ham shu
+          yerga olib keladi (`?minus=1`) — raqam bosilganda javob
+          chiqsin, qidiruv boshlanmasin. -->
+    <div><label>&nbsp;</label>
+      <label class="tag" style="cursor:pointer;display:inline-flex;
+        align-items:center;gap:6px;padding:8px 10px">
+        <input type="checkbox" id="sMinus" style="width:auto" onchange="load()">
+        Faqat minusga tushgan</label></div>
     <div class="row" style="gap:8px" id="stockTools"></div>
   </div>
   <!--  ★ QISQARGAN RO'YXAT SABABINI AYTADI (izoh:
@@ -252,9 +265,14 @@ async function boot() {
   //  qoldiq omborning ICHIDA kiritiladi — mudir «Arra ombori»
   //  kartochkasini bosadi va o'sha zahoti o'sha omborning qoldig'ida
   //  turadi. Ombor tanlash uchun ikkinchi bosish so'ralmaydi.
-  const kod = new URLSearchParams(location.search).get('w');
+  const qs = new URLSearchParams(location.search);
+  const kod = qs.get('w');
   const kirdi = kod && ref.warehouses.find((w) => w.code === kod);
   if (kirdi) { tab = 'stock'; $('sWh').value = kirdi.id; }
+  //  ★ PANELDAGI «MINUSGA TUSHGAN» KARTOCHKASI SHU YERGA OLIB KELADI.
+  //  Ombor TANLANMAYDI: savol butun zavod bo'yicha va minusga tushgan
+  //  qator qaysi omborda ekanini odam oldindan bilmaydi.
+  if (qs.get('minus') === '1') { tab = 'stock'; $('sMinus').checked = true; }
 
   $('kSup').innerHTML = "<option value=''>Barcha ta'minotchi</option>"
     + (ref.suppliers || []).map((x) =>
@@ -321,6 +339,7 @@ async function load() {
   } else if (tab === 'stock') {
     if ($('sWh').value)       q.set('warehouse_id', $('sWh').value);
     if ($('sQ').value.trim()) q.set('q', $('sQ').value.trim());
+    if ($('sMinus').checked)  q.set('minus', '1');
     rows = (await App.api('/api/materials/stock?' + q)).rows;
   } else if (tab === 'kirim') {
     if ($('kSup').value)      q.set('supplier_id', $('kSup').value);
