@@ -989,4 +989,62 @@ router.get('/working-capital', need(...READ), wrap(async (req, res) => {
   res.json({ from: a, to: b, rows: jadval, wip_shops: tsex.rows });
 }));
 
+/* ============================================================================
+ *  ★ RAHBARIYATGA KUNLIK KASSA XULOSASI (zavod qarori, 2026-09)
+ *
+ *  Direktorning ertalabki savoli: «kassada qancha pul bor va kecha
+ *  nima bo'ldi». Sahifa bor edi, lekin uni ochib ko'rish kerak edi.
+ *
+ *  ★ BU PUL OQIMI HISOBOTI EMAS va shuning uchun nomi ham boshqa.
+ *  `v_cash_month` ichki harakatni hisobga olmaydi — menejerdan kassaga
+ *  topshirilgan pul korxonaga KIRIM emas. Bu yerdagi savol esa aynan
+ *  KASSANING o'zi haqida: javonga kecha qancha pul kirdi va qancha
+ *  chiqdi. Shuning uchun matn ham «Kassaga kirdi / Kassadan chiqdi»
+ *  deb yoziladi — «tushum» deb emas, aks holda ikki hisobot bir xil
+ *  so'z bilan ikki xil raqam aytardi.
+ *
+ *  Yo'nalish TOMONDAN o'qiladi (`v_cash_flow.side_kind = 'account'`):
+ *  har operatsiya ikki qator bo'lib ochiladi va kassa tomonidagi
+ *  ishora kirimmi yoki chiqim ekanini aytadi — sahifadagi lenta ham
+ *  AYNAN shu ifodadan o'qiydi (izoh: sql/cash.sql).
+ *
+ *  Kecha bo'yicha: xulosa ertalab keladi va bugun hali kun
+ *  boshlanmagan.
+ * ========================================================================== */
+async function kassaXabari(client) {
+  const c = client || db;
+  const [oqim, kassa, qolda] = await Promise.all([
+    c.query(
+      `SELECT COALESCE(SUM(f.amount_usd) FILTER (WHERE f.amount_usd > 0), 0)
+                AS kirim,
+              COALESCE(-SUM(f.amount_usd) FILTER (WHERE f.amount_usd < 0), 0)
+                AS chiqim
+         FROM v_cash_flow f
+        WHERE f.side_kind = 'account' AND f.op_date = CURRENT_DATE - 1`),
+    c.query(`SELECT name, total_usd FROM v_cash_balance
+              WHERE is_active ORDER BY sort, name`),
+    c.query(`SELECT COALESCE(SUM(total_usd), 0)::numeric AS usd
+               FROM v_worker_cash`),
+  ]);
+  const x = oqim.rows[0];
+  const jami = kassa.rows.reduce((n, r) => n + Number(r.total_usd || 0), 0);
+  const matn = [
+    `Kecha kassaga kirdi: ${notify.pul(x.kirim)} $`,
+    `Kecha kassadan chiqdi: ${notify.pul(x.chiqim)} $`,
+    '',
+    'Qoldiq:',
+    ...kassa.rows.map((r) => `${r.name} — ${notify.pul(r.total_usd)} $`),
+    `Jami: ${notify.pul(jami)} $`,
+    '',
+    //  Xodimning qo'lidagi pul ham KORXONANING puli, shunchaki
+    //  javonda emas (izoh: CLAUDE.md, sof aylanma kapital) — jami
+    //  qoldiqqa QO'SHILMAYDI, alohida qator bo'lib turadi: kassada
+    //  nima borligi va kimningdir qo'lida nima turgani ikki xil
+    //  savol.
+    `Xodimlar qo'lida: ${notify.pul(qolda.rows[0].usd)} $`,
+  ];
+  return { title: `Kassa · ${notify.kun(new Date())}`, body: matn.join('\n') };
+}
+
 module.exports = router;
+module.exports.kassaXabari = kassaXabari;

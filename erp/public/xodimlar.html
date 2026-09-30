@@ -494,6 +494,26 @@ function openForm(id){
                     w && !w.tg_id
                       ? ' — <b>Telegram ID yozilmagan</b>, xabar bormaydi'
                       : ''}</span></span>
+            </div>
+
+            <!--  ★ KUNLIK RAHBARIYAT XULOSASI (izoh: sql/materials.sql).
+                  Direktorning ertalabki savoli to'rtta va ularning har
+                  biri uchun sahifa bor — aynan shuning uchun ko'pincha
+                  ochilmasdi. Ta'minot saldosi ikkala ro'yxatga ham
+                  ketadi, lekin BOSHQA vaqtda: ta'minotchi ish
+                  boshlashdan oldin, rahbariyat kunni boshlaganda.
+                  Standarti BO'SH: xulosada butun zavodning puli
+                  turadi. -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="wDig" style="width:auto"
+                     ${w?.daily_digest ? 'checked' : ''}>
+              <span style="flex:1">Kunlik xulosa oladi
+                <span class="muted" style="font-size:12px">· har kuni
+                  ertalab to'rtta xabar: ta'minotchilar saldosi, mijozlar
+                  saldosi, kassa qoldig'i va kunlik chiqish${
+                    w && !w.tg_id
+                      ? ' — <b>Telegram ID yozilmagan</b>, xabar bormaydi'
+                      : ''}</span></span>
             </div></div>
 
           <div><label>Rollar</label>
@@ -597,6 +617,7 @@ async function save(id){
     can_add_customer: $('wCust').checked,
     can_request_unit: $('wReq').checked,
     supply_reports: $('wSup').checked,
+    daily_digest: $('wDig').checked,
     mat_scope: $('wMatScope').value,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),

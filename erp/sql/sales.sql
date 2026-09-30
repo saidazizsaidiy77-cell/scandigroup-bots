@@ -271,6 +271,27 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS plan_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS orders_plan_on_idx ON orders(plan_on)
   WHERE plan_on IS NOT NULL;
 
+--  ★ «BUYURTMA TAYYOR» XABARI BIR MARTA KETADI (zavod qarori,
+--  2026-09).
+--
+--  Menejer buyurtmaning oxirgi konveri T/M omborga tushgan KUNI
+--  bilishi kerak: shundan keyin u mijoz bilan chiqish kunini
+--  kelishadi va chiqarishga ruxsat beradi. Ilgari buni bilish uchun
+--  u buyurtmalar ro'yxatini ochib ko'rishdan boshqa yo'l yo'q edi va
+--  tayyor mahsulot javonda kunlab turib qolardi.
+--
+--  Belgi KERAK, chunki shart HOLATDAN hisoblanadi va saqlanmaydi:
+--  konver ombordan qaytarilib, qaytadan qabul qilinsa buyurtma
+--  ikkinchi marta «tayyor» bo'lib qolardi va menejer o'sha xabarni
+--  yana olardi. Bir marta aytilgan gap ikkinchi marta aytilsa
+--  ko'z unga o'rganib qoladi (navbat belgisi bilan bir xil sabab).
+--
+--  Eski buyurtmalarga BAYROQ QO'YILMAYDI va bu ataylab: xabar
+--  faqat QABUL QILISH paytida yoziladi, ya'ni allaqachon tayyor
+--  bo'lib turgan buyurtma uchun hech qanday hodisa bo'lmaydi va
+--  deploy kuni hech kimga to'da xabar ketmaydi.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS ready_notified_at TIMESTAMPTZ;
+
 CREATE OR REPLACE VIEW v_sales_orders AS
 SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        o.customer_id, c.name AS customer_name, c.region, c.phone,

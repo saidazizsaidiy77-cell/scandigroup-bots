@@ -95,6 +95,19 @@ async function queueSupply({ module, title, body }, client) {
   return rows.length;
 }
 
+//  KUNLIK XULOSA: rahbariyatning ertalabki to'rt savoli
+//  (`workers.daily_digest`, izoh: sql/materials.sql). Ta'minot
+//  belgisidan ALOHIDA va shu sababdan: bitta xabar — ta'minotchilar
+//  saldosi — ikkala ro'yxatga ham ketadi, lekin BOSHQA vaqtda.
+async function queueDigest({ module, title, body }, client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT id FROM workers WHERE active AND daily_digest`);
+  for (const r of rows)
+    await queue({ worker_id: r.id, module, title, body }, c);
+  return rows.length;
+}
+
 // Bot jarayoni shuni chaqiradi. send(tg_id, text) — Telegram yuboruvchi funksiya.
 async function sendPending(send, limit = 50) {
   const { rows } = await db.query(
@@ -125,4 +138,38 @@ async function sendPending(send, limit = 50) {
   return rows.length;
 }
 
-module.exports = { queue, queueShop, queueWarehouse, queueSupply, sendPending };
+//  ★ RAQAM XABARDA BIR XIL YOZILADI (zavod qarori, 2026-09). Format
+//  ilgari `modules/materials.js` da edi va faqat ta'minot xabarlari
+//  uni ishlatardi; savdo xabariga ham summa qo'shilgach ikkinchi
+//  nusxa yozilishi kerak bo'lardi va bir kun ular ajralib ketardi —
+//  bitta xabarda «2 100,00», ikkinchisida «2100» turardi.
+//
+//  `toLocaleString` ming ajratgichga UZLUKSIZ bo'shliq (U+00A0)
+//  qo'yadi va u ba'zi Telegram klientlarida boshqa belgi bo'lib
+//  chiqadi — ustiga xabarni qidirib topib bo'lmaydi.
+const pul = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\u00a0/g, ' ');
+
+//  Soni butun bo'lsa kasrsiz: «100 dona», «2,5 kg» emas «2,500 kg».
+const son = (v) => {
+  const n = Number(v || 0);
+  return Number.isInteger(n) ? String(n)
+    : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
+       .replace(/\u00a0/g, ' ');
+};
+
+//  ★ SANA `YYYY-MM-DD` BO'LIB YOZILADI, va format ham BITTA joyda
+//  (`pul` va `son` bilan bir xil sabab). `pg` DATE ustunini JS `Date`
+//  obyekti qilib qaytaradi va `String(d).slice(0,10)` undan «Sat Sep
+//  12» chiqarardi — xabarda sana o'qib bo'lmas holga kelardi.
+//  `toISOString()` ham yo'l emas: u UTC ga o'tkazadi va
+//  `TZ=Asia/Tashkent` da kun bir kunga surilib ketardi.
+const kun = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') return d.slice(0, 10);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+module.exports = { queue, queueShop, queueWarehouse, queueSupply, queueDigest,
+                   sendPending, pul, son, kun };

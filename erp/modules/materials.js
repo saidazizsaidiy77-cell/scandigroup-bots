@@ -678,27 +678,13 @@ const SANA = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? v : null);
 //  mingliklar ajratilgan, ikki kasr.
 //  Minglik ajratgichi ODDIY bo'shliq: `toLocaleString` uzilmaydigan
 //  bo'shliq (U+00A0) qo'yadi va u ba'zi Telegram klientlarida boshqa
-//  belgi bo'lib chiqadi — ustiga xabarni qidirib topib bo'lmaydi.
-const pul = (v) => Number(v || 0).toLocaleString('ru-RU',
-  { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\u00a0/g, ' ');
-//  Soni butun bo'lsa kasrsiz: «100 dona», «2,5 kg» emas «2,500 kg».
-const son = (v) => {
-  const n = Number(v || 0);
-  return Number.isInteger(n) ? String(n)
-    : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
-       .replace(/\u00a0/g, ' ');
-};
-//  ★ SANA `YYYY-MM-DD` BO'LIB YOZILADI. `pg` DATE ustunini JS
-//  `Date` obyekti qilib qaytaradi va `String(d).slice(0,10)` undan
-//  «Sat Sep 12» chiqarardi — xabarda sana o'qib bo'lmas holga
-//  kelardi. `toISOString()` ham yo'l emas: u UTC ga o'tkazadi va
-//  `TZ=Asia/Tashkent` da kun bir kunga surilib ketardi.
-const kun = (d) => {
-  if (!d) return '';
-  if (typeof d === 'string') return d.slice(0, 10);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-};
+//  belgi bo'lib chiqadi.
+//
+//  ★ FORMAT `erp/notify.js` DA, bitta joyda: savdo xabariga ham
+//  summa qo'shilgach ikkinchi nusxa ajralib ketardi — bitta
+//  xabarda «2 100,00», ikkinchisida «2100» turardi.
+//  Sana formati ham o'sha yerda va o'sha sababdan (izoh: erp/notify.js).
+const { pul, son, kun } = require('../notify');
 
 //  ★ QARZ IKKI TOMONLI (izoh: sql/materials.sql). Musbat bo'lsa BIZ
 //  qarzdormiz, manfiy bo'lsa ta'minotchi — ishorali raqamni o'qigan

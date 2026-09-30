@@ -230,24 +230,83 @@ function xabarJadvali() {
 //
 //  Xabar NAVBATGA qo'yiladi: tokensiz ham hech narsa buzilmaydi,
 //  belgisi bor xodim bo'lmasa hech kimga yozilmaydi.
-function saldoJadvali() {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(
-    String(process.env.SUPPLY_AT || '09:00').trim());
-  if (!m) return;
-  const daqiqa = Number(m[1]) * 60 + Number(m[2]);
+//  ★ KUNLIK ISHLAR BITTA JADVALDA (zavod qarori, 2026-09). Ilgari
+//  bittasi bor edi; zavod yana uchtasini so'ragach har biriga o'z
+//  taymerini yozish kerak bo'lardi va vaqt oynasi to'rt nusxada
+//  turardi — bir kun ularning biri ikkinchisidan boshqacha ishlab
+//  qolardi.
+//
+//  Ro'yxat KODDA: bu jadval, ma'lumot emas. Kimga borishi esa har
+//  ishning ichida va XODIM BELGISI bilan hal qilinadi (4-qoida).
+const KUNLIK = [
+  //  Ta'minotchi uni ish boshlashdan oldin oladi.
+  { nom: 'saldo', env: 'SUPPLY_AT', vaqt: '09:00',
+    ish: () => require('./modules/materials').saldoYubor() },
+
+  //  Menejerga FAQAT o'z mijozlarining qarzi (izoh: modules/sales.js).
+  { nom: 'mijoz-qarzi', env: 'SALES_DEBT_AT', vaqt: '09:00',
+    ish: () => require('./modules/sales').qarzYubor() },
+
+  //  ★ RAHBARIYAT XULOSASI — to'rtta savol, to'rtta xabar
+  //  (`workers.daily_digest`, izoh: sql/materials.sql). Bitta uzun
+  //  xabar qilinmadi: Telegramda u bir ekranga sig'masdi va
+  //  direktor javobni o'rtasidan qidirib o'tirardi.
+  //
+  //  Ta'minot saldosi bu yerda IKKINCHI marta yuboriladi va bu
+  //  takror emas: ta'minotchi uni 09:00 da, direktor 08:00 da
+  //  oladi. Matn BITTA joydan (`saldoXabari`).
+  { nom: 'xulosa', env: 'DIGEST_AT', vaqt: '08:00',
+    ish: async () => {
+      const notify = require('./notify');
+      const xabarlar = await Promise.all([
+        require('./modules/materials').saldoXabari(),
+        require('./modules/sales').mijozSaldoXabari(),
+        require('./modules/cash').kassaXabari(),
+        require('./modules/sales').chiqishXabari(),
+      ]);
+      let n = 0;
+      for (const x of xabarlar) {
+        if (!x) continue;
+        n += await notify.queueDigest(
+          { module: 'sales', title: x.title, body: x.body });
+      }
+      return n;
+    } },
+
+  //  Tsex boshlig'iga: ertaga topshiriladigan konverlar. KUN OXIRIDA,
+  //  chunki u ertangi kunni shu xabar bilan tuzadi.
+  { nom: 'muddat', env: 'DUE_AT', vaqt: '17:00',
+    ish: () => require('./modules/units').muddatYubor() },
+];
+
+function kunlikJadval() {
   const OYNA = 15;
-  let oxirgi = '';
-  console.log(`Kunlik ta'minot saldosi: ${m[1]}:${m[2]} (server vaqti)`);
+  const ishlar = [];
+  for (const k of KUNLIK) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(
+      String(process.env[k.env] || k.vaqt).trim());
+    if (!m) continue;
+    ishlar.push({ ...k, daqiqa: Number(m[1]) * 60 + Number(m[2]), oxirgi: '' });
+    console.log(`Kunlik «${k.nom}»: ${m[1]}:${m[2]} (server vaqti)`);
+  }
+  if (!ishlar.length) return;
+
   setInterval(async () => {
     const d = new Date();
     const kun = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-    const farq = (d.getHours() * 60 + d.getMinutes()) - daqiqa;
-    if (kun === oxirgi || farq < 0 || farq >= OYNA) return;
-    oxirgi = kun;
-    try {
-      const n = await require('./modules/materials').saldoYubor();
-      if (n) console.log(`[saldo] ${n} ta xodimga navbatga qo'yildi`);
-    } catch (e) { console.error('[saldo] XATO:', e.message); }
+    const hozir = d.getHours() * 60 + d.getMinutes();
+    for (const k of ishlar) {
+      const farq = hozir - k.daqiqa;
+      if (k.oxirgi === kun || farq < 0 || farq >= OYNA) continue;
+      //  Belgi CHAQIRISHDAN OLDIN qo'yiladi: ish yiqilsa ham u shu
+      //  kun ichida qayta urinmaydi — har besh daqiqada takrorlanib,
+      //  yiqilgan so'rovni o'n ikki marta yuborardi.
+      k.oxirgi = kun;
+      try {
+        const n = await k.ish();
+        if (n) console.log(`[${k.nom}] ${n} ta xabar navbatga qo'yildi`);
+      } catch (e) { console.error(`[${k.nom}] XATO:`, e.message); }
+    }
   }, 5 * 60 * 1000);
 }
 
@@ -270,5 +329,5 @@ const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`ZELTA ERP → http://localhost:${PORT}`));
   zaxiraJadvali();
   xabarJadvali();
-  saldoJadvali();
+  kunlikJadval();
 })();

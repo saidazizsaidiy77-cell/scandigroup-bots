@@ -5567,13 +5567,25 @@ test('navbat xabarlari Telegram navbatiga ham tushadi', async () => {
   const b1 = await belgi();
   assert.equal((await korpus('POST', '/api/units/handover',
     { items: [u.id] })).status, 200);
-  const x1 = await yangi(b1, "%tsexingizga jo'natildi");
+  const x1 = await yangi(b1, '%qabul qilishingizni kutmoqda');
   assert.ok(x1.length, 'xabar yozildi');
   const ismlar = x1.map((r) => r.name);
   assert.ok(ismlar.includes("Bo'yoq ustasi"),
     `keyingi tsexning boshlig'iga: ${ismlar.join(', ')}`);
   assert.match(x1[0].body, new RegExp(u.conveyor_no), 'konver raqami turadi');
   assert.match(x1[0].body, /Korpus ustasi/, 'kim jo\'natgani ham');
+  //  ★ MAHSULOT NOMI VA TURI HAM (zavod qarori, 2026-09): qabul
+  //  qiluvchi boshliq «K26-0041 · 10 ta» ni o'qib nima kelayotganini
+  //  bilmasdi, zavodda esa bitta nom ikki guruhda uchraydi.
+  {
+    const p = await H.id(
+      `SELECT p.name, g.name AS tur FROM production_units u
+         JOIN products p ON p.id = u.product_id
+         JOIN product_groups g ON g.id = p.group_id
+        WHERE u.id = $1`, [u.id]);
+    assert.match(x1[0].body, new RegExp(p.name), 'mahsulot nomi turadi');
+    assert.match(x1[0].body, new RegExp(`\\(${p.tur}\\)`), 'turi ham turadi');
+  }
 
   //  Jo'natgan odamning O'ZIGA yozilmaydi: qabul qilish keyingi
   //  tsexning ishi va unga bu xabar emas. Doirasi YO'Q xodimga ham
@@ -5588,7 +5600,7 @@ test('navbat xabarlari Telegram navbatiga ham tushadi', async () => {
   const b2 = await belgi();
   assert.equal((await qad('POST', '/api/units/handover',
     { items: [u2.id] })).status, 200);
-  const x2 = await yangi(b2, '%T/M omborga jo\'natildi');
+  const x2 = await yangi(b2, '%T/M omborga qabul qilishni kutmoqda');
   assert.ok(x2.length, 'omborga jo\'natilgani yozildi');
   assert.match(x2[0].body, new RegExp(u2.conveyor_no));
   //  HAR oluvchida qabul qilish huquqi bor: qoldiqni savdo ham
@@ -7614,6 +7626,181 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   const r = await mng('GET', '/api/sales/dashboard');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.ozi, true, 'doirasi bor xodimda menejerlar bloki chizilmaydi');
+});
+
+//  ★ KUNLIK XABARLAR — JADVALDAN YUBORILADI (zavod qarori, 2026-09).
+//
+//  To'rttasi ham `erp/server.js` dagi BITTA jadvaldan chaqiriladi
+//  (`KUNLIK`), lekin matnni va kimga borishini modulning O'ZI hal
+//  qiladi. Test aynan o'sha funksiyalarni chaqiradi: jadvalni kutib
+//  o'tirish testni soatga bog'lab qo'yardi.
+test('kunlik xabarlar: menejer qarzi, rahbariyat xulosasi, muddat', async () => {
+  const { db } = require('../db');
+  const sales = require('../modules/sales');
+  const units = require('../modules/units');
+  const cash  = require('../modules/cash');
+
+  const belgi = async () => Number((await H.id(
+    `SELECT COALESCE(MAX(id), 0)::int AS n FROM notifications`)).n);
+  const yangi = async (dan, t) => (await db.query(
+    `SELECT n.worker_id, n.title, n.body, w.name
+       FROM notifications n LEFT JOIN workers w ON w.id = n.worker_id
+      WHERE n.id > $1 AND n.title LIKE $2 ORDER BY n.id`, [dan, t])).rows;
+
+  //  ── 1. MENEJERGA FAQAT O'Z MIJOZLARINING QARZI ──────────────────
+  //
+  //  Doira so'rovning O'ZIDAN chiqadi (`customers.manager_id`):
+  //  xabarning «foydalanuvchisi» yo'q, u jadvaldan yuboriladi va
+  //  `ownOf` ni o'qiy olmaydi. Egasi yo'q mijoz hech kimga
+  //  yozilmaydi — u hech kimniki emas.
+  const mgr = (await H.id(`SELECT id FROM workers WHERE name='Sinov sotuvchi'`)).id;
+  await db.query(
+    `INSERT INTO customers (name, manager_id, opening_debt, opening_debt_on)
+     VALUES ('Qarzli mijoz', $1, 1500, CURRENT_DATE)
+     ON CONFLICT (lower(name)) DO UPDATE
+        SET manager_id = $1, opening_debt = 1500`, [mgr]);
+  await db.query(
+    `INSERT INTO customers (name, opening_debt, opening_debt_on)
+     VALUES ('Egasiz qarzli', 900, CURRENT_DATE)
+     ON CONFLICT (lower(name)) DO UPDATE SET opening_debt = 900, manager_id = NULL`);
+
+  const b1 = await belgi();
+  assert.ok(await sales.qarzYubor() > 0, 'menejerga xabar yozildi');
+  const x1 = await yangi(b1, 'Mijozlaringiz saldosi%');
+  const meniki = x1.find((r) => r.worker_id === mgr);
+  assert.ok(meniki, 'o\'sha menejerga yozildi');
+  assert.match(meniki.body, /Qarzli mijoz/, 'o\'z mijozi turadi');
+  assert.ok(!meniki.body.includes('Egasiz qarzli'),
+    'egasi yo\'q mijoz hech kimga yozilmaydi');
+  for (const r of x1)
+    assert.ok(!r.body.includes('Egasiz qarzli'), `${r.name}: egasiz mijoz`);
+
+  //  ── 2. RAHBARIYAT XULOSASI — belgisi bor xodimga ────────────────
+  //
+  //  Belgi XODIMDA (`daily_digest`), rolda emas: xulosada butun
+  //  zavodning puli turadi va uni kim o'qishini zavod o'zi hal
+  //  qiladi (4-qoida). Belgisiz xodimga xabar UMUMAN yozilmaydi.
+  const notify = require('../notify');
+  await db.query(`UPDATE workers SET daily_digest = false`);
+  const b2 = await belgi();
+  for (const x of [await require('../modules/materials').saldoXabari(),
+                   await sales.mijozSaldoXabari(),
+                   await cash.kassaXabari(),
+                   await sales.chiqishXabari()]) {
+    if (!x) continue;
+    assert.equal(await notify.queueDigest(
+      { module: 'sales', title: x.title, body: x.body }), 0,
+      `${x.title}: belgisiz xodimga yozilmaydi`);
+  }
+  assert.equal((await yangi(b2, '%')).length, 0, 'hech narsa yozilmadi');
+
+  const dir = (await H.id(`SELECT id FROM workers WHERE name='Administrator'`)).id;
+  await db.query(`UPDATE workers SET daily_digest = true WHERE id = $1`, [dir]);
+  const b3 = await belgi();
+  const xulosa = [await sales.mijozSaldoXabari(), await cash.kassaXabari(),
+                  await sales.chiqishXabari()];
+  for (const x of xulosa) {
+    assert.ok(x, 'xulosa matni bo\'sh emas');
+    await notify.queueDigest({ module: 'sales', title: x.title, body: x.body });
+  }
+  const x3 = await yangi(b3, '%');
+  assert.equal(x3.length, 3, 'uchala xabar ham yozildi');
+  for (const r of x3) assert.equal(r.worker_id, dir, 'faqat belgisi borga');
+  assert.match(x3.find((r) => /^Kassa/.test(r.title)).body,
+    /Xodimlar qo'lida/, 'kassa xulosasida xodimlar qo\'lidagi pul ham');
+  assert.match(x3.find((r) => /^Kunlik chiqish/.test(r.title)).body,
+    /Chiqishni kutmoqda/, 'chiqish xulosasida kutayotgani');
+
+  //  ── 3. «ERTAGA TOPSHIRILADI» ────────────────────────────────────
+  //
+  //  Sana `v_unit_register` dan: fakt → boshliq qo'ygan reja →
+  //  marshrut. Test rejani QO'LDA qo'yadi (`next_shop_planned_on`),
+  //  ya'ni formulaning o'zini emas, XABARNI tekshiradi — formulaning
+  //  o'z testlari bor.
+  //
+  //  «Ertaga» — ertangi ISH kuni: yakshanba tashlanadi va shanba kuni
+  //  yuborilgan xabar dushanbanikidir. Hisob `ish_kuni()` da, bitta
+  //  joyda — test ham o'shandan o'qiydi, nusxasini yozmaydi.
+  const um = await newUnit({ section_id: SHKUR });
+  await db.query(
+    `UPDATE production_units SET next_shop_planned_on = ish_kuni(CURRENT_DATE, 1)
+      WHERE id = $1`, [um.id]);
+  const b4 = await belgi();
+  assert.ok(await units.muddatYubor() > 0, 'muddat xabari yozildi');
+  const x4 = await yangi(b4, 'Ertaga topshiriladi%');
+  assert.ok(x4.length, 'xabar bor');
+  const qator = x4.map((r) => r.body).join('\n');
+  assert.match(qator, new RegExp(um.conveyor_no), 'konver raqami');
+  assert.match(qator, /→ /, 'qayerga topshirilishi ham yozilgan');
+  //  Konverning EGASI bo'lgan tsexga — jo'natish xabari bilan aynan
+  //  bir xil doira.
+  const ismlar4 = x4.map((r) => r.name);
+  assert.ok(ismlar4.includes('Korpus ustasi'),
+    `korpus boshlig'iga: ${ismlar4.join(', ')}`);
+  assert.ok(!ismlar4.includes('Administrator'), 'doirasi yo\'q xodimga emas');
+});
+
+//  ★ «BUYURTMA TAYYOR» — OXIRGI KONVER OMBORGA TUSHGANDA.
+//
+//  Shart RO'YXATNIKI (`HOLAT = 'reserved'`) va xabar BIR MARTA ketadi:
+//  konver ombordan qaytarilib qaytadan qabul qilinsa buyurtma
+//  ikkinchi marta «tayyor» bo'lardi.
+test('buyurtma tayyor bo\'lganda menejerga bir marta xabar ketadi', async () => {
+  const { db } = require('../db');
+  const belgi = async () => Number((await H.id(
+    `SELECT COALESCE(MAX(id), 0)::int AS n FROM notifications`)).n);
+
+  const mgr = (await H.id(`SELECT id FROM workers WHERE name='Sinov sotuvchi'`)).id;
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Tayyor xabar mijozi' })).body;
+
+  const z = await admin('POST', '/api/sales/orders', {
+    customer_id: mij.id, manager_id: mgr,
+    items: [{ product_id: PENAL, qty: 2, unit_price: 100 }] });
+  assert.equal(z.status, 200, z.text);
+  const qator = (await admin('GET', '/api/sales/orders/' + z.body.id)).body.items[0];
+
+  //  Konver qadoqlashda turadi, jo'natiladi va omborga qabul
+  //  qilinadi — xabar aynan QABUL QILISH paytida yoziladi.
+  //  Konver CHIQISH bo'limida YARATILMAYDI: `createOne` chiqish
+  //  bo'limidagi konverni o'sha zahoti `fg` qilib qo'yadi (boshlang'ich
+  //  qoldiq yo'li) va qabul qilish hodisasi umuman bo'lmasdi. Shuning
+  //  uchun oldingi bo'limdan boshlanadi va marshrut bo'ylab yuradi.
+  const QADOYNA2 = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
+  const u = await newUnit({ section_id: QADOYNA2, qty: 2 });
+  const bron = await admin('POST', '/api/sales/orders/' + z.body.id + '/assign',
+    { item_id: qator.id, unit_id: u.id, qty: 2 });
+  assert.equal(bron.status, 200, bron.text);
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
+  assert.equal((await qad('POST', '/api/units/move',
+    { items: [{ unit_id: u.id }] })).status, 200);
+  assert.equal((await qad('POST', '/api/units/handover',
+    { items: [u.id] })).status, 200);
+
+  const b1 = await belgi();
+  const qab = await admin('POST', '/api/units/stock/accept', { items: [u.id] });
+  assert.equal(qab.status, 200, qab.text);
+  const x1 = (await db.query(
+    `SELECT worker_id, title, body FROM notifications
+      WHERE id > $1 AND title LIKE 'Buyurtma tayyor%'`, [b1])).rows;
+  assert.equal(x1.length, 1, 'bitta xabar');
+  assert.equal(x1[0].worker_id, mgr, 'buyurtmaning menejeriga');
+  assert.match(x1[0].title, new RegExp(z.body.order_no), 'zakaz raqami sarlavhada');
+  assert.match(x1[0].body, /Tayyor xabar mijozi/, 'mijoz nomi');
+
+  //  ★ IKKINCHI MARTA YOZILMAYDI: ombordan qaytarilib, qaytadan
+  //  qabul qilinsa buyurtma yana «tayyor» bo'ladi — bir marta
+  //  aytilgan gap takrorlansa ko'z unga o'rganib qoladi.
+  assert.equal((await admin('POST', '/api/units/stock/accept',
+    { items: [u.id], undo: true })).status, 200);
+  const b2 = await belgi();
+  assert.equal((await admin('POST', '/api/units/stock/accept',
+    { items: [u.id] })).status, 200);
+  assert.equal((await db.query(
+    `SELECT COUNT(*)::int AS n FROM notifications
+      WHERE id > $1 AND title LIKE 'Buyurtma tayyor%'`, [b2])).rows[0].n, 0,
+    'ikkinchi marta yozilmaydi');
 });
 
 test('yakun', async () => {

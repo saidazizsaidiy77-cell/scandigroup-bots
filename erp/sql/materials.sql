@@ -932,6 +932,52 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS
   supply_reports BOOLEAN NOT NULL DEFAULT false;
 
 
+-- ═══════════════════════ KUNLIK RAHBARIYAT XULOSASI — XODIM BELGISI
+--
+--  ★ ZAVOD QARORI (2026-09). Direktorning ertalabki savoli bitta emas,
+--  to'rtta: kimga qancha qarzmiz, kim bizga qarzdor, kassada qancha pul
+--  bor va kecha nima chiqdi. Ularning har biri uchun sahifa bor, lekin
+--  u to'rtta sahifani ochib ko'rishni talab qilardi — va aynan shuning
+--  uchun ko'pincha umuman ochilmasdi.
+--
+--  ★ TA'MINOT SALDOSI IKKI ODAMGA, IKKI VAQTDA ketadi va bu takror
+--  EMAS: ta'minotchi uni ish boshlashdan oldin oladi (`supply_reports`,
+--  09:00), direktor esa kunni boshlaganda (08:00). Matn BITTA joyda
+--  yoziladi (`saldoXabari`) — ikki nusxa bo'lsa bir kun biri
+--  ikkinchisidan boshqa raqam aytardi.
+--
+--  Belgi XODIMDA, rolda emas — `supply_reports` bilan bir xil idiom va
+--  bir xil sabab: rol huquqlari KODDA turadi va bitta odam uchun
+--  o'zgartirib bo'lmaydi; kodga na ism, na lavozim yoziladi (4-qoida).
+--
+--  Standarti `false`: xulosada butun zavodning puli turadi va uni kim
+--  o'qishini zavod O'ZI hal qiladi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS
+  daily_digest BOOLEAN NOT NULL DEFAULT false;
+
+--  Bir martalik: standarti `false` bo'lgani uchun deploy kuni belgi
+--  hech kimda bo'lmasdi va xulosa hech kimga ketmasdi.
+--
+--  Belgi HUQUQDAN chiqadi, lavozimdan emas (4-qoida): konverni
+--  TASDIQLAYDIGAN va kassani KO'RADIGAN odam — rahbariyat. Buxgalterda
+--  `production.approve` yo'q, tsex boshlig'ida esa kassa yo'q, ya'ni
+--  ikkala shart birga faqat rahbariyatga to'g'ri keladi. Keyin zavod
+--  belgini kimga qo'yishni o'zi hal qiladi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'kunlik-xulosa') THEN
+    UPDATE workers w SET daily_digest = true
+     WHERE EXISTS (SELECT 1 FROM v_worker_permissions p
+                    WHERE p.worker_id = w.id
+                      AND p.permission_code = 'production.approve')
+       AND EXISTS (SELECT 1 FROM v_worker_permissions p
+                    WHERE p.worker_id = w.id
+                      AND p.permission_code IN ('cash.view', 'cash.manage'));
+    INSERT INTO migration_flags (key) VALUES ('kunlik-xulosa');
+  END IF;
+END $$;
+
+
 -- ═══════════════════════════════ OMBOR DOIRASI — XODIM BELGISI
 --
 --  ★ ZAVOD QARORI (2026-09). Tsex doirasi IKKI savolga birdan javob

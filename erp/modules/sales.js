@@ -1866,14 +1866,27 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     //  lekin bu uning ishi emas — u allaqachon o'z ekranida ko'rib
     //  turibdi.
     if (o.manager_id) {
+      //  ★ SUMMA HAM YOZILADI (zavod qarori, 2026-09). Menejerning
+      //  savoli «qaysi buyurtma ketdi» bilan tugamaydi: chiqib ketgan
+      //  mahsulot o'sha zahoti MIJOZNING QARZIGA qo'shiladi va u
+      //  qancha qo'shilganini bilishi kerak. Raqam YUK XATIDAN —
+      //  buyurtma qatorlarining summasi (izoh: CLAUDE.md, «Narx —
+      //  yuk xatidan»): balans, dalolatnoma va bu xabar uchalasi bir
+      //  xil raqamni aytadi.
+      //
+      //  Summa TRANZAKSIYA ICHIDAN o'qiladi (3-qoida): narx chiqarish
+      //  paytida konverga ko'chiriladi va hovuzdan yangi ulanish hali
+      //  yozilmagan qatorni ko'rmasdi.
       const mij = (await client.query(
-        `SELECT c.name FROM orders x JOIN customers c ON c.id = x.customer_id
-          WHERE x.id = $1`, [o.id])).rows[0];
+        `SELECT c.name, o2.amount FROM v_sales_orders o2
+           JOIN customers c ON c.id = o2.customer_id
+          WHERE o2.id = $1`, [o.id])).rows[0];
       await notify.queue({
         worker_id: o.manager_id, module: 'sales',
         title: 'Buyurtma chiqib ketdi',
         body: `${o.order_no} · ${mij ? mij.name : ''}`
               + `\n${bron.length} ta konver`
+              + `\nSummasi: ${notify.pul(mij?.amount)} $`
               + `\n\nKim chiqardi: ${req.user.name}`,
       }, client);
     }
@@ -2038,6 +2051,198 @@ router.get('/payment/:id', need(...READ), wrap(async (req, res) => {
   res.json({ op: o });
 }));
 
+/* ============================================================================
+ *  ★ SAVDO XABARLARI — BITTA JOYDA
+ *
+ *  Uchtasi ham `notifications` NAVBATIGA qo'yiladi, Telegramga shu
+ *  yerdan yuborilmaydi: jadval ham, API javobi ham Telegramning
+ *  javobini kutmasligi kerak — bot javob bermasa savdo ishi to'xtab
+ *  qolardi (izoh: erp/notify.js).
+ *
+ *  Tranzaksiya ichidan chaqirilsa `client` UZATILADI (3-qoida).
+ * ========================================================================== */
+
+//  ── ★ «BUYURTMA TAYYOR» — oxirgi konver omborga tushganda ─────────
+//
+//  Menejerning ishi shu daqiqada boshlanadi: u mijoz bilan chiqish
+//  kunini kelishadi va shundan keyin chiqarishga ruxsat beradi.
+//  Ilgari buni bilish uchun u buyurtmalar ro'yxatini ochib ko'rardi va
+//  tayyor mahsulot javonda kunlab turardi.
+//
+//  ★ SHART RO'YXATNIKI, QAYTA YOZILMAYDI: `HOLAT = 'reserved'` —
+//  menyudagi navbat belgisi va «Tayyor» tabi ham AYNAN shu ifodadan
+//  o'qiydi (izoh: modules/nav.js, 7-navbat). Ikkinchi marta yozilgan
+//  shart bir kun ajralib ketardi: xabar kelardi, tab esa bo'sh
+//  chiqardi.
+//
+//  Xabar BIR MARTA ketadi (`orders.ready_notified_at`): konver
+//  ombordan qaytarilib qaytadan qabul qilinsa buyurtma ikkinchi marta
+//  «tayyor» bo'lardi va bir marta aytilgan gap takrorlanardi.
+async function tayyorXabar(client, orderIds) {
+  const ids = [...new Set((orderIds || []).filter(Boolean))];
+  if (!ids.length) return 0;
+  const c = client || db;
+  const { rows } = await c.query(
+    //  Belgi `orders` dan o'qiladi, view'dan emas: `v_sales_orders`
+    //  ustunlarni birma-bir sanaydi va unga yangi ustun qo'shish
+    //  DROP+CREATE talab qilardi (2-qoida) — bu yerdagi savol esa
+    //  view'niki emas, xabarniki.
+    `SELECT o.id, o.order_no, o.amount, o.manager_id, c.name AS customer
+       FROM v_sales_orders o
+       JOIN orders src ON src.id = o.id
+       JOIN customers c ON c.id = o.customer_id
+      WHERE o.id = ANY($1::int[])
+        AND o.manager_id IS NOT NULL
+        AND src.ready_notified_at IS NULL
+        AND ${HOLAT} = 'reserved'`, [ids]);
+  let n = 0;
+  for (const o of rows) {
+    //  Belgi SHU YERDA qo'yiladi va `IS NULL` sharti bilan: ikkita
+    //  konver bir vaqtda qabul qilinsa xabar ikki marta ketardi.
+    const upd = await c.query(
+      `UPDATE orders SET ready_notified_at = NOW()
+        WHERE id = $1 AND ready_notified_at IS NULL`, [o.id]);
+    if (!upd.rowCount) continue;
+    await notify.queue({
+      worker_id: o.manager_id, module: 'sales',
+      title: `Buyurtma tayyor — ${o.order_no}`,
+      body: `${o.customer}`
+            + `\nHammasi T/M omborda · ${notify.pul(o.amount)} $`
+            + `\n\nMijoz bilan kunni kelishib, chiqarishga bering.`,
+    }, c);
+    n++;
+  }
+  return n;
+}
+
+//  ── ★ MENEJERGA O'Z MIJOZLARINING QARZI ───────────────────────────
+//
+//  Zavod qarori (2026-09): har kuni ertalab menejer o'z mijozlarining
+//  qarzini ko'rsin. Doira bu yerda SO'ROVNING O'ZIDAN chiqadi —
+//  `channelsOf`/`ownOf` emas: xabarning «foydalanuvchisi» yo'q, u
+//  jadvaldan yuboriladi. Mijoz kimniki ekani `customers.manager_id`
+//  da turadi va guruhlash aynan shundan: menejerga FAQAT o'zi
+//  yuritadigan mijoz ketadi va kodga na ism, na lavozim yoziladi
+//  (4-qoida).
+//
+//  Egasi yo'q mijoz hech kimga yozilmaydi — u hech kimniki emas
+//  (savdo doirasi bilan bir xil qoida).
+//
+//  Qarzi NOL bo'lgan mijoz yozilmaydi va ikki tomon ALOHIDA turadi:
+//  biri 1000 qarzdor, boshqasi 1000 haqdor bo'lsa «0» degan javob
+//  ikkalasini ham yashirardi (ta'minotchilar saldosi bilan bir xil
+//  qoida va bir xil shakl).
+async function mijozSaldoMatni(rows) {
+  const qarz = rows.filter((r) => Number(r.balance) > 0);
+  const haq  = rows.filter((r) => Number(r.balance) < 0);
+  const jami = (a) => a.reduce((x, r) => x + Math.abs(Number(r.balance)), 0);
+  const qator = (r) => `${r.name} — ${notify.pul(Math.abs(r.balance))} $`;
+  const matn = [];
+  if (qarz.length)
+    matn.push('Bizga qarzdor:', ...qarz.map(qator),
+              `Jami: ${notify.pul(jami(qarz))} $`);
+  if (haq.length) {
+    if (matn.length) matn.push('');
+    matn.push('Oldindan to\'lagan:', ...haq.map(qator),
+              `Jami: ${notify.pul(jami(haq))} $`);
+  }
+  return matn.join('\n');
+}
+
+async function qarzYubor(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT v.manager_id, v.name, v.balance
+       FROM v_customer_sales v
+      WHERE v.manager_id IS NOT NULL AND ROUND(v.balance::numeric, 2) <> 0
+      ORDER BY v.manager_id, ABS(v.balance) DESC, v.name`);
+  const kimga = new Map();
+  for (const r of rows) {
+    if (!kimga.has(r.manager_id)) kimga.set(r.manager_id, []);
+    kimga.get(r.manager_id).push(r);
+  }
+  let n = 0;
+  for (const [mgr, list] of kimga) {
+    await notify.queue({
+      worker_id: mgr, module: 'sales',
+      title: `Mijozlaringiz saldosi · ${notify.kun(new Date())}`,
+      body: await mijozSaldoMatni(list),
+    }, c);
+    n++;
+  }
+  return n;
+}
+
+//  ── ★ RAHBARIYATGA: BUTUN MIJOZLAR SALDOSI ────────────────────────
+//
+//  Menejernikisi bilan BIR XIL matn, faqat doirasi yo'q: direktorning
+//  savoli «kim bizga qancha qarzdor» — butun zavod bo'yicha. Matn
+//  bitta funksiyadan chiqadi, aks holda ikki xabarda bir xil mijoz
+//  ikki xil ko'rinishda turardi.
+async function mijozSaldoXabari(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT v.name, v.balance FROM v_customer_sales v
+      WHERE ROUND(v.balance::numeric, 2) <> 0
+      ORDER BY v.balance DESC, v.name`);
+  if (!rows.length) return null;
+  return { title: `Mijozlar saldosi · ${notify.kun(new Date())}`,
+           body: await mijozSaldoMatni(rows) };
+}
+
+//  ── ★ RAHBARIYATGA: KUNLIK CHIQISH HISOBI ─────────────────────────
+//
+//  Direktorning savoli: «kecha nima chiqdi va hozir nima kutib
+//  turibdi». Ikki raqam ham SUMMA bilan — buyurtma soni «qancha pul
+//  ketdi» degan savolga javob bermaydi.
+//
+//  ★ KUTAYOTGANI — «Mijozga chiqarilsin» (`status = 'to_ship'`):
+//  savdo ruxsat bergan, mudir hali chiqarmagan. Aynan shu ro'yxat
+//  ombor mudirining ekranida turadi (`GET /api/sales/shipping`) —
+//  ikkinchi shart yozilmadi, aks holda direktor mudirnikidan boshqa
+//  raqam ko'rardi.
+//
+//  Kechadan QOLGANI alohida ajratiladi: umumiy raqam o'sib borishi
+//  mumkin, lekin savol «qaysisi turib qoldi» degani — chiqish sanasi
+//  o'tib ketgani (`due_on < CURRENT_DATE`) o'sha javob.
+//
+//  Chiqqani KECHAGI kun bo'yicha: xulosa ertalab keladi va bugun hali
+//  hech narsa chiqmagan.
+async function chiqishXabari(client) {
+  const c = client || db;
+  const { rows: [x] } = await c.query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM v_sales_orders o
+         WHERE o.status = 'to_ship') AS kutmoqda,
+       (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
+         WHERE o.status = 'to_ship') AS kutmoqda_sum,
+       (SELECT COUNT(*)::int FROM v_sales_orders o
+         WHERE o.status = 'to_ship'
+           AND o.due_on IS NOT NULL AND o.due_on < CURRENT_DATE) AS kechikkan,
+       (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
+         WHERE o.status = 'to_ship'
+           AND o.due_on IS NOT NULL AND o.due_on < CURRENT_DATE) AS kechikkan_sum,
+       (SELECT COUNT(*)::int FROM v_sales_orders o
+         WHERE o.status = 'shipped'
+           AND o.shipped_on = CURRENT_DATE - 1) AS chiqdi,
+       (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
+         WHERE o.status = 'shipped'
+           AND o.shipped_on = CURRENT_DATE - 1) AS chiqdi_sum`);
+  const matn = [
+    `Kecha chiqdi: ${x.chiqdi} ta · ${notify.pul(x.chiqdi_sum)} $`,
+    '',
+    `Chiqishni kutmoqda: ${x.kutmoqda} ta · ${notify.pul(x.kutmoqda_sum)} $`,
+  ];
+  //  Nol yozilmaydi: «kechikkani 0 ta» degan qator har kuni turib,
+  //  ko'z unga o'rganib qolardi va haqiqiy kechikish o'sha to'da
+  //  orasida ko'rinmay ketardi (navbat belgisi bilan bir xil sabab).
+  if (x.kechikkan)
+    matn.push(`  shundan muddati o'tgan: ${x.kechikkan} ta`
+              + ` · ${notify.pul(x.kechikkan_sum)} $`);
+  return { title: `Kunlik chiqish · ${notify.kun(new Date())}`,
+           body: matn.join('\n') };
+}
+
 module.exports = router;
 //  ★ HOLAT NAVBATGA HAM BERILADI (zavod qarori, 2026-09).
 //
@@ -2048,3 +2253,7 @@ module.exports = router;
 //  «Boshlanmagan» da yotardi. Endi ikkalasi ham SHU ifodadan o'qiydi,
 //  ya'ni ajralishi mumkin emas.
 module.exports.HOLAT = HOLAT;
+module.exports.tayyorXabar = tayyorXabar;
+module.exports.qarzYubor = qarzYubor;
+module.exports.mijozSaldoXabari = mijozSaldoXabari;
+module.exports.chiqishXabari = chiqishXabari;

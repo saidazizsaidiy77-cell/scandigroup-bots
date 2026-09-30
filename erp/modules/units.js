@@ -2337,6 +2337,13 @@ async function handoverOne(client, req, it, undo) {
   // (izoh: sql/catalog-groups.sql, owner_shop_id).
   const u = (await client.query(
     `SELECT u.id, u.conveyor_no, u.status, u.qty,
+            --  ★ XABARDA MAHSULOT HAM YOZILADI (zavod qarori,
+            --  2026-09): qabul qiluvchi boshliq «K26-0041 · 10 ta» ni
+            --  o'qib nima kelayotganini bilmasdi — zavodda bitta nom
+            --  ikki guruhda uchraydi, shuning uchun TURI ham
+            --  («Barocco» sp mi, penal mi). Ikkala jadval ham
+            --  allaqachon qo'shilgan, ikkinchi so'rov yozilmadi.
+            pr.name AS product, g.name AS product_type,
             COALESCE(g.owner_shop_id, sc.shop_id) AS shop_id,
             COALESCE(osh.name, sh.name)           AS shop,
             sc.name AS section, COALESCE(sc.is_exit, false) AS is_exit,
@@ -2344,7 +2351,8 @@ async function handoverOne(client, req, it, undo) {
             --  (guruhniki, bo'lmasa bo'limning tsexi). Ekrandagi
             --  «jo'natish» tugmasi ham aynan shu hisobdan chiqadi
             --  (/board) — ikkalasi bitta qoidadan o'qishi shart.
-            nx.shop_id AS next_shop_id, nx.name AS next_section
+            nx.shop_id AS next_shop_id, nx.name AS next_section,
+            nx.shop_name AS next_shop_name
        FROM production_units u
        JOIN products pr       ON pr.id = u.product_id
        JOIN product_groups g  ON g.id  = pr.group_id
@@ -2356,9 +2364,16 @@ async function handoverOne(client, req, it, undo) {
           WHERE pr2.product_id = u.product_id
             AND pr2.section_id = u.current_section_id LIMIT 1) cur ON true
        LEFT JOIN LATERAL (
-         SELECT COALESCE(g.owner_shop_id, s2.shop_id) AS shop_id, s2.name
+         SELECT COALESCE(g.owner_shop_id, s2.shop_id) AS shop_id, s2.name,
+                --  Xabarda QAYERGA topshirilishi yoziladi va u TSEX
+                --  nomi bo'lishi kerak, bo'limniki emas: boshliq
+                --  «Lak tsexiga» deb o'qiydi, «Rover karkas» deb
+                --  emas. Nom BAZADAN keladi (4-qoida).
+                COALESCE(osh2.name, s2sh.name) AS shop_name
            FROM v_product_route pr3
            JOIN sections s2 ON s2.id = pr3.section_id
+           LEFT JOIN shops s2sh ON s2sh.id = s2.shop_id
+           LEFT JOIN shops osh2 ON osh2.id = g.owner_shop_id
           WHERE pr3.product_id = u.product_id
             AND cur.step_no IS NOT NULL AND pr3.step_no > cur.step_no
           ORDER BY pr3.step_no LIMIT 1) nx ON true
@@ -2440,7 +2455,9 @@ async function handoverOne(client, req, it, undo) {
   //  Qayerga ketayotgani xabar uchun qaytariladi (izoh: `/handover`):
   //  keyingi TSEXGA yoki chiqish bo'limidan T/M OMBORGA.
   return { unit_id: id, conveyor_no: u.conveyor_no, sent: true, qty: n,
-           next_shop_id: u.next_shop_id || null, from_shop: u.shop };
+           product: u.product, product_type: u.product_type,
+           next_shop_id: u.next_shop_id || null,
+           next_shop: u.next_shop_name || null, from_shop: u.shop };
 }
 
 //  Har element: { unit_id, qty? } yoki oddiy id — soni ko'rsatilmasa
@@ -2467,9 +2484,19 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
     if (!undo) {
       const tsexga = new Map();
       const omborga = [];
+      //  ★ QATORDA MAHSULOT HAM TURADI (zavod qarori, 2026-09).
+      //  Ilgari faqat raqam va soni yozilardi — qabul qiluvchi
+      //  boshliq nima kelayotganini bilish uchun saytni ochishi kerak
+      //  edi. TURI ham yoziladi: zavodda bitta nom ikki guruhda
+      //  uchraydi («Barocco» sp ham, penal ham) va faqat nomi
+      //  ko'rinsa qaysi biri ekani noaniq qolardi — ombor qoldig'i va
+      //  vitrinadan qaytarish hujjati bilan bir xil qoida.
+      const qatorYoz = (d) => `${d.conveyor_no} · ${d.product}`
+        + (d.product_type ? ` (${d.product_type})` : '')
+        + ` · ${d.qty} ta`;
       for (const d of done) {
         if (!d.sent) continue;
-        const qator = `${d.conveyor_no} · ${d.qty} ta`;
+        const qator = qatorYoz(d);
         if (d.next_shop_id) {
           if (!tsexga.has(d.next_shop_id)) tsexga.set(d.next_shop_id, []);
           tsexga.get(d.next_shop_id).push(qator);
@@ -2479,7 +2506,7 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
         await notify.queueShop({
           shop_id: shopId, perms: ['production.entry', 'production.view'],
           module: 'production',
-          title: `${qatorlar.length} ta konver tsexingizga jo'natildi`,
+          title: `${qatorlar.length} ta konver qabul qilishingizni kutmoqda`,
           body: qatorlar.join('\n')
                 + `\n\nKim jo'natdi: ${req.user.name}`,
         }, client);
@@ -2487,7 +2514,7 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
         await notify.queueWarehouse({
           perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
           module: 'warehouse',
-          title: `${omborga.length} ta konver T/M omborga jo'natildi`,
+          title: `${omborga.length} ta konver T/M omborga qabul qilishni kutmoqda`,
           body: omborga.join('\n')
                 + `\n\nKim jo'natdi: ${req.user.name}`,
         }, client);
@@ -2782,6 +2809,31 @@ router.post('/stock/accept', need('warehouse.move', 'production.manage'), wrap(a
     await client.query('BEGIN');
     const done = [];
     for (const id of ids) done.push(await acceptStock(client, req, id, undo));
+
+    //  ★ OXIRGI KONVER KELGANDA MENEJERGA AYTILADI (zavod qarori,
+    //  2026-09). Buyurtmaning hamma broni T/M omborga tushdi, ya'ni u
+    //  chiqarishga tayyor — menejer endi mijoz bilan kunni kelishadi.
+    //  Ilgari buni bilish uchun u buyurtmalar ro'yxatini ochib
+    //  ko'rardi va tayyor mahsulot javonda kunlab turardi.
+    //
+    //  Shart SAVDONIKI va u yerda yoziladi (`tayyorXabar`, HOLAT):
+    //  menyudagi navbat belgisi ham, «Tayyor» tabi ham AYNAN o'sha
+    //  ifodadan o'qiydi — bu yerda ikkinchi marta yozilsa bir kun
+    //  ajralib ketardi.
+    //
+    //  `require` FUNKSIYA ICHIDA: savdo moduli units.js ni o'zi
+    //  chaqiradi (`clonePart`, `requestOne`) va tepada yozilsa
+    //  aylanma bog'lanish paydo bo'lib, yuklanish tartibiga qarab
+    //  eksportlarning biri `undefined` bo'lib qolardi.
+    if (!undo) {
+      const zakaz = (await client.query(
+        `SELECT DISTINCT oi.order_id FROM unit_reservations ur
+           JOIN order_items oi ON oi.id = ur.order_item_id
+          WHERE ur.unit_id = ANY($1::int[])`,
+        [done.map((d) => d.unit_id)])).rows.map((r) => r.order_id);
+      await require('./sales').tayyorXabar(client, zakaz);
+    }
+
     await audit(req, { module: 'warehouse', action: undo ? 'fg-undo' : 'fg-accept',
                        entity: 'unit', entity_id: done.length,
                        payload: { units: done.map((x) => x.conveyor_no) } }, client);
@@ -3388,7 +3440,71 @@ router.get('/feed/export', need('production.view'), wrap(async (req, res) => {
   res.send('﻿' + [head, ...body].join('\r\n') + '\r\n');
 }));
 
+/* ============================================================================
+ *  ★ «TOPSHIRISHGA 1 KUN QOLDI» — TSEX BOSHLIG'IGA (zavod qarori, 2026-09)
+ *
+ *  Muddat jurnalda va bo'limlar ekranida turadi, lekin boshliq uni
+ *  KUN OXIRIDA emas, kun boshida ko'rardi: kechikkani faqat ertasiga
+ *  bilinardi va o'shanda tuzatishga kech bo'lardi. Endi kun tugashiga
+ *  yaqin xabar keladi va boshliq ertangi kunni shunga qarab tuzadi.
+ *
+ *  ★ SANA BITTA MANBADAN: `v_unit_register` — fakt → boshliq qo'ygan
+ *  reja → marshrut (izoh: sql/register.sql). Xabar o'z hisobini
+ *  yozmaydi, aks holda ekrandagi kun bilan Telegramdagi kun
+ *  ajralib ketardi.
+ *
+ *  ★ «ERTAGA» — ERTANGI ISH KUNI. Zavod yakshanba ishlamaydi va sana
+ *  hech qachon yakshanbaga tushmaydi (izoh: CLAUDE.md), ya'ni shanba
+ *  kuni yuborilgan xabar DUSHANBA topshiriladiganlar haqida bo'lishi
+ *  kerak. Hisob `ish_kuni()` da, bitta joyda — bu yerda nusxasi yo'q.
+ *
+ *  ★ QAYERGA TOPSHIRILISHI MARSHRUTDAN: oldinda tsex tursa uning
+ *  nomi, qolmagan bo'lsa T/M ombor. Sana ham SHU juftlikdan olinadi —
+ *  keyingi tsex bor bo'lsa `next_shop_on`, yo'q bo'lsa `fg_on`. Aks
+ *  holda xabar «T/M omborga» deb yozib, aslida lak tsexiga
+ *  topshiriladigan konverni ko'rsatardi.
+ *
+ *  Kimga borishi jo'natish xabari bilan AYNAN bir xil: konverning
+ *  EGASI bo'lgan tsex (`owner_shop_id`) va faqat doirasi bor xodim.
+ * ========================================================================== */
+async function muddatYubor(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT r.owner_shop_id AS shop_id, r.conveyor_no, r.product,
+            r.product_type, r.qty,
+            COALESCE(r.next_shop, 'T/M ombor') AS qayerga
+       FROM v_unit_register r
+      WHERE r.status = 'production'
+        AND r.section_id IS NOT NULL
+        AND r.owner_shop_id IS NOT NULL
+        AND (CASE WHEN r.next_shop IS NULL THEN r.fg_on ELSE r.next_shop_on END)
+            = ish_kuni(CURRENT_DATE, 1)
+      --  Tartib RAQAM bo'yicha, qog'oz daftardagidek: tsex ekranidagi
+      --  ro'yxat bilan bir xil (izoh: CLAUDE.md).
+      ORDER BY r.owner_shop_id, r.conveyor_no`);
+  if (!rows.length) return 0;
+
+  const tsexga = new Map();
+  for (const r of rows) {
+    if (!tsexga.has(r.shop_id)) tsexga.set(r.shop_id, []);
+    tsexga.get(r.shop_id).push(
+      `${r.conveyor_no} · ${r.product}`
+      + (r.product_type ? ` (${r.product_type})` : '')
+      + ` · ${r.qty} ta → ${r.qayerga}`);
+  }
+  let n = 0;
+  for (const [shopId, qatorlar] of tsexga)
+    n += await notify.queueShop({
+      shop_id: shopId, perms: ['production.entry', 'production.view'],
+      module: 'production',
+      title: `Ertaga topshiriladi: ${qatorlar.length} ta konver`,
+      body: qatorlar.join('\n'),
+    }, c);
+  return n;
+}
+
 module.exports = router;
+module.exports.muddatYubor = muddatYubor;
 // Excel'dan yuklash shu funksiyani chaqiradi (modules/import.js) — qo'lda
 // kiritilgan qator bilan yuklangan qator bir xil yo'ldan o'tsin.
 module.exports.createOne = createOne;
