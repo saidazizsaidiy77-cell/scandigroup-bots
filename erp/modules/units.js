@@ -1891,6 +1891,50 @@ async function bronKochir(client, fromId, toId, limit) {
   return kochdi;
 }
 
+//  ★ BO'SHAB QOLGAN QATOR O'CHADI — TARIXI QOLADI. Bo'laklar
+//  uchrashganda qator birlashadi va bo'shab qolgani o'chiriladi. O'sha
+//  qatorga ilingan hamma narsa AVVAL tirik qatorga ko'chadi.
+//
+//  Ilgari faqat `unit_moves` ko'chirilardi va qolgani ikki xil yo'ldan
+//  yo'qolardi. Biri — JIM: `ON DELETE CASCADE` bilan bog'langan yozuv
+//  o'chib ketardi, ya'ni o'sha bo'lakka sarflangan MATERIAL ham
+//  tannarxdan tushib qolardi (`material_moves` da FK yo'q, ya'ni u
+//  o'chmaydi ham — yo'q konverga ilinib qolardi: undan ham yomoni).
+//  Ikkinchisi — BAQIRIB: `unit_requests` va `wh_return_items` da
+//  `ON DELETE` yo'q, ya'ni o'chirish FK xatosi bilan yiqilardi va
+//  ekranda «update or delete on table "production_units" violates
+//  foreign key constraint» chiqardi — usta o'tkaza olmasdi.
+//
+//  Ro'yxat SHU YERDA, bitta joyda: konverga ilinadigan yangi jadval
+//  qo'shilsa bitta qator yoziladi va u ikki yo'lning hech qaysisiga
+//  tushmaydi.
+async function birlashtir(client, eski, tirik) {
+  //  Tarix va hujjatlar — to'g'ridan-to'g'ri ko'chadi.
+  for (const q of [
+    `UPDATE unit_moves      SET unit_id = $2 WHERE unit_id = $1`,
+    `UPDATE unit_requests   SET unit_id = $2 WHERE unit_id = $1`,
+    `UPDATE wh_return_items SET unit_id = $2 WHERE unit_id = $1`,
+    `UPDATE warehouse_moves SET unit_id = $2 WHERE unit_id = $1`,
+    //  Sarflangan xom ashyo: bog'lanish polimorf (`to_kind`), ya'ni FK
+    //  yo'q — ko'chirilmasa yozuv yo'q konverda qolib ketardi va
+    //  tannarx uni hech qachon topmasdi.
+    `UPDATE material_moves  SET to_id = $2
+      WHERE to_kind = 'unit' AND to_id = $1`,
+  ]) await client.query(q, [eski, tirik]);
+
+  //  Kalitida konver bor jadvallar: tirik qatorda o'sha yozuv allaqachon
+  //  bo'lishi mumkin, shuning uchun ko'chirish emas, QO'SHISH.
+  await client.query(
+    `INSERT INTO unit_no_material (unit_id, section_id, worker_id, created_at)
+     SELECT $2, section_id, worker_id, created_at FROM unit_no_material
+      WHERE unit_id = $1
+     ON CONFLICT (unit_id, section_id) DO NOTHING`, [eski, tirik]);
+  await client.query(
+    `INSERT INTO unit_bron_seen (worker_id, unit_id, seen_at)
+     SELECT worker_id, $2, seen_at FROM unit_bron_seen WHERE unit_id = $1
+     ON CONFLICT (worker_id, unit_id) DO NOTHING`, [eski, tirik]);
+}
+
 async function placePieces(client, req, u, toSection, n, movedOn) {
   const sibling = toSection ? (await client.query(
     `SELECT id FROM production_units
@@ -1908,8 +1952,7 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
     //  o'chirilishidan OLDIN — `ON DELETE CASCADE` uni yo'q qilardi.
     await bronKochir(client, u.id, sibling.id, whole ? null : n);
     if (whole) {
-      await client.query(`UPDATE unit_moves SET unit_id = $2 WHERE unit_id = $1`,
-                         [u.id, sibling.id]);
+      await birlashtir(client, u.id, sibling.id);
       await client.query(`DELETE FROM production_units WHERE id = $1`, [u.id]);
     } else {
       await client.query(`UPDATE production_units SET qty = qty - $2 WHERE id = $1`,

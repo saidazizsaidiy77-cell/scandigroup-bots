@@ -8243,6 +8243,64 @@ test('omborlar aro material ko\'chiriladi', async () => {
   await db.query(`UPDATE app_settings SET val = '' WHERE key = 'minus_material'`);
 });
 
+//  ★ BO'SHAB QOLGAN QATOR O'CHADI — ILINGAN HAMMASI TIRIK QATORGA
+//  KO'CHADI (izoh: `birlashtir`, modules/units.js). Bo'laklar
+//  uchrashganda qator birlashadi va bo'shab qolgani o'chiriladi.
+//  Ilgari faqat `unit_moves` ko'chirilardi: so'rovdan ochilgan
+//  konverni o'tkazmoqchi bo'lgan usta ekranda FK xatosini ko'rardi
+//  («update or delete on table "production_units" violates foreign key
+//  constraint "unit_requests_unit_id_fkey"») va konverni umuman
+//  o'tkaza olmasdi.
+test("bo'laklar birlashganda so'rov va sarf tirik qatorga ko'chadi", async () => {
+  const { db } = require('../db');
+
+  //  So'rovdan ochilgan konver: `unit_requests.unit_id` unga ilinadi.
+  const kir = await xodim('Sinov birlashuv', 'kirituvchi');
+  const q = await kir('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 6, started_on: '2026-09-19' });
+  assert.equal(q.status, 200, q.text);
+  const ok = await admin('POST',
+    `/api/units/requests/${q.body.created[0]}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+  const id = ok.body.unit_id;
+  assert.equal((await H.id(
+    `SELECT unit_id AS id FROM unit_requests WHERE unit_id = $1`, [id])).id, id,
+    "so'rov konverga ilingan");
+
+  //  Arraga qo'yamiz va unga xom ashyo sarfini yozamiz — u ham
+  //  ko'chishi kerak (tannarx o'sha yozuvdan yig'iladi).
+  assert.equal((await admin('PATCH', '/api/units/' + id,
+    { section_id: ARRA })).status, 200);
+  await db.query(
+    `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                 to_kind, to_id, moved_on, section_id)
+     SELECT (SELECT id FROM materials ORDER BY id LIMIT 1), 1,
+            'warehouse', (SELECT id FROM warehouses WHERE code='TSEX-KOR-ARRA'),
+            'unit', $1, CURRENT_DATE, $2`, [id, ARRA]);
+
+  //  Avval 2 tasi Roverga (yangi bo'lak), keyin qolgan 4 tasi — shunda
+  //  ESKI qator bo'shaydi va o'chiriladi.
+  assert.equal((await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: id, qty: 2 }] })).status, 200);
+  const qolgan = await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: id }] });
+  assert.equal(qolgan.status, 200, qolgan.text);
+
+  //  Eski qator o'chdi, tirigida oltitasi turibdi.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::text AS id FROM production_units WHERE id = $1`, [id])).id, '0');
+  const tirik = qolgan.body.moved[0].unit_id;
+  assert.equal((await H.id(
+    `SELECT qty::text AS id FROM production_units WHERE id = $1`, [tirik])).id, '6');
+
+  //  So'rov ham, sarf ham tirik qatorda — ikkalasi ham yo'qolmadi.
+  assert.equal((await H.id(
+    `SELECT unit_id AS id FROM unit_requests WHERE unit_id = $1`, [tirik])).id, tirik);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::text AS id FROM material_moves
+      WHERE to_kind = 'unit' AND to_id = $1`, [tirik])).id, '1');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
