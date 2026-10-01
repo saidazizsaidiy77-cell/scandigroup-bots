@@ -31,6 +31,19 @@
     <button onclick="period('otgan')">O'tgan oy</button>
     <button onclick="period('yil')">Shu yil</button>
     <button onclick="period('hammasi')">Hammasi</button>
+    <!--  ★ MENEJER FILTRI (zavod qarori, 2026-10). Savdo bo'lim
+          boshlig'ining savoli «kimning mijozi qancha qarzdor»: ustun
+          ilgari ham bor edi, lekin uni SARALAB bo'lmasdi — butun
+          zavodning ro'yxatidan bittasining mijozlarini ko'z bilan terib
+          olish kerak edi.
+
+          Ro'yxat buyurtmalar sahifasidagi filtr bilan BIR manbadan
+          (`/api/units/customers` dagi `managers`), aks holda ikki
+          ekranda ikki xil ro'yxat turardi. Faqat o'zinikini ko'radigan
+          xodimda umuman CHIZILMAYDI: u yerda baribir bitta ism turardi
+          (izoh: `ownOf`). -->
+    <div id="fMgrBox" hidden><label>Menejer</label>
+      <select id="fMgr" onchange="load()" style="min-width:190px"></select></div>
     <div style="flex:1;min-width:180px"><label>Qidiruv</label>
       <input id="fQ" placeholder="mijoz, region yoki telefon" oninput="onSearch()"></div>
     <button onclick="exportCsv()">Excelga yuklash</button>
@@ -122,6 +135,10 @@ async function load() {
   if ($('fFrom').value) p.set('from', $('fFrom').value);
   if ($('fTo').value)   p.set('to', $('fTo').value);
   if ($('fQ').value.trim()) p.set('q', $('fQ').value.trim());
+  //  Filtr SERVERDA: ro'yxat butun zavodniki va klientda qisqartirilsa
+  //  yuqoridagi kartochkalar baribir hammasini qo'shib turardi —
+  //  «shu menejerga qancha qarz» degan savolga javob bermasdi.
+  if ($('fMgr').value) p.set('manager_id', $('fMgr').value);
   open.clear();
   data = await App.api('/api/sales/debts?' + p);
   $('fFrom').value = data.from; $('fTo').value = data.to;
@@ -233,7 +250,22 @@ function exportCsv() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-App.start(load, 'sales.view', 'sales.manage');
+//  Menejerlar ro'yxati BIR MARTA o'qiladi: u o'zgarmaydi, qarzdorlik
+//  esa har filtr almashganda qayta so'raladi. Ro'yxatda faqat SAVDO
+//  xodimi (`is_sales`) — zavodning oltmish oltita xodimi orasidan
+//  menejerni qidirish kerak emas, qolganlari menejer ham bo'lmaydi.
+async function boot() {
+  if (!App.me()?.scope_own) {
+    const { managers = [] } = await App.api('/api/units/customers');
+    const savdochi = managers.filter((m) => m.is_sales);
+    $('fMgrBox').hidden = !savdochi.length;
+    $('fMgr').innerHTML = '<option value="">Barcha menejer</option>'
+      + savdochi.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  }
+  await load();
+}
+
+App.start(boot, 'sales.view', 'sales.manage');
 </script>
 </body>
 </html>

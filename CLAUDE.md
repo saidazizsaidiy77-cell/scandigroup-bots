@@ -868,6 +868,25 @@ Qator bosilganda ostida o'sha mijozning harakatlari chiqadi (qaysi konver,
 qaysi zakaz, qaysi kun) va yonida yugurib boradigan qoldiq. Chegara savdo
 bilan bir xil: menejer faqat o'z yo'nalishidagi mijozlarni ko'radi.
 
+**★ MENEJER BO'YICHA FILTR** (zavod qarori, 2026-10). Savdo bo'lim
+boshlig'ining savoli «kimning mijozi qancha qarzdor»: menejer ustuni
+ilgari ham bor edi, lekin uni SARALAB bo'lmasdi — butun zavodning
+ro'yxatidan bittasining mijozlarini ko'z bilan terib olish kerak edi
+(buyurtmalar ro'yxatidagi menejer filtri bilan bir xil sabab).
+
+Filtr **SERVERDA** (`?manager_id=`): klientda qisqartirilsa yuqoridagi
+kartochkalar baribir butun zavodni qo'shib turardi va «shu menejerga
+qancha qarz» degan savolga javob bermasdi. Yig'indi ham filtrlangan
+ro'yxatdan chiqadi va test uni RO'YXATNING o'zidan qayta
+hisoblanganiga solishtiradi.
+
+Ro'yxat buyurtmalar sahifasi bilan **BIR manbadan**
+(`/api/units/customers` dagi `managers`, faqat `is_sales`), aks holda
+ikki ekranda ikki xil menejer ro'yxati turardi. **Doirasi bor xodimga
+chizilmaydi** — u yerda baribir bitta ism turardi. Filtr CHEGARA
+emas: `ownOf` o'z joyida qoladi va ikkalasi `customers.manager_id` ni
+alohida shart bo'lib qaraydi.
+
 **Solishtirma dalolatnoma** (`/dalolatnoma.html`) — o'sha lentaning
 MIJOZGA beriladigan ko'rinishi: bitta mijoz, bitta oraliq, boshiga va
 oxiriga saldosi bilan. Hisobot «kim qancha qarzdor» degan savolga zavod

@@ -2071,6 +2071,14 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
 //
 //  Chegara boshqa savdo sahifalari bilan bir xil: menejer faqat o'z
 //  yo'nalishidagi mijozlarni ko'radi (`channelsOf`).
+//
+//  ★ MENEJER BO'YICHA FILTR HAM BOR (zavod qarori, 2026-10).
+//  Savdo bo'lim boshlig'ining savoli «kimning mijozi qancha qarzdor»:
+//  butun zavodning ro'yxatidan bitta menejernikini ko'z bilan terib
+//  olish kerak edi — ustun bor edi-yu, saralab bo'lmasdi.
+//  Buyurtmalar ro'yxatidagi menejer filtri bilan BIR XIL idiom va
+//  bir xil manba (`/api/units/customers` dagi `managers`), shuning
+//  uchun ikki sahifada ikki xil ro'yxat turmaydi.
 const DEBT_SQL = `
   SELECT c.id, c.name, c.region, c.phone, c.channel,
          ch.name AS channel_name, m.name AS manager_name,
@@ -2084,7 +2092,12 @@ const DEBT_SQL = `
     LEFT JOIN v_customer_ledger l  ON l.customer_id = c.id
    WHERE c.active
      AND ($3::text[] IS NULL OR c.channel = ANY($3))
+     --  $6 — MENEJER FILTRI, $5 esa «faqat o'zinikini» CHEGARASI.
+     --  Ikkisi bir xil ustunni qaraydi, lekin bir xil narsa emas:
+     --  birini xodim o'zi tanlaydi, ikkinchisini klient o'chira
+     --  olmaydi (buyurtmalar ro'yxati bilan aynan bir xil idiom).
      AND ($5::int IS NULL OR c.manager_id = $5)
+     AND ($6::int IS NULL OR c.manager_id = $6)
      AND ($4::text IS NULL OR c.name ILIKE '%' || $4 || '%'
           OR c.region ILIKE '%' || $4 || '%' OR c.phone ILIKE '%' || $4 || '%')
    GROUP BY c.id, c.name, c.region, c.phone, c.channel, ch.name, m.name
@@ -2118,7 +2131,8 @@ const yon = (v) => {
 router.get('/debts', need(...READ), wrap(async (req, res) => {
   const { from, to } = period(req.query);
   const { rows } = (await db.query(DEBT_SQL,
-    [from, to, channelsOf(req), req.query.q || null, ownOf(req)]));
+    [from, to, channelsOf(req), req.query.q || null, ownOf(req),
+     req.query.manager_id || null]));
   for (const r of rows) {
     const o = yon(r.opening), c = yon(r.closing);
     r.opening_debit = o.debit; r.opening_credit = o.credit;

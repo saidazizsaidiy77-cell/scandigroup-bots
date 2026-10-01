@@ -8781,6 +8781,53 @@ test('kelib, o\'sha davrda chiqib ketgan mahsulot qatori nol qoldiq bilan turadi
   assert.equal(tashqari.rows.length, 0, 'oraliq tashqarisida qator yo\'q');
 });
 
+//  ★ MENEJER FILTRI — SERVERDA, va yig'indi ham o'sha filtrdan chiqadi.
+//  Savdo bo'lim boshlig'ining savoli «kimning mijozi qancha qarzdor»:
+//  klientda qisqartirilsa kartochkalardagi summa baribir butun zavodni
+//  qo'shib turardi va javob noto'g'ri bo'lardi.
+//
+//  Test oxirida turadi: ikkita mijoz qo'shadi va ularning boshlang'ich
+//  qarzi qarzdorlik yig'indisiga tushadi — o'rtada tursa oldingi
+//  testlarning raqamlariga qo'shilib ketardi.
+test('qarzdorlik menejer bo\'yicha filtrlanadi', async () => {
+  const mgr = (await H.id(`SELECT id FROM workers WHERE name = 'Sinov sotuvchi'`)).id;
+  assert.equal((await admin('POST', '/api/units/customers', { items: [
+    { name: 'Qarzdor menejerli', opening_debt: 700, opening_debt_on: '2026-09-01' },
+    { name: 'Qarzdor menejersiz', opening_debt: 900, opening_debt_on: '2026-09-01' },
+  ] })).status, 200);
+  const meniki = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Qarzdor menejerli'`)).id;
+  const ozga = (await H.id(
+    `SELECT id FROM customers WHERE name = 'Qarzdor menejersiz'`)).id;
+  await H.id(`UPDATE customers SET manager_id = $2 WHERE id = $1`, [meniki, mgr]);
+  await H.id(`UPDATE customers SET manager_id = NULL WHERE id = $1`, [ozga]);
+
+  const q = 'from=1900-01-01&to=2030-01-01';
+  const hammasi = (await admin('GET', `/api/sales/debts?${q}`)).body;
+  assert.ok(hammasi.rows.some((r) => r.id === meniki), 'filtrsiz ikkalasi ham turadi');
+  assert.ok(hammasi.rows.some((r) => r.id === ozga));
+
+  const faqat = (await admin('GET', `/api/sales/debts?${q}&manager_id=${mgr}`)).body;
+  assert.ok(faqat.rows.some((r) => r.id === meniki), 'o\'z mijozi qoladi');
+  assert.ok(!faqat.rows.some((r) => r.id === ozga), 'boshqasi chiqib ketadi');
+  assert.ok(faqat.rows.every((r) => r.manager_name === 'Sinov sotuvchi'),
+    faqat.rows.map((r) => r.manager_name).join(','));
+
+  //  ★ YIG'INDI RO'YXATNING O'ZIDAN qayta hisoblanganiga teng: shart
+  //  ikki joyda yozilsa kartochkadagi raqam jadvaldan ajralib ketardi
+  //  (menyudagi navbat belgisi bilan bir xil qoida).
+  const yig = faqat.rows.reduce((a, r) => a + Number(r.closing), 0);
+  assert.equal(Number(faqat.total.closing).toFixed(2), yig.toFixed(2));
+  assert.ok(Number(faqat.total.closing) < Number(hammasi.total.closing),
+    'filtrlangan yig\'indi kichikroq');
+
+  //  Noma'lum menejer — bo'sh ro'yxat, xato emas: savol to'g'ri, javobi yo'q.
+  const yoq = await admin('GET', `/api/sales/debts?${q}&manager_id=999999`);
+  assert.equal(yoq.status, 200);
+  assert.equal(yoq.body.rows.length, 0);
+  assert.equal(Number(yoq.body.total.closing), 0);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
