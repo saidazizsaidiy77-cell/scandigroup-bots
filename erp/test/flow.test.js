@@ -9158,6 +9158,91 @@ test('xom ashyo qoldig\'ida oraliq: aylanma oraliqniki, qoldiq hozirgi',
   assert.ok(await qator('?q=Aylanma sinov'), 'nomi bo\'yicha ham');
 });
 
+test('qoldiqni to\'g\'rilash: minus nolga keladi, hujjat bo\'lib qoladi',
+  async () => {
+  const xom = await xodim('Sinov tuzatish xodim', 'xom_ombor');
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Tuzatish sinov smolasi', uom: 'kg', category: 'FURN' })).body;
+
+  const qator = async () => (await xom('GET', '/api/materials/stock'))
+    .body.rows.find((r) => r.material_id === m.id);
+
+  //  Minusga tushirish: boshlang'ich qoldiqsiz sarf yoziladi. Bu
+  //  ataylab mumkin \u2014 material allaqachon kesilgan va yozuvni
+  //  rad etish taxtani qaytarmaydi (izoh: `minus_material`).
+  const usta = await xodim('Sinov tuzatish ustasi', 'tsex_usta');
+  //  Sarfni tsex boshlig'i yozadi, lekin bu test uchun ombordan
+  //  to'g'ridan-to'g'ri chiqim yetarli: qoldiq minusga tushsa bo'ldi.
+  await H.id(`INSERT INTO material_moves
+                (material_id, qty, from_kind, from_id, to_kind, moved_on)
+              VALUES ($1, 30, 'warehouse', $2, 'writeoff', CURRENT_DATE)
+              RETURNING id`, [m.id, wh]);
+  assert.equal(Number((await qator()).qty), -30, 'qoldiq minusda');
+
+  //  ★ SABAB MAJBURIY: tuzatish ombor qiymatiga tegadi va «nega
+  //  nolga tushdi» degan savol keyin beriladi.
+  const sz = await xom('POST', '/api/materials/adjust',
+    { items: [{ warehouse_id: wh, material_id: m.id, to_qty: 0 }] });
+  assert.equal(sz.status, 400, sz.text);
+  assert.match(sz.body.error, /[Ss]abab/);
+
+  //  ★ NECHTA BO'LISHI KERAKLIGI yuboriladi, farqni SERVER hisoblaydi.
+  const ok = await xom('POST', '/api/materials/adjust', {
+    note: 'sanoq \u2014 hujjati topilmadi',
+    items: [{ warehouse_id: wh, material_id: m.id, to_qty: 0 }] });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.saved, 1);
+  //  ★ QOLDIQDAN BUTUNLAY CHIQADI: `v_material_stock` nolni tashlab
+  //  yuboradi (`HAVING SUM(qty) <> 0`), ya'ni qator ro'yxatda
+  //  qolmaydi \u2014 minus ham, nol ham ko'rinmaydi.
+  assert.equal(await qator(), undefined, 'nolga kelgan qator qoldiqda yo\'q');
+
+  //  ★ RAQAM JIMGINA O'ZGARMAYDI \u2014 TARIXDA QATOR BO'LIB QOLADI,
+  //  sababi, sanasi va kim yozgani bilan.
+  const mv = (await xom('GET', '/api/materials/moves')).body.rows
+    .find((r) => r.material === 'Tuzatish sinov smolasi'
+               && r.from_kind === 'writeoff');
+  assert.ok(mv, 'tuzatish tarixda turadi');
+  assert.equal(mv.to_kind, 'warehouse', 'minusda ombor QABUL qiluvchi tomon');
+  assert.equal(Number(mv.qty), 30);
+  assert.match(mv.note, /sanoq/);
+
+  //  ★ FARQI YO'Q QATOR O'TKAZIB YUBORILADI, xato emas: ro'yxat
+  //  ochilgandan keyin kirim yozilgan bo'lishi mumkin.
+  const yana = await xom('POST', '/api/materials/adjust', {
+    note: 'ikkinchi marta',
+    items: [{ warehouse_id: wh, material_id: m.id, to_qty: 0 }] });
+  assert.equal(yana.status, 400, yana.text);
+  assert.match(yana.body.error, /yo'q/);
+
+  //  Teskari yo'nalish ham SHU yo'ldan: javonda ortiqcha chiqsa
+  //  ombor BERUVCHI tomon bo'ladi (ikkita mexanizm yozilmadi).
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 50 }] })).status, 200);
+  const kam = await xom('POST', '/api/materials/adjust', {
+    note: 'sanoqda 42 chiqdi',
+    items: [{ warehouse_id: wh, material_id: m.id, to_qty: 42 }] });
+  assert.equal(kam.status, 200, kam.text);
+  assert.equal(Number((await qator()).qty), 42, 'sanoqdagi songa keldi');
+  const ch = (await xom('GET', '/api/materials/moves')).body.rows
+    .find((r) => r.material === 'Tuzatish sinov smolasi'
+               && r.to_kind === 'writeoff' && Number(r.qty) === 8);
+  assert.ok(ch, 'ortiqchasi hisobdan chiqdi');
+
+  //  ★ BEKOR QILISH BORLIGI \u2014 boshlang'ich qoldiq bilan BITTA
+  //  yo'ldan: ikkalasi ham hujjatsiz harakat va ikkinchi yo'l
+  //  yozilsa bir kun biri ikkinchisidan ajralib ketardi.
+  assert.equal((await xom('POST', `/api/materials/moves/${ch.id}/cancel`))
+    .status, 200);
+  assert.equal(Number((await qator()).qty), 50, 'bekor qilingach qaytdi');
+
+  //  Huquq: sarfni yozadigan tsex boshlig'ida `materials.manage` yo'q.
+  const rad = await usta('POST', '/api/materials/adjust', {
+    note: 'sinov', items: [{ warehouse_id: wh, material_id: m.id, to_qty: 0 }] });
+  assert.equal(rad.status, 403, rad.text);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

@@ -3560,6 +3560,29 @@ nol ustun turib, nimani anglatishi hech qayerda yozilmasdi. Shu
 sababdan so'rovda ham shart bor — oraliq berilmasa aylanma UMUMAN
 hisoblanmaydi va ro'yxat eskicha, faqat javondagisi bo'lib turadi.
 
+**★ CHOP ETISH VA «FAQAT FAKT»** (zavod qarori, 2026-10). Qoldiq IKKI
+savolga javob beradi va ularning qog'ozi boshqa: «davr ichida nima
+o'tdi» — aylanma; «javonda nima turibdi» — inventarizatsiya.
+Ikkinchisi javon oldiga olib boriladi va u yerda ekran yo'q, ya'ni
+varaqning O'ZI qaysi ombor, qaysi oraliq va qaysi filtr bilan
+olinganini aytishi kerak (qarzdorlik hisoboti bilan bir xil idiom:
+`print-head`, `print-only`).
+
+**«Faqat fakt»** belgisi qo'yilsa qoldig'i nol qator chizilmaydi (u
+`FULL JOIN` dan keladi — oraliqda kirib, o'sha oraliqda chiqib
+ketgani) va AYLANMA ustunlari ham yopiladi. Ikkalasi bir varaqda tursa
+qator «kirdi 40, qoldiq 0» bo'lib, sanoq varag'i yana savol beradigan
+hujjatga aylanardi. Qoldiq, bron va summa HOZIRGI holat — ular
+oraliqdan qat'i nazar to'g'ri va o'z joyida qoladi.
+
+**Belgi SERVERGA bormaydi**: qoldiq so'rovida LIMIT yo'q va
+qatorlarning hammasi sahifada turadi (saralash bilan bir xil sabab) —
+javob bosilgan zahoti chiqadi. Yig'indi ham o'zgarmaydi: u javondagini
+sanaydigan manbadan keladi va yashirilayotgan qatorlar unga baribir
+nol qo'shardi. Ikkala sahifada ham bir xil (`/ombor.html` va
+`/materiallar.html`): bittasida bo'lib, ikkinchisida bo'lmasa
+mudirning qo'lida ikki xil varaq bo'lardi.
+
 **View'ga TEGILMADI**: aylanma `v_material_flow` dan CTE bilan
 olinadi va `v_material_stock` ga `FULL JOIN` qilinadi. Sabab ikkita.
 Birinchisi — 2-qoida: view'ni o'zgartirish migratsiyani
@@ -3767,6 +3790,65 @@ bo'lardi, yashirish esa xatoni ko'rinmas qilardi.
 chiqadi, tarixda o'chirilgan holida qoladi (kassadagi operatsiya
 bilan bir xil qoida). Sarf PULGA tegadi va yo'qolgan qator savol
 qoldirardi — «men yozgan edim-ku».
+
+**★ MINUS HUJJAT BILAN NOLGA KELADI** (zavod qarori, 2026-10;
+`POST /api/materials/adjust`, xom ashyo qoldig'idagi **«⚖ Qoldiqni
+to'g'rilash»**). Minusni o'chiradigan uchta to'g'ri yo'l bor va
+ularning hammasi MA'LUM SABABNIKI:
+
+    mol kelgan, hujjati yozilmagan   →  KIRIM (ta'minotchi qarzi oshadi)
+    tizimdan oldin javonda turgan    →  BOSHLANG'ICH QOLDIQ (qarzsiz)
+    sarf adashib yozilgan            →  o'sha qatorni bekor qilish
+
+To'rtinchi hol ham bor: sabab TOPILMADI. Material qayerdan kelgani
+endi ma'lum emas, hech kim undan pul so'ramayapti va javonda nol
+turibdi — ya'ni uchala yo'l ham yolg'on yozuv bo'lardi. Bunday qator
+minusda qolib ketardi va qizil raqam har kuni ko'rinib turardi: ko'z
+unga o'rganib qolgach YANGI va haqiqiy minus o'sha to'da orasida
+ko'rinmay ketardi (bron belgisi bilan bir xil sabab).
+
+**Raqam jimgina o'zgarmaydi — HUJJAT bo'lib o'zgaradi.** Qoldiqni
+`UPDATE` bilan nolga qo'yish eng oson yo'l edi va eng yomoni: kim,
+qachon va NEGA o'zgartirgani hech qayerda qolmasdi. Shuning uchun
+tuzatish ham oddiy HARAKAT bo'ladi (`material_moves`) — sabab, sana
+va xodim bilan, tarixda ko'rinadi va kerak bo'lsa bekor qilinadi.
+**Sabab MAJBURIY**: tuzatish ombor qiymatiga tegadi.
+
+Tomoni — `writeoff`, va u IKKI YO'NALISHDA ishlaydi:
+
+    qoldiq MINUSDA    writeoff → ombor    «sanoq — hisobda yo'q edi»
+    qoldiq ORTIQCHA   ombor → writeoff    «sanoq — hisobdan chiqarildi»
+
+Ikkinchisi birinchisi bilan BITTA yo'ldan o'tadi: sanoqda ikkala farq
+ham chiqadi va ikkita mexanizm yozilsa biri ertaga ikkinchisidan
+ajralib ketardi (vitrinadan qaytarish hujjatining ikki tomonli
+bo'lgani bilan bir xil sabab). Shu sababdan oynaning nomi «hisobdan
+chiqarish» emas: u faqat bitta yo'nalishni atardi.
+
+**★ NECHTAGA emas, NECHTA BO'LISHI KERAKLIGI yuboriladi** (`to_qty`,
+standarti nol). Farqni SERVER hisoblaydi: ekran ochilgandan keyin
+kirim yozilgan bo'lsa, ekrandagi farq allaqachon eskirgan bo'lardi va
+tuzatish qoldiqni boshqa tomonga og'dirib yuborardi. Sanoqda
+beriladigan savol ham aynan shu: «javonda nechta chiqdi». Farqi yo'q
+qator o'tkazib yuboriladi, xato emas.
+
+**Oyna ro'yxatni O'ZI yig'adi**: ekranda turgan qatorlarning minusga
+tushganlari, hammasi belgilangan holda — zavodda o'n to'rtta ombor va
+uch yuzdan ortiq nom bor, o'ttizta qizil qatorni birma-bir ochib
+tuzatish yarim kunlik ish bo'lardi. Qatorni belgidan chiqarish ham
+mumkin: sababi aniq bo'lgan minus kirim bilan tuzatiladi va oyna uni
+majburlamaydi.
+
+**Narx yozilmaydi**: hisobdan tashqari kelgan materialning bahosi
+ma'lum emas, nol esa «bepul» degani bo'lardi — narxsiz qator
+o'rtachaga umuman qo'shilmaydi (na surat, na maxraj), ya'ni omborning
+qiymati o'z narxli kirimlaridan hisoblanaveradi.
+
+Bekor qilish boshlang'ich qoldiq bilan BITTA yo'ldan
+(`POST /moves/:id/cancel`): ikkalasi ham hujjatsiz harakat va ikkinchi
+yo'l yozilsa bir kun biri ikkinchisidan ajralib ketardi. Huquqi
+**`materials.manage`** — javonni sanaydigan odam; ombor doirasi bu
+yerda ham CHEGARA.
 
 Huquqi **`materials.request`** — nomi shuni aytadi: «talabnoma yozish
 va SARFNI yozish». Tsex boshlig'ida u allaqachon bor; huquqi yo'q

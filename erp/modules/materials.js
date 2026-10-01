@@ -499,6 +499,131 @@ router.post('/opening', need(...MANAGE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+// ═══════════════════════════════════════════ QOLDIQNI TO'G'RILASH
+//
+//  ★ MINUSGA TUSHGAN QOLDIQ HUJJAT BILAN NOLGA KELADI (zavod qarori,
+//  2026-10). Qoldiq minusga tushishi mumkin va bu ataylab: material
+//  allaqachon kesilgan, sarfni rad etish taxtani qaytarmaydi
+//  (izoh: `minus_material`). Minus esa BELGI bo'lib qoladi — kirim
+//  hujjati yozilmagan.
+//
+//  Belgini o'chiradigan uchta to'g'ri yo'l bor va ularning hammasi
+//  MA'LUM SABABNIKI:
+//
+//    mol haqiqatda kelgan, hujjati yozilmagan  →  KIRIM (qarz oshadi)
+//    tizimdan oldin javonda turgan             →  BOSHLANG'ICH QOLDIQ
+//    sarf adashib yozilgan                     →  o'sha qatorni bekor
+//
+//  To'rtinchi hol ham bor va aynan shu yerda hal qilinadi: sabab
+//  TOPILMADI. Material qayerdan kelgani endi ma'lum emas, hech kim
+//  undan pul so'ramayapti va javonda nol turibdi — ya'ni uchala yo'l
+//  ham yolg'on yozuv bo'lardi. Ilgari bunday qator MINUSDA qolib
+//  ketardi va qizil raqam har kuni ko'rinib turardi: ko'z unga
+//  o'rganib qolgach, YANGI va haqiqiy minus o'sha to'da orasida
+//  ko'rinmay ketardi.
+//
+//  ★ RAQAM JIMGINA O'ZGARMAYDI — HUJJAT BO'LIB O'ZGARADI. Qoldiqni
+//  `UPDATE` bilan nolga qo'yish eng oson yo'l edi va eng yomoni: kim,
+//  qachon va NEGA o'zgartirgani hech qayerda qolmasdi. Shuning uchun
+//  tuzatish ham oddiy HARAKAT bo'ladi (`material_moves`) — sabab,
+//  sana va xodim bilan, tarixda ko'rinadi va kerak bo'lsa bekor
+//  qilinadi (kassadagi operatsiya bilan bir xil qoida).
+//
+//  Tomoni — `writeoff`, va u IKKI YO'NALISHDA ishlaydi:
+//
+//    qoldiq MINUSDA   writeoff → ombor   «hisobdan tashqari kelgan»
+//    qoldiq ORTIQCHA  ombor → writeoff   «hisobdan chiqarildi»
+//
+//  Ikkinchisi birinchisi bilan BITTA yo'ldan o'tadi: sanoqda ikkala
+//  farq ham chiqadi va ikkita mexanizm yozilsa biri ertaga
+//  ikkinchisidan ajralib ketardi (vitrinadan qaytarish hujjatining
+//  ikki tomonli bo'lgani bilan bir xil sabab).
+//
+//  ★ NECHTAGA EMAS, NECHTA BO'LISHI KERAKLIGI yuboriladi (`to_qty`).
+//  Farqni SERVER hisoblaydi: ekran ochilgandan keyin kirim yozilgan
+//  bo'lsa, ekrandagi farq allaqachon eskirgan bo'lardi va tuzatish
+//  qoldiqni boshqa tomonga og'dirib yuborardi. Sanoqda beriladigan
+//  savol ham aynan shu: «javonda nechta chiqdi».
+//
+//  ★ NARX YOZILMAYDI. Hisobdan tashqari kelgan materialning bahosi
+//  ma'lum emas, nol yozish esa «bepul» degani bo'lardi — narxsiz
+//  qator o'rtachaga umuman qo'shilmaydi (na surat, na maxraj), ya'ni
+//  omborning qiymati o'z narxli kirimlaridan hisoblanaveradi.
+//
+//  Huquqi `materials.manage` — javonni sanaydigan odam. Ombor
+//  doirasi bu yerda ham CHEGARA: id ni qo'lda yuborib boshqa tsexning
+//  omborini to'g'rilab bo'lmaydi.
+router.post('/adjust', need(...MANAGE), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+  //  Sabab MAJBURIY: tuzatish pulga tegadi (ombor qiymati o'zgaradi)
+  //  va «nega nolga tushdi» degan savol keyin beriladi. Sababsiz
+  //  hujjat o'sha savolni javobsiz qoldirardi.
+  const sabab = trim(req.body.note);
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const on = trim(req.body.on);
+  const doira = whDoira(req);
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    let n = 0, jami = 0;
+    for (const it of items) {
+      const wh = (await client.query(
+        `SELECT w.id, w.name, w.kind FROM warehouses w
+          WHERE w.id = $1
+            AND ($2::int[] IS NULL
+                 OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
+        [it.warehouse_id, doira])).rows[0];
+      if (!wh) throw new Error('Ombor tanlanmagan');
+      if (wh.kind !== 'material')
+        throw new Error(`«${wh.name}» xom ashyo ombori emas`);
+      const mt = (await client.query(
+        `SELECT m.id, m.name, m.uom,
+                COALESCE(s.qty, 0)::NUMERIC(14,3) AS bor
+           FROM materials m
+           LEFT JOIN v_material_stock s
+                  ON s.material_id = m.id AND s.warehouse_id = $2
+          WHERE m.id = $1`, [it.material_id, wh.id])).rows[0];
+      if (!mt) throw new Error('Material topilmadi');
+
+      //  Bo'sh yuborilgani NOL degani: minusni nolga keltirish shu
+      //  oynaning asosiy ishi va uni har qatorda qo'lda terib
+      //  o'tirish ortiqcha bo'lardi.
+      const nishon = it.to_qty === '' || it.to_qty == null ? 0 : Number(it.to_qty);
+      if (!Number.isFinite(nishon) || nishon < 0)
+        throw new Error(`«${mt.name}» — sanoq soni noto'g'ri`);
+      const farq = Number((nishon - Number(mt.bor)).toFixed(3));
+      //  Farqi yo'q qator O'TKAZIB YUBORILADI, xato emas: ro'yxat
+      //  ochilgandan keyin kirim yozilgan bo'lishi mumkin va o'shanda
+      //  tuzatiladigan narsa qolmagan.
+      if (!farq) continue;
+
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                     to_kind, to_id, moved_on, note, worker_id)
+         VALUES ($1, $2,
+                 CASE WHEN $3 THEN 'writeoff' ELSE 'warehouse' END,
+                 CASE WHEN $3 THEN NULL      ELSE $4::int    END,
+                 CASE WHEN $3 THEN 'warehouse' ELSE 'writeoff' END,
+                 CASE WHEN $3 THEN $4::int   ELSE NULL       END,
+                 COALESCE($5::date, CURRENT_DATE), $6, $7)`,
+        [mt.id, Math.abs(farq), farq > 0, wh.id, on || null, sabab, req.user.id]);
+      n++;
+      jami += farq;
+    }
+    if (!n) throw new Error("To'g'rilanadigan qator yo'q");
+    await audit(req, { module: 'materials', action: 'adjust',
+                       entity: 'material_moves', entity_id: n,
+                       payload: { count: n, note: sabab } }, client);
+    await client.query('COMMIT');
+    res.json({ saved: n, jami: Number(jami.toFixed(3)) });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 // ═══════════════════════════════════ KONVERGA XOM ASHYO BIRIKTIRISH
 //
 //  ★ ZAVOD QARORI (2026-09): sarfni TSEX BOSHLIG'I yozadi, o'z
@@ -716,23 +841,41 @@ router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
 //  qilinadi (u ta'minotchining qarziga ham tegadi), talabnomaniki
 //  esa o'z hujjatining qatori — bitta qatorni yakka bekor qilish
 //  hujjatni haqiqatdan ajratib qo'yardi.
+//  ★ TO'G'RILASH QATORI HAM SHU YO'LDAN BEKOR QILINADI (zavod qarori,
+//  2026-10). Boshlang'ich qoldiq ham, sanoq tuzatishi ham HUJJATSIZ
+//  harakat: ikkalasi ham to'g'ridan-to'g'ri `material_moves` ga
+//  yoziladi va ikkalasini ham faqat shu yerdan orqaga olish mumkin.
+//  Ikkinchi yo'l yozilsa bir kun biri ikkinchisidan ajralib ketardi
+//  — shart BITTA joyda turadi.
+//
+//  Ombor tomoni ikki xil bo'lishi mumkin: tuzatish ombornikini
+//  OSHIRSA ombor qabul qiluvchi tomonda, kamaytirsa beruvchi tomonda
+//  turadi. Doira esa ikkalasida ham bir xil tekshiriladi.
+const QOLDA = `((m.from_kind = 'opening'   AND m.to_kind = 'warehouse')
+             OR (m.from_kind = 'writeoff'  AND m.to_kind = 'warehouse')
+             OR (m.from_kind = 'warehouse' AND m.to_kind = 'writeoff'))`;
+
 router.post('/moves/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
   const mv = (await db.query(
-    `SELECT m.id, m.to_id, w.name AS ombor FROM material_moves m
-       JOIN warehouses w ON w.id = m.to_id
+    `SELECT m.id, w.name AS ombor,
+            (m.from_kind = 'opening') AS boshlangich
+       FROM material_moves m
+       JOIN warehouses w
+         ON w.id = CASE WHEN m.to_kind = 'warehouse' THEN m.to_id ELSE m.from_id END
       WHERE m.id = $1 AND m.status = 'ok'
-        AND m.from_kind = 'opening' AND m.to_kind = 'warehouse'
+        AND ${QOLDA}
         AND m.doc_kind IS NULL
         AND ($2::int[] IS NULL
              OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
     [req.params.id, whDoira(req)])).rows[0];
   if (!mv) return res.status(404).json({
-    error: "Boshlang'ich qoldiq qatori topilmadi. Kirim hujjati o'z "
-         + "oynasidan, talabnomaniki esa hujjatdan bekor qilinadi" });
+    error: "Boshlang'ich qoldiq yoki to'g'rilash qatori topilmadi. Kirim "
+         + "hujjati o'z oynasidan, talabnomaniki esa hujjatdan bekor qilinadi" });
 
   await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`,
                  [mv.id]);
-  await audit(req, { module: 'materials', action: 'opening-cancel',
+  await audit(req, { module: 'materials',
+                     action: mv.boshlangich ? 'opening-cancel' : 'adjust-cancel',
                      entity: 'material_moves', entity_id: mv.id,
                      payload: { warehouse: mv.ombor } });
   res.json({ ok: true });
