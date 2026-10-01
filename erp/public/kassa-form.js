@@ -728,6 +728,138 @@ async function saveOpening() {
   } catch (e) { toast(e.message, true); }
 }
 
+// ═════════════════════════════════════ YOZILGANINI TUZATISH
+//
+//  ★ PUL O'ZGARMAYDI, U QAYERGA YOZILGANI O'ZGARADI (zavod qarori,
+//  2026-10). Operatsiyada ikki xil narsa turadi: summa, valyuta,
+//  kurs va TOMONLAR — haqiqatda bo'lib o'tgan harakat; sana, modda,
+//  foyda-zarar oyi, xodim va izoh esa uning QAYERGA yozilgani.
+//
+//  Birinchisi ekrandan qayta yozilmaydi: u mijozning yoki
+//  ta'minotchining qarzini jimgina o'zgartirardi va kassa qoldig'i
+//  sababini aytmasdi. Xato bo'lsa yo'l eskicha — operatsiya BEKOR
+//  qilinadi va qaytadan yoziladi, ikkala hujjat ham tarixda qoladi.
+//
+//  Ikkinchisi saralash xatosi: pul to'g'ri ketgan, lekin
+//  foyda-zararda boshqa qatorga tushgan. Uni bekor qilib qayta yozish
+//  hujjat raqamini bekorga yoqardi va lentada bitta to'lov ikkita
+//  qator bo'lib turardi — shuning uchun JOYIDA tuzatiladi.
+//
+//  Sabab EKRANDA yoziladi: nimaga tegib bo'lmasligini bilmagan odam
+//  summa katagini qidirib yurardi.
+function fixOp(id) {
+  const o = ops.find((x) => x.id === id);
+  if (!o) return;
+  //  Modda faqat moddasi BO'LISHI MUMKIN bo'lgan operatsiyada:
+  //  kassalar aro ko'chirishga yoki podotchyotga modda yozib qo'yish
+  //  foyda-zararga bo'lmagan harajatni qo'shardi (tekshiruv ham
+  //  serverda — oynani o'zgartirish himoya emas).
+  const moddali = o.to_kind === 'expense' || o.to_kind === 'supplier';
+  const it = refs.items.find((x) => x.id === o.expense_item_id) || null;
+  fixState = { id, moddali, group: it ? it.group_code : '',
+               item: o.expense_item_id || '',
+               month: String(o.pl_month || '').slice(0, 7),
+               staff: o.staff_id || '' };
+  drawFix();
+}
+
+let fixState = null;
+
+function drawFix() {
+  const F = fixState, o = ops.find((x) => x.id === F.id);
+  const it = refs.items.find((x) => x.id === Number(F.item)) || null;
+  const xodimKerak = !!(it && it.needs_worker);
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closeForm()">
+      <div class="modal" style="max-width:560px">
+        <div class="row" style="justify-content:space-between;margin-bottom:10px">
+          <h2 style="margin:0">${esc(o.doc_no)} — tuzatish</h2>
+          <button onclick="closeForm()">Yopish</button></div>
+
+        <!--  Hujjatning o'zgarmaydigan yuzi: odam qaysi operatsiyani
+              tuzatayotganini ko'rib tursin. -->
+        <div class="ord-head" style="margin-bottom:14px">
+          <div class="t">${esc(o.from_name || '')} → ${esc(o.to_name || '')}</div>
+          <div class="muted" style="font-size:12px">${o.currency === 'UZS'
+            ? uzs(o.amount) + " so'm · kurs " + uzs(o.rate)
+            : usd(o.amount) + ' $'} · <b>${usd(o.amount_usd)} $</b></div>
+        </div>
+
+        <div class="fields">
+          <div><label>Sana</label>
+            <input id="xDate" type="date" value="${String(o.op_date || '').slice(0, 10)}"></div>
+          ${!F.moddali ? '' : `
+          <div><label>Harajat guruhi</label>
+            <select id="xGroup" onchange="fixSet('group', this.value)">
+              <option value="">—</option>
+              ${refs.groups.map((g) => `<option value="${esc(g.code)}"${
+                g.code === F.group ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}
+            </select></div>
+          <div><label>Harajat moddasi</label>
+            <select id="xItem" onchange="fixSet('item', this.value)"${
+              F.group ? '' : ' disabled'}>
+              <option value="">—</option>
+              ${refs.items.filter((i) => i.group_code === F.group).map((i) =>
+                `<option value="${i.id}"${Number(F.item) === i.id ? ' selected' : ''}>${
+                  esc(i.name)}</option>`).join('')}
+            </select></div>
+          ${!F.item ? '' : `
+          <div><label>Foyda-zarar oyi</label>
+            <select id="xMonth">${oyOptions(F.month)}</select></div>`}
+          ${!xodimKerak ? '' : `
+          <div><label>Kimga berildi</label>
+            <select id="xStaff">
+              <option value="">—</option>
+              ${refs.staff.map((w) => `<option value="${w.id}"${
+                Number(F.staff) === w.id ? ' selected' : ''}>${esc(w.name)}${
+                w.position ? ' · ' + esc(w.position) : ''}</option>`).join('')}
+            </select></div>`}`}
+          <div style="grid-column:1/-1"><label>Izoh</label>
+            <input id="xNote" value="${esc(o.note || '')}"></div>
+        </div>
+
+        <p class="muted" style="font-size:12px;margin:12px 0 0">
+          Summa, valyuta, kurs va tomonlar bu yerdan o'zgarmaydi — ular
+          haqiqatda bo'lib o'tgan harakat. Ularda xato bo'lsa operatsiya
+          <b>bekor qilinadi</b> va qaytadan yoziladi: ikkala hujjat ham
+          tarixda qoladi.</p>
+
+        <div class="row" style="justify-content:flex-end;margin-top:14px">
+          <button class="primary" onclick="saveFix()">Saqlash</button></div>
+      </div>
+    </div>`;
+}
+
+//  Guruh almashsa modda TOZALANADI: eski guruhning moddasi katakda
+//  turib qolsa saqlashda u yoziladi va odam buni ko'rmasdi. Modda
+//  almashsa xodim ham shunday.
+function fixSet(k, v) {
+  if (k === 'group') { fixState.group = v; fixState.item = ''; fixState.staff = ''; }
+  if (k === 'item') {
+    //  Tanlangan oyni saqlab qolamiz: modda almashgani bilan harajat
+    //  qaysi oyniki ekani o'zgarmaydi.
+    if ($('xMonth')) fixState.month = $('xMonth').value;
+    fixState.item = v; fixState.staff = '';
+  }
+  drawFix();
+}
+
+async function saveFix() {
+  const F = fixState;
+  try {
+    await App.api(`/api/cash/ops/${F.id}/fix`, { method: 'PATCH',
+      body: JSON.stringify({
+        op_date: $('xDate').value,
+        note: $('xNote').value,
+        expense_item_id: $('xItem') ? $('xItem').value || null : null,
+        pl_month: $('xMonth') ? $('xMonth').value : null,
+        staff_id: $('xStaff') ? $('xStaff').value || null : null,
+      }) });
+    toast('Tuzatildi'); closeForm(); reload();
+  } catch (e) { toast(e.message, true); }
+}
+
+
 App.start(async () => {
   refs = await App.api('/api/cash/refs');
   await reload();

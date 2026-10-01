@@ -661,6 +661,118 @@ router.patch('/ops/:id', need(...ANY), wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ─────────────────────────────────── YOZILGANINI TUZATISH
+//
+//  ★ CHEGARA PULNING O'ZIDAN CHIQADI, QULAYLIKDAN EMAS (zavod qarori,
+//  2026-10). Operatsiya yozilgach unda ikki xil narsa turadi va ular
+//  bir xil emas:
+//
+//    PUL        qancha, qaysi valyutada, qaysi kursda va KIMDAN KIMGA
+//    QAYERGA    qaysi kun, qaysi harajat moddasi, qaysi foyda-zarar
+//               oyi, kimning oyligi va izoh
+//
+//  Birinchisi — haqiqatda bo'lib o'tgan harakat: pul o'shancha va
+//  o'sha odamga ketgan. Uni ekrandan qayta yozish TARIXNI jimgina
+//  almashtirardi — mijozning yoki ta'minotchining qarzi o'zgarib
+//  turar, kassa qoldig'i esa sababini aytmasdi. Xato bo'lsa yo'l
+//  eskicha: operatsiya BEKOR qilinadi va qaytadan yoziladi, ikkala
+//  hujjat ham tarixda qoladi.
+//
+//  Ikkinchisi — SARALASH xatosi: pul to'g'ri ketgan, lekin
+//  foyda-zararda boshqa qatorga tushgan. Uni bekor qilib qayta
+//  yozish hujjat raqamini bekorga yoqardi va kassa lentasida bitta
+//  to'lov ikkita qator bo'lib turardi. Shuning uchun u JOYIDA
+//  tuzatiladi.
+//
+//  Huquqi `cash.manage` — kassir va BUXGALTER: moddani to'g'rilash
+//  aynan ularning ishi. Pulning o'ziga baribir tegilmaydi, shuning
+//  uchun alohida huquq yozilmadi (`sales.fix` dan farqi shunda: u
+//  yerda summa O'ZGARADI va mijozning qarziga tegadi).
+//
+//  Audit jurnalida yozuv `fix` deb turadi, `update` emas — «kim
+//  yozilgan hujjatga tegdi» degan savol alohida javob talab qiladi
+//  (chiqib ketgan buyurtmani tuzatish bilan bir xil idiom).
+router.patch('/ops/:id/fix', need(...MANAGE), wrap(async (req, res) => {
+  const b = req.body || {};
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(
+      `SELECT * FROM cash_ops WHERE id = $1 FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!o) throw new Error('Operatsiya topilmadi');
+    //  Bekor qilingani hisobdan chiqqan — uni tuzatish hech narsani
+    //  o'zgartirmasdi; kutib turgani esa hali qabul qilinmagan va
+    //  uning yo'li boshqa: rad etiladi, xodim qaytadan yozadi.
+    if (o.status !== 'ok')
+      throw new Error(o.status === 'pending'
+        ? 'Kutib turgan topshirish tuzatilmaydi — rad eting, xodim qaytadan yozadi'
+        : 'Bekor qilingan operatsiya tuzatilmaydi');
+
+    const sana = String(b.op_date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sana)) throw new Error('Sana kiritilmagan');
+
+    //  ★ MODDA FAQAT MODDASI BO'LISHI MUMKIN BO'LGAN OPERATSIYADA.
+    //  Kassalar aro ko'chirishga yoki xodimga berilgan podotchyotga
+    //  modda yozib qo'yish foyda-zararga BO'LMAGAN harajatni
+    //  qo'shardi: pul korxonadan chiqmagan, shunchaki joyini
+    //  o'zgartirgan (izoh: «Xodim tomon bo'lmaydi», sql/cash.sql).
+    const moddali = o.to_kind === 'expense' || o.to_kind === 'supplier';
+    let item_id = null, pl_month = null, staff_id = null;
+    if (moddali) {
+      item_id = Number(b.expense_item_id) || null;
+      //  Ta'minotchiga to'lovda modda IXTIYORIY (kassir yozganda ham
+      //  shunday), harajatda esa majburiy — uning tomoni moddaning
+      //  O'ZI va moddasiz qator qayerga tushishi noma'lum qolardi.
+      if (!item_id && o.to_kind === 'expense')
+        throw new Error('Harajat moddasi tanlanmagan');
+      if (item_id) {
+        const m = String(b.pl_month || '').slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(m)) throw new Error('Foyda-zarar oyi tanlanmagan');
+        pl_month = m + '-01';
+        //  Xodim moddaning belgisidan so'raladi (`needs_worker`), ya'ni
+        //  qoida bazada turadi — yaratishdagi bilan bitta shart.
+        const it = (await client.query(
+          `SELECT needs_worker FROM expense_items WHERE id = $1`, [item_id])).rows[0];
+        if (!it) throw new Error('Bunday harajat moddasi yo\'q');
+        if (it.needs_worker) {
+          staff_id = Number(b.staff_id) || null;
+          if (!staff_id) throw new Error('Xodim tanlanmagan');
+          const w = (await client.query(
+            `SELECT 1 FROM workers WHERE id = $1 AND active`, [staff_id])).rows[0];
+          if (!w) throw new Error('Bunday xodim yo\'q');
+        }
+        //  Modda almashsa va yangisi xodim so'ramasa, eskisining ismi
+        //  katakda turib qolmasin: `staff_id` yuqorida null bo'lib
+        //  qoladi va shu holda yoziladi.
+      }
+    }
+
+    const { rows } = await client.query(
+      `UPDATE cash_ops
+          SET op_date = $2, note = $3,
+              expense_item_id = $4, pl_month = $5::date, staff_id = $6
+        WHERE id = $1 RETURNING doc_no`,
+      [o.id, sana, (b.note || '').trim() || null, item_id, pl_month, staff_id]);
+
+    await audit(req, { module: 'cash', action: 'fix', entity: 'cash_op',
+                       entity_id: o.id,
+                       payload: { doc_no: rows[0].doc_no,
+                                  edi: { op_date: o.op_date, note: o.note,
+                                         expense_item_id: o.expense_item_id,
+                                         pl_month: o.pl_month,
+                                         staff_id: o.staff_id },
+                                  boldi: { op_date: sana, note: b.note || null,
+                                           expense_item_id: item_id,
+                                           pl_month, staff_id } } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 // ──────────────────────────────────────────── TOPSHIRILGAN PULNI QABUL
 //
 //  ★ KASSIR PULNI KO'RADI, SANAB OLADI, KEYIN QABUL QILADI (zavod

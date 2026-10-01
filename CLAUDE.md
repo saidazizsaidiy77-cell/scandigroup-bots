@@ -1907,6 +1907,48 @@ turardi. So'mdagi qoldiq uchun o'sha kundagi kurs ham yoziladi.
 qoldiqdan chiqadi, tarixda qoladi. Pulda o'chirilgan qator eng yomon
 narsa.
 
+**★ TUZATISH BOR, LEKIN CHEGARASI PULNING O'ZIDAN CHIQADI** (zavod
+qarori, 2026-10; `PATCH /api/cash/ops/:id/fix`, lentadagi **✎**).
+Operatsiyada ikki xil narsa turadi va ular bir xil emas:
+
+    PUL        qancha, qaysi valyutada, qaysi kursda, KIMDAN KIMGA
+    QAYERGA    qaysi kun, qaysi harajat moddasi, qaysi foyda-zarar
+               oyi, kimning oyligi va izoh
+
+Birinchisi — haqiqatda bo'lib o'tgan harakat. Uni ekrandan qayta
+yozish TARIXNI jimgina almashtirardi: mijozning yoki ta'minotchining
+qarzi o'zgarib turar, kassa qoldig'i esa sababini aytmasdi. Xato bo'lsa
+yo'l eskicha — **bekor qilinadi va qaytadan yoziladi**, ikkala hujjat
+ham tarixda qoladi.
+
+Ikkinchisi — SARALASH xatosi: pul to'g'ri ketgan, lekin
+foyda-zararda boshqa qatorga tushgan. Bekor qilib qayta yozish hujjat
+raqamini bekorga yoqardi va lentada bitta to'lov ikkita qator bo'lib
+turardi, shuning uchun u **joyida** tuzatiladi.
+
+**Modda faqat moddasi BO'LISHI MUMKIN bo'lgan operatsiyada**
+(`to_kind` — `expense` yoki `supplier`): kassalar aro ko'chirishga
+yoki xodimga berilgan podotchyotga modda yozib qo'yish foyda-zararga
+BO'LMAGAN harajatni qo'shardi — pul korxonadan chiqmagan, shunchaki
+joyini o'zgartirgan. Harajatda modda MAJBURIY qolaveradi (uning tomoni
+moddaning O'ZI), ta'minotchiga to'lovda esa ixtiyoriy — yaratishdagi
+bilan aynan bir xil shart, va xodim ham moddaning belgisidan
+(`needs_worker`) so'raladi.
+
+**Bekor qilingani tuzatilmaydi** (hisobdan chiqqan), **kutib turgani
+ham** (`pending`): u hali qabul qilinmagan va uning yo'li boshqa —
+rad etiladi, xodim qaytadan yozadi.
+
+Huquqi **`cash.manage`** — kassir va buxgalter: moddani to'g'rilash
+aynan ularning ishi va pulning o'ziga baribir tegilmaydi. Shu sababdan
+`sales.fix` kabi alohida huquq yozilmadi: u yerda summa O'ZGARADI va
+mijozning qarziga tegadi. Audit jurnalida yozuv **`fix`** deb turadi,
+`update` emas, va eski qiymat ham yoziladi — «kim yozilgan hujjatga
+tegdi» degan savol alohida javob talab qiladi.
+
+Sabab **EKRANDA** yozilib turadi: nimaga tegib bo'lmasligini bilmagan
+odam summa katagini qidirib yurardi.
+
 **Avval KASSALAR ro'yxati, keyin kassaning ichi** — omborlar bilan bir
 xil idiom: zavodda ikkita pul joyi bor va ular bir-biriga o'xshamaydi,
 qoldig'i ham alohida sanaladi. `/kassalar.html` — ro'yxat (har kassa

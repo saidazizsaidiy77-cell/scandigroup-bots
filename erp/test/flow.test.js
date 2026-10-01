@@ -8858,6 +8858,106 @@ test('qarzdorlik menejer bo\'yicha filtrlanadi', async () => {
   assert.equal(Number(yoq.body.total.closing), 0);
 });
 
+//  ★ YOZILGANINI TUZATISH — PUL O'ZGARMAYDI, U QAYERGA YOZILGANI
+//  O'ZGARADI (zavod qarori, 2026-10). Sana, modda, foyda-zarar oyi,
+//  xodim va izoh — saralash; summa, valyuta, kurs va tomonlar esa
+//  haqiqatda bo'lib o'tgan harakat va ular bu yo'ldan o'tmaydi.
+//
+//  Test OXIRIDA turadi: u harajatni oydan oyga ko'chiradi va
+//  o'rtada tursa foyda-zarar hisobotining aniq qatorlarini
+//  tekshiradigan testlarga qo'shilib ketardi.
+test('kassa operatsiyasi tuzatiladi: modda va oy ko\'chadi, pul qimirlamaydi', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  await db.query(`INSERT INTO expense_groups (code, name) VALUES ('TUZAT','Tuzatish guruhi')
+                  ON CONFLICT DO NOTHING`);
+  for (const n of ['Tuzatish A', 'Tuzatish B'])
+    await db.query(`INSERT INTO expense_items (group_code, name) VALUES ('TUZAT', $1)
+                    ON CONFLICT DO NOTHING`, [n]);
+  const A = (await H.id(`SELECT id FROM expense_items WHERE name='Tuzatish A'`)).id;
+  const B = (await H.id(`SELECT id FROM expense_items WHERE name='Tuzatish B'`)).id;
+
+  const oldin = Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd);
+  const r = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense',
+    currency: 'USD', amount: 300, op_date: '2026-09-20',
+    expense_item_id: A, pl_month: '2026-09', note: 'eski izoh' });
+  assert.equal(r.status, 200, r.text);
+  const id = r.body.id || (await H.id(
+    `SELECT id FROM cash_ops ORDER BY id DESC LIMIT 1`)).id;
+
+  //  Tuzatish: sana, modda, foyda-zarar oyi va izoh
+  const f = await kassir('PATCH', `/api/cash/ops/${id}/fix`, {
+    op_date: '2026-09-21', expense_item_id: B, pl_month: '2026-07',
+    note: 'yangi izoh' });
+  assert.equal(f.status, 200, f.text);
+
+  const o = await H.id(
+    `SELECT to_char(op_date,'YYYY-MM-DD') AS kun, note, expense_item_id,
+            to_char(pl_month,'YYYY-MM') AS oy, amount_usd, status
+       FROM cash_ops WHERE id = $1`, [id]);
+  assert.equal(o.kun, '2026-09-21');
+  assert.equal(o.note, 'yangi izoh');
+  assert.equal(o.expense_item_id, B);
+  assert.equal(o.oy, '2026-07');
+  //  ★ PUL QIMIRLAMAYDI: summa ham, kassa qoldig'i ham o'sha holda.
+  assert.equal(Number(o.amount_usd), 300);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd),
+    oldin - 300, 'qoldiq faqat birinchi yozuvdan o\'zgargan');
+
+  //  Foyda-zararda ham ko'chgan: iyulda bor, sentabrda yo'q
+  const pl = (await kassir('GET', '/api/cash/pl?from=2026-01&to=2026-12')).body;
+  const iyul = pl.rows.filter((x) => x.kind === 'expense'
+    && x.pl_month.slice(0, 7) === '2026-07' && x.item_id === B);
+  assert.equal(iyul.length, 1, 'harajat iyul qatorida');
+  assert.equal(Number(iyul[0].amount_usd), 300);
+  assert.ok(!pl.rows.some((x) => x.kind === 'expense' && x.item_id === A),
+    'eski moddada qolmaydi');
+
+  //  ★ HARAJATDA MODDA MAJBURIY QOLAVERADI: uning tomoni moddaning
+  //  O'ZI va moddasiz qator qayerga tushishi noma'lum qolardi.
+  const bosh = await kassir('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', expense_item_id: null });
+  assert.equal(bosh.status, 400);
+  assert.match(bosh.body.error, /modda/i);
+
+  //  ★ MODDASI BO'LMAYDIGAN OPERATSIYAGA MODDA YOZIB BO'LMAYDI.
+  //  Kassalar aro ko'chirishda pul korxonadan chiqmagan, shunchaki
+  //  joyini o'zgartirgan — unga modda qo'shilsa foyda-zararga
+  //  bo'lmagan harajat tushardi. Tekshiruv SERVERDA: katakni
+  //  yashirish himoya emas.
+  const bank = (await H.id(`SELECT id FROM cash_accounts WHERE code <> 'MAIN'
+                             ORDER BY id LIMIT 1`));
+  if (bank) {
+    const k = await kassir('POST', '/api/cash/ops', {
+      from_kind: 'account', from_id: kassa, to_kind: 'account', to_id: bank.id,
+      currency: 'USD', amount: 10, op_date: '2026-09-22' });
+    assert.equal(k.status, 200, k.text);
+    const kid = (await H.id(`SELECT id FROM cash_ops ORDER BY id DESC LIMIT 1`)).id;
+    assert.equal((await kassir('PATCH', `/api/cash/ops/${kid}/fix`,
+      { op_date: '2026-09-23', expense_item_id: A, pl_month: '2026-09' })).status, 200);
+    const kk = await H.id(`SELECT expense_item_id, pl_month FROM cash_ops WHERE id = $1`, [kid]);
+    assert.equal(kk.expense_item_id, null, 'modda yozilmaydi');
+    assert.equal(kk.pl_month, null);
+  }
+
+  //  Bekor qilingani tuzatilmaydi: u hisobdan chiqqan va tuzatish
+  //  hech narsani o'zgartirmasdi.
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + id)).status, 200);
+  const bekor = await kassir('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', expense_item_id: B, pl_month: '2026-07' });
+  assert.equal(bekor.status, 400);
+  assert.match(bekor.body.error, /[Bb]ekor/);
+
+  //  Menejerda `cash.manage` yo'q — tuzatish ham yo'q.
+  const menejer = H.api(base, await H.sessionFor('Sinov menejer'));
+  assert.equal((await menejer('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21' })).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

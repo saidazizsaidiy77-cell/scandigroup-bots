@@ -304,8 +304,14 @@ function drawOps() {
           ? `<div class="muted" style="font-size:11px">${uzs(o.rate)}</div>` : ''}</td>
         <td class="muted" style="font-size:12.5px">${esc(o.note || '')}${o.order_no
           ? ` <span class="tag">${esc(o.order_no)}</span>` : ''}</td>
+        <!--  ★ IKKI TUGMA, IKKI XIL ISH (izoh: kassa-form.js, fixOp).
+              «✎» — pul to'g'ri ketgan, lekin SARALASH xato: sana,
+              modda, foyda-zarar oyi yoki izoh. «×» — pulning O'ZIDA
+              xato: summa, kurs yoki tomon; u tuzatilmaydi, operatsiya
+              bekor qilinadi va qaytadan yoziladi. -->
         ${boss ? `<td class="num">${o.status === 'ok'
-          ? `<button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
+          ? `<button class="ic" title="Tuzatish" onclick="fixOp(${o.id})">✎</button>
+             <button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
           : o.status === 'pending'
           ? `<button class="primary" onclick="acceptOp(${o.id})">Qabul qilish</button>
              <button class="ic" title="Rad etish" onclick="cancelOp(${o.id})">×</button>`
