@@ -9036,6 +9036,59 @@ test('kassa summasi: kassir tegolmaydi, administrator tuzatadi', async () => {
     `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance), oldinQarz);
 });
 
+//  ★ TA'MINOTCHIGA TO'LOV HAM HUJJAT BO'LIB OCHILADI (zavod qarori,
+//  2026-10). Qarzdorlik lentasida to'lov raqami bosilsa kassa orderi
+//  ochiladi — mijozning kirim orderi bilan BIR XIL sahifa, faqat
+//  yo'nalishi teskari.
+//
+//  Ilgari lenta mijozning yo'liga ulangan edi va u
+//  `from_kind = 'customer'` bilan qattiq bog'langan: ekranda «Hujjat
+//  topilmadi» chiqardi. Test aynan shuni ushlab turadi.
+test('ta\'minotchiga to\'lov kassa orderi bo\'lib ochiladi', async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const admin = H.api(base, tokenAdmin);
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const tam = (await H.id(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).id;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE needs_supplier LIMIT 1`)).id;
+
+  const r = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'supplier', to_id: tam,
+    currency: 'USD', amount: 250, op_date: '2026-09-18',
+    expense_item_id: modda, pl_month: '2026-09' });
+  assert.equal(r.status, 200, r.text);
+  const id = (await H.id(`SELECT id FROM cash_ops ORDER BY id DESC LIMIT 1`)).id;
+
+  //  Hujjat ochiladi va ichida solishtirish uchun kerak bo'lgani turadi.
+  const d = await admin('GET', '/api/purchasing/payment/' + id);
+  assert.equal(d.status, 200, d.text);
+  assert.equal(d.body.op.doc_no, r.body.doc_no);
+  assert.equal(Number(d.body.op.amount_usd), 250);
+  assert.ok(d.body.op.supplier_name, 'kimga to\'langani yoziladi');
+  //  Pul QAYERDAN chiqqani: kassadan yoki podotchyot olgan xodimdan.
+  assert.ok(d.body.op.qarshi, 'qaysi kassadan');
+  //  Foyda-zararda qaysi qatorda turgani ham hujjatda.
+  assert.ok(d.body.op.expense_item);
+  assert.equal(d.body.op.pl_month, '2026-09');
+
+  //  ★ MIJOZNING YO'LI buni TOPMAYDI, va aynan shu yerda ekranda
+  //  «Hujjat topilmadi» chiqardi: so'rov `from_kind = 'customer'` ga
+  //  bog'langan.
+  assert.equal((await admin('GET', '/api/sales/payment/' + id)).status, 404);
+
+  //  Lentadagi qator o'sha hujjatga olib boradi: ekrandagi havola
+  //  `op_id` dan quriladi va u bo'sh bo'lsa raqam umuman bosilmasdi.
+  const lenta = (await admin('GET',
+    `/api/purchasing/debts/${tam}?from=2026-09-01&to=2026-09-30`)).body;
+  const qator = lenta.rows.find((x) => x.op_id === id);
+  assert.ok(qator, 'to\'lov lentada turadi');
+  assert.equal(qator.kind, 'payment');
+  assert.equal(Number(qator.debit), 250, 'qarzdor tomonda \u2014 qarzimiz kamaydi');
+
+  //  Tozalab ketamiz: keyingi testlar qoldiqni o'z holida topsin.
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + id)).status, 200);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

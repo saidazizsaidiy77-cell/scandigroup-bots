@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kassa orderi · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/yukxati.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="row no-print" style="justify-content:flex-end;gap:8px;margin-bottom:12px">
+  <button onclick="window.print()">Chop etish</button>
+  <button onclick="window.close()">Yopish</button>
+</div>
+
+<div id="body"><p class="muted">Yuklanmoqda…</p></div>
+
+<script>
+//  KASSA ORDERI — bitta to'lovning hujjati.
+//
+//  Solishtirma dalolatnomada yoki ta'minotchilar qarzdorligida to'lov
+//  qatori bosilganda alohida oynada ochiladi. Yuk xati bilan bir xil
+//  mantiq: sahifa faqat O'QIYDI va qog'ozga tugmalarsiz tushadi.
+//
+//  ★ BITTA HUJJAT, IKKI YO'NALISH (zavod qarori, 2026-10). Mijoz
+//  to'laganda pul KIRADI, ta'minotchiga to'langanda CHIQADI — savol
+//  esa ikkalasida ham bitta: «bu P26-0169 qanday hujjat». Shuning
+//  uchun sahifa BITTA va yo'nalishni `?kind=` aytadi; ikki nusxa
+//  yozilsa biri ertaga ikkinchisidan orqada qolardi (yukxati.js bilan
+//  bir xil idiom va bir xil sabab).
+//
+//  Ilgari sahifa faqat mijozniki edi (`kirim-orderi.html`) va
+//  ta'minotchi lentasi ham o'shanga ulangan edi: so'rov
+//  `from_kind = 'customer'` bilan qattiq bog'langani uchun to'lov
+//  raqami bosilganda «Hujjat topilmadi» chiqardi, ustiga ta'minot
+//  xodimida savdo huquqi yo'q va sahifa unga umuman ochilmasdi.
+//
+//  Eng muhim qatori — KIM OLIB KELGAN (chiqimda: QAYERDAN to'landi):
+//  solishtirishda «bu pulni kim topshirgan» degan savol birinchi
+//  chiqadi va javobi hujjatda turishi kerak.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const num = (v, n = 2) => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: n, maximumFractionDigits: n });
+const d8 = (s) => !s ? '' : new Date(s).toLocaleDateString('ru-RU',
+  { day: '2-digit', month: '2-digit', year: '2-digit' });
+const FIRMA = 'ZELTA PREMIUM';
+
+const qator = (lab, val) => !val ? '' : `
+  <div style="display:flex;justify-content:space-between;gap:16px;
+       padding:9px 0;border-bottom:1px solid var(--line)">
+    <span class="muted">${esc(lab)}</span>
+    <span style="text-align:right"><b>${val}</b></span></div>`;
+
+App.start(async () => {
+  const q = new URLSearchParams(location.search);
+  const id = q.get('id');
+  //  Yo'nalishni CHAQIRGAN sahifa biladi: mijoz lentasi kirimni,
+  //  ta'minotchiniki chiqimni ochadi. Standarti mijoz — eski
+  //  havolalar o'z holida ishlayveradi.
+  const tam = q.get('kind') === 'supplier';
+  if (!id) return $('body').innerHTML = '<p class="muted">Hujjat tanlanmagan</p>';
+  let d;
+  try { d = await App.api((tam ? '/api/purchasing/payment/'
+                               : '/api/sales/payment/') + id); }
+  catch (e) { return $('body').innerHTML =
+    `<div class="card"><h2>Ochib bo'lmadi</h2>
+     <p class="muted" style="margin-top:8px">${esc(e.message)}</p></div>`; }
+  const o = d.op;
+  const nom = tam ? 'Chiqim orderi' : 'Kirim orderi';
+  document.title = `${nom} ${o.doc_no} · ZELTA`;
+
+  $('body').innerHTML = `
+    <div class="card" style="max-width:640px;margin:0 auto">
+      <div style="text-align:center;padding-bottom:14px;border-bottom:2px solid var(--text)">
+        <div style="font-weight:600;letter-spacing:.08em">${esc(FIRMA)}</div>
+        <div style="font-size:19px;font-weight:600;margin-top:6px">
+          ${nom} № ${esc(o.doc_no)}</div>
+        <div class="muted" style="font-size:13px">${d8(o.op_date)}${
+          o.status === 'cancelled'
+            ? ' · <span class="tag bad">bekor qilingan</span>' : ''}</div>
+      </div>
+
+      <div style="margin-top:14px">
+        <!--  Chiqimda tomon TESKARI: pul ta'minotchiga ketadi, ya'ni
+              u «Kimga» bo'lib turadi. -->
+        ${qator(tam ? 'Kimga' : 'Kimdan',
+          esc(tam ? o.supplier_name : o.customer_name) + (o.region
+          ? ` <span class="muted" style="font-weight:400">${esc(o.region)}</span>` : ''))}
+        ${qator('Telefon', (tam ? o.supplier_phone : o.customer_phone)
+          ? esc(tam ? o.supplier_phone : o.customer_phone) : '')}
+        ${tam ? '' : qator('Zakaz', o.order_no ? esc(o.order_no) : '')}
+        ${qator('Summa', num(o.amount) + (o.currency === 'UZS' ? " so'm" : ' $'))}
+        ${o.currency === 'UZS' ? qator('Kurs', num(o.rate) + " so'm") : ''}
+        ${qator('Dollarda', num(o.amount_usd) + ' $')}
+        <!--  KIM OLIB KELGAN: menejer o'z qo'liga olgan bo'lsa o'sha
+              odam, to'g'ridan kassaga to'langan bo'lsa kassa nomi.
+              Chiqimda savol teskari: pul QAYERDAN chiqqan — kassadan
+              yoki podotchyot olgan xodimning qo'lidan. -->
+        ${tam
+          ? qator(o.from_kind === 'worker' ? 'Kim to\'lagan' : 'Qaysi kassadan',
+              o.qarshi ? esc(o.qarshi) : '')
+          : qator(o.to_kind === 'worker' ? 'Kim olib kelgan' : 'Qayerga tushdi',
+              o.qabul ? esc(o.qabul) : '')}
+        <!--  Foyda-zararda qaysi qatorda turgani — «bu to'lov qayerga
+              yozilgan» degan savol solishtirishda ham beriladi. -->
+        ${!tam ? '' : qator('Harajat moddasi', o.expense_item
+          ? (o.expense_group ? esc(o.expense_group) + ' · ' : '')
+            + esc(o.expense_item) : '')}
+        ${!tam ? '' : qator('Foyda-zarar oyi', o.pl_month ? esc(o.pl_month) : '')}
+        ${qator('Kiritdi', o.kiritgan ? esc(o.kiritgan) + (o.kiritgan_phone
+          ? ` <span class="muted" style="font-weight:400">${esc(o.kiritgan_phone)}</span>`
+          : '') : '')}
+        ${qator('Izoh', o.note ? esc(o.note) : '')}
+      </div>
+
+      <div style="display:flex;gap:40px;margin-top:36px">
+        <div style="flex:1;border-top:1px solid var(--text);padding-top:6px">
+          <div class="muted" style="font-size:12px">${tam
+            ? 'Berdi — imzo' : 'Topshirdi — imzo'}</div></div>
+        <div style="flex:1;border-top:1px solid var(--text);padding-top:6px">
+          <div class="muted" style="font-size:12px">${tam
+            ? 'Oldi — imzo' : 'Qabul qildi — imzo'}</div></div>
+      </div>
+    </div>`;
+//  Ikkala huquq ham: hujjat ikki lentadan ochiladi va ta'minot
+//  xodimida savdo huquqi yo'q. Chegara SERVERDA — savdo xodimi
+//  ta'minotchining hujjatini so'rasa 403 oladi: sahifani ochish
+//  huquqi hujjatni ochish huquqi emas.
+}, 'sales.view', 'sales.manage', 'purchasing.view', 'purchasing.manage');
+</script>
+</body>
+</html>

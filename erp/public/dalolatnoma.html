@@ -101,7 +101,7 @@ function draw() {
       return `<a href="/yukxati.html?id=${r.order_id}" target="_blank"
                 >${esc(r.order_no || 'yuk xati')}</a>`;
     if (r.kind === 'payment' && r.op_id)
-      return `<a href="/kirim-orderi.html?id=${r.op_id}" target="_blank"
+      return `<a href="/kassa-orderi.html?id=${r.op_id}" target="_blank"
                 >${esc(r.doc_no || 'kirim orderi')}</a>`;
     return `<span class="muted">${esc(r.order_no || '—')}</span>`;
   };

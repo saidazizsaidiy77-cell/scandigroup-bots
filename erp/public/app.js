@@ -347,8 +347,12 @@ const App = (() => {
       perm: ['sales.view', 'sales.manage'] },
     //  Hujjat sahifalari menyuda turmaydi: ular boshqa sahifadan,
     //  alohida oynada ochiladi (yukxati.html bilan bir xil).
-    { href: '/kirim-orderi.html', mod: 'sales', nav: 'Kirim orderi', hidden: true,
-      perm: ['sales.view', 'sales.manage'] },
+    //  Bitta hujjat, ikki yo'nalish: mijoz to'laganda KIRIM, ta'minotchiga
+    //  to'langanda CHIQIM orderi — ikkala lenta ham shu sahifaga ulanadi
+    //  (izoh: public/kassa-orderi.html). Shuning uchun huquqi ham ikkala
+    //  tomonniki: ta'minot xodimida savdo huquqi yo'q.
+    { href: '/kassa-orderi.html', mod: 'sales', nav: 'Kassa orderi', hidden: true,
+      perm: ['sales.view', 'sales.manage', 'purchasing.view', 'purchasing.manage'] },
     { href: '/taminotchilar.html', mod: ['purchasing', 'refs'], nav: "Ta'minotchilar",
       title: "Ta'minotchilar", lead: "Kimdan sotib olinadi",
       text: "Nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim \u00b7 kirim hujjati va qarzdorlik shunga tayanadi",

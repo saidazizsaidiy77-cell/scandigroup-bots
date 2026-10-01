@@ -951,7 +951,7 @@ uchun — shuning uchun har qator HUJJATGA bog'langan:
 
   · chiqib ketgan mahsulot — zakaz raqami, bosilsa **yuk xati** ochiladi;
   · to'lov — order raqami (`P26-0004`), bosilsa **kirim orderi** ochiladi
-    (`public/kirim-orderi.html`): kimdan, kim olib kelgan, summa, kurs.
+    (`public/kassa-orderi.html`): kimdan, kim olib kelgan, summa, kurs.
 
 «Bu 500 dollar qayerdan chiqdi» degan savolga jadvaldagi raqamning o'zi
 javob bermasdi — mijoz hujjatni ko'rishi kerak. Ikkalasi ham ALOHIDA
@@ -2413,6 +2413,42 @@ so'rab yurardi.
 **Kassaga topshirish esa ochiq qoladi** — pastda, «Topshirish ikki
 bosqich» bo'limida.
 
+**★ BITTA HUJJAT, IKKI YO'NALISH** (zavod qarori, 2026-10;
+`public/kassa-orderi.html`). Mijoz to'laganda pul KIRADI, ta'minotchiga
+to'langanda CHIQADI — savol esa ikkalasida ham bitta: «bu `P26-0169`
+qanday hujjat, qancha va kim bilan». Shuning uchun sahifa BITTA va
+yo'nalishni `?kind=` aytadi: ikki nusxa yozilsa biri ertaga
+ikkinchisidan orqada qolardi (`yukxati.js` bilan bir xil idiom va bir
+xil sabab).
+
+Ilgari sahifa faqat MIJOZNIKI edi (`kirim-orderi.html`) va ta'minotchi
+lentasi ham o'shanga ulangan edi. So'rov esa
+`from_kind = 'customer'` bilan qattiq bog'langan: ta'minotchining
+to'lov raqami bosilganda ekranda **«Hujjat topilmadi»** chiqardi —
+ya'ni «bu 3 850 dollar qayerdan chiqdi» degan savolga lenta javob
+bermay qolardi. Ustiga ta'minot xodimida savdo huquqi yo'q va sahifa
+unga umuman ochilmasdi.
+
+Endi ikkita yo'l va **har biri o'z huquqida**:
+`GET /api/sales/payment/:id` (savdo, yo'nalish va `ownOf` chegarasi
+bilan) — kirim; `GET /api/purchasing/payment/:id`
+(`purchasing.view`/`manage`) — chiqim. Sahifaning O'ZI to'rtala
+huquqqa ochiq, lekin **chegara SERVERDA**: savdo xodimi
+ta'minotchining hujjatini so'rasa 403 oladi — sahifani ochish huquqi
+hujjatni ochish huquqi emas.
+
+**Tomon IKKALA tarafda ham qidiriladi** (`to_kind` yoki `from_kind`):
+lenta `v_cash_flow` dan o'qiydi va u har operatsiyani IKKI qator qilib
+ochadi, ya'ni ta'minotchi beruvchi tomonda ham turishi mumkin
+(qaytarib bergan pul). Bitta tomonni qattiq yozish o'sha qatorni yana
+topilmas qilardi.
+
+Chiqimda ikki qator QO'SHILADI va ikkalasi ham solishtirishda
+so'raladi: **harajat moddasi** va **foyda-zarar oyi** — «bu to'lov
+qayerga yozilgan». Zakaz qatori esa chizilmaydi: ta'minotchiga
+to'lovning buyurtmasi yo'q. Imzo joylari ham almashadi
+(«Topshirdi/Qabul qildi» → «Berdi/Oldi»).
+
 **Mijoz balansi to'ldi**: `boshlang'ich qarz + chiqib ketgan mahsulot −
 TO'LOVLAR`. Shu sababdan `v_customer_sales` va `v_customer_ledger`
 **`sql/cash.sql` ga ko'chirildi** — ular endi `cash_ops` ni o'qiydi, u
@@ -3298,8 +3334,8 @@ keladi. Shuning uchun avval kiritish, keyin modul.
    `/taminot-qarzdorlik.html`) — mijozlarniki bilan BIR XIL shakl:
    aylanma-saldo qaydnomasi (ОСВ), ya'ni `boshiga · davr ichida ·
    oxiriga`, har biri ikki ustun bo'lib. Qator bosilsa harakatlari va
-   yugurib boradigan qoldiq chiqadi; to'lov raqami bosilsa kirim
-   orderi alohida oynada ochiladi.
+   yugurib boradigan qoldiq chiqadi; to'lov raqami bosilsa **chiqim
+   orderi** alohida oynada ochiladi (pastda).
 
    **★ TOMONI MIJOZNIKIGA TESKARI** — ta'minotchi PASSIV hisob:
 

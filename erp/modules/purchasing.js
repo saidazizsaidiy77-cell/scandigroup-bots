@@ -254,6 +254,54 @@ router.get('/debts/:id', need(...SEE), wrap(async (req, res) => {
              total: jami, closing: opening + jami.credit - jami.debit });
 }));
 
+// ══════════════════════════════════════════ CHIQIM ORDERI — HUJJAT
+//
+//  Qarzdorlik lentasida to'lov qatori bosilsa o'sha operatsiya hujjat
+//  bo'lib ochiladi — mijozning KIRIM orderi bilan bir xil idiom va
+//  bir xil sahifa (`public/kassa-orderi.html`), faqat yo'nalishi
+//  teskari: pul korxonadan CHIQADI.
+//
+//  Ilgari lenta mijozning yo'liga ulangan edi (`/api/sales/payment`)
+//  va u `from_kind = 'customer'` bilan qattiq bog'langan — to'lov
+//  raqami bosilganda «Hujjat topilmadi» chiqardi. Ustiga ta'minot
+//  xodimida savdo huquqi yo'q va sahifa unga umuman ochilmasdi.
+//
+//  ★ TOMON IKKALASIDA HAM QIDIRILADI: lenta `v_cash_flow` dan
+//  o'qiydi va u har operatsiyani IKKI qator qilib ochadi — ya'ni
+//  ta'minotchi beruvchi tomonda ham turishi mumkin (qaytarib bergan
+//  pul). Bitta tomonni qattiq yozish o'sha qatorni yana topilmas
+//  qilardi.
+//
+//  Sahifa faqat O'QIYDI: operatsiya bu yerdan o'zgarmaydi va kassa
+//  qoldig'i ham berilmaydi — u ta'minot xodimining ishi emas.
+router.get('/payment/:id', need(...SEE), wrap(async (req, res) => {
+  const o = (await db.query(
+    `SELECT o.id, o.doc_no, o.op_date, o.currency, o.amount, o.rate,
+            o.amount_usd, o.note, o.status, o.from_kind, o.to_kind,
+            s.name AS supplier_name, s.region, s.phone AS supplier_phone,
+            --  Pul QAYERDAN chiqqan: kassadan yoki podotchyot olgan
+            --  xodimning qo'lidan (ombor mudiri bozorda naqd to'laydi).
+            COALESCE(fa.name, fw.name, ta.name, tw.name) AS qarshi,
+            --  Foyda-zararda qaysi qatorda turgani: «bu to'lov qayerga
+            --  yozilgan» degan savol solishtirishda ham beriladi.
+            eg.name AS expense_group, ei.name AS expense_item,
+            to_char(o.pl_month, 'YYYY-MM') AS pl_month,
+            k.name AS kiritgan, k.phone AS kiritgan_phone
+       FROM cash_ops o
+       JOIN suppliers s ON (o.to_kind   = 'supplier' AND s.id = o.to_id)
+                        OR (o.from_kind = 'supplier' AND s.id = o.from_id)
+       LEFT JOIN cash_accounts fa ON o.from_kind = 'account' AND fa.id = o.from_id
+       LEFT JOIN workers       fw ON o.from_kind = 'worker'  AND fw.id = o.from_id
+       LEFT JOIN cash_accounts ta ON o.to_kind   = 'account' AND ta.id = o.to_id
+       LEFT JOIN workers       tw ON o.to_kind   = 'worker'  AND tw.id = o.to_id
+       LEFT JOIN expense_items ei ON ei.id = o.expense_item_id
+       LEFT JOIN expense_groups eg ON eg.code = ei.group_code
+       LEFT JOIN workers        k ON k.id = o.created_by
+      WHERE o.id = $1`, [req.params.id])).rows[0];
+  if (!o) return res.status(404).json({ error: 'Hujjat topilmadi' });
+  res.json({ op: o });
+}));
+
 //  ─────────────────────────────────────────── RO'YXATNI YUKLAB OLISH
 //
 //  ★ Ta'minotchi NOMI boshqa fayllarda KALIT bo'lib ishlatiladi: xom
