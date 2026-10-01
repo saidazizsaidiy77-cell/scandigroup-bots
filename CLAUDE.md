@@ -905,6 +905,15 @@ o'qilardi, holbuki u belgi.
 chizilmaydi (`@media print`: `.grid`), lekin raqam jadvalning «Jami»
 qatorida turaveradi — u yerda allaqachon bor.
 
+**★ TA'MINOTCHILAR HISOBOTIDA HAM** (`/taminot-qarzdorlik.html`), va
+bir vaqtda: ikkala hisobot ataylab bir xil shaklda (ОСВ) va bitta
+ko'z bilan o'qiladi — bittasida chop etish bo'lib, ikkinchisida
+bo'lmasa shakl buzilardi (boshlang'ich qoldiq ustuni bilan bir xil
+sabab). Farqi bitta: **menejer filtri YO'Q** — u ta'minotchilar
+hisobotida umuman chizilmaydi, ya'ni qog'ozda ham yozilmaydi.
+Telegram javobi (**«1 ta xodimga yuborildi»**) ham `.no-print`: u
+ekrandagi ish quroli, hujjatning o'zi emas.
+
 **`.no-print` endi UMUMIY** (`style.css`, `print-only` ning juftligi):
 ilgari u faqat `yukxati.css` da edi va boshqa sahifa undan
 foydalanolmasdi. Ekrandagi maslahat yozuvi («qatorni bossangiz

@@ -21,6 +21,15 @@
   <div class="row"><span class="row" id="erpUser"></span></div>
 </div>
 
+<!--  ★ QOG'OZ O'ZI AYTIB TURADI (zavod qarori, 2026-10). Mijozlar
+      hisoboti bilan AYNAN bir xil idiom va bir xil sabab: aylanma-saldo
+      qaydnomasi devorga ilib qo'yiladi va ikki hafta o'tib varaqdagi
+      raqam QAYSI KUNNIKI ekani noma'lum bo'lib qolardi — ekranda sana
+      filtri turadi, qog'ozda esa yo'q edi. Ikkala hisobot ataylab bir
+      xil shaklda va bitta ko'z bilan o'qiladi: bittasida chop etish
+      bo'lib, ikkinchisida bo'lmasa shakl buzilardi. -->
+<div id="printHead" class="print-only print-head"></div>
+
 <div class="card">
   <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div><label>Sanadan</label>
@@ -33,6 +42,7 @@
     <button onclick="period('hammasi')">Hammasi</button>
     <div style="flex:1;min-width:180px"><label>Qidiruv</label>
       <input id="fQ" placeholder="ta'minotchi, region yoki telefon" oninput="onSearch()"></div>
+    <button onclick="printPage()">Chop etish</button>
     <button onclick="exportCsv()">Excelga yuklash</button>
     <!--  ★ «TELEGRAMGA YUBORISH» (izoh: modules/materials.js).
           Jadval kuniga bir marta, ertalab yuradi — belgini endi
@@ -42,7 +52,10 @@
           joy BITTA. -->
     <button id="tgBtn" onclick="tgYubor()">Telegramga yuborish</button>
   </div>
-  <p class="muted" style="margin-top:10px;font-size:12px" id="tgMsg"></p>
+  <!--  Telegram javobi — EKRANDAGI ish quroli, hujjatning o'zi emas:
+        qog'ozda «1 ta xodimga yuborildi» degan yozuv turishi
+        mantiqsiz bo'lardi (yuk xatidagi `.no-print` bilan bir xil). -->
+  <p class="muted no-print" style="margin-top:10px;font-size:12px" id="tgMsg"></p>
 </div>
 
 <div class="grid g3" style="margin-top:16px">
@@ -67,7 +80,9 @@
 <div class="card" style="margin-top:16px">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <h2 style="margin:0" id="tHead">Ta'minotchilar</h2>
-    <span class="muted" style="font-size:12px" id="tHint"></span>
+    <!--  Qog'ozda emas: oraliq sarlavhada allaqachon turadi, «qatorni
+          bossangiz» esa ekrandagi maslahat (izoh: `printPage`). -->
+    <span class="muted no-print" style="font-size:12px" id="tHint"></span>
   </div>
   <!--  Aylanma-saldo qaydnomasi (ОСВ) shakli: har saldo IKKI ustun —
         qarzdor va haqdor. Bitta ishorali ustun bo'lsa 300 ni ko'rgan
@@ -273,6 +288,42 @@ async function tgYubor() {
     m.innerHTML = `<span class="tag bad">${e.message}</span>`;
   }
   b.disabled = false; b.textContent = 'Telegramga yuborish';
+}
+
+//  Korxonaning O'Z nomi — u ta'minotchi ma'lumoti emas, kodda bitta
+//  qator bo'lib turadi (yuk xati bilan bir xil).
+const FIRMA = 'ZELTA PREMIUM';
+
+//  Qog'ozdagi sarlavha filtrni MATN qilib yozadi: oraliq va qidiruv.
+//  Ro'yxat qisqarib turgan bo'lsa varaqda nega qisqa ekani ko'rinib
+//  tursin — aks holda «ta'minotchilar yetishmayapti» degan savol
+//  qolardi. Menejer filtri bu yerda YO'Q: ta'minotchilar hisobotida u
+//  umuman chizilmaydi.
+function filterText() {
+  const bosh = data.from <= '1900-01-01' ? 'boshidan' : d8(data.from);
+  const bits = [`Davr: ${bosh} — ${d8(data.to)}`];
+  if ($('fQ').value.trim()) bits.push(`Qidiruv: ${$('fQ').value.trim()}`);
+  return bits.join('  \u00b7  ');
+}
+
+//  ★ CHOP ETISH. Qog'ozda kartochkalar chizilmaydi (`@media print`:
+//  `.grid`), lekin yig'indi YO'QOLMAYDI — u jadvalning «Jami»
+//  qatorida turadi. Shuning uchun ikkinchi jadval yozilmadi.
+function printPage() {
+  const now = new Date();
+  const ikki = (n) => String(n).padStart(2, '0');
+  const kun = `${ikki(now.getDate())}.${ikki(now.getMonth() + 1)}.${now.getFullYear()}`;
+  const soat = `${ikki(now.getHours())}:${ikki(now.getMinutes())}`;
+  //  Kim chop etgani ham yoziladi: devorda ikkita varaq yonma-yon
+  //  tursa qaysi birini kim olgani savol bo'lardi. Ism BAZADAN keladi
+  //  (sessiyadagi xodim), kodga yozilmaydi (4-qoida).
+  const xodim = App.me()?.name ? ` \u00b7 ${esc(App.me().name)}` : '';
+  $('printHead').innerHTML = `
+    <h1>Ta'minot · aylanma-saldo qaydnomasi · ${esc(FIRMA)}</h1>
+    <div class="meta">${esc(filterText())}</div>
+    <div class="meta">${data.rows.length} ta ta'minotchi · chop etildi ${
+      kun} ${soat}${xodim}</div>`;
+  window.print();
 }
 
 function exportCsv() {
