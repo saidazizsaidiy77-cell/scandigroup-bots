@@ -2729,7 +2729,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `xom_ombor` | `materials.view`, `materials.manage`, `purchasing.view` | xom ashyo spravochnigi, material omborlari va ularning boshlang'ich qoldig'i — narx bilan. T/M ombor unga ochilmaydi |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
 | `savdo_boshliq` | `sotuvchi` bilan AYNAN bir xil | savdo bo'lim boshlig'i: farqi faqat **doirasida** — yo'nalish ham, «Faqat o'zinikini» ham bo'sh qoladi, ya'ni butun savdoni ko'radi |
-| `admin` | barchasi | hammasi. **`sales.fix` va `cash.fix` faqat unda**: chiqib ketgan buyurtmani va kassa operatsiyasining summasini tuzatish |
+| `admin` | barchasi | hammasi. **`sales.fix`, `cash.fix` va `production.undo` faqat unda**: chiqib ketgan buyurtmani, kassa operatsiyasining summasini tuzatish va oxirgi o'tkazishni orqaga qaytarish |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
 ko'rinishi va panelni.** Ikkisi alohida: sotuvchi o'z buyurtmasi qaysi
@@ -3018,6 +3018,48 @@ eski qatorda «jo'natilgan» bo'lib ro'yxatda turaveradi — ikkala raqam
 ham to'g'ri. **Bron ESKI qatorda qoladi**: teskarisi qilinsa 2 talik
 qatorda 4 ta bron turib qolardi, ya'ni konverda bo'shdan ko'p band dona
 bo'lardi va savdo hisobi buzilardi.
+
+**★ ORQAGA QAYTARISH — FAQAT ADMINISTRATORDA** (`production.undo`,
+`POST /api/units/undo`, zavod qarori 2026-10). «O'tkazish» bexosdan
+bosilishi oddiy hol, lekin uni orqaga oladigan joy tsex ekranida YO'Q
+edi: jurnal ustaga ochilmaydi va u boshliqqa qo'ng'iroq qilardi. Endi
+tugma o'tkazishning yonida turadi (**↩**, kichik — xom ashyo tugmasi
+bilan bir xil sabab).
+
+Huquq **ALOHIDA va faqat administratorda** (`sales.fix`, `cash.fix`
+bilan bir xil idiom): qaytarish harakat yozuvini ham
+(`unit_moves`), jamlanma hisobotdagi qatorni ham (`flow_log`)
+O'CHIRADI — ya'ni TARIX jimgina qayta yoziladi va buni keyin hech
+narsa aytmaydi. Ilgari u `production.entry` da edi, ya'ni har tsex
+ustasi API orqali chaqira olardi. **Jurnaldagi ↩ ham shu huquqqa
+ko'chdi** — ikki ekranda ikki xil qoida turishi mumkin emas; ishlab
+chiqarish boshlig'iga kerak bo'lsa `sql/core-seed.sql` ga bitta qator.
+
+Ustada ikkinchi yo'l bor va u TARIXNI SAQLAYDI: konverni keyingi
+bo'limdan qaytarib o'tkazish. Shuning uchun qaytarish «yo'q» emas,
+boshqa odamniki.
+
+**FAQAT OXIRGI harakat** qaytariladi: o'rtadagisini olib tashlash
+konverni o'tmagan bo'limdan o'tgan qilib ko'rsatardi. Uch holda
+umuman qaytarilmaydi — mijozga **jo'natilgan**, **T/M omborda**
+(avval ombor qabulini qaytaradi) va **tsexga jo'natilgan** konver:
+oxirgisida belgi qayerdan jo'natilganini aytadi va konverni orqaga
+surish uni jo'natilmagan bo'limdan jo'natilgan qilib qo'yardi.
+Ekranda ham chizilmaydi, tekshiruv esa SERVERDA.
+
+**★ XOM ASHYO JOYIDAN QIMIRLAMAYDI, va bu to'g'ri**: material
+HAQIQATDA sarflangan — qog'ozdagi yozuvni orqaga surish kesilgan
+taxtani qaytarmaydi. Yozuv konverga ilingan (`material_moves`,
+`to_kind = 'unit'`), HARAKATGA emas; bo'laklar uchrashsa esa u tirik
+qatorga ko'chadi (`birlashtir`). Ya'ni **konveyer raqami bo'yicha
+yig'indi o'zgarmaydi** — tannarx aynan shundan hisoblanadi.
+
+Bitta joyi e'tibor talab qiladi va u tuzatildi: qaytgan dona YANGI
+qator bo'lsa (qaytadigan joyda bo'lak turmagan bo'lsa) o'sha qatorda
+«bu bo'limda material yozilgan» degan iz qolmasdi va konver oldinga
+qayta o'tkazilganda `xomYoqmi` uni YANA so'rardi — boshliq ikkinchi
+marta yozsa bitta sarf ikki marta hisoblanardi. Endi javobning IZI
+ko'chiriladi (`unit_no_material`), sarfning O'ZI emas: u bo'linmaydi.
 
 **★ TSEXGA QAYTARISH** (`POST /api/units/stock/return`). Qadoqlash
 «jo'natdim» deb bosgan, lekin mahsulot omborga kelmagan: adashib

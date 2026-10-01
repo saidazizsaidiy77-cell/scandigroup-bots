@@ -150,8 +150,11 @@ test('chiqish bo\'limiga o\'tish OMBORGA TUSHIRMAYDI', async () => {
   assert.equal((await H.id(
     `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q, before);
 
-  // Qaytarish ham qoldiqqa tegmaydi — u oshmagan edi
-  assert.equal((await qad('POST', '/api/units/undo', { unit_id: u.id })).status, 200);
+  //  Qaytarish ham qoldiqqa tegmaydi — u oshmagan edi. Huquqi
+  //  `production.undo`, ya'ni FAQAT administratorda: usta bosa
+  //  olmaydi (pastda alohida tekshiriladi).
+  const admin1 = H.api(base, tokenAdmin);
+  assert.equal((await admin1('POST', '/api/units/undo', { unit_id: u.id })).status, 200);
   assert.equal((await H.id(
     `SELECT COALESCE((SELECT qty FROM fg_stock WHERE product_id=$1),0) q`, [PENAL])).q, before);
 });
@@ -187,7 +190,8 @@ test('T/M ombor: jo\'natdim → qabul qildim → jurnaldan chiqadi', async () =>
   assert.equal(j.body.length, 0, 'qabul qilingach jurnalda ko\'rinmaydi');
 
   // Ombordagi konverni ishlab chiqarish orqaga sura olmaydi
-  const back = await qad('POST', '/api/units/undo', { unit_id: u.id });
+  const back = await H.api(base, tokenAdmin)('POST', '/api/units/undo',
+    { unit_id: u.id });
   assert.equal(back.status, 400);
   assert.match(back.body.error, /ombor/);
 
@@ -846,8 +850,16 @@ test('bo\'lib o\'tkazishni qaytarganda donalar o\'z joyiga qaytadi', async () =>
   assert.deepEqual(await holat(),
     [{ qty: 5, bolim: 'KOR-ARRA' }, { qty: 3, bolim: 'KOR-ROVER' }]);
 
+  //  ★ ORQAGA QAYTARISH — FAQAT ADMINISTRATORDA (`production.undo`,
+  //  zavod qarori 2026-10): harakat yozuvi ham, jamlanma hisobot ham
+  //  o'chadi, ya'ni tarix qayta yoziladi. Tsex boshlig'ida bu yo'l
+  //  yo'q — u konverni keyingi bo'limdan qaytarib o'tkazadi.
+  assert.equal((await korpus('POST', '/api/units/undo', { unit_id: yangi })).status, 403,
+    'tsex boshlig\'i orqaga sura olmaydi');
+
   // Qaytarish: 3 tasi Arraga qaytadi va 5 taga qo'shiladi
-  assert.equal((await korpus('POST', '/api/units/undo', { unit_id: yangi })).status, 200);
+  assert.equal((await H.api(base, tokenAdmin)('POST', '/api/units/undo',
+    { unit_id: yangi })).status, 200);
   assert.deepEqual(await holat(), [{ qty: 8, bolim: 'KOR-ARRA' }],
     'sakkiztasi yana bitta qator bo\'lib Arrada turibdi');
 });

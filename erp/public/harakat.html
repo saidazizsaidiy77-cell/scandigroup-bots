@@ -53,6 +53,8 @@ const d8 = v => !v ? '\u2014'
   : (x => `${x.slice(8,10)}.${x.slice(5,7)}.${x.slice(2,4)}`)(String(v).slice(0,10));
 
 let tab = 'board', canMove = false, canPlan = false, canXom = false;
+//  ★ Orqaga qaytarish FAQAT administratorda (`production.undo`).
+let canUndo = false;
 let data = null, shopId = null;
 const picked = new Set();
 //  Qaysi konverning buyurtmalari ochilgan. Qiymat `undefined` — so'rov
@@ -225,6 +227,18 @@ function row(u, mine, isExit) {
   const xom = canXom && mine
     ? `<button class="ic" title="Xom ashyo biriktirish"
          onclick="xomOch(${u.id}, event)">&#9635;</button>` : '';
+  //  ★ ORQAGA QAYTARISH — FAQAT ADMINISTRATORDA (zavod qarori,
+  //  2026-10). Usta konverni adashib o'tkazib yuboradi va uni orqaga
+  //  oladigan joy shu ekranda edi emas: jurnal unga ochilmaydi.
+  //
+  //  Tugma KICHIK va o'tkazishning yonida (xom ashyo tugmasi bilan
+  //  bir xil sabab), FAQAT O'Z bo'limidagi konverda: kelayotgani
+  //  hali qabul qilinmagan va uni qaytaradigan tsex boshqa.
+  //  Jo'natilgani ham chizilmaydi — avval jo'natish qaytarib
+  //  olinadi (tekshiruv serverda ham).
+  const orqaga = canUndo && mine && !u.sent
+    ? `<button class="ic" title="Oxirgi o'tkazishni qaytarish"
+         onclick="undo1(${u.id}, '${esc(u.conveyor_no)}', event)">&#8617;</button>` : '';
   const sel = canMove && u.on_route && (u.next_section_id || (mine && leaves))
     && !(mine && leaves && u.sent)
     ? `<input type="checkbox" style="width:auto" ${picked.has(u.id) ? 'checked' : ''}
@@ -253,7 +267,7 @@ function row(u, mine, isExit) {
       style="font-size:11.5px">${u.booked_qty} buyurtmada</div>` : ''}</td>
     <td class="c-due">${due(u)}${mine ? '' :
       `<div class="muted" style="font-size:12px">${esc(u.shop)} · ${esc(u.section)}</div>`}</td>
-    <td class="c-act">${act}${xom}</td></tr>${openBron.has(u.id) ? bronRow(u) : ''}`;
+    <td class="c-act">${act}${xom}${orqaga}</td></tr>${openBron.has(u.id) ? bronRow(u) : ''}`;
 }
 
 //  ── KONVERNI KIM KUTMOQDA ─────────────────────────────────────────────
@@ -875,6 +889,23 @@ async function xomBekor(id) {
   } catch (e) { toast(e.message, true); }
 }
 
+//  Oxirgi o'tkazishni qaytarish. «O'tkazish» bexosdan bosilishi oddiy
+//  hol; bekor qilish bunga yaramaydi — u konverni jurnaldan butunlay
+//  chiqaradi. Tasdiq SO'RALADI: harakat yozuvi ham, jamlanma hisobot
+//  ham o'chadi, ya'ni tarix qayta yoziladi.
+async function undo1(id, no, ev) {
+  if (ev) ev.stopPropagation();
+  if (!confirm(`${no} — oxirgi o'tkazish qaytarilsinmi?\n\n` +
+    'Konver avvalgi bo\'limga tushadi, harakat yozuvi va jamlanma\n' +
+    'hisobotdagi qatori o\'chadi. Biriktirilgan xom ashyo joyida qoladi.')) return;
+  try {
+    const d = await App.api('/api/units/undo',
+      { method: 'POST', body: JSON.stringify({ unit_id: id }) });
+    toast(`${d.undone[0].conveyor_no} qaytarildi`);
+    await load();
+  } catch (e) { toast(e.message, true); }
+}
+
 async function unsend(id) {
   try {
     await App.api('/api/units/handover', {
@@ -1047,6 +1078,7 @@ const exportFeed = () => {
 //  yuklama esa uning ishi emas (CLAUDE.md, «Kim nima ko'radi»).
 App.start(async () => {
   canMove = App.can('production.entry');
+  canUndo = App.can('production.undo');
   //  Korpusda muddatni BOSHLIQ qo'yadi (izoh: sql/register.sql) —
   //  shuning uchun sana katagi bosiladigan bo'ladi.
   canPlan = App.can('production.plan', 'production.units', 'production.manage');

@@ -359,6 +359,9 @@ function render(){
   // ishlab chiqarishniki.
   const canEdit = App.can('production.units', 'production.manage');
   const canMove = App.can('production.entry');
+  //  ★ Orqaga qaytarish FAQAT administratorda (`production.undo`):
+  //  u harakat yozuvini ham, jamlanma hisobotni ham o'chiradi.
+  const canUndo = App.can('production.undo');
   // Xato kiritilgan qatorni omborga o'tkazish — tarixga tegadigan
   // tuzatish, shuning uchun faqat boshqaruvchida.
   const canFix = FIX_TO_WAREHOUSE && App.can('production.manage');
@@ -411,7 +414,7 @@ function render(){
       <td class="act sep">
         ${canMove && r.status === 'production'
           ? `<button onclick="move(${r.id})">O'tkazish</button>` : ''}
-        ${canMove && r.section && r.status !== 'shipped'
+        ${canUndo && r.section && r.status !== 'shipped'
           ? `<button class="ic" onclick="undo(${r.id})"
                title="Oxirgi o'tkazishni qaytarish">↩</button>` : ''}
         ${canFix && r.status === 'production' && fgHouses.length

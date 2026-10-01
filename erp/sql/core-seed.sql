@@ -10,6 +10,18 @@ INSERT INTO permissions (code, module, name) VALUES
   -- Ishlab chiqarish (ishlayapti)
   ('production.view',   'production', 'Ishlab chiqarishni ko''rish'),
   ('production.entry',  'production', 'Bo''limdan dona o''tkazish, brak, to''xtash'),
+  --
+  --  ★ ORQAGA QAYTARISH — ALOHIDA HUQUQ, va u FAQAT administratorda
+  --  (zavod qarori, 2026-10). «O'tkazish» kuniga o'nlab marta
+  --  bosiladi va uning yonida turgan «qaytarish» ham o'sha qo'l
+  --  bilan bosilardi: harakat yozuvi ham, jamlanma hisobot ham
+  --  o'chadi, ya'ni TARIX jimgina qayta yoziladi va buni keyin hech
+  --  narsa aytmasdi. Ustasida esa ikkinchi yo'l bor — konverni
+  --  keyingi bo'limdan qaytarib o'tkazish; u tarixni saqlaydi.
+  --  Ro'yxatda hech kimga berilmaydi: administrator uni «hamma
+  --  huquq» qatori bilan oladi (`sales.fix`, `cash.fix` bilan bir
+  --  xil idiom va bir xil sabab).
+  ('production.undo',   'production', 'Oxirgi o''tkazishni qaytarish'),
   --  Konverni OCHISH endi bu huquqda emas: kiritilgani tasdiqdan
   --  o'tadi (izoh: `modules/units.js`, `POST /`). Bu huquq jurnalni
   --  TO'LDIRISH: zakaz, mijoz, narx, rang, mato.

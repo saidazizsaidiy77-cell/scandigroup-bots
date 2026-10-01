@@ -2422,6 +2422,12 @@ async function undoLastMove(client, req, unit_id) {
   // ketadi: ombor mahsulot bor deb turadi, jurnal esa uni orqaga suradi.
   if (u.status === 'fg')
     throw new Error(`${u.conveyor_no}: T/M omborda — avval ombor qabulini qaytaring`);
+  //  Jo'natilgan konver ham shunday: belgi QAYERDAN jo'natilganini
+  //  aytadi (`handover_shop_id`) va konverni orqaga surish uni
+  //  jo'natilmagan bo'limdan jo'natilgan qilib qo'yardi — qabul
+  //  qiluvchi ro'yxatda kelmagan konverni ko'rardi.
+  if (u.handover_at)
+    throw new Error(`${u.conveyor_no}: jo'natilgan — avval jo'natishni qaytarib oling`);
 
   const last = (await client.query(
     `SELECT m.*, s.is_exit FROM unit_moves m
@@ -2460,6 +2466,31 @@ async function undoLastMove(client, req, unit_id) {
   const row = await placePieces(client, req, u, last.from_section_id || null,
                                 back, last.moved_on);
 
+  //  ★ XOM ASHYO JOYIDAN QIMIRLAMAYDI, va bu to'g'ri: material
+  //  HAQIQATDA sarflangan — qog'ozdagi yozuvni orqaga surish kesilgan
+  //  taxtani qaytarmaydi. Yozuv konverga ilingan (`material_moves`,
+  //  `to_kind = 'unit'`), harakatga emas; bo'laklar uchrashsa esa u
+  //  tirik qatorga KO'CHADI (`birlashtir`). Ya'ni konveyer raqami
+  //  bo'yicha yig'indi o'zgarmaydi — tannarx aynan shundan hisoblanadi.
+  //
+  //  Bitta joyi e'tibor talab qiladi: qaytgan dona YANGI qator bo'lsa
+  //  (qaytadigan joyda bo'lak turmagan bo'lsa) o'sha qatorda
+  //  «bu bo'limda material yozilgan» degan iz QOLMAYDI — va konver
+  //  oldinga qayta o'tkazilganda `xomYoqmi` uni YANA so'rardi. Boshliq
+  //  ikkinchi marta yozsa bitta sarf ikki marta hisoblanardi.
+  //  Shuning uchun javobning IZI ko'chiriladi: sarfning o'zi emas
+  //  (u bo'linmaydi), «so'ralgan va javob berilgan» belgisi.
+  if (row !== u.id) await client.query(
+    `INSERT INTO unit_no_material (unit_id, section_id, worker_id, created_at)
+     SELECT $2, $3, $4, NOW()
+      WHERE EXISTS (SELECT 1 FROM material_moves mm
+                     WHERE mm.to_kind = 'unit' AND mm.to_id = $1
+                       AND mm.section_id = $3 AND mm.status = 'ok')
+         OR EXISTS (SELECT 1 FROM unit_no_material nm
+                     WHERE nm.unit_id = $1 AND nm.section_id = $3)
+     ON CONFLICT (unit_id, section_id) DO NOTHING`,
+    [u.id, row, last.from_section_id || null, req.user?.id || null]);
+
   // Lak va qadoqlash sanalari qolgan harakatlardan qaytadan olinadi
   await client.query(
     `UPDATE production_units u SET
@@ -2483,7 +2514,13 @@ async function undoLastMove(client, req, unit_id) {
 }
 
 // Oxirgi o'tkazishni qaytarish. Bir nechta konverni birdan ham qabul qiladi.
-router.post('/undo', need('production.entry'), wrap(async (req, res) => {
+//
+//  ★ HUQUQI `production.undo` — FAQAT ADMINISTRATORDA (zavod qarori,
+//  2026-10). Ilgari `production.entry` edi, ya'ni har tsex ustasi
+//  chaqira olardi: harakat yozuvi ham, jamlanma hisobot ham o'chadi
+//  va TARIX jimgina qayta yoziladi. Tekshiruv SERVERDA — ekranda
+//  tugmani chizmaslik himoya emas.
+router.post('/undo', need('production.undo'), wrap(async (req, res) => {
   const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
   if (!ids.length) throw new Error('Konver tanlanmagan');
   const client = await db.connect();
