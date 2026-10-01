@@ -1320,8 +1320,12 @@ test('mahsulot T/M ombordan vitrinaga ko\'chiriladi, bir qismi ham', async () =>
   const vitr = (await mudir('GET',
     `/api/warehouse/fg/units?w=VITR-ABU&product_id=${PENAL}&color=Bej`)).body.rows[0];
   assert.equal(vitr.qty, 3);
+  //  Sana ATAYLAB yoziladi: bo'sh qoldirilsa server CURRENT_DATE qo'yadi
+  //  va pastdagi tarix so'rovi sentabr oralig'i bilan yuboriladi — ya'ni
+  //  suite oktabrda yurganda harakat o'sha oraliqdan tushib qolardi va
+  //  test KALENDAR almashgani uchun qizil bo'lardi.
   assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
-    { unit_id: vitr.id, to_code: 'VITR-PALMA' })).status, 200);
+    { unit_id: vitr.id, to_code: 'VITR-PALMA', moved_on: '2026-09-11' })).status, 200);
   assert.equal((await qoldiq('VITR-ABU')).total.qty, 0);
   assert.equal((await qoldiq('VITR-PALMA')).total.qty, 3);
 
@@ -3437,11 +3441,32 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
   //  Shu mijozdan avvalgi testlarda ham mahsulot chiqqan, shuning uchun
   //  aniq raqam emas: boshlang'ich qarz ICHIDA ekani tekshiriladi.
   assert.ok(Number(r.opening) >= 500, String(r.opening));
-  //  ★ Oktabrda chiqib ketgani: 6 × 250 = 1500 — buyurtma QATORINING
-  //  narxi bo'yicha. Konverning o'zida narx yo'q edi (tsexdan kelgan
-  //  ikkitasi), lekin mijoz yuk xatidagi summani to'laydi: sotilgan
-  //  narx chiqarishda konverga ko'chadi (modules/sales.js).
-  assert.equal(Number(r.debit), 1500, String(r.debit));
+  //  ★ ORALIQNING JAMI RAQAMI QOTIB QO'YILMAYDI, va bu ataylab. Kunlik
+  //  reja testi mahsulotni AYNAN bugungi kun bilan chiqaradi — u boshqa
+  //  sana bilan ishlay olmaydi ham — ya'ni suite oktabrda yurganda o'sha
+  //  summa ham shu oraliqqa tushadi. Qotib qolgan 1500 sinovni
+  //  KALENDARGA bog'lab qo'yardi: kod o'zgarmasa ham, kun almashgani
+  //  uchun qizil bo'lardi.
+  //
+  //  Shuning uchun aylanma TAFSILOT bilan solishtiriladi — ikki hisob
+  //  bitta narsani aytishi kerak, aks holda qaysi biri to'g'ri degan
+  //  savol chiqadi.
+  const okt_t = (await admin('GET',
+    `/api/sales/debts/${mijoz}?from=2026-10-01&to=2026-10-31`)).body;
+  assert.equal(Number(r.debit), Number(okt_t.total.debit),
+    'jadval va tafsilot bitta raqamni aytadi');
+
+  //  ★ Tekshirilayotgan narsa esa ANIQ: sotilgan narx chiqarishda
+  //  konverga KO'CHADI (modules/sales.js). Konverning o'zida narx yo'q
+  //  edi (tsexdan kelgan ikkitasi), lekin mijoz yuk xatidagi summani
+  //  to'laydi — 6 × 250 = 1500. Shuning uchun raqam o'sha ikki KUN
+  //  bo'yicha sanaladi: sanalari testlarda qo'lda yozilgan, ya'ni
+  //  kalendar almashsa ham joyida qoladi.
+  const KUN = ['2026-10-04', '2026-10-06'];
+  const kochgan = okt_t.rows
+    .filter((x) => KUN.includes(String(x.on_date).slice(0, 10)))
+    .reduce((a, x) => a + Number(x.debit), 0);
+  assert.equal(kochgan, 1500, String(kochgan));
   assert.equal(Number(r.credit), 0, 'kassa yo\'q — haqdor bo\'sh');
   //  Saldo o'z TOMONIDA beriladi: qarzdor — mijozning korxonaga qarzi,
   //  haqdor — korxonaning mijozga qarzi. Bitta ishorali raqam bo'lsa
@@ -8710,6 +8735,50 @@ test('chiqib ketgan buyurtmada konver raqami ko\'rinadi', async () => {
     `SELECT COUNT(*)::text AS id FROM unit_reservations r
        JOIN order_items i ON i.id = r.order_item_id
       WHERE i.order_id = $1`, [z.id])).id, '0');
+});
+
+//  ★ KELIB, O'SHA DAVRDA CHIQIB KETGANI HAM QATOR BO'LIB TURADI, lekin
+//  qoldig'i NOL va konver ro'yxati BO'SH. Qoldiq jadvali ikki manbadan
+//  yig'iladi: hozir javonda turgani va oraliqda qimirlagani. Mudirning
+//  «davr ichida nima o'tdi» degan savoliga javob kerak, shuning uchun
+//  qator yo'qolmaydi — lekin ekranda sababi yozilib turishi kerak
+//  (`yoqIzoh`), aks holda u tushunarsiz qoldiq bo'lib o'qiladi.
+//
+//  Test ENG OXIRIDA turadi: u mahsulotni vitrinaga ko'chiradi va
+//  vitrinalarning yig'indisi boshqa testlarda tekshiriladi —
+//  o'rtada tursa o'sha raqamlarga qo'shilib ketardi.
+test('kelib, o\'sha davrda chiqib ketgan mahsulot qatori nol qoldiq bilan turadi', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+
+  //  T/M omborga kiritiladi va o'sha oraliqning ichida vitrinaga
+  //  ko'chiriladi: T/M uchun bu kirim va chiqim, qoldiq esa nol.
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Nol-qoldiq', is_opening: true,
+      fg_on: '2026-09-12' },
+  ] })).body.created[0];
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: u.id, to_code: 'VITR-ABU', moved_on: '2026-09-13' })).status, 200);
+
+  const d = (await mudir(
+    'GET', '/api/warehouse/fg/summary?w=TM&q=Nol-qoldiq&from=2026-09-01&to=2026-09-30')).body;
+  const row = d.rows.find((r) => r.color === 'Nol-qoldiq');
+  assert.ok(row, 'davr ichida qimirlagani qator bo\'lib turadi');
+  assert.equal(row.qty, 0, 'javonda hech narsa qolmagan');
+  assert.equal(row.kirdi, 2, 'oraliqda kirgan');
+  assert.equal(row.chiqdi, 2, 'o\'sha oraliqda chiqib ketgan');
+
+  //  Qator ochilganda konver ro'yxati BO'SH: u hozir javonda turganini
+  //  o'qiydi. Ekrandagi izoh aynan shu holat uchun yozildi.
+  const det = await mudir('GET',
+    `/api/warehouse/fg/units?w=TM&product_id=${PENAL}&color=Nol-qoldiq`);
+  assert.equal(det.status, 200, det.text);
+  assert.equal(det.body.rows.length, 0, 'omborda konver qolmagan');
+
+  //  Oraliq tashqarisida qator umuman chiqmaydi: harakat ham, qoldiq
+  //  ham yo'q — ya'ni nol qator o'zidan-o'zi turib qolmaydi.
+  const tashqari = (await mudir(
+    'GET', '/api/warehouse/fg/summary?w=TM&q=Nol-qoldiq&from=2099-01-01')).body;
+  assert.equal(tashqari.rows.length, 0, 'oraliq tashqarisida qator yo\'q');
 });
 
 test('yakun', async () => {

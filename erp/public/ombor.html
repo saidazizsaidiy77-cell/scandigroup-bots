@@ -435,6 +435,23 @@ function sortSet(k) {
   drawStock();
 }
 
+//  ★ SAVDOGA NOL QATOR CHIZILMAYDI (zavod qarori, 2026-10). Qator
+//  ikki manbadan tushadi va davr ichida kirib-chiqib ketgani ham o'z
+//  qatorida turadi (izoh: `yoqIzoh`). MUDIRGA bu javob: aylanma
+//  ustunlari yonida turadi va «bugun nima o'tdi» degan savolni o'qiydi.
+//
+//  SAVDOGA esa o'sha ustunlar umuman chizilmaydi (izoh: `faqatQoldiq`),
+//  ya'ni qatorda yagona raqam «Qoldiq 0» bo'lib qolardi va u hech
+//  narsani tushuntirmasdi — menejer javonda yo'q mahsulotni
+//  ro'yxatda ko'rib, nega turganini bilmasdi. Uning savoli bitta:
+//  mijozga hozir nechtasini va'da qila olaman.
+//
+//  Bu KO'RINISH, himoya emas: server baribir o'sha qatorlarni beradi
+//  va yuqoridagi kartochkalar ham o'zgarmaydi — nol qator
+//  yig'indiga baribir nol qo'shadi.
+const korinadigan = rows => !faqatQoldiq() ? rows
+  : rows.filter(r => Number(r.qty) || Number(r.bron));
+
 function saralangan(rows) {
   if (!sortK || !SORT[sortK]) return rows;
   const qiy = SORT[sortK], yon = sortAsc ? 1 : -1;
@@ -563,7 +580,8 @@ function drawStock() {
           ${isTM() ? '' : `${th('narx', 's-price', 'Narx, $')}
                            ${th('summa', 's-amount', 'Summa, $')}`}
         </tr></thead>
-        <tbody>${saralangan(d.rows).map(r => drawStockRow(r)).join('')}</tbody>
+        <tbody>${saralangan(korinadigan(d.rows))
+          .map(r => drawStockRow(r)).join('')}</tbody>
         <!--  JAMI eng ostida, ustunlar bilan bir chiziqda: alohida
               kartochka qilinsa ko'z jadvaldan chiqib, qaysi raqam qaysi
               ustunniki ekanini qidirib qolardi. O'lchov birligi bo'yicha
@@ -622,6 +640,35 @@ function jamiRows(d) {
   </tr>`).join('');
 }
 
+//  ★ BO'SH QATOR SAVOL QOLDIRMAYDI (zavod qarori, 2026-10). Qoldiq
+//  jadvali IKKI manbadan yig'iladi: hozir javonda turgani
+//  (`v_fg_units`) va tanlangan oraliqda QIMIRLAGANI (`v_fg_moves`).
+//  Shuning uchun kelib, o'sha oraliqning O'ZIDA chiqib ketgan mahsulot
+//  ham o'z qatorida turadi — qoldig'i nol bo'lgani holda, va bu
+//  to'g'ri: «davr ichida nima o'tdi» degan savolga javob kerak.
+//
+//  Qator ochilganda esa konver ro'yxati BO'SH chiqadi: u HOZIR javonda
+//  turganini o'qiydi va o'sha konver allaqachon ketgan. Ilgari o'sha
+//  joyda bitta «—» turardi va u hech narsa aytmasdi — mudir
+//  «qanday qilib qo'shilgan, konver raqami ham yo'q» degan savol bilan
+//  qolardi. Endi SABABI yoziladi: bo'sh katak bu yerda javob emas,
+//  savol (xom ashyodagi «bo'sh qator savol, yo'q qator yolg'on» bilan
+//  bir xil qoida).
+//
+//  Qaysi konver ekani «Harakat» tabida turadi, shuning uchun izohda
+//  o'sha yo'l ko'rsatiladi — lekin faqat tarixi ochiq xodimga:
+//  savdoga ko'rinmaydigan tabga yo'llash javobsiz savol bo'lardi.
+function yoqIzoh(r) {
+  const kirdi = Number(r.kirdi) || 0, chiqdi = Number(r.chiqdi) || 0;
+  const sabab = kirdi && chiqdi ? 'oraliqda kirib, chiqib ketgan'
+              : chiqdi          ? 'oraliqda chiqib ketgan'
+              : kirdi           ? "kirgani keyin bekor qilingan yoki boshqa omborga ko'chgan"
+              :                   '';
+  return `<span class="muted">Hozir omborda yo'q${sabab ? ' \u2014 ' + sabab : ''}.${
+    canLedger ? ' Qaysi konver ekani \u00ab<a href="#" onclick="event.preventDefault();'
+      + 'event.stopPropagation();go(\'moves\')">Harakat</a>\u00bb tabida.' : ''}</span>`;
+}
+
 function drawStockRow(r) {
   const k = rowKey(r);
   const open = openRows.has(k);
@@ -668,7 +715,7 @@ function drawStockRow(r) {
     ${!open ? '' : `<tr class="more"><td colspan="${faqatQoldiq() ? 5 : 9}"
       style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
-      : !units.length ? `<span class="muted">\u2014</span>`
+      : !units.length ? yoqIzoh(r)
       : units.map(u => {
           // Yorliq bosilsa oyna ochiladi: ko'chirish va/yoki sonini
           // to'g'rilash — qaysinisi huquqda bor bo'lsa.

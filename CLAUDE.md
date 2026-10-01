@@ -2753,6 +2753,26 @@ Qator IKKI manbadan tushadi (`FULL JOIN`): hozir omborda turgani
 davrning o'zida chiqib ketgan mahsulot ham qatorda ko'rinishi kerak,
 garchi undan omborda hech narsa qolmagan bo'lsa ham.
 
+**★ BO'SH QATOR SABABINI AYTADI** (zavod qarori, 2026-10). Shu
+qoidaning ko'rinadigan oqibati bor: kelib, o'sha davrning o'zida chiqib
+ketgan mahsulot qatorda **Qoldiq 0 · Jami 0** bo'lib turadi, qator
+ochilganda esa konver ro'yxati BO'SH chiqadi — ro'yxat HOZIR javonda
+turganini o'qiydi va o'sha konver allaqachon ketgan. Ilgari o'sha joyda
+bitta «—» turardi va u hech narsa aytmasdi: mudir
+«qanday qilib qo'shilgan, konver raqami ham yo'q» degan savol
+bilan qolardi. Endi SABABI yoziladi («Hozir omborda yo'q —
+oraliqda kirib, chiqib ketgan») va qaysi konver ekani
+«Harakat» tabida — bo'sh katak bu yerda javob emas, savol.
+
+**Savdoga esa bunday qator umuman chizilmaydi** (`korinadigan`): u yerda
+aylanma ustunlari yo'q (izoh: `faqatQoldiq`), ya'ni qatorda yagona raqam
+«Qoldiq 0» bo'lib qolardi va hech narsani tushuntirmasdi —
+menejer javonda yo'q mahsulotni ro'yxatda ko'rib, nega turganini
+bilmasdi. Uning savoli bitta: mijozga hozir nechtasini va'da qila
+olaman. Bu KO'RINISH, himoya emas: server baribir o'sha qatorlarni
+beradi va yuqoridagi kartochkalar o'zgarmaydi — nol qator
+yig'indiga baribir nol qo'shadi.
+
 Eng ostida **JAMI** qatori, o'lchov birligi bo'yicha ajratilgan: dona
 bilan komplektni qo'shib bo'lmaydi. Alohida kartochka qilinmadi — ko'z
 jadvaldan chiqib, qaysi raqam qaysi ustunniki ekanini qidirib qolardi.
