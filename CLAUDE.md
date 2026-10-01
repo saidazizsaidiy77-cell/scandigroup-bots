@@ -1917,9 +1917,39 @@ Operatsiyada ikki xil narsa turadi va ular bir xil emas:
 
 Birinchisi — haqiqatda bo'lib o'tgan harakat. Uni ekrandan qayta
 yozish TARIXNI jimgina almashtirardi: mijozning yoki ta'minotchining
-qarzi o'zgarib turar, kassa qoldig'i esa sababini aytmasdi. Xato bo'lsa
-yo'l eskicha — **bekor qilinadi va qaytadan yoziladi**, ikkala hujjat
-ham tarixda qoladi.
+qarzi o'zgarib turar, kassa qoldig'i esa sababini aytmasdi. Shuning
+uchun oddiy kassirda yo'l eskicha — **bekor qilinadi va qaytadan
+yoziladi**, ikkala hujjat ham tarixda qoladi.
+
+**★ SUMMA ESA TUZATILADI, LEKIN FAQAT ADMINISTRATORDA**
+(`cash.fix`, zavod qarori 2026-10). Bekor qilib qayta yozish har doim
+ham yo'l emas: hujjat allaqachon mijozga yoki ta'minotchiga
+ko'rsatilgan, raqami lentada turibdi va bitta to'lov ikkita qator
+bo'lib ikkilanib qolardi. Xato esa oddiy — bitta nol ortiqcha,
+kursning tiyini tushib qolgan.
+
+Huquq **ALOHIDA va faqat administratorda**: `cash.manage` bor har
+kassir summani qayta yoza olsa, mijozning va ta'minotchining qarzi
+hamda kassa qoldig'i ekrandan jimgina o'zgarib turardi. Ro'yxatda
+hech kimga berilmaydi — administrator uni «hamma huquq» qatori bilan
+oladi (`sql/core-seed.sql`), `sales.fix` bilan AYNAN bir xil idiom va
+bir xil sabab.
+
+**Tekshiruv yaratishdagi bilan BIR XIL**: summa noldan katta,
+dollarda kurs yo'q, so'mda esa **majburiy** — kursi yo'q so'm
+dollarga aylanmaydi va qator qiymatsiz qolardi. Qayta hisoblanadigan
+narsa YO'Q: `amount_usd` — GENERATED ustun, ya'ni qarz ham, qoldiq
+ham, foyda-zarar ham uni bazaning O'ZIDAN oladi.
+
+**TOMONLAR (kimdan → kimga) baribir o'zgarmaydi**, `cash.fix` bilan
+ham: boshqa odam — boshqa hodisa, tuzatish emas. Unda operatsiya
+bekor qilinadi va qaytadan yoziladi.
+
+Ekranda summa, valyuta va kurs kataklari **faqat huquqi borida**
+chiziladi, **«KURSDA TIYIN BOR, SUMMADA YO'Q»** idiomi bilan: dollar
+yozilsa kurs o'zi chiqadi. Tekshiruv SERVERDA — huquqi yo'q odam
+summa yuborsa ham e'tiborga olinmaydi va qolgani (sana, modda, izoh)
+eskicha tuzatiladi: katakni chizmaslik himoya emas.
 
 Ikkinchisi — SARALASH xatosi: pul to'g'ri ketgan, lekin
 foyda-zararda boshqa qatorga tushgan. Bekor qilib qayta yozish hujjat
@@ -1940,11 +1970,11 @@ ham** (`pending`): u hali qabul qilinmagan va uning yo'li boshqa —
 rad etiladi, xodim qaytadan yozadi.
 
 Huquqi **`cash.manage`** — kassir va buxgalter: moddani to'g'rilash
-aynan ularning ishi va pulning o'ziga baribir tegilmaydi. Shu sababdan
-`sales.fix` kabi alohida huquq yozilmadi: u yerda summa O'ZGARADI va
-mijozning qarziga tegadi. Audit jurnalida yozuv **`fix`** deb turadi,
-`update` emas, va eski qiymat ham yoziladi — «kim yozilgan hujjatga
-tegdi» degan savol alohida javob talab qiladi.
+aynan ularning ishi; **summa esa `cash.fix` da**, faqat
+administratorda (yuqorida). Audit jurnalida yozuv **`fix`** deb
+turadi, `update` emas, va eski qiymat ham yoziladi — pul qatori ham
+shu yerda (`edi`/`boldi`): «kim yozilgan hujjatga tegdi» degan savol
+alohida javob talab qiladi.
 
 Sabab **EKRANDA** yozilib turadi: nimaga tegib bo'lmasligini bilmagan
 odam summa katagini qidirib yurardi.
@@ -2652,7 +2682,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `xom_ombor` | `materials.view`, `materials.manage`, `purchasing.view` | xom ashyo spravochnigi, material omborlari va ularning boshlang'ich qoldig'i — narx bilan. T/M ombor unga ochilmaydi |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
 | `savdo_boshliq` | `sotuvchi` bilan AYNAN bir xil | savdo bo'lim boshlig'i: farqi faqat **doirasida** — yo'nalish ham, «Faqat o'zinikini» ham bo'sh qoladi, ya'ni butun savdoni ko'radi |
-| `admin` | barchasi | hammasi. **`sales.fix` faqat unda**: chiqib ketgan buyurtmani tuzatish |
+| `admin` | barchasi | hammasi. **`sales.fix` va `cash.fix` faqat unda**: chiqib ketgan buyurtmani va kassa operatsiyasining summasini tuzatish |
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
 ko'rinishi va panelni.** Ikkisi alohida: sotuvchi o'z buyurtmasi qaysi

@@ -756,10 +756,15 @@ function fixOp(id) {
   //  serverda — oynani o'zgartirish himoya emas).
   const moddali = o.to_kind === 'expense' || o.to_kind === 'supplier';
   const it = refs.items.find((x) => x.id === o.expense_item_id) || null;
+  //  Pul ham HOLATDA turadi: oyna har o'zgarishda qayta chiziladi va
+  //  katakdan o'qilsa guruh almashganda terilgan summa yo'qolardi.
   fixState = { id, moddali, group: it ? it.group_code : '',
                item: o.expense_item_id || '',
                month: String(o.pl_month || '').slice(0, 7),
-               staff: o.staff_id || '' };
+               staff: o.staff_id || '',
+               cur: o.currency, amount: String(o.amount || ''),
+               rate: o.rate ? String(Number(o.rate)) : '',
+               note: o.note || '', date: String(o.op_date || '').slice(0, 10) };
   drawFix();
 }
 
@@ -769,6 +774,12 @@ function drawFix() {
   const F = fixState, o = ops.find((x) => x.id === F.id);
   const it = refs.items.find((x) => x.id === Number(F.item)) || null;
   const xodimKerak = !!(it && it.needs_worker);
+  //  ★ SUMMA FAQAT `cash.fix` DA — administrator. Tekshiruv baribir
+  //  SERVERDA: katakni chizmaslik himoya emas.
+  const pul = App.can('cash.fix');
+  const so = F.cur === 'UZS';
+  const dollar = so ? (Number(F.rate) > 0 ? Number(F.amount) / Number(F.rate) : 0)
+                    : Number(F.amount) || 0;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)closeForm()">
       <div class="modal" style="max-width:560px">
@@ -782,12 +793,13 @@ function drawFix() {
           <div class="t">${esc(o.from_name || '')} → ${esc(o.to_name || '')}</div>
           <div class="muted" style="font-size:12px">${o.currency === 'UZS'
             ? uzs(o.amount) + " so'm · kurs " + uzs(o.rate)
-            : usd(o.amount) + ' $'} · <b>${usd(o.amount_usd)} $</b></div>
+            : usd(o.amount) + ' $'} · <b>${usd(o.amount_usd)} $</b>${
+            pul ? ' · <i>yozilgani</i>' : ''}</div>
         </div>
 
         <div class="fields">
           <div><label>Sana</label>
-            <input id="xDate" type="date" value="${String(o.op_date || '').slice(0, 10)}"></div>
+            <input id="xDate" type="date" value="${esc(F.date)}"></div>
           ${!F.moddali ? '' : `
           <div><label>Harajat guruhi</label>
             <select id="xGroup" onchange="fixSet('group', this.value)">
@@ -814,15 +826,40 @@ function drawFix() {
                 Number(F.staff) === w.id ? ' selected' : ''}>${esc(w.name)}${
                 w.position ? ' · ' + esc(w.position) : ''}</option>`).join('')}
             </select></div>`}`}
+          ${!pul ? '' : `
+          <div><label>Valyuta</label>
+            <select id="xCur" onchange="fixSet('cur', this.value)">
+              <option value="UZS"${so ? ' selected' : ''}>so'm</option>
+              <option value="USD"${so ? '' : ' selected'}>$</option>
+            </select></div>
+          <div><label>Summa</label>
+            <input id="xAmt" type="number" step="0.01" value="${esc(F.amount)}"
+                   oninput="fixMoney('amount', this.value)"></div>
+          ${!so ? '' : `
+          <div><label>Kurs</label>
+            <input id="xRate" type="number" step="0.0001" value="${esc(F.rate)}"
+                   oninput="fixMoney('rate', this.value)"></div>`}
+          <div><label>Dollarda</label>
+            <input id="xSum" type="number" step="0.01"${so ? '' : ' readonly'}
+                   value="${dollar ? dollar.toFixed(2) : ''}"
+                   oninput="fixMoney('usd', this.value)">
+            <div class="hint">${so
+              ? "bank qancha dollar yozgan bo'lsa shuni yozing \u2014 kurs o'zi chiqadi"
+              : ''}</div></div>`}
           <div style="grid-column:1/-1"><label>Izoh</label>
-            <input id="xNote" value="${esc(o.note || '')}"></div>
+            <input id="xNote" value="${esc(F.note)}"></div>
         </div>
 
-        <p class="muted" style="font-size:12px;margin:12px 0 0">
-          Summa, valyuta, kurs va tomonlar bu yerdan o'zgarmaydi — ular
-          haqiqatda bo'lib o'tgan harakat. Ularda xato bo'lsa operatsiya
-          <b>bekor qilinadi</b> va qaytadan yoziladi: ikkala hujjat ham
-          tarixda qoladi.</p>
+        <p class="muted" style="font-size:12px;margin:12px 0 0">${pul
+          ? `Summa o'zgarsa mijozning yoki ta'minotchining qarzi va kassa
+             qoldig'i ham o'zgaradi — eski qiymat audit jurnalida qoladi.
+             <b>Tomonlar (kimdan → kimga) bu yerdan o'zgarmaydi</b>: boshqa
+             odam — boshqa hodisa, tuzatish emas. Unda operatsiya bekor
+             qilinadi va qaytadan yoziladi.`
+          : `Summa, valyuta, kurs va tomonlar bu yerdan o'zgarmaydi — ular
+             haqiqatda bo'lib o'tgan harakat. Ularda xato bo'lsa operatsiya
+             <b>bekor qilinadi</b> va qaytadan yoziladi: ikkala hujjat ham
+             tarixda qoladi.`}</p>
 
         <div class="row" style="justify-content:flex-end;margin-top:14px">
           <button class="primary" onclick="saveFix()">Saqlash</button></div>
@@ -834,14 +871,44 @@ function drawFix() {
 //  turib qolsa saqlashda u yoziladi va odam buni ko'rmasdi. Modda
 //  almashsa xodim ham shunday.
 function fixSet(k, v) {
+  //  Oyna qayta chiziladi, ya'ni kataklarda TERILGAN hammasi avval
+  //  holatga ko'chiriladi: valyuta almashtirilgani izohni yoki
+  //  tanlangan oyni o'chirib yuborishi kerak emas.
+  if ($('xMonth')) fixState.month = $('xMonth').value;
+  if ($('xStaff')) fixState.staff = $('xStaff').value;
+  if ($('xNote')) fixState.note = $('xNote').value;
+  if ($('xDate')) fixState.date = $('xDate').value;
+  //  Valyuta almashsa kurs tozalanadi: dollarda u yo'q, so'mga
+  //  qaytilganda esa eski kurs yangi summaga tegishli emas.
+  if (k === 'cur') { fixState.cur = v; fixState.rate = ''; }
   if (k === 'group') { fixState.group = v; fixState.item = ''; fixState.staff = ''; }
-  if (k === 'item') {
-    //  Tanlangan oyni saqlab qolamiz: modda almashgani bilan harajat
-    //  qaysi oyniki ekani o'zgarmaydi.
-    if ($('xMonth')) fixState.month = $('xMonth').value;
-    fixState.item = v; fixState.staff = '';
-  }
+  if (k === 'item') { fixState.item = v; fixState.staff = ''; }
   drawFix();
+}
+
+//  ★ KURSDA TIYIN BOR, SUMMADA YO'Q — yaratish oynasidagi bilan
+//  AYNAN bir xil qoida (izoh: `kursHisobla`). Summa yoki kurs
+//  o'zgarsa dollar qayta hisoblanadi, dollar yozilsa kurs chiqadi:
+//  ko'chirmada turgan birlamchi fakt — summa.
+//  Oyna qayta chizilmaydi: kataklar joyida yangilanadi, aks holda
+//  terayotgan odamning kursori sakrab ketardi.
+function fixMoney(k, v) {
+  const F = fixState;
+  if (k === 'amount') F.amount = v;
+  if (k === 'rate') F.rate = v;
+  const so = F.cur === 'UZS';
+  if (k === 'usd') {
+    if (!so) return;
+    const a = Number(F.amount) || 0, d = Number(v) || 0;
+    if (!(a > 0 && d > 0)) return;
+    //  To'rt xona — bazadagi ustun bilan bir xil (NUMERIC(14,4)).
+    F.rate = String(Number((a / d).toFixed(4)));
+    if ($('xRate')) $('xRate').value = F.rate;
+    return;
+  }
+  const a = Number(F.amount) || 0, r = Number(F.rate) || 0;
+  const d = so ? (r > 0 ? a / r : 0) : a;
+  if ($('xSum')) $('xSum').value = d ? d.toFixed(2) : '';
 }
 
 async function saveFix() {
@@ -854,6 +921,10 @@ async function saveFix() {
         expense_item_id: $('xItem') ? $('xItem').value || null : null,
         pl_month: $('xMonth') ? $('xMonth').value : null,
         staff_id: $('xStaff') ? $('xStaff').value || null : null,
+        //  Huquqi bo'lmaganda umuman yuborilmaydi: server ham shu
+        //  qoidani qo'yadi, lekin ikkalasi bir xil gapirsin.
+        ...($('xAmt') ? { amount: $('xAmt').value, currency: F.cur,
+                          rate: F.cur === 'UZS' ? F.rate : null } : {}),
       }) });
     toast('Tuzatildi'); closeForm(); reload();
   } catch (e) { toast(e.message, true); }

@@ -77,6 +77,15 @@ INSERT INTO permissions (code, module, name) VALUES
   ('cash.view',         'cash',       'Kassa hisobotlarini ko''rish'),
   ('cash.entry',        'cash',       'Kirim / chiqim kiritish'),
   ('cash.manage',       'cash',       'Kassa yopish, tuzatish, tasdiqlash'),
+  --
+  --  ★ SUMMANI TUZATISH — ALOHIDA HUQUQ, va u FAQAT administratorda.
+  --  `cash.manage` bor har kassir yozilgan operatsiyaning summasini
+  --  qayta yoza olsa, mijozning va ta'minotchining qarzi hamda kassa
+  --  qoldig'i ekrandan jimgina o'zgarib turardi — pulning o'zi esa
+  --  haqiqatda bo'lib o'tgan harakat. `sales.fix` bilan bir xil
+  --  idiom va bir xil sabab: ro'yxatda hech kimga berilmaydi,
+  --  administrator uni «hamma huquq» qatori bilan oladi (pastda).
+  ('cash.fix',          'cash',       'Kassa operatsiyasining summasini tuzatish'),
   -- Maosh (rejada)
   ('payroll.view',      'payroll',    'Maosh hisobotlarini ko''rish'),
   ('payroll.manage',    'payroll',    'Maosh hisoblash va to''lash'),

@@ -8958,6 +8958,84 @@ test('kassa operatsiyasi tuzatiladi: modda va oy ko\'chadi, pul qimirlamaydi', a
     { op_date: '2026-09-21' })).status, 403);
 });
 
+//  ★ SUMMANI FAQAT ADMINISTRATOR TUZATADI (`cash.fix`). Kassirning
+//  tuzatishi SARALASH xatosi uchun: pul to'g'ri ketgan, lekin
+//  foyda-zararda boshqa qatorga tushgan. Summaning o'zi esa haqiqatda
+//  bo'lib o'tgan harakat va u mijozning, ta'minotchining qarzi hamda
+//  kassa qoldig'i bilan bir vaqtda o'zgaradi — shuning uchun huquqi
+//  ALOHIDA va u faqat administratorda (`sales.fix` bilan bir xil
+//  idiom va bir xil sabab).
+test('kassa summasi: kassir tegolmaydi, administrator tuzatadi', async () => {
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const admin = H.api(base, tokenAdmin);
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const tam = (await H.id(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).id;
+
+  const oldinKassa = Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd);
+  const oldinQarz = Number((await H.id(
+    `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance);
+
+  const r = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'supplier', to_id: tam,
+    currency: 'USD', amount: 500, op_date: '2026-09-20' });
+  assert.equal(r.status, 200, r.text);
+  const id = (await H.id(`SELECT id FROM cash_ops ORDER BY id DESC LIMIT 1`)).id;
+
+  //  Kassirda `cash.fix` YO'Q: summa yuborilsa ham e'tiborga
+  //  olinmaydi, qolgani esa (sana, izoh) eskicha tuzatiladi.
+  const k = await kassir('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', amount: 900, currency: 'USD' });
+  assert.equal(k.status, 200, k.text);
+  assert.equal(Number((await H.id(
+    `SELECT amount FROM cash_ops WHERE id = $1`, [id])).amount), 500,
+    'kassir summaga tegolmaydi');
+
+  //  Administratorda — ko'chadi, va u bilan BIRGA kassa qoldig'i
+  //  hamda ta'minotchining qarzi: `amount_usd` GENERATED, ya'ni
+  //  qayta hisoblanadigan narsa yo'q.
+  const a = await admin('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', amount: 900, currency: 'USD' });
+  assert.equal(a.status, 200, a.text);
+  const o = await H.id(`SELECT amount, amount_usd, currency, rate
+                          FROM cash_ops WHERE id = $1`, [id]);
+  assert.equal(Number(o.amount), 900);
+  assert.equal(Number(o.amount_usd), 900);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd),
+    oldinKassa - 900, 'kassadan 900 chiqdi');
+  assert.equal(Number((await H.id(
+    `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance),
+    oldinQarz - 900, 'qarz 900 ga kamaydi');
+
+  //  So'mga o'tkazilganda KURS majburiy: kursi yo'q so'm dollarga
+  //  aylanmaydi va qator qiymatsiz qolardi.
+  const kursiz = await admin('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', amount: 9000000, currency: 'UZS' });
+  assert.equal(kursiz.status, 400);
+  assert.match(kursiz.body.error, /[Kk]urs/);
+
+  const soum = await admin('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', amount: 9000000, currency: 'UZS', rate: 11811.0236 });
+  assert.equal(soum.status, 200, soum.text);
+  const u = await H.id(`SELECT currency, amount_usd FROM cash_ops WHERE id = $1`, [id]);
+  assert.equal(u.currency, 'UZS');
+  assert.equal(Number(u.amount_usd), 762, 'tiyinli kurs bilan aynan 762 $');
+
+  //  Nol yoki manfiy summa qabul qilinmaydi — yaratishdagi bilan
+  //  AYNAN bir xil shart.
+  assert.equal((await admin('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-21', amount: 0, currency: 'USD' })).status, 400);
+
+  //  Tozalab ketamiz: qoldiq va qarz keyingi testlar uchun o'z
+  //  holida qolsin.
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + id)).status, 200);
+  assert.equal(Number((await H.id(
+    `SELECT total_usd FROM v_cash_balance WHERE code='MAIN'`)).total_usd), oldinKassa);
+  assert.equal(Number((await H.id(
+    `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance), oldinQarz);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

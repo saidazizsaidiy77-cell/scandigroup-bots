@@ -748,12 +748,36 @@ router.patch('/ops/:id/fix', need(...MANAGE), wrap(async (req, res) => {
       }
     }
 
+    //  ★ SUMMA — FAQAT `cash.fix` DA (administrator). Pulning O'ZI
+    //  haqiqatda bo'lib o'tgan harakat va uni ekrandan qayta yozish
+    //  mijozning yoki ta'minotchining qarzini hamda kassa qoldig'ini
+    //  jimgina o'zgartirardi — shuning uchun oddiy kassirda yo'l
+    //  eskicha qoladi: bekor qilinadi va qaytadan yoziladi.
+    //  Huquqi yo'q odam summa yuborsa ham e'tiborga olinmaydi:
+    //  katakni yashirish himoya emas.
+    const pul = can(req, 'cash.fix');
+    let amount = o.amount, currency = o.currency, rate = o.rate;
+    if (pul && b.amount !== undefined) {
+      //  Tekshiruv yaratishdagi bilan AYNAN bir xil: ikki joyda
+      //  boshqacha yozilsa tuzatilgan qator yangisidan boshqa
+      //  qoidaga bo'ysunardi.
+      currency = b.currency === 'USD' ? 'USD' : 'UZS';
+      amount = Number(b.amount);
+      if (!(amount > 0)) throw new Error('Summa kiritilmagan');
+      rate = currency === 'USD' ? null : Number(b.rate);
+      if (currency === 'UZS' && !(rate > 0)) throw new Error('Kurs kiritilmagan');
+    }
+
+    //  `amount_usd` GENERATED — qarz, qoldiq va hisobotlar uni
+    //  bazaning O'ZIDAN oladi, ya'ni qayta hisoblanadigan narsa yo'q.
     const { rows } = await client.query(
       `UPDATE cash_ops
           SET op_date = $2, note = $3,
-              expense_item_id = $4, pl_month = $5::date, staff_id = $6
+              expense_item_id = $4, pl_month = $5::date, staff_id = $6,
+              amount = $7, currency = $8, rate = $9
         WHERE id = $1 RETURNING doc_no`,
-      [o.id, sana, (b.note || '').trim() || null, item_id, pl_month, staff_id]);
+      [o.id, sana, (b.note || '').trim() || null, item_id, pl_month, staff_id,
+       amount, currency, rate]);
 
     await audit(req, { module: 'cash', action: 'fix', entity: 'cash_op',
                        entity_id: o.id,
@@ -761,10 +785,13 @@ router.patch('/ops/:id/fix', need(...MANAGE), wrap(async (req, res) => {
                                   edi: { op_date: o.op_date, note: o.note,
                                          expense_item_id: o.expense_item_id,
                                          pl_month: o.pl_month,
-                                         staff_id: o.staff_id },
+                                         staff_id: o.staff_id,
+                                         amount: o.amount, currency: o.currency,
+                                         rate: o.rate },
                                   boldi: { op_date: sana, note: b.note || null,
                                            expense_item_id: item_id,
-                                           pl_month, staff_id } } }, client);
+                                           pl_month, staff_id,
+                                           amount, currency, rate } } }, client);
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {
