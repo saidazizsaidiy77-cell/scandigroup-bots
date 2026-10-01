@@ -131,12 +131,43 @@ router.patch('/suppliers/:id', need('purchasing.manage'), wrap(async (req, res) 
 //  ★ TOMONI MIJOZNIKIGA TESKARI. Ta'minotchi — passiv hisob:
 //  HAQDOR biz qarzdor ekanimizni, QARZDOR esa to'lovni (yoki
 //  oldindan to'lovni) anglatadi. Saldo = kredit − debet.
+//
+//  ★ BOSHLANG'ICH QOLDIQ — ALOHIDA USTUN, AYLANMA EMAS (zavod qarori,
+//  2026-10). Ilgari u HAQDOR aylanmasiga qo'shilib ketardi va
+//  kartochkada «kelgan mol va boshlang'ich qarz» deb turardi: oy
+//  ichida qancha mol kelgani degan savolga javob yo'q edi — 20 833
+//  degan raqamning qancha qismi haqiqiy yetkazib berish ekanini
+//  faqat qatorni ochib, lentani ko'zdan kechirib bilish mumkin edi.
+//
+//  Sababi: boshlang'ich qarz lentada SANALI qator bo'lib turadi
+//  (`opening_debt_on`) va o'sha sana tanlangan oraliqqa tushsa u
+//  aylanmaga qo'shilardi.
+//
+//  «Davr boshiga» ga ko'chirish YO'L EMAS edi: zavod tizimni
+//  15-sentabrda ishga tushirgan bo'lsa, 1-sentabrdan boshlangan
+//  oraliqda u qarz 1-sentabrda ham bor edi degan YOLG'ON da'vo
+//  bo'lardi. Shuning uchun uchinchi ustun: u na saldo, na aylanma —
+//  tizim ishga tushgan kundagi raqam, va ekranda shunday deb
+//  ataladi.
+//
+//      boshiga + boshlang'ich qoldiq + haqdor − qarzdor = oxiriga
+//
+//  Ajratuvchi belgi — lentadagi `kind = 'opening'`, ya'ni shart
+//  BITTA joyda (`v_supplier_ledger`) va sana bo'yicha taxmin
+//  qilinmaydi.
 const DEBT_SQL = `
   SELECT s.id, s.name, s.phone, s.region, s.category,
          sc.name AS category_name, w.name AS manager_name,
          COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <  $1), 0) AS opening,
-         COALESCE(SUM(l.debit)  FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) AS debit,
-         COALESCE(SUM(l.credit) FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) AS credit,
+         --  ★ BOSHLANG'ICH QOLDIQ AYLANMAGA QO'SHILMAYDI (izoh pastda).
+         COALESCE(SUM(l.debit)  FILTER (
+                  WHERE l.kind = 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS start_debit,
+         COALESCE(SUM(l.credit) FILTER (
+                  WHERE l.kind = 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS start_credit,
+         COALESCE(SUM(l.debit)  FILTER (
+                  WHERE l.kind <> 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS debit,
+         COALESCE(SUM(l.credit) FILTER (
+                  WHERE l.kind <> 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS credit,
          COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <= $2), 0) AS closing
     FROM suppliers s
     LEFT JOIN supplier_categories sc ON sc.code = s.category
@@ -147,6 +178,10 @@ const DEBT_SQL = `
           OR s.region ILIKE '%' || $3 || '%' OR s.phone ILIKE '%' || $3 || '%')
    GROUP BY s.id, s.name, s.phone, s.region, s.category, sc.name, w.name
   HAVING COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <  $1), 0) <> 0
+      --  Aylanma SHARTI o'zgarmaydi: u endi boshlang'ich qoldiqni
+      --  ichiga olmaydi, shuning uchun o'sha qator alohida so'raladi —
+      --  aks holda faqat boshlang'ich qarzi bor ta'minotchi butunlay
+      --  tushib qolardi.
       OR COALESCE(SUM(l.debit)  FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) <> 0
       OR COALESCE(SUM(l.credit) FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) <> 0
       OR COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <= $2), 0) <> 0
@@ -187,6 +222,8 @@ router.get('/debts', need(...SEE), wrap(async (req, res) => {
   res.json({ from, to, rows,
              total: { opening: sum('opening'), debit: sum('debit'),
                       credit: sum('credit'), closing: sum('closing'),
+                      start_debit: sum('start_debit'),
+                      start_credit: sum('start_credit'),
                       opening_debit: sum('opening_debit'),
                       opening_credit: sum('opening_credit'),
                       closing_debit: sum('closing_debit'),

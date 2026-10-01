@@ -2072,6 +2072,22 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
 //  Chegara boshqa savdo sahifalari bilan bir xil: menejer faqat o'z
 //  yo'nalishidagi mijozlarni ko'radi (`channelsOf`).
 //
+//  ★ BOSHLANG'ICH QOLDIQ — ALOHIDA USTUN, AYLANMA EMAS (zavod qarori,
+//  2026-10). Boshlang'ich qarz lentada SANALI qator bo'lib turadi
+//  (`opening_debt_on`) va o'sha sana tanlangan oraliqqa tushsa u
+//  QARZDOR aylanmasiga qo'shilib ketardi — «oy ichida qancha mahsulot
+//  chiqdi» degan savolga javob yo'qolardi.
+//
+//  «Davr boshiga» ga ko'chirish YO'L EMAS edi: tizim 15-sentabrda
+//  ishga tushgan bo'lsa, 1-sentabrdan boshlangan oraliqda u qarz
+//  1-sentabrda ham bor edi degan YOLG'ON da'vo bo'lardi. Shuning
+//  uchun uchinchi ustun: u na saldo, na aylanma.
+//
+//      boshiga + boshlang'ich qoldiq + qarzdor − haqdor = oxiriga
+//
+//  Ta'minotchilar hisoboti bilan AYNAN bir xil shakl (izoh:
+//  modules/purchasing.js) — ikki hisobot bir ko'z bilan o'qiladi.
+//
 //  ★ MENEJER BO'YICHA FILTR HAM BOR (zavod qarori, 2026-10).
 //  Savdo bo'lim boshlig'ining savoli «kimning mijozi qancha qarzdor»:
 //  butun zavodning ro'yxatidan bitta menejernikini ko'z bilan terib
@@ -2083,8 +2099,15 @@ const DEBT_SQL = `
   SELECT c.id, c.name, c.region, c.phone, c.channel,
          ch.name AS channel_name, m.name AS manager_name,
          COALESCE(SUM(l.debit - l.credit) FILTER (WHERE l.on_date <  $1), 0) AS opening,
-         COALESCE(SUM(l.debit)  FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) AS debit,
-         COALESCE(SUM(l.credit) FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) AS credit,
+         --  ★ BOSHLANG'ICH QOLDIQ AYLANMAGA QO'SHILMAYDI (izoh pastda).
+         COALESCE(SUM(l.debit)  FILTER (
+                  WHERE l.kind = 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS start_debit,
+         COALESCE(SUM(l.credit) FILTER (
+                  WHERE l.kind = 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS start_credit,
+         COALESCE(SUM(l.debit)  FILTER (
+                  WHERE l.kind <> 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS debit,
+         COALESCE(SUM(l.credit) FILTER (
+                  WHERE l.kind <> 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS credit,
          COALESCE(SUM(l.debit - l.credit) FILTER (WHERE l.on_date <= $2), 0) AS closing
     FROM customers c
     LEFT JOIN customer_channels ch ON ch.code = c.channel
@@ -2142,6 +2165,8 @@ router.get('/debts', need(...READ), wrap(async (req, res) => {
   res.json({ from, to, rows,
              total: { opening: sum('opening'), debit: sum('debit'),
                       credit: sum('credit'), closing: sum('closing'),
+                      start_debit: sum('start_debit'),
+                      start_credit: sum('start_credit'),
                       opening_debit: sum('opening_debit'),
                       opening_credit: sum('opening_credit'),
                       closing_debit: sum('closing_debit'),
