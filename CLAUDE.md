@@ -3101,15 +3101,42 @@ ikki raqamni atardi va «qoldiq nechta» degan savolga ikki odam ikki
 xil javob berardi — menejer 3 deydi, mudir 10; ikkalasi ham to'g'ri
 va ikkalasi ham bir-birini tushunmaydi.
 
-Endi qoldiq HAMMAGA bronni ayirgandagi. Mudirning jismoniy soni
-yo'qolmadi — yonidagi **«Jami»** ustuniga chiqdi, tepadagi «Jami»
-kartochkasi bilan bir xil so'z va bir xil raqam. «Bo'sh» kartochkasi
-ham shu sababdan «Qoldiq» deb qayta nomlandi: bitta sahifada bitta
-narsa ikki nom bilan turardi.
+**★ NOMLAR OXIRGI MARTA AYTILDI** (zavod qarori, 2026-10). Birinchi
+urinishda qoldiq HAMMAGA bronni ayirgandagi bo'ldi va jismoniy soni
+«Jami» ga chiqdi. Nomlar baribir javobni aytmasdi: «Jami» nimaning
+jamisi ekani — javondagimi, bronda turgani bilanmi — faqat izohni
+o'qib bilinardi. Endi ikkalasi ham O'ZINI ataydi:
 
-Savdoga «Jami» chizilmaydi (inventarizatsiya raqami, unga yolg'on
-umid berardi), vitrinaga ham — u yerda bron bo'lmaydi va ikkala
-ustun bir xil raqamni takrorlardi.
+    QOLDIQ            javonda JISMONAN turgani, bronda turgani bilan
+                      birga — inventarizatsiyada sanaladigan raqam
+    BRONSIZ QOLDIQ    bronni ayirgandagi, ya'ni sotish mumkin bo'lgani
+
+Savdoga faqat **bronsiz qoldiq** chiziladi: uning savoli bitta —
+mijozga hozir nechtasini va'da qilaman. Vitrinada ustun bitta va
+«Qoldiq» bo'lib qolaveradi — u yerda bron bo'lmaydi (vitrina savdoga
+chiqmaydi) va ikkala ustun bir xil raqamni takrorlardi.
+
+**★ T/M OMBORDA TEPADA BESHTA KARTOCHKA** (zavod qarori, 2026-10):
+**kirdi · chiqdi · bronda · qoldiq · bronsiz qoldiq**. Mudirning
+savoli yuqoridan pastga o'qiladi — «bugun nima keldi, nima ketdi,
+nechtasi band, javonda nechta turibdi va shundan nechtasini sotish
+mumkin». Ilgari tepada uchta kartochka turardi («Omborda», «Jami»,
+«Qoldiq») va aylanma faqat jadvalda edi: «bu oyda qancha keldi»
+degan savolga javob uchun ustunlarni ko'z bilan qo'shish kerak edi.
+
+**Nomlar jadval ustunlari bilan AYNAN bir xil** va tartibi ham o'sha:
+bitta so'z bitta raqamni atashi kerak, aks holda tepadagi «Jami»
+bilan ustundagi «Jami» boshqa-boshqa javob berardi. Konverlar soni
+yo'qolmadi — «Qoldiq» kartochkasining ostida, mayda yozuvda.
+
+Raqam O'LCHOV BIRLIGI bo'yicha ajratiladi (stul DONA, penal
+KOMPLEKT) va yozilishi BITTA joyda — `uomKpi()`: beshta kartochka
+beshta joyda bir xil chizilishi kerak. Nol ham yoziladi: bo'sh
+kartochka «hisoblanmadi» degan savol qoldirardi.
+
+Aylanma kartochkasi QAYSI oraliqniki ekanini o'zi aytadi
+(`oraliqIzoh`) — «kirdi 40» degan raqam qaysi kunniki ekani noma'lum
+qolmasin.
 
 **Telefonda JAMI qatori ham kartochka bo'ladi**, qatorlar bilan BIR
 XIL panjarada. Katagi `position:sticky; bottom:0` bo'lib qolgan edi
@@ -3515,6 +3542,39 @@ narx) / SUM(qty)`, faqat KIRGAN qatorlar bo'yicha. Oxirgi kirimning
 narxini olish yo'l emas edi: omborda ikki xil narxda kelgan bitta
 material turadi va oxirgisi butun qoldiqning bahosini o'zgartirib
 yuborardi.
+
+**★ XOM ASHYO QOLDIG'I HAM AYLANMA** (zavod qarori, 2026-10;
+`GET /api/materials/stock` dagi `from`/`to`). Mudir javondagi raqamni
+ko'radi-yu, «shu oyda qancha keldi, qancha ketdi» degan savolga javob
+topolmasdi: harakatlar tabiga o'tib, bitta material bo'yicha ko'z
+bilan qo'shib chiqish kerak edi.
+
+Tayyor mahsulot qoldig'i bilan AYNAN bir xil idiom va bir xil
+ogohlantirish: **kirdi va chiqdi tanlangan ORALIQ bo'yicha**,
+**qoldiq, narx va summa esa HOZIRGI holat**. Boshqacha bo'lishi
+mumkin emas — «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
+filtri bilan aralashtirib bo'lmaydi; sahifa buni o'zi yozib turadi.
+
+**Ikki ustun FAQAT oraliq tanlanganda chiziladi**: aks holda ikkita
+nol ustun turib, nimani anglatishi hech qayerda yozilmasdi. Shu
+sababdan so'rovda ham shart bor — oraliq berilmasa aylanma UMUMAN
+hisoblanmaydi va ro'yxat eskicha, faqat javondagisi bo'lib turadi.
+
+**View'ga TEGILMADI**: aylanma `v_material_flow` dan CTE bilan
+olinadi va `v_material_stock` ga `FULL JOIN` qilinadi. Sabab ikkita.
+Birinchisi — 2-qoida: view'ni o'zgartirish migratsiyani
+qimirlatardi, bu esa shunchaki filtr uchun ortiqcha xavf.
+Ikkinchisi tayyor mahsulot qoldig'idagi bilan bir xil: `FULL JOIN`
+kelib, o'sha davrning O'ZIDA sarflanib bo'lingan materialni ham
+qatorda saqlaydi — `v_material_stock` nol qoldiqni tashlab yuboradi
+(`HAVING SUM(qty) <> 0`) va u ro'yxatdan butunlay tushib ketardi.
+
+**Qidiruv endi KOD bo'yicha ham** (`materials.code`): zavodda uch
+yuzdan ortiq nom bor va mudir ko'pincha kodni yozadi —
+spravochnikdagi qidiruv bilan bir xil shart. Tayyor mahsulot
+omborida ham qidiruv MAHSULOT nomi va TURI bo'yicha ishlardi, lekin
+katakdagi yozuv faqat rang, mato va konveyer raqamini aytardi:
+mudir mahsulot bo'yicha izlash mumkinligini bilmasdi.
 
 **★ MOL HUJJAT BILAN KIRADI** (`mat_receipts`, `M26-0001`, xom ashyo
 sahifasidagi **«Kirim»** tabi; zavod qarori 2026-09). Boshlang'ich

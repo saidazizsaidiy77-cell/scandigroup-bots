@@ -47,7 +47,19 @@
     <div style="min-width:200px"><label>Ombor</label>
       <select id="sWh" onchange="load()"></select></div>
     <div style="min-width:200px"><label>Qidiruv</label>
-      <input id="sQ" placeholder="material nomi" oninput="deb()"></div>
+      <input id="sQ" placeholder="material nomi yoki kodi" oninput="deb()"></div>
+    <!--  ★ SANA — AYLANMA ORALIG'I (zavod qarori, 2026-10). Tayyor
+          mahsulot qoldig'idagi bilan AYNAN bir xil idiom: kirdi va
+          chiqdi SHU oraliqniki, qoldiq esa hozirgi holat. Ikkalasini
+          aralashtirib bo'lmaydi — «1-sentabrdagi qoldiq» boshqa
+          savol. Oraliq bo'sh bo'lsa ikkala ustun ham chizilmaydi:
+          bo'sh ustun savol beradi, javob emas. -->
+    <div><label>Harakat sanasi, dan</label>
+      <input id="sFrom" type="date" onchange="load()"></div>
+    <div><label>gacha</label>
+      <input id="sTo" type="date" onchange="load()"></div>
+    <button onclick="oyStock()">Shu oy</button>
+    <button onclick="tozaStock()">Tozalash</button>
     <!--  ★ MINUSGA TUSHGANLARNI BIR JOYDA KO'RISH (zavod qarori,
           2026-09). Manfiy qator ALLAQACHON qizil bo'lib turadi,
           lekin faqat O'SHA omborning ichida: zavodda o'n to'rtta
@@ -347,6 +359,8 @@ async function load() {
     if ($('sWh').value)       q.set('warehouse_id', $('sWh').value);
     if ($('sQ').value.trim()) q.set('q', $('sQ').value.trim());
     if ($('sMinus').checked)  q.set('minus', '1');
+    if ($('sFrom').value)     q.set('from', $('sFrom').value);
+    if ($('sTo').value)       q.set('to', $('sTo').value);
     rows = (await App.api('/api/materials/stock?' + q)).rows;
   } else if (tab === 'kirim') {
     if ($('kSup').value)      q.set('supplier_id', $('kSup').value);
@@ -429,7 +443,13 @@ function drawStock() {
   //  qo'shilsa omborning qiymati jimgina pasayib borardi. Shuning
   //  uchun narxsiz qatorlar SONI ombor sarlavhasida yoziladi:
   //  raqamning o'zi yolg'on emas, tushuntirilmagani yolg'on bo'lardi.
-  $('body').innerHTML = gr.map((g) => {
+  //  Aylanma ustunlari FAQAT oraliq tanlanganda: aks holda ikkita
+  //  nol ustun turib, nimani anglatishini hech narsa aytmasdi.
+  const ay = !!($('sFrom').value || $('sTo').value);
+  $('body').innerHTML = (ay ? `<p class="muted" style="font-size:12px;margin:0 0 4px">
+      Kirdi va chiqdi — tanlangan oraliq bo'yicha &middot;
+      qoldiq, narx va summa — hozirgi holat</p>` : '')
+    + gr.map((g) => {
     const jami = g.items.reduce((a, r) => a + (Number(r.amount) || 0), 0);
     const yoq  = g.items.filter((r) => r.price == null).length;
     return `
@@ -442,11 +462,16 @@ function drawStock() {
     </div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Material</th><th>Turkum</th>
+        ${ay ? '<th class="num">Kirdi</th><th class="num">Chiqdi</th>' : ''}
         <th class="num">Qoldiq</th><th>O'lchov</th>
         <th class="num">Narx, $</th><th class="num">Summa, $</th></tr></thead>
       <tbody>${g.items.map((r) => `<tr>
         <td><b>${esc(r.material)}</b></td>
         <td class="muted">${esc(r.category_name || '—')}</td>
+        <!--  Nol bu yerda HAQIQIY javob («bu oyda kelmadi»), bo'sh
+              katak emas: ombor qoldig'idagi bilan bir xil qoida. -->
+        ${!ay ? '' : `<td class="num">${son(r.kirdi)}</td>
+        <td class="num">${son(r.chiqdi)}</td>`}
         <!--  ★ MANFIY QOLDIQ QIZIL: material omborga kirmasdan
               sarflangan degani — kirim hujjati yozilmagan. Raqamni
               nolga qisish yolg'on bo'lardi, yashirish esa xatoni
@@ -459,6 +484,24 @@ function drawStock() {
         </tr>`).join('')}
       </tbody></table></div>`;
   }).join('');
+}
+
+//  Oraliq tugmalari: «shu oy» kuniga o'nlab marta kerak bo'ladi va
+//  uni ikkita kalendardan terib o'tirish ortiqcha ish bo'lardi
+//  (qarzdorlik hisobotidagi bilan bir xil idiom).
+function oyStock() {
+  const n = new Date();
+  const kun = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4)
+    .toISOString().slice(0, 10);
+  $('sFrom').value = kun(new Date(n.getFullYear(), n.getMonth(), 1));
+  $('sTo').value = kun(n);
+  load();
+}
+
+function tozaStock() {
+  $('sFrom').value = ''; $('sTo').value = '';
+  $('sQ').value = ''; $('sMinus').checked = false;
+  load();
 }
 
 //  Pul — ikki kasr xonasi bilan, ajratuvchisi PROBEL: «12 500.00».

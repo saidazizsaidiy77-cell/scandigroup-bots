@@ -9095,6 +9095,69 @@ test('ta\'minotchiga to\'lov kassa orderi bo\'lib ochiladi', async () => {
   assert.equal((await kassir('PATCH', '/api/cash/ops/' + id)).status, 200);
 });
 
+//  ★ XOM ASHYO QOLDIG'I HAM AYLANMA (zavod qarori, 2026-10). Mudir
+//  javondagi raqamni ko'radi-yu, «shu oyda qancha keldi» degan
+//  savolga javob topolmasdi — harakatlar tabiga o'tib, bitta
+//  material bo'yicha ko'z bilan qo'shib chiqish kerak edi. Tayyor
+//  mahsulot qoldig'idagi bilan AYNAN bir xil qoida, shuning uchun
+//  test ham o'sha ikki narsani tekshiradi: kirdi/chiqdi
+//  ORALIQNIKI, qoldiq esa HOZIRGI holat.
+test('xom ashyo qoldig\'ida oraliq: aylanma oraliqniki, qoldiq hozirgi',
+  async () => {
+  const xom = await xodim('Sinov aylanma xodim', 'xom_ombor');
+  //  Kirim FAQAT zavod omboriga yoziladi (izoh: modules/materials.js),
+  //  shuning uchun tsex ombori emas.
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const tam = (await H.id(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Aylanma sinov yelimi', uom: 'kg', category: 'FURN' })).body;
+
+  //  Sentabrda 100 boshlang'ich qoldiq, oktabrda 40 kirim.
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    on: '2026-09-05',
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 100 }] })).status, 200);
+  const k = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh, doc_on: '2026-10-03',
+    items: [{ material_id: m.id, qty: 40, price: 5 }] });
+  assert.equal(k.status, 200, k.text);
+
+  const qator = async (q) => (await xom('GET', '/api/materials/stock' + q))
+    .body.rows.find((r) => r.material_id === m.id);
+
+  //  ★ ORALIQ BERILMASA aylanma NOL bo'lib keladi: so'ralmagan
+  //  savolga javob yozilmaydi va ro'yxat eskicha turaveradi.
+  const hammasi = await qator('');
+  assert.ok(hammasi, 'javonda turgani ro\'yxatda');
+  assert.equal(Number(hammasi.qty), 140, 'javonda 100 + 40');
+  assert.equal(Number(hammasi.kirdi), 0, 'oraliqsiz aylanma so\'ralmaydi');
+  assert.equal(Number(hammasi.chiqdi), 0);
+
+  //  SENTABR: faqat boshlang'ich qoldiq tushadi.
+  const sen = await qator('?from=2026-09-01&to=2026-09-30');
+  assert.equal(Number(sen.kirdi), 100, 'sentabrda 100 kirdi');
+  assert.equal(Number(sen.chiqdi), 0);
+  //  ★ Qoldiq ORALIQQA BOG'LIQ EMAS — u hozirgi holat.
+  assert.equal(Number(sen.qty), 140, 'qoldiq oraliqdan qat\'i nazar bir xil');
+
+  //  OKTABR: faqat kirim hujjati.
+  const okt = await qator('?from=2026-10-01&to=2026-10-31');
+  assert.equal(Number(okt.kirdi), 40, 'oktabrda 40 kirdi');
+  assert.equal(Number(okt.qty), 140);
+
+  //  Oraliqdan tashqarida aylanma nol, lekin qator YO'QOLMAYDI:
+  //  javonda turgani baribir ko'rinishi kerak.
+  const yoq = await qator('?from=2026-11-01&to=2026-11-30');
+  assert.ok(yoq, 'javondagi material oraliqsiz oyda ham turadi');
+  assert.equal(Number(yoq.kirdi), 0);
+  assert.equal(Number(yoq.qty), 140);
+
+  //  Qidiruv KOD bo'yicha ham ishlaydi: mudir ko'pincha kodni
+  //  yozadi va ilgari so'rov faqat nomni qidirardi.
+  await H.id(`UPDATE materials SET code = 'AYL-77' WHERE id = $1`, [m.id]);
+  assert.ok(await qator('?q=AYL-77'), 'kod bo\'yicha topiladi');
+  assert.ok(await qator('?q=Aylanma sinov'), 'nomi bo\'yicha ham');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

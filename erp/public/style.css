@@ -287,11 +287,17 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   .stock .s-in::before  {content:'kirdi ';color:var(--muted)}
   .stock .s-out::before {content:'chiqdi ';color:var(--muted)}
   .stock .s-bron::before{content:'bronda ';color:var(--muted)}
-  .stock .s-all::before {content:'jami ';color:var(--muted)}
-  /* Telefonda katta raqam — QOLDIQ, ya'ni sotish mumkin bo'lgani:
-     mudirning ham, savdoning ham kunlik savoli shu. Javondagi
-     jismoniy soni («jami») ostida, mayda yozuvda turadi — u
-     inventarizatsiya raqami va har kuni kerak bo'lmaydi. */
+  /*  ★ T/M omborda yozuv «qoldiq» (javondagi, inventarizatsiya
+      raqami), katta raqam esa BRONSIZ qoldiq — sotish mumkin
+      bo'lgani. Vitrinada ustun «Jami» bo'lib qolaveradi: u yerda
+      bron yo'q va ikki nom kerak emas. Nomlar ekrandagi ustun va
+      kartochkalar bilan BIR XIL (izoh: public/ombor.html). */
+  .stock .s-all::before      {content:'jami ';color:var(--muted)}
+  .stock.tm .s-all::before   {content:'qoldiq ';color:var(--muted)}
+  /* Telefonda katta raqam — BRONSIZ QOLDIQ, ya'ni sotish mumkin
+     bo'lgani: mudirning ham, savdoning ham kunlik savoli shu.
+     Javondagi jismoniy soni («qoldiq») ostida, mayda yozuvda
+     turadi — u inventarizatsiya raqami va har kuni kerak emas. */
   .stock .s-free{grid-area:qty;font-size:15px}
   /*  ★ JAMI QATORI HAM KARTOCHKA BO'LADI, qatorlar bilan BIR XIL
       panjarada: yig'indi qaysi ustunniki ekani telefonda ham

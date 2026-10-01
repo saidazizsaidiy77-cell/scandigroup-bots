@@ -486,13 +486,36 @@ const th = (k, cls, nom) => `<th class="${cls}" onclick="sortSet('${k}')">${
   nom}<span style="opacity:.45">${
   sortK === k ? (sortAsc ? ' \u25b2' : ' \u25bc') : ''}</span></th>`;
 
+//  ★ KARTOCHKADAGI RAQAM O'LCHOV BIRLIGI BO'YICHA (CLAUDE.md): stul
+//  DONA, penal KOMPLEKT — ularni bitta yig'indiga qo'shib bo'lmaydi,
+//  «22» degan raqam nimani anglashi noma'lum qolardi. Beshta
+//  kartochka beshta joyda bir xil chizilishi kerak, shuning uchun
+//  yozilishi BITTA joyda: ikki nusxada bo'lsa biri ertaga
+//  ikkinchisidan ajralib ketardi.
+//
+//  Nol ham yoziladi: bo'sh kartochka «hisoblanmadi» degan savol
+//  qoldirardi, nol esa javob — bu oraliqda hech narsa kelmagan.
+function uomKpi(d, kalit) {
+  const bor = (d.total.by_uom || []).filter((x) => Number(x[kalit]));
+  return bor.length
+    ? bor.map((x) => `${x[kalit]}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
+    : String(d.total[kalit] ?? 0);
+}
+
+//  Aylanma kartochkasi QAYSI oraliqniki ekanini o'zi aytadi — aks
+//  holda «kirdi 40» degan raqam qaysi kunniki ekani noma'lum qolardi
+//  (jadval ustidagi izoh bilan bir xil sabab).
+const oraliqIzoh = (d) => d.from || d.to
+  ? `${d.from ? d8(d.from) : 'boshidan'} \u2014 ${d.to ? d8(d.to) : 'bugungacha'}`
+  : 'butun davr uchun';
+
 function drawStock() {
   const d = stock;
   $('body').innerHTML = `
     <div class="card">
       <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
         <div style="flex:1;min-width:150px"><label>Qidiruv</label>
-          <input id="sQ" placeholder="rang, mato, konveyer \u2116"
+          <input id="sQ" placeholder="mahsulot, turi, rang, mato, konveyer \u2116"
                  value="${esc(d.q || '')}" oninput="debStock()"></div>
         <!--  Sana endi HARAKAT sanasi: kirdi/chiqdi shu oraliqniki.
               Bronda va qoldiq esa hozirgi holat va oraliqqa bog'liq
@@ -522,39 +545,60 @@ function drawStock() {
         <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
     </div>
 
+    <!--  ★ T/M OMBORDA BESHTA KARTOCHKA, JADVAL USTUNLARI BILAN
+          AYNAN BIR XIL (zavod qarori, 2026-10): kirdi · chiqdi ·
+          bronda · qoldiq · bronsiz qoldiq. Mudirning savoli
+          yuqoridan pastga o'qiladi — «bugun nima keldi, nima ketdi,
+          nechtasi band, javonda nechta turibdi va shundan nechtasini
+          sotish mumkin» — va javob ikkala joyda bir xil so'z bilan
+          turishi kerak: ilgari tepada «Jami» turib, ustunda ham
+          «Jami» bor edi, «Qoldiq» esa ikkalasida BOSHQA raqamni
+          ko'rsatardi.
+
+          ★ «QOLDIQ» endi JAVONDAGISI (inventarizatsiya raqami), sotish
+          mumkin bo'lgani esa «BRONSIZ QOLDIQ». Ilgari teskari edi va
+          «qoldiq nechta» degan savolga ikki odam ikki xil javob
+          berardi — endi so'zning o'zi qaysi raqam ekanini aytadi.
+
+          Har raqam O'LCHOV BIRLIGI bo'yicha ajratiladi: stul DONA,
+          penal KOMPLEKT — qo'shib bo'lmaydi. -->
     <div class="grid g3" style="margin-top:16px">
+      ${!isTM() ? `
       <div class="card"><h2>Omborda</h2>
         <div class="kpi">${d.total.units}<small> konver</small></div></div>
-      <!--  «Jami» — bronda turgani bilan BIRGA: bu inventarizatsiya
-            raqami, ya'ni ombor mudirining savoli. Savdoga u yolg'on
-            umid berardi (bronda turgani boshqa mijozniki), shuning
-            uchun unga chizilmaydi. -->
       ${faqatQoldiq() ? '' : `
       <div class="card"><h2>Jami</h2>
-        <div class="kpi">${d.total.by_uom && d.total.by_uom.length
-          ? d.total.by_uom.map(x => `${x.qty}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
-          : d.total.qty}</div>
+        <div class="kpi">${uomKpi(d, 'qty')}</div>
         <p class="muted" style="margin-top:6px;font-size:12px">bronda turgani bilan
-          birga \u2014 inventarizatsiyada shu raqam sanaladi</p></div>`}
-      <!--  T/M omborda pul emas, DONA muhim: mudir mahsulotni sanaydi va
-            buyurtmaga qanchasi olinganini ko'radi. Vitrinada esa narx va
-            summa qoladi \u2014 u yerda sotuv nuqtasi hisobi yuritiladi. -->
-      <!--  ★ KARTOCHKA HAM «QOLDIQ» DEYILADI, ustundagi bilan bir xil
-            so'z va bir xil raqam. Ilgari u «Bo'sh» edi va bitta sahifada
-            bitta narsa ikki nom bilan turardi — pastdagi «Qoldiq» esa
-            o'sha paytda BOSHQA raqamni (jismoniy sonini) ko'rsatardi. -->
-      ${isTM() ? `<div class="card"><h2>Qoldiq</h2>
-        <div class="kpi">${d.total.by_uom && d.total.by_uom.length
-          ? d.total.by_uom.map(x => `${x.free}<small> ${esc(x.uom)}</small>`).join(' \u00b7 ')
-          : (d.total.free ?? 0)}</div>
-        <!--  Bron ham o'lchov birligi bilan: dona bilan komplektni
-              qo'shib bo'lmaydi (CLAUDE.md). -->
-        <p class="muted" style="margin-top:6px;font-size:12px">${
-          d.total.bron ? (d.total.by_uom || []).filter(x => x.bron)
-              .map(x => `${x.bron} ${esc(x.uom)}`).join(' \u00b7 ') + ' bronda'
-            : 'bron yo\'q'}</p></div>`
-      : `<div class="card"><h2>Summa</h2>
-        <div class="kpi">${d.total.amount ? '$' + money(d.total.amount) : '\u2014'}</div></div>`}
+          birga — inventarizatsiyada shu raqam sanaladi</p></div>`}
+      <div class="card"><h2>Summa</h2>
+        <div class="kpi">${d.total.amount ? '$' + money(d.total.amount) : '\u2014'}</div></div>`
+      : faqatQoldiq() ? `
+      <!--  Savdoga aylanma chizilmaydi (izoh: faqatQoldiq): uning
+            savoli bitta — mijozga hozir nechtasini va'da qilaman. -->
+      <div class="card"><h2>Bronsiz qoldiq</h2>
+        <div class="kpi">${uomKpi(d, 'free')}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">
+          buyurtmaga olinganini ayirgandagi</p></div>`
+      : `
+      <div class="card"><h2>Kirdi</h2>
+        <div class="kpi">${uomKpi(d, 'kirdi')}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">${oraliqIzoh(d)}</p></div>
+      <div class="card"><h2>Chiqdi</h2>
+        <div class="kpi">${uomKpi(d, 'chiqdi')}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">${oraliqIzoh(d)}</p></div>
+      <div class="card"><h2>Bronda</h2>
+        <div class="kpi">${uomKpi(d, 'bron')}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">
+          mijozga va'da qilingani</p></div>
+      <div class="card"><h2>Qoldiq</h2>
+        <div class="kpi">${uomKpi(d, 'qty')}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">javonda turgani —
+          ${d.total.units} konver, inventarizatsiyada shu sanaladi</p></div>
+      <div class="card"><h2>Bronsiz qoldiq</h2>
+        <div class="kpi">${uomKpi(d, 'free')}</div>
+        <p class="muted" style="margin-top:6px;font-size:12px">
+          bronni ayirgandagi — sotish mumkin bo'lgani</p></div>`}
     </div>
 
     ${!d.rows.length ? `<div class="card" style="margin-top:16px"><h2>Ombor bo'sh</h2>
@@ -575,8 +619,12 @@ function drawStock() {
           ${faqatQoldiq() ? '' : `${th('kirdi', 's-in', 'Kirdi')}
           ${th('chiqdi', 's-out', 'Chiqdi')}
           ${isTM() ? th('bron', 's-bron', 'Bronda') : ''}`}
-          ${th('free', 's-free', 'Qoldiq')}
-          ${jamiUstun() ? th('jami', 's-all', 'Jami') : ''}
+          <!--  Nomlar YUQORIDAGI kartochkalar bilan bir xil: bitta
+                so'z bitta raqamni atashi kerak. -->
+          ${isTM() ? `${th('jami', 's-all', 'Qoldiq')}
+                      ${th('free', 's-free', 'Bronsiz qoldiq')}`
+                   : `${th('free', 's-free', 'Qoldiq')}
+                      ${jamiUstun() ? th('jami', 's-all', 'Jami') : ''}`}
           ${isTM() ? '' : `${th('narx', 's-price', 'Narx, $')}
                            ${th('summa', 's-amount', 'Summa, $')}`}
         </tr></thead>
@@ -630,10 +678,12 @@ function jamiRows(d) {
     ${faqatQoldiq() ? '' : `<td class="s-in">${son(x.kirdi)}</td>
     <td class="s-out">${son(x.chiqdi)}</td>
     ${isTM() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}`}
-    <td class="s-free"><b>${isTM() ? x.free : x.qty}</b> <span class="muted"
-      style="font-size:11px">${esc(x.uom)}</span></td>
-    ${!jamiUstun() ? '' : `<td class="s-all"><b>${x.qty}</b> <span class="muted"
-      style="font-size:11px">${esc(x.uom)}</span></td>`}
+    ${(() => {
+      const kat = (cls, v) => `<td class="${cls}"><b>${v}</b> <span class="muted"
+        style="font-size:11px">${esc(x.uom)}</span></td>`;
+      return isTM() ? kat('s-all', x.qty) + kat('s-free', x.free)
+                    : kat('s-free', x.qty);
+    })()}
     ${isTM() ? '' : `<td class="s-price"></td>
       <td class="s-amount">${i === 0 && Number(d.total.amount)
         ? `<b>${money(d.total.amount)}</b>` : ''}</td>`}
@@ -699,10 +749,15 @@ function drawStockRow(r) {
             chiqdi: javondagi donani u bilan sanaydi. Vitrinada bron
             bo'lmaydi (savdoga chiqmaydi), ya'ni u yerda ikkalasi bir
             xil raqam va ikkinchi ustun faqat joy egallardi. -->
-      <td class="s-free"><b>${isTM() ? r.free : r.qty}</b> <span class="muted"
-        style="font-size:11px">${esc(r.uom || '')}</span></td>
-      ${!jamiUstun() ? '' : `<td class="s-all"><b>${r.qty}</b> <span class="muted"
-        style="font-size:11px">${esc(r.uom || '')}</span></td>`}
+      ${(() => {
+        const bir = esc(r.uom || '');
+        const kat = (cls, v) => `<td class="${cls}"><b>${v}</b> <span class="muted"
+          style="font-size:11px">${bir}</span></td>`;
+        //  T/M da avval QOLDIQ (javondagi), keyin BRONSIZ QOLDIQ —
+        //  sarlavha va yuqoridagi kartochkalar bilan bir xil tartib.
+        return isTM() ? kat('s-all', r.qty) + kat('s-free', r.free)
+                      : kat('s-free', r.qty);
+      })()}
       ${isTM() ? ''
       //  Vitrinada narx va summa: u yerda nuqta hisobi yuritiladi.
       //  Narxi yo'q konverning summasi 0 emas, NOMA'LUM: nol raqam
@@ -1181,7 +1236,7 @@ function drawMoves() {
               va uchtasi ham bo'sh turgan filtr qatori joy egallardi. -->
         <div style="flex:1;min-width:220px"><label>Qidiruv</label>
           <input id="mQ" value="${esc(d.q || '')}"
-            placeholder="mijoz nomi · konver № · zakaz №"
+            placeholder="mahsulot · mijoz · konver № · zakaz №"
             onchange="loadMoves()"></div>
         <div><label>Amal</label>
           <select id="mKind" onchange="loadMoves()">

@@ -312,30 +312,79 @@ async function yetarlimi(client, whId, materialId, qty, nomi) {
   throw e;
 }
 
+//  ★ XOM ASHYO QOLDIG'I HAM AYLANMA (zavod qarori, 2026-10). Tayyor
+//  mahsulot ombori bilan AYNAN bir xil idiom va bir xil sabab: mudir
+//  javondagi raqamni ko'radi-yu, «shu oyda qancha keldi, qancha
+//  ketdi» degan savolga javob topolmasdi — harakatlar tabiga o'tib,
+//  bitta material bo'yicha ko'z bilan qo'shib chiqish kerak edi.
+//
+//  Sana IKKI XIL ishlaydi va buni bilib qo'yish kerak: **kirdi va
+//  chiqdi tanlangan ORALIQ bo'yicha**, **qoldiq, narx va summa esa
+//  HOZIRGI holat**. Boshqacha bo'lishi mumkin emas — «1-sentabrdagi
+//  qoldiq» boshqa savol va uni oraliq filtri bilan aralashtirib
+//  bo'lmaydi; sahifa buni o'zi yozib turadi.
+//
+//  ★ ORALIQ QATOR HAM QO'SHADI (`FULL JOIN`, tayyor mahsulot
+//  qoldig'idagi bilan bir xil): kelib, o'sha davrning O'ZIDA
+//  sarflanib bo'lingan material javonda qolmaydi
+//  (`v_material_stock` nol qoldiqni tashlab yuboradi) va ro'yxatdan
+//  butunlay tushib ketardi — «LDSP qani» degan savolga javob
+//  bo'lmasdi. Oraliq BERILMAGANDA esa qo'shiladigan narsa yo'q:
+//  `ay` bo'sh qoladi va ro'yxat eskicha, faqat javondagisi bo'lib
+//  turaveradi.
 router.get('/stock', need(...VIEW), wrap(async (req, res) => {
   const doira = whDoira(req);
+  const from = trim(req.query.from), to = trim(req.query.to);
   const { rows } = await db.query(
-    `SELECT s.*, c.name AS category_name, u.name AS uom_name
+    `WITH ay AS (
+       SELECT f.place_id AS warehouse_id, f.material_id,
+              COALESCE(SUM(f.qty)  FILTER (WHERE f.qty > 0), 0)::NUMERIC(14,3) AS kirdi,
+              COALESCE(SUM(-f.qty) FILTER (WHERE f.qty < 0), 0)::NUMERIC(14,3) AS chiqdi
+         FROM v_material_flow f
+        WHERE f.kind = 'warehouse'
+          --  Oraliq berilmasa aylanma SO'RALMAGAN: shart yolg'on
+          --  bo'lib qoladi va FULL JOIN eski ro'yxatni beradi.
+          AND ($5::date IS NOT NULL OR $6::date IS NOT NULL)
+          AND ($5::date IS NULL OR f.moved_on >= $5)
+          AND ($6::date IS NULL OR f.moved_on <= $6)
+        GROUP BY f.place_id, f.material_id
+     )
+     SELECT COALESCE(s.warehouse_id, ay.warehouse_id) AS warehouse_id,
+            w.code AS warehouse_code, w.name AS warehouse, w.shop_id,
+            COALESCE(s.material_id, ay.material_id)    AS material_id,
+            mt.name AS material, mt.uom, mt.category,
+            COALESCE(s.qty, 0)::NUMERIC(14,3) AS qty,
+            s.price, s.amount,
+            COALESCE(ay.kirdi, 0)  AS kirdi,
+            COALESCE(ay.chiqdi, 0) AS chiqdi,
+            c.name AS category_name, u.name AS uom_name
        FROM v_material_stock s
-       JOIN warehouses w ON w.id = s.warehouse_id
-       LEFT JOIN material_categories c ON c.code = s.category
-       LEFT JOIN material_uoms u       ON u.code = s.uom
+       FULL JOIN ay ON ay.warehouse_id = s.warehouse_id
+                   AND ay.material_id  = s.material_id
+       JOIN warehouses w ON w.id = COALESCE(s.warehouse_id, ay.warehouse_id)
+       JOIN materials mt ON mt.id = COALESCE(s.material_id, ay.material_id)
+       LEFT JOIN material_categories c ON c.code = mt.category
+       LEFT JOIN material_uoms u       ON u.code = mt.uom
       WHERE ($1::int[] IS NULL
              OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))
-        AND ($2::int IS NULL OR s.warehouse_id = $2)
-        AND ($3::text IS NULL OR s.material ILIKE '%' || $3 || '%')
+        AND ($2::int IS NULL OR w.id = $2)
+        --  ★ QIDIRUV KODNI HAM OLADI: zavodda uch yuzdan ortiq nom
+        --  bor va mudir ko'pincha kodni yozadi (spravochnikdagi
+        --  qidiruv bilan bir xil shart).
+        AND ($3::text IS NULL OR mt.name ILIKE '%' || $3 || '%'
+             OR COALESCE(mt.code, '') ILIKE '%' || $3 || '%')
         --  ★ FAQAT MINUSGA TUSHGANI. Zavodda o'n to'rtta ombor va uch
         --  yuzdan ortiq nom bor — minusga tushgan o'ttiztasini ko'z
         --  bilan terib olish uchun har omborni birma-bir ochish kerak
         --  edi. Ular ALLAQACHON qizil bo'lib turadi, lekin faqat
         --  o'sha omborning ichida.
         AND (NOT $4::boolean OR ${MINUS})
-      ORDER BY w.sort, c.code NULLS LAST, s.material
+      ORDER BY w.sort, mt.category NULLS LAST, mt.name
       LIMIT 3000`,
     [doira,
      Number(req.query.warehouse_id) || null, trim(req.query.q),
-     req.query.minus === '1']);
-  res.json({ rows });
+     req.query.minus === '1', from || null, to || null]);
+  res.json({ rows, from: from || '', to: to || '' });
 }));
 
 //  Harakat tarixi: qaysi kuni, qayerdan qayerga, nechta va kim.
