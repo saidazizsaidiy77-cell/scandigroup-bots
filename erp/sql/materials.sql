@@ -1258,3 +1258,61 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('bolim-material');
   END IF;
 END $$;
+
+-- ═════════════════════════════════ NARX OMBORDAN OMBORGA KO'CHADI
+--
+--  ★ TSEX OMBORIDA NARX YO'Q EDI, va sababi mexanizmda (zavod qarori,
+--  2026-10). Narx HARAKAT QATORIDA turadi, materialda emas; o'rtacha
+--  narx esa faqat NARXI BOR kirim qatorlaridan hisoblanadi. Tsex
+--  omboriga material talabnoma yoki ko'chirish bilan keladi va o'sha
+--  qatorda narx YOZILMASDI — ya'ni tsex javonida turgan materialning
+--  qiymati HAR DOIM bo'sh chiqardi va «tsexda qancha pul turibdi»
+--  degan savolga javob yo'q edi.
+--
+--  Qo'lda narx qo'yib chiqish yo'l emas: narx materialning emas,
+--  KIRIMNING xususiyati — bugun LDSP 250 000, ertaga 270 000. Qo'lda
+--  yozilgan raqam ertasigayoq haqiqatdan uzilardi va uni har
+--  ko'chirishda qayta terib o'tirish kerak bo'lardi.
+--
+--  Javob mexanizmning O'ZIDA: material ombordan chiqqanda uning
+--  tannarxi o'sha paytda MA'LUM — manba omborning o'rtacha kirim
+--  narxi. Shuning uchun u harakat qatoriga YOZILADI va qator bilan
+--  QOTIB qoladi (kursning operatsiya bilan qotishi bilan bir xil
+--  idiom va bir xil sabab): ertaga zavod ombori yangi narxda to'lsa
+--  tsexga kecha ketgan material qayta baholanmaydi.
+--
+--  Bitta qator — bitta narx: u beruvchi tomonda CHIQIM, qabul
+--  qiluvchida KIRIM bo'lib o'qiladi (`v_material_flow` har qatorni
+--  ikki marta ochadi). Chiqim qatorlari o'rtachaga umuman
+--  qo'shilmaydi (`WHERE f.qty > 0`), ya'ni manba omborning narxi
+--  o'zgarmaydi — faqat tsexniki to'ladi.
+--
+--  Yangi ko'chirishlarni `modules/materials.js` yozadi; quyidagisi
+--  ESKI qatorlar uchun, bir martalik.
+DO $$
+DECLARE n INT;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'tsex-narx') THEN
+    --  Zanjir bo'lishi mumkin: zavod ombori → tsex ombori → bo'lim
+    --  ombori. Ikkinchi bo'g'inning narxi birinchisi to'lgandan
+    --  keyingina ma'lum bo'ladi, shuning uchun bir necha marta
+    --  yuriladi va hech narsa o'zgarmagan joyda to'xtaladi.
+    FOR i IN 1..5 LOOP
+      WITH narx AS (
+        SELECT s.warehouse_id, s.material_id, s.price
+          FROM v_material_stock s WHERE s.price IS NOT NULL
+      )
+      UPDATE material_moves m
+         SET price = narx.price, ccy = 'USD', rate = NULL
+        FROM narx
+       WHERE m.status = 'ok'
+         AND m.from_kind = 'warehouse' AND m.to_kind = 'warehouse'
+         AND m.price IS NULL
+         AND narx.warehouse_id = m.from_id
+         AND narx.material_id  = m.material_id;
+      GET DIAGNOSTICS n = ROW_COUNT;
+      EXIT WHEN n = 0;
+    END LOOP;
+    INSERT INTO migration_flags (key) VALUES ('tsex-narx');
+  END IF;
+END $$;

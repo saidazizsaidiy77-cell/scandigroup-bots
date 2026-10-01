@@ -272,6 +272,30 @@ router.patch('/:id', need(...MANAGE), wrap(async (req, res) => {
 //  bilan bir xil qoida va bir xil sabab).
 const MINUS = 's.qty < 0';
 
+//  ★ NARX OMBORDAN OMBORGA KO'CHADI (zavod qarori, 2026-10; izoh:
+//  sql/materials.sql). Tsex omboriga material talabnoma yoki
+//  ko'chirish bilan keladi va o'sha qatorda narx YOZILMASDI — ya'ni
+//  tsex javonida turgan materialning qiymati har doim bo'sh chiqardi.
+//
+//  Narx materialning emas, KIRIMNING xususiyati: bugun LDSP
+//  250 000, ertaga 270 000. Qo'lda yozilgan raqam ertasigayoq
+//  haqiqatdan uzilardi, shuning uchun javob mexanizmning o'zida —
+//  material chiqqan paytda uning tannarxi MA'LUM: manba omborning
+//  o'rtacha kirim narxi. U qatorga yoziladi va qator bilan QOTIB
+//  qoladi (kurs bilan bir xil idiom).
+//
+//  Narxi yo'q bo'lsa NULL qolaveradi: nol yozish «bepul» degani
+//  bo'lardi va tsexning qiymati jimgina pasayib borardi.
+//
+//  Hisob-kitob dollarda, ya'ni `ccy` har doim USD va kurs yozilmaydi:
+//  o'rtacha allaqachon `price_usd` dan chiqqan.
+async function chiqishNarxi(client, whId, materialId) {
+  const r = (await client.query(
+    `SELECT price FROM v_material_stock
+      WHERE warehouse_id = $1 AND material_id = $2`, [whId, materialId])).rows[0];
+  return r && r.price != null ? Number(r.price) : null;
+}
+
 //  ★ QOLDIQDAN KO'P SARFLAB BO'LMAYDI (zavod qarori, 2026-09; kalit
 //  `minus_material`, izoh: sql/core.sql).
 //
@@ -1882,14 +1906,21 @@ router.post('/requests/:id/done', need('materials.request', ...MANAGE),
       //  berib bo'lmaydi va yetmagani allaqachon xarid zayavkasiga
       //  tushgan (izoh: `zayavkaYoz`).
       await yetarlimi(client, r.from_warehouse_id, q.material_id, v, q.name);
+      //  Narx MANBA omborning o'rtacha kirim narxidan olinadi va
+      //  qator bilan qotadi (izoh: `chiqishNarxi`). Shu bilan
+      //  qabul qiluvchi omborda qiymat paydo bo'ladi, manba
+      //  omborniki esa o'zgarmaydi: chiqim qatorlari o'rtachaga
+      //  umuman qo'shilmaydi.
+      const narx = await chiqishNarxi(client, r.from_warehouse_id, q.material_id);
       await client.query(
         `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
                                      to_kind, to_id, moved_on, doc_kind,
-                                     doc_id, worker_id)
+                                     doc_id, worker_id, price, ccy)
          VALUES ($1,$2,'warehouse',$3,'warehouse',$4,
-                 COALESCE($5::date, CURRENT_DATE), 'request', $6, $7)`,
+                 COALESCE($5::date, CURRENT_DATE), 'request', $6, $7,
+                 $8, CASE WHEN $8::numeric IS NULL THEN NULL ELSE 'USD' END)`,
         [q.material_id, v, r.from_warehouse_id, r.to_warehouse_id,
-         SANA(req.body.on), r.id, req.user.id]);
+         SANA(req.body.on), r.id, req.user.id, narx]);
       n++;
     }
     if (!n) throw new Error("Birorta ham qator chiqarilmadi");

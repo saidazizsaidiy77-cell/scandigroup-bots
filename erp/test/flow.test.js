@@ -9158,6 +9158,95 @@ test('xom ashyo qoldig\'ida oraliq: aylanma oraliqniki, qoldiq hozirgi',
   assert.ok(await qator('?q=Aylanma sinov'), 'nomi bo\'yicha ham');
 });
 
+test('tsex omborida narx: ko\'chirishda qator bilan ketadi', async () => {
+  //  ★ NARX OMBORDAN OMBORGA KO'CHADI (izoh: sql/materials.sql).
+  //  Tsex omboriga material talabnoma bilan keladi va o'sha qatorda
+  //  narx yozilmasdi — tsex javonining qiymati HAR DOIM bo'sh
+  //  chiqardi va «tsexda qancha pul turibdi» degan savolga javob
+  //  yo'q edi.
+  const { db } = require('../db');
+  const xom = await xodim('Sinov tsex narx xodim', 'xom_ombor');
+  await xodim('Sinov tsex narx boshliq', 'tsex_usta');
+  //  Tsex boshlig'ining DOIRASI bor (talabnoma testi bilan bir xil):
+  //  u faqat o'z tsexining omboriga so'raydi.
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = (SELECT id FROM shops WHERE code='KORPUS')
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Sinov tsex narx boshliq')`);
+  const bosh = H.api(base, await H.sessionFor('Sinov tsex narx boshliq'));
+  const zavod = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const tsexWh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Narx ko\'chish sinovi', uom: 'list', category: 'LDSP' })).body;
+
+  //  Zavod omborida 100 list, listi 20 $ (so'mda yozilgani kurs bilan).
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    ccy: 'UZS', rate: 12500,
+    items: [{ warehouse_id: zavod, material_id: m.id, qty: 100,
+              price: 250000 }] })).status, 200);
+
+  const qator = async (whId) => (await xom(
+    'GET', '/api/materials/stock?warehouse_id=' + whId))
+    .body.rows.find((r) => r.material_id === m.id);
+  assert.equal(Number((await qator(zavod)).price), 20);
+
+  //  Talabnoma bilan tsexga 30 list.
+  const t = await bosh('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 30 }] });
+  assert.equal(t.status, 200, t.text);
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${t.body.id}/ready`)).status, 200);
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${t.body.id}/done`, {})).status, 200);
+
+  //  ★ TSEXDA ENDI NARX BOR va u manba omborning o'rtachasi.
+  const tx = await qator(tsexWh);
+  assert.equal(Number(tx.qty), 30);
+  assert.equal(Number(tx.price), 20, 'narx manba omborning o\'rtachasi');
+  assert.equal(Number(tx.amount), 600, '30 \u00d7 20 $');
+
+  //  ★ MANBA OMBORNING NARXI O'ZGARMAYDI: chiqim qatorlari
+  //  o'rtachaga umuman qo'shilmaydi (`WHERE f.qty > 0`).
+  const zv = await qator(zavod);
+  assert.equal(Number(zv.qty), 70);
+  assert.equal(Number(zv.price), 20, 'manba omborning narxi qimirlamadi');
+
+  //  ★ NARX QATOR BILAN QOTADI. Zavod omboriga qimmatroq kirim
+  //  kelsa uning o'rtachasi ko'tariladi, tsexga KECHA ketgan
+  //  material esa qayta baholanmaydi — kursning operatsiya bilan
+  //  qotishi bilan bir xil idiom.
+  const tam = (await H.id(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).id;
+  assert.equal((await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: zavod,
+    items: [{ material_id: m.id, qty: 70, price: 40 }] })).status, 200);
+  //  O'rtacha KIRGAN dona bo'yicha, qoldiq bo'yicha emas: chiqib
+  //  ketgani o'rtachaga ham, maxrajga ham qo'shilmaydi.
+  //  (100 \u00d7 20 + 70 \u00d7 40) / 170 = 28,2353 $
+  assert.equal(Number((await qator(zavod)).price), 28.2353);
+  assert.equal(Number((await qator(tsexWh)).price), 20,
+    'tsexdagi eski narx qayta baholanmaydi');
+
+  //  Narxi yo'q materialda qator NARXSIZ qoladi: nol yozish «bepul»
+  //  degani bo'lardi va tsexning qiymati jimgina pasayib borardi.
+  const m2 = (await xom('POST', '/api/materials',
+    { name: 'Narxsiz ko\'chish sinovi', uom: 'kg' })).body;
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ warehouse_id: zavod, material_id: m2.id, qty: 50 }] })).status, 200);
+  const t2 = await bosh('POST', '/api/materials/requests', {
+    shop_warehouse_id: tsexWh, factory_warehouse_id: zavod,
+    items: [{ material_id: m2.id, qty: 10 }] });
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${t2.body.id}/ready`)).status, 200);
+  assert.equal((await xom('POST',
+    `/api/materials/requests/${t2.body.id}/done`, {})).status, 200);
+  const nx = (await xom('GET', '/api/materials/stock?warehouse_id=' + tsexWh))
+    .body.rows.find((r) => r.material_id === m2.id);
+  assert.equal(Number(nx.qty), 10);
+  assert.equal(nx.price, null, 'narxsiz material narxsiz ko\'chadi');
+});
+
 test('qoldiqni to\'g\'rilash: minus nolga keladi, hujjat bo\'lib qoladi',
   async () => {
   const xom = await xodim('Sinov tuzatish xodim', 'xom_ombor');

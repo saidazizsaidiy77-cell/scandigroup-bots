@@ -3543,6 +3543,39 @@ narxini olish yo'l emas edi: omborda ikki xil narxda kelgan bitta
 material turadi va oxirgisi butun qoldiqning bahosini o'zgartirib
 yuborardi.
 
+**★ NARX OMBORDAN OMBORGA KO'CHADI** (zavod qarori, 2026-10;
+`chiqishNarxi`, `modules/materials.js`). Tsex omborlarida narx
+UMUMAN yo'q edi va sababi mexanizmda: materialga tsex omboriga
+talabnoma yoki ko'chirish bilan keladi, o'sha qatorda esa narx
+yozilmasdi — o'rtacha narx faqat narxi BOR kirim qatorlaridan
+hisoblanadi, ya'ni tsex javonining qiymati HAR DOIM bo'sh chiqardi
+va «tsexda qancha pul turibdi» degan savolga javob bo'lmasdi.
+
+Qo'lda narx qo'yib chiqish yo'l emas: narx materialning emas,
+KIRIMNING xususiyati — bugun LDSP 250 000, ertaga 270 000. Qo'lda
+yozilgan raqam ertasigayoq haqiqatdan uzilardi va uni har
+ko'chirishda qayta terib o'tirish kerak bo'lardi.
+
+Javob mexanizmning O'ZIDA: material ombordan chiqqanda uning
+tannarxi o'sha paytda MA'LUM — manba omborning o'rtacha kirim narxi.
+U harakat qatoriga yoziladi va qator bilan QOTIB qoladi (kursning
+operatsiya bilan qotishi bilan bir xil idiom): ertaga zavod ombori
+qimmatroq narxda to'lsa, tsexga kecha ketgan material qayta
+baholanmaydi.
+
+**Bitta qator — bitta narx**: u beruvchi tomonda CHIQIM, qabul
+qiluvchida KIRIM bo'lib o'qiladi (`v_material_flow` har qatorni ikki
+marta ochadi). Chiqim qatorlari o'rtachaga umuman qo'shilmaydi
+(`WHERE f.qty > 0`), ya'ni MANBA omborning narxi o'zgarmaydi — faqat
+tsexniki to'ladi. Narxi yo'q bo'lsa NULL qolaveradi: nol yozish
+«bepul» degani bo'lardi.
+
+Eski ko'chirishlar bir martalik to'ldirildi (`migration_flags`:
+`tsex-narx`) — manba omborning HOZIRGI o'rtachasi bilan, ya'ni bu
+taxmin: o'sha kungi narx endi ma'lum emas. Zanjir bo'lgani uchun
+(zavod ombori → tsex ombori → bo'lim ombori) bir necha marta
+yuriladi va hech narsa o'zgarmagan joyda to'xtaladi.
+
 **★ XOM ASHYO QOLDIG'I HAM AYLANMA** (zavod qarori, 2026-10;
 `GET /api/materials/stock` dagi `from`/`to`). Mudir javondagi raqamni
 ko'radi-yu, «shu oyda qancha keldi, qancha ketdi» degan savolga javob
