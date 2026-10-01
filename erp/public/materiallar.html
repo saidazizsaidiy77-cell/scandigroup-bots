@@ -18,6 +18,13 @@
 
 <div class="row" id="tabs" style="gap:8px;margin-bottom:16px"></div>
 
+<!--  ★ QOG'OZ O'ZI AYTIB TURADI (zavod qarori, 2026-10). Sanoq varag'i
+      javon oldiga olib boriladi va u yerda ekran yo'q: qaysi ombor,
+      qaysi oraliq va qaysi filtr bilan olingani varaqning O'ZIDA
+      yozilishi kerak. Tayyor mahsulot qoldig'i va qarzdorlik hisoboti
+      bilan bir xil idiom (`print-head`, `print-only`). -->
+<div id="printHead" class="print-only print-head"></div>
+
 <div class="card" id="cardRef">
   <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px;
     align-items:flex-end">
@@ -60,6 +67,22 @@
       <input id="sTo" type="date" onchange="load()"></div>
     <button onclick="oyStock()">Shu oy</button>
     <button onclick="tozaStock()">Tozalash</button>
+    <!--  ★ FAQAT FAKT — javonda turgani (tayyor mahsulot qoldig'i
+          bilan bir xil qoida va bir xil sabab). Qoldiq jadvali IKKI
+          manbadan yig'iladi: hozir javonda turgani va tanlangan
+          oraliqda QIMIRLAGANI — «davr ichida nima o'tdi» degan
+          savolga bu to'g'ri javob, lekin INVENTARIZATSIYA boshqa
+          savol va unda qoldig'i nol qator faqat xalaqit beradi.
+
+          Belgi qo'yilsa aylanma ustunlari ham chizilmaydi: qator
+          «kirdi 40, qoldiq 0» bo'lib, sanoq varag'i yana savol
+          beradigan hujjatga aylanardi. -->
+    <div><label>&nbsp;</label>
+      <label class="tag" style="cursor:pointer;display:inline-flex;
+        align-items:center;gap:6px;padding:8px 10px">
+        <input type="checkbox" id="sFakt" style="width:auto" onchange="draw()">
+        Faqat fakt</label></div>
+    <button onclick="printStock()">Chop etish</button>
     <!--  ★ MINUSGA TUSHGANLARNI BIR JOYDA KO'RISH (zavod qarori,
           2026-09). Manfiy qator ALLAQACHON qizil bo'lib turadi,
           lekin faqat O'SHA omborning ichida: zavodda o'n to'rtta
@@ -205,6 +228,10 @@ function drawTabs() {
 
 function go(k) {
   tab = k; drawTabs();
+  //  Qog'ozdagi sarlavha chop etishdan OLDIN to'ldiriladi, ya'ni
+  //  boshqa tabga o'tilgach eskisi osilib qolardi: Ctrl+P bosgan odam
+  //  qoldiq sarlavhasi bilan talabnomalar ro'yxatini chiqarardi.
+  $('printHead').innerHTML = '';
   $('body').innerHTML = '<p class="muted">Yuklanmoqda…</p>';
   load();
 }
@@ -432,11 +459,22 @@ function drawStock() {
   }
   //  Ombor bo'yicha guruhlanadi: har ombor o'z javoni va uning
   //  qoldig'i alohida sanaladi (omborlar ro'yxati bilan bir xil).
+  //  «Faqat fakt» da javonda turmagan qator umuman chizilmaydi:
+  //  qoldig'i nol qator FULL JOIN dan keladi — oraliqda kirib, o'sha
+  //  oraliqning o'zida sarflanib bo'lingan material (izoh:
+  //  modules/materials.js). Sanoq varag'ida u faqat xalaqit beradi.
+  const kor = $('sFakt').checked
+    ? rows.filter((r) => Number(r.qty)) : rows;
   const gr = [];
-  for (const r of rows) {
+  for (const r of kor) {
     let g = gr.find((x) => x.id === r.warehouse_id);
     if (!g) gr.push(g = { id: r.warehouse_id, name: r.warehouse, items: [] });
     g.items.push(r);
+  }
+  if (!gr.length) {
+    $('body').innerHTML = `<p class="muted">Javonda hech narsa yo'q —
+      qatorlar faqat oraliqdagi harakatdan kelgan.</p>`;
+    return;
   }
   //  ★ NARX O'RTACHA KIRIM NARXI, $ (izoh: sql/materials.sql). Summa
   //  faqat narxi BOR qatorlardan yig'iladi — narxsizi nol deb
@@ -445,8 +483,17 @@ function drawStock() {
   //  raqamning o'zi yolg'on emas, tushuntirilmagani yolg'on bo'lardi.
   //  Aylanma ustunlari FAQAT oraliq tanlanganda: aks holda ikkita
   //  nol ustun turib, nimani anglatishini hech narsa aytmasdi.
-  const ay = !!($('sFrom').value || $('sTo').value);
-  $('body').innerHTML = (ay ? `<p class="muted" style="font-size:12px;margin:0 0 4px">
+  //  ★ FAQAT FAKT: aylanma umuman chizilmaydi va qoldig'i nol qator
+  //  ham tushib qoladi — varaq sanoq uchun (izoh: filtr qatoridagi
+  //  belgi). Qoldiq, narx va summa HOZIRGI holat, ya'ni ular
+  //  oraliqdan qat'i nazar to'g'ri va o'z joyida qolaveradi.
+  const fakt = $('sFakt').checked;
+  const ay = !fakt && !!($('sFrom').value || $('sTo').value);
+  $('body').innerHTML = (fakt
+    ? `<p class="muted" style="font-size:12px;margin:0 0 4px">
+      Faqat hozir javonda turganlari — sanoq varag'i. Aylanma (kirdi va
+      chiqdi) chizilmaydi: u oraliq savoli, bu esa javon savoli</p>`
+    : ay ? `<p class="muted" style="font-size:12px;margin:0 0 4px">
       Kirdi va chiqdi — tanlangan oraliq bo'yicha &middot;
       qoldiq, narx va summa — hozirgi holat</p>` : '')
     + gr.map((g) => {
@@ -486,6 +533,52 @@ function drawStock() {
   }).join('');
 }
 
+//  Korxona nomi — zavodning O'Z nomi: kodda bitta qator (4-qoida
+//  mijoz ma'lumotiga tegishli, bu esa korxonaning o'zi).
+const FIRMA = 'ZELTA PREMIUM';
+
+//  Qog'ozdagi sarlavha filtrni MATN qilib yozadi: qaysi ombor, oraliq,
+//  qidiruv va belgilar. Ro'yxat qisqarib turgan bo'lsa varaqda NEGA
+//  qisqa ekani ko'rinib tursin — aks holda «material yetishmayapti»
+//  degan savol qolardi (qarzdorlik hisoboti bilan bir xil sabab).
+function stockFilterText() {
+  const wh = $('sWh').selectedOptions[0];
+  const bits = [$('sWh').value && wh ? wh.textContent.trim() : 'Barcha ombor'];
+  const fakt = $('sFakt').checked;
+  //  Aylanma chizilmagan varaqda oraliq YOZILMAYDI: u faqat kirdi va
+  //  chiqdi ustunlariga tegishli edi, qoldiq esa bugungi holat —
+  //  sanani yozib qo'yish varaqni o'sha kunniki qilib ko'rsatardi.
+  if (fakt) bits.push('Faqat javonda turganlari — holat: bugun');
+  else if ($('sFrom').value || $('sTo').value)
+    bits.push(`Harakat sanasi: ${$('sFrom').value ? kun($('sFrom').value) : 'boshidan'
+      } — ${$('sTo').value ? kun($('sTo').value) : 'bugungacha'}`);
+  else bits.push('Harakat sanasi: butun davr');
+  if ($('sMinus').checked) bits.push('Faqat minusga tushgan');
+  if ($('sQ').value.trim()) bits.push(`Qidiruv: ${$('sQ').value.trim()}`);
+  return bits.join('  ·  ');
+}
+
+//  ★ CHOP ETISH. Qog'ozda tugma, filtr va kartochka chizilmaydi
+//  (`@media print`), jadval esa to'liq chiqib sahifalarga o'zi
+//  bo'linadi — ombor sarlavhalari o'z joyida qoladi.
+function printStock() {
+  const now = new Date();
+  const ikki = (n) => String(n).padStart(2, '0');
+  const kun = `${ikki(now.getDate())}.${ikki(now.getMonth() + 1)}.${now.getFullYear()}`;
+  const soat = `${ikki(now.getHours())}:${ikki(now.getMinutes())}`;
+  //  Kim chop etgani ham yoziladi: javon oldida ikkita varaq yonma-yon
+  //  tursa qaysi birini kim olgani savol bo'lardi. Ism BAZADAN keladi.
+  const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
+  const qator = $('sFakt').checked
+    ? rows.filter((r) => Number(r.qty)).length : rows.length;
+  $('printHead').innerHTML = `
+    <h1>${$('sFakt').checked ? 'Xom ashyo sanoq varag\'i' : 'Xom ashyo qoldig\'i'
+      } · ${esc(FIRMA)}</h1>
+    <div class="meta">${esc(stockFilterText())}</div>
+    <div class="meta">${qator} ta qator · chop etildi ${kun} ${soat}${xodim}</div>`;
+  window.print();
+}
+
 //  Oraliq tugmalari: «shu oy» kuniga o'nlab marta kerak bo'ladi va
 //  uni ikkita kalendardan terib o'tirish ortiqcha ish bo'lardi
 //  (qarzdorlik hisobotidagi bilan bir xil idiom).
@@ -501,6 +594,7 @@ function oyStock() {
 function tozaStock() {
   $('sFrom').value = ''; $('sTo').value = '';
   $('sQ').value = ''; $('sMinus').checked = false;
+  $('sFakt').checked = false;
   load();
 }
 

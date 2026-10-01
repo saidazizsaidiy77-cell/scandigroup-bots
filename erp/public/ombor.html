@@ -24,6 +24,18 @@
 </div>
 
 <div class="row" id="tabs" style="margin-bottom:16px;gap:8px;flex-wrap:wrap"></div>
+
+<!--  ★ QOG'OZ O'ZI AYTIB TURADI (zavod qarori, 2026-10). Inventarizatsiya
+      varag'i javon oldiga olib boriladi va u yerda ekran yo'q: varaqning
+      O'ZI qaysi ombor, qaysi oraliq va qaysi filtr bilan olinganini
+      aytishi kerak. Qarzdorlik hisoboti bilan bir xil idiom
+      (`print-head`, `print-only`) — u yerda ham sabab bir xil edi:
+      ikki hafta o'tib raqam qaysi kunniki ekani noma'lum qolardi.
+
+      `#body` dan TASHQARIDA turadi: u qayta chizilganda sarlavha
+      yo'qolib ketardi. -->
+<div id="printHead" class="print-only print-head"></div>
+
 <div id="body"></div>
 <div id="modalRoot"></div>
 
@@ -50,6 +62,10 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
 // ekran «qabul qildim» tugmasi. Stol ustidagi kompyuterda esa u qoldiqni
 // ko'radi — nimadan nechta borligini.
 const isPhone = window.matchMedia('(max-width: 620px)').matches;
+
+//  Korxona nomi — zavodning O'Z nomi, mijoz ma'lumoti emas: kodda
+//  bitta qator bo'lib turadi (yuk xati bilan bir xil).
+const FIRMA = 'ZELTA PREMIUM';
 
 //  Qaysi ombor ochilgan — manzilda (`?w=VITR-ABU`). Ko'rsatilmasa T/M
 //  ombor: eski havolalar va telefondagi yorliqlar shundan buzilmaydi.
@@ -93,6 +109,36 @@ const faqatQoldiq = () => savdoKoz && isTM();
 //  Savdoga chizilmaydi: bronda turgani boshqa mijozniki va u yerda
 //  faqat yolg'on umid berardi (izoh: `faqatQoldiq`).
 const jamiUstun = () => isTM() && !faqatQoldiq();
+
+//  ★ «FAQAT FAKT» — JAVONDA TURGANI (zavod qarori, 2026-10).
+//
+//  Qoldiq jadvali IKKI manbadan yig'iladi: hozir javonda turgani va
+//  tanlangan oraliqda QIMIRLAGANI (izoh: `yoqIzoh`). Mudirning kunlik
+//  savoliga bu to'g'ri javob — «davr ichida nima o'tdi» — lekin
+//  INVENTARIZATSIYA boshqa savol: javonda nima turibdi. Varaq javon
+//  oldiga olib boriladi va unda qoldig'i nol qator faqat xalaqit
+//  beradi: sanaydigan odam har safar «buni ham sanaymanmi» deb
+//  to'xtaydi.
+//
+//  Shuning uchun belgi qo'yilsa AYLANMA umuman chizilmaydi —
+//  ustunlari ham, kartochkalari ham. Ikkalasi bir varaqda tursa
+//  qator «kirdi 40, qoldiq 0» bo'lib, sanoq varag'i yana savol
+//  beradigan hujjatga aylanardi. Qoldiq, bron va summa esa HOZIRGI
+//  holat, ya'ni ular oraliqdan qat'i nazar to'g'ri va o'z joyida
+//  qoladi — yig'indi ham o'sha manbadan keladi.
+let faktOnly = false;
+//  Aylanma ustunlari: savdoga umuman chizilmaydi (izoh:
+//  `faqatQoldiq`), inventarizatsiya varag'ida esa vaqtincha yopiladi.
+const aylKor = () => !faqatQoldiq() && !faktOnly;
+//  Bronda — HOZIRGI holat, ya'ni «faqat fakt» da ham qoladi: javonda
+//  turgan mahsulotning qanchasi mijozniki ekani sanoqda ham kerak.
+const bronUstun = () => isTM() && !faqatQoldiq();
+//  Ochilgan qator ostidagi katak butun kenglikni egallaydi. Ustunlar
+//  shartga qarab paydo bo'lib yo'qoladi, shuning uchun soni BITTA
+//  joyda sanaladi: ikki nusxada bo'lsa biri ertaga ikkinchisidan
+//  ajralib, konver ro'yxati jadvalni surib yuborardi.
+const ustunSoni = () => 4 + (aylKor() ? 2 : 0) + (bronUstun() ? 1 : 0)
+  + (jamiUstun() ? 1 : 0) + 1 + (isTM() ? 0 : 2);
 //  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
 //  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
 //
@@ -155,6 +201,10 @@ function drawTabs() {
 }
 async function go(k) {
   tab = k; drawTabs();
+  //  Qog'ozdagi sarlavha chop etishdan OLDIN to'ldiriladi, ya'ni
+  //  boshqa tabga o'tilgach eskisi osilib qolardi: Ctrl+P bosgan
+  //  odam qoldiq sarlavhasi bilan harakatlar ro'yxatini chiqarardi.
+  $('printHead').innerHTML = '';
   $('body').innerHTML = `<p class="muted">Yuklanmoqda…</p>`;
   if (k === 'inbox') return load();
   if (k === 'stock') return loadStock();
@@ -449,8 +499,12 @@ function sortSet(k) {
 //  Bu KO'RINISH, himoya emas: server baribir o'sha qatorlarni beradi
 //  va yuqoridagi kartochkalar ham o'zgarmaydi — nol qator
 //  yig'indiga baribir nol qo'shadi.
-const korinadigan = rows => !faqatQoldiq() ? rows
-  : rows.filter(r => Number(r.qty) || Number(r.bron));
+//  «Faqat fakt» ham AYNAN shu shartdan o'tadi: ikkalasining savoli
+//  bitta — «javonda bormi» — va ikki xil shart yozilsa biri
+//  ertaga ikkinchisidan ajralib ketardi.
+const javonda = r => Number(r.qty) || Number(r.bron);
+const korinadigan = rows => (faqatQoldiq() || faktOnly)
+  ? rows.filter(javonda) : rows;
 
 function saralangan(rows) {
   if (!sortK || !SORT[sortK]) return rows;
@@ -527,7 +581,18 @@ function drawStock() {
         <div><label>gacha</label>
           <input id="sTo" type="date" value="${d.to || ''}" onchange="loadStock()"></div>
         <button onclick="period2(30)">30 kun</button>`}
+        <!--  ★ FAQAT FAKT — javonda turgani (izoh: faktOnly).
+              Savdoda chizilmaydi: u yerda nol qator allaqachon
+              yo'q va ikkinchi belgi faqat savol qoldirardi. -->
+        ${faqatQoldiq() ? '' : `
+        <div><label>&nbsp;</label>
+          <label class="tag" style="cursor:pointer;display:inline-flex;
+            align-items:center;gap:6px;padding:8px 10px">
+            <input type="checkbox" id="sFakt" style="width:auto"
+                   ${faktOnly ? 'checked' : ''} onchange="faktSet(this.checked)">
+            Faqat fakt</label></div>`}
         <button onclick="clearStock()">Tozalash</button>
+        <button onclick="printStock()">Chop etish</button>
         <button onclick="exportStock()">Excelga yuklash</button>
         ${App.can('production.units', 'production.manage')
           ? `<button onclick="location.href='/qoldiq.html'">Fayldan kiritish</button>` : ''}
@@ -535,11 +600,14 @@ function drawStock() {
 
       <p class="muted" style="font-size:12px;margin-top:10px">${faqatQoldiq()
         ? "Qoldiq — buyurtmaga olinganini ayirgandagi, ya'ni sotish mumkin bo'lgani"
+        : faktOnly
+        ? 'Faqat hozir javonda turganlari — sanoq varag\'i. Aylanma '
+          + '(kirdi va chiqdi) chizilmaydi: u oraliq savoli, bu esa javon savoli'
         : 'Kirdi va chiqdi — tanlangan oraliq bo\'yicha &middot; '
-          + 'Bronda, qoldiq va jami — hozirgi holat'}</p>
+          + 'Bronda, qoldiq va bronsiz qoldiq — hozirgi holat'}</p>
       ${!jamiUstun() ? '' : `<p class="muted" style="font-size:12px;margin-top:4px">
-        Qoldiq — bronni ayirgandagi, ya'ni sotish mumkin bo'lgani &middot;
-        Jami — bronda turgani bilan birga, inventarizatsiya raqami</p>`}
+        Qoldiq — javonda turgani, bronda turgani bilan birga: inventarizatsiyada
+        shu sanaladi &middot; Bronsiz qoldiq — sotish mumkin bo'lgani</p>`}
       ${typeChips(d) ? `<div style="margin-top:14px">
         <label>Turi</label>
         <div class="row" style="gap:6px;flex-wrap:wrap">${typeChips(d)}</div></div>` : ''}
@@ -581,12 +649,13 @@ function drawStock() {
         <p class="muted" style="margin-top:6px;font-size:12px">
           buyurtmaga olinganini ayirgandagi</p></div>`
       : `
+      ${!aylKor() ? '' : `
       <div class="card"><h2>Kirdi</h2>
         <div class="kpi">${uomKpi(d, 'kirdi')}</div>
         <p class="muted" style="margin-top:6px;font-size:12px">${oraliqIzoh(d)}</p></div>
       <div class="card"><h2>Chiqdi</h2>
         <div class="kpi">${uomKpi(d, 'chiqdi')}</div>
-        <p class="muted" style="margin-top:6px;font-size:12px">${oraliqIzoh(d)}</p></div>
+        <p class="muted" style="margin-top:6px;font-size:12px">${oraliqIzoh(d)}</p></div>`}
       <div class="card"><h2>Bronda</h2>
         <div class="kpi">${uomKpi(d, 'bron')}</div>
         <p class="muted" style="margin-top:6px;font-size:12px">
@@ -612,19 +681,22 @@ function drawStock() {
             KIRDI/CHIQDI tanlangan oraliqniki, BRONDA/QOLDIQ/JAMI esa
             hozirgi holat. «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
             filtri bilan aralashtirib bo'lmaydi. -->
-      <table class="stock ${faqatQoldiq() ? 'savdo' : isTM() ? 'tm' : 'shop'}">
+      <table class="stock ${faqatQoldiq() ? 'savdo' : isTM() ? 'tm' : 'shop'}${
+        faktOnly ? ' fakt' : ''}">
         <thead><tr>
           ${th('product', 's-name', 'Mahsulot')}${th('type', 's-type', 'Turi')}
           ${th('color', 's-color', 'Rang')}${th('fabric', 's-fabric', 'Mato')}
-          ${faqatQoldiq() ? '' : `${th('kirdi', 's-in', 'Kirdi')}
-          ${th('chiqdi', 's-out', 'Chiqdi')}
-          ${isTM() ? th('bron', 's-bron', 'Bronda') : ''}`}
+          ${aylKor() ? `${th('kirdi', 's-in', 'Kirdi')}
+          ${th('chiqdi', 's-out', 'Chiqdi')}` : ''}
+          ${bronUstun() ? th('bron', 's-bron', 'Bronda') : ''}
           <!--  Nomlar YUQORIDAGI kartochkalar bilan bir xil: bitta
-                so'z bitta raqamni atashi kerak. -->
-          ${isTM() ? `${th('jami', 's-all', 'Qoldiq')}
+                so'z bitta raqamni atashi kerak. Savdoga «Qoldiq»
+                ustuni CHIZILMAYDI (izoh: jamiUstun) — uning savoli
+                bitta va javobi «bronsiz qoldiq»; javondagi jismoniy
+                soni u yerda faqat yolg'on umid berardi. -->
+          ${isTM() ? `${jamiUstun() ? th('jami', 's-all', 'Qoldiq') : ''}
                       ${th('free', 's-free', 'Bronsiz qoldiq')}`
-                   : `${th('free', 's-free', 'Qoldiq')}
-                      ${jamiUstun() ? th('jami', 's-all', 'Jami') : ''}`}
+                   : th('free', 's-free', 'Qoldiq')}
           ${isTM() ? '' : `${th('narx', 's-price', 'Narx, $')}
                            ${th('summa', 's-amount', 'Summa, $')}`}
         </tr></thead>
@@ -667,21 +739,24 @@ function price(r) {
 function jamiRows(d) {
   //  Savdoda qator FAQAT bo'sh qoldig'i borida turadi: hammasi
   //  bronda bo'lgan mahsulot unga sotiladigan narsa emas.
-  const u = (d.total.by_uom || []).filter(x => faqatQoldiq()
-    ? x.free : (x.qty || x.kirdi || x.chiqdi));
+  //  Sanoq varag'ida faqat javonda turgani: aylanma ustunlari
+  //  chizilmagan joyda ular bo'yicha qator qoldirish «nimaning
+  //  jamisi» degan savol berardi.
+  const u = (d.total.by_uom || []).filter(x => faqatQoldiq() ? x.free
+    : faktOnly ? x.qty : (x.qty || x.kirdi || x.chiqdi));
   if (!u.length) return '';
   const son = (v) => v ? `<b>${v}</b>` : '<span class="muted">\u2014</span>';
   return u.map((x, i) => `<tr>
     <td class="s-name">${i === 0 ? 'JAMI' : ''}</td>
     <td class="s-type muted">${esc(x.uom)}</td>
     <td class="s-color"></td><td class="s-fabric"></td>
-    ${faqatQoldiq() ? '' : `<td class="s-in">${son(x.kirdi)}</td>
-    <td class="s-out">${son(x.chiqdi)}</td>
-    ${isTM() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}`}
+    ${!aylKor() ? '' : `<td class="s-in">${son(x.kirdi)}</td>
+    <td class="s-out">${son(x.chiqdi)}</td>`}
+    ${bronUstun() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}
     ${(() => {
       const kat = (cls, v) => `<td class="${cls}"><b>${v}</b> <span class="muted"
         style="font-size:11px">${esc(x.uom)}</span></td>`;
-      return isTM() ? kat('s-all', x.qty) + kat('s-free', x.free)
+      return isTM() ? (jamiUstun() ? kat('s-all', x.qty) : '') + kat('s-free', x.free)
                     : kat('s-free', x.qty);
     })()}
     ${isTM() ? '' : `<td class="s-price"></td>
@@ -729,17 +804,18 @@ function drawStockRow(r) {
       <td class="s-type muted">${esc(r.product_type || '')}</td>
       <td class="s-color muted">${esc(r.color || '\u2014')}</td>
       <td class="s-fabric muted">${esc(r.fabric || '\u2014')}</td>
-      ${faqatQoldiq() ? '' : `
+      ${!aylKor() ? '' : `
       <td class="s-in">${r.kirdi ? `<b>${r.kirdi}</b>`
         : '<span class="muted">&mdash;</span>'}</td>
       <td class="s-out">${r.chiqdi ? `<b>${r.chiqdi}</b>`
-        : '<span class="muted">&mdash;</span>'}</td>
-      ${isTM()
+        : '<span class="muted">&mdash;</span>'}</td>`}
+      ${!bronUstun() ? ''
       //  Bronda turgan mahsulot OMBORDA: u hali chiqib ketmagan,
       //  shuning uchun qoldiqdan ayrilmaydi — sotib bo'lmasligi
-      //  alohida ustunda turadi.
-      ? `<td class="s-bron">${r.bron
-            ? `<b>${r.bron}</b>` : '<span class="muted">&mdash;</span>'}</td>` : ''}`}
+      //  alohida ustunda turadi. Sanoq varag'ida ham qoladi: javondagi
+      //  donaning qanchasi mijozniki ekani o'sha yerda ham kerak.
+      : `<td class="s-bron">${r.bron
+            ? `<b>${r.bron}</b>` : '<span class="muted">&mdash;</span>'}</td>`}
       <!--  ★ QOLDIQ — BRONNI AYIRGANDAGISI, va u HAMMAGA bir xil:
             mudirga ham, savdoga ham. Ilgari bitta ustun ikki xil
             raqamni ko'rsatardi (savdoda bo'sh, mudirda jismoniy) va
@@ -755,7 +831,8 @@ function drawStockRow(r) {
           style="font-size:11px">${bir}</span></td>`;
         //  T/M da avval QOLDIQ (javondagi), keyin BRONSIZ QOLDIQ —
         //  sarlavha va yuqoridagi kartochkalar bilan bir xil tartib.
-        return isTM() ? kat('s-all', r.qty) + kat('s-free', r.free)
+        //  Savdoda birinchisi tushib qoladi (izoh: `jamiUstun`).
+        return isTM() ? (jamiUstun() ? kat('s-all', r.qty) : '') + kat('s-free', r.free)
                       : kat('s-free', r.qty);
       })()}
       ${isTM() ? ''
@@ -767,7 +844,7 @@ function drawStockRow(r) {
          <td class="s-amount">${Number(r.amount) ? `<b>${money(r.amount)}</b>`
             : '<span class="muted">\u2014</span>'}</td>`}
     </tr>
-    ${!open ? '' : `<tr class="more"><td colspan="${faqatQoldiq() ? 5 : 9}"
+    ${!open ? '' : `<tr class="more"><td colspan="${ustunSoni()}"
       style="background:var(--bg);padding:10px 14px">
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? yoqIzoh(r)
@@ -922,7 +999,59 @@ const debStock = () => { clearTimeout(t1); t1 = setTimeout(loadStock, 350); };
 function clearStock() {
   ['sQ', 'sFrom', 'sTo'].forEach(i => { if ($(i)) $(i).value = ''; });
   sel.type.clear();
+  faktOnly = false;
   loadStock();
+}
+
+//  Belgi SERVERGA bormaydi: qoldiq so'rovi LIMITsiz va qatorlarning
+//  HAMMASI sahifada turadi (saralash bilan bir xil sabab) — ya'ni
+//  javob bosilgan zahoti chiqadi. Yig'indi ham o'zgarmaydi: u
+//  `v_fg_units` dan keladi, u esa allaqachon faqat javondagini
+//  sanaydi — yashirilayotgan qatorlar unga baribir nol qo'shardi.
+function faktSet(v) {
+  faktOnly = !!v;
+  if ($('sQ')) stock.q = $('sQ').value;
+  drawStock();
+}
+
+//  Qog'ozdagi sarlavha filtrni MATN qilib yozadi: qaysi ombor, qaysi
+//  oraliq, qidiruv va tanlangan turlar. Ro'yxat qisqarib turgan bo'lsa
+//  varaqda nega qisqa ekani ko'rinib tursin — aks holda «mahsulot
+//  yetishmayapti» degan savol qolardi (qarzdorlik bilan bir xil).
+function stockFilterText() {
+  const d = stock;
+  const bits = [whName || 'T/M ombor'];
+  //  Aylanma chizilmagan varaqda oraliq YOZILMAYDI: u faqat kirdi va
+  //  chiqdi ustunlariga tegishli edi, qoldiq esa bugungi holat —
+  //  sanani yozib qo'yish varaqni o'sha kunniki qilib ko'rsatardi.
+  if (aylKor() && (d.from || d.to))
+    bits.push(`Harakat sanasi: ${d.from ? d8(d.from) : 'boshidan'} — ${
+      d.to ? d8(d.to) : 'bugungacha'}`);
+  else if (aylKor()) bits.push('Harakat sanasi: butun davr');
+  else bits.push('Faqat javonda turganlari — holat: bugun');
+  if (sel.type.size) bits.push(`Turi: ${[...sel.type].join(', ')}`);
+  if (d.q) bits.push(`Qidiruv: ${d.q}`);
+  return bits.join('  ·  ');
+}
+
+//  ★ CHOP ETISH. Qog'ozda kartochkalar chizilmaydi (`@media print`:
+//  `.grid`), lekin yig'indi YO'QOLMAYDI — u jadvalning «JAMI»
+//  qatorida turadi. Shuning uchun ikkinchi jadval yozilmadi
+//  (qarzdorlik hisoboti bilan bir xil qoida va bir xil sabab).
+function printStock() {
+  const now = new Date();
+  const kun = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`;
+  const soat = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  //  Kim chop etgani ham yoziladi: javon oldida ikkita varaq yonma-yon
+  //  tursa qaysi birini kim olgani savol bo'lardi. Ism BAZADAN keladi
+  //  (sessiyadagi xodim), kodga yozilmaydi (4-qoida).
+  const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
+  const qator = korinadigan(stock.rows).length;
+  $('printHead').innerHTML = `
+    <h1>${faktOnly ? 'Sanoq varag\'i' : 'Ombor qoldig\'i'} · ${esc(FIRMA)}</h1>
+    <div class="meta">${esc(stockFilterText())}</div>
+    <div class="meta">${qator} ta qator · chop etildi ${kun} ${soat}${xodim}</div>`;
+  window.print();
 }
 function period2(days) {
   $('sFrom').value = isoDay(new Date(Date.now() - days * 864e5));
