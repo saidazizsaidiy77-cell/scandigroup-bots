@@ -887,6 +887,30 @@ chizilmaydi** — u yerda baribir bitta ism turardi. Filtr CHEGARA
 emas: `ownOf` o'z joyida qoladi va ikkalasi `customers.manager_id` ni
 alohida shart bo'lib qaraydi.
 
+**★ CHOP ETISH — QOG'OZ O'ZI AYTIB TURADI** (zavod qarori,
+2026-10). Aylanma-saldo qaydnomasi devorga ilib qo'yiladi, ya'ni
+varaqning o'zi qachongi ekanini aytishi kerak: ekranda sana filtri
+turadi, qog'ozda esa YO'Q edi va ikki hafta o'tib raqam qaysi kunniki
+ekani noma'lum bo'lib qolardi.
+
+Sarlavha ishlab chiqarish jurnali bilan BIR XIL idiom (`print-head`,
+`print-only`): korxona nomi, **oraliq**, **menejer filtri**, qidiruv,
+mijozlar soni, chop etilgan kun-soat va **chop etgan XODIM** — devorda
+ikkita varaq yonma-yon tursa qaysi birini kim olgani savol bo'lardi.
+Ism BAZADAN, sessiyadagi xodimdan keladi (4-qoida). «Hammasi» oralig'i
+qog'ozda sana emas, **«boshidan»** deb yoziladi: `01.01.00` sana bo'lib
+o'qilardi, holbuki u belgi.
+
+**Yig'indi uchun ikkinchi jadval yozilmadi**: qog'ozda kartochkalar
+chizilmaydi (`@media print`: `.grid`), lekin raqam jadvalning «Jami»
+qatorida turaveradi — u yerda allaqachon bor.
+
+**`.no-print` endi UMUMIY** (`style.css`, `print-only` ning juftligi):
+ilgari u faqat `yukxati.css` da edi va boshqa sahifa undan
+foydalanolmasdi. Ekrandagi maslahat yozuvi («qatorni bossangiz
+harakatlari chiqadi») qog'ozga chiqmaydi, ustunlarni tushuntiradigan
+izoh esa chiqadi — u hujjatning o'zi.
+
 **Solishtirma dalolatnoma** (`/dalolatnoma.html`) — o'sha lentaning
 MIJOZGA beriladigan ko'rinishi: bitta mijoz, bitta oraliq, boshiga va
 oxiriga saldosi bilan. Hisobot «kim qancha qarzdor» degan savolga zavod

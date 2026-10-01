@@ -464,6 +464,11 @@ tr.click:hover td{background:var(--surface-2)}
   body{padding:0;max-width:none;background:#fff;color:#000;font-size:10px}
   .top,.nav,button,input,select,label,.chip,.grid,.toast{display:none!important}
   .print-only{display:block!important}
+  /* Ekrandagi ish quroli — maslahat yozuvi, tugma yonidagi izoh.
+     Qog'ozda hujjatning O'ZI qolishi kerak (yuk xati bilan bir xil
+     qoida, faqat u yerda o'z faylida edi va boshqa sahifa ishlata
+     olmasdi). */
+  .no-print{display:none!important}
   /* Kartochka qog'ozda ramka bo'lib turishi shart emas */
   .card{border:0;padding:0;margin:0!important;background:#fff;border-radius:0}
   /* Kartochka sarlavhalari: qog'ozdagi sarlavha yuqorida bir marta

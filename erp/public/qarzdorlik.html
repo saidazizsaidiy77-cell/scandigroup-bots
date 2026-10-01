@@ -21,6 +21,15 @@
   <div class="row"><span class="row" id="erpUser"></span></div>
 </div>
 
+<!--  ★ QOG'OZ O'ZI AYTIB TURADI (zavod qarori, 2026-10).
+      Aylanma-saldo qaydnomasi devorga ilib qo'yiladi va ikki hafta
+      o'tib varaqdagi raqam QAYSI KUNNIKI ekani noma'lum bo'lib
+      qolardi — ekranda sana filtri turadi, qog'ozda esa yo'q edi.
+      Shuning uchun oraliq ham, menejer filtri ham, chop etgan xodim
+      ham sarlavhada yoziladi (jurnal bilan bir xil idiom:
+      `print-head`, `printJournal`). -->
+<div id="printHead" class="print-only print-head"></div>
+
 <div class="card">
   <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div><label>Sanadan</label>
@@ -46,6 +55,7 @@
       <select id="fMgr" onchange="load()" style="min-width:190px"></select></div>
     <div style="flex:1;min-width:180px"><label>Qidiruv</label>
       <input id="fQ" placeholder="mijoz, region yoki telefon" oninput="onSearch()"></div>
+    <button onclick="printPage()">Chop etish</button>
     <button onclick="exportCsv()">Excelga yuklash</button>
   </div>
 </div>
@@ -64,7 +74,9 @@
 <div class="card" style="margin-top:16px">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <h2 style="margin:0" id="tHead">Mijozlar</h2>
-    <span class="muted" style="font-size:12px" id="tHint"></span>
+    <!--  Qog'ozda emas: oraliq sarlavhada allaqachon turadi, «qatorni
+          bossangiz» esa ekrandagi maslahat (izoh: `printPage`). -->
+    <span class="muted no-print" style="font-size:12px" id="tHint"></span>
   </div>
   <!--  Aylanma-saldo shakli: har saldo IKKI ustun — qarzdor va haqdor.
         Ilgari bitta ustun edi va manfiy raqam haqdorni anglatardi, lekin
@@ -108,6 +120,10 @@ const sum = (v) => Number(v) ? money(v) : '<span class="muted">—</span>';
 const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4)
   .toISOString().slice(0, 10);
 const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+
+//  Korxona nomi — zavodning O'Z nomi, mijoz ma'lumoti emas, shuning
+//  uchun kodda bitta qator (yuk xati va dalolatnoma bilan bir xil).
+const FIRMA = 'ZELTA PREMIUM';
 
 let data = { rows: [], total: {} };
 //  Ochilgan mijozlar: qator bosilganda harakatlari ostida chiqadi.
@@ -226,6 +242,39 @@ function drawRows(id) {
       <td class="num muted">${qoldiq < 0 ? money(-qoldiq) : ''}</td>
     </tr>`;
   }).join('');
+}
+
+//  Qog'ozdagi sarlavha filtrni MATN qilib yozadi: oraliq, menejer va
+//  qidiruv. Ro'yxat qisqarib turgan bo'lsa varaqda nega qisqa ekani
+//  ko'rinib tursin — aks holda «mijozlar yetishmayapti» degan savol
+//  qolardi.
+function filterText() {
+  const bosh = data.from <= '1900-01-01' ? 'boshidan' : d8(data.from);
+  const bits = [`Davr: ${bosh} — ${d8(data.to)}`];
+  const mgr = $('fMgr').selectedOptions[0];
+  if ($('fMgr').value && mgr) bits.push(`Menejer: ${mgr.textContent}`);
+  if ($('fQ').value.trim()) bits.push(`Qidiruv: ${$('fQ').value.trim()}`);
+  return bits.join('  \u00b7  ');
+}
+
+//  ★ CHOP ETISH. Qog'ozda kartochkalar chizilmaydi (`@media print`:
+//  `.grid`), lekin yig'indi YO'QOLMAYDI — u jadvalning «Jami»
+//  qatorida turadi. Shuning uchun ikkinchi jadval yozilmadi.
+function printPage() {
+  const now = new Date();
+  const ikki = (n) => String(n).padStart(2, '0');
+  const kun = `${ikki(now.getDate())}.${ikki(now.getMonth() + 1)}.${now.getFullYear()}`;
+  const soat = `${ikki(now.getHours())}:${ikki(now.getMinutes())}`;
+  //  Kim chop etgani ham yoziladi: devorda ikkita varaq yonma-yon
+  //  tursa qaysi birini kim olgani savol bo'lardi. Ism BAZADAN keladi
+  //  (sessiyadagi xodim), kodga yozilmaydi.
+  const xodim = App.me()?.name ? ` \u00b7 ${esc(App.me().name)}` : '';
+  $('printHead').innerHTML = `
+    <h1>Aylanma-saldo qaydnomasi \u00b7 ${esc(FIRMA)}</h1>
+    <div class="meta">${esc(filterText())}</div>
+    <div class="meta">${data.rows.length} ta mijoz \u00b7 chop etildi ${
+      kun} ${soat}${xodim}</div>`;
+  window.print();
 }
 
 //  Excel zavodda shu ko'rinishda kutiladi: bitta mijoz — bitta qator,
