@@ -158,12 +158,28 @@ router.patch('/suppliers/:id', need('purchasing.manage'), wrap(async (req, res) 
 const DEBT_SQL = `
   SELECT s.id, s.name, s.phone, s.region, s.category,
          sc.name AS category_name, w.name AS manager_name,
-         COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <  $1), 0) AS opening,
-         --  ★ BOSHLANG'ICH QOLDIQ AYLANMAGA QO'SHILMAYDI (izoh pastda).
-         COALESCE(SUM(l.debit)  FILTER (
-                  WHERE l.kind = 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS start_debit,
-         COALESCE(SUM(l.credit) FILTER (
-                  WHERE l.kind = 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS start_credit,
+         --  ★ BOSHLANG'ICH QOLDIQ — «DAVR BOSHIGA» NING ICHIDA
+         --  (zavod qarori, 2026-10). U bir muddat ALOHIDA ustun bo'lib
+         --  turdi: lentada sanali qator bo'lgani uchun tizim ishga
+         --  tushgan kun tanlangan oraliqqa tushsa AYLANMAGA qo'shilib
+         --  ketardi va «oy ichida qancha mol keldi» degan savolga
+         --  javob yo'q edi.
+         --
+         --  Lekin bu BIR MARTALIK hol edi — faqat tizim ishga tushgan
+         --  oyda. Undan keyingi har oraliqda boshlang'ich qoldiq
+         --  o'tmishda qoladi, ya'ni ustun HAR DOIM nol bo'lib
+         --  turaveradi: jadvalda ikkita bo'sh ustun va yuqorida nol
+         --  turgan kartochka. Shuning uchun u «Davr boshiga» ga
+         --  ko'chdi va aylanmadan TASHQARIDA qoldi — mijozning ham,
+         --  ta'minotchining ham hisobotida bir vaqtda (ular ataylab
+         --  bir xil shaklda va bitta ko'z bilan o'qiladi).
+         --
+         --  Shart SANA bo'yicha emas, kind ustuni bo'yicha: boshlang'ich
+         --  qarz «davr boshidagi saldo» degani va uning sanasi
+         --  oraliqning ichiga tushgani bu javobni o'zgartirmaydi.
+         COALESCE(SUM(l.credit - l.debit) FILTER (
+                  WHERE l.on_date < $1
+                     OR (l.kind = 'opening' AND l.on_date <= $2)), 0) AS opening,
          COALESCE(SUM(l.debit)  FILTER (
                   WHERE l.kind <> 'opening' AND l.on_date BETWEEN $1 AND $2), 0) AS debit,
          COALESCE(SUM(l.credit) FILTER (
@@ -177,11 +193,9 @@ const DEBT_SQL = `
      AND ($3::text IS NULL OR s.name ILIKE '%' || $3 || '%'
           OR s.region ILIKE '%' || $3 || '%' OR s.phone ILIKE '%' || $3 || '%')
    GROUP BY s.id, s.name, s.phone, s.region, s.category, sc.name, w.name
-  HAVING COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <  $1), 0) <> 0
-      --  Aylanma SHARTI o'zgarmaydi: u endi boshlang'ich qoldiqni
-      --  ichiga olmaydi, shuning uchun o'sha qator alohida so'raladi —
-      --  aks holda faqat boshlang'ich qarzi bor ta'minotchi butunlay
-      --  tushib qolardi.
+  HAVING COALESCE(SUM(l.credit - l.debit) FILTER (
+           WHERE l.on_date < $1
+              OR (l.kind = 'opening' AND l.on_date <= $2)), 0) <> 0
       OR COALESCE(SUM(l.debit)  FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) <> 0
       OR COALESCE(SUM(l.credit) FILTER (WHERE l.on_date BETWEEN $1 AND $2), 0) <> 0
       OR COALESCE(SUM(l.credit - l.debit) FILTER (WHERE l.on_date <= $2), 0) <> 0
@@ -222,8 +236,6 @@ router.get('/debts', need(...SEE), wrap(async (req, res) => {
   res.json({ from, to, rows,
              total: { opening: sum('opening'), debit: sum('debit'),
                       credit: sum('credit'), closing: sum('closing'),
-                      start_debit: sum('start_debit'),
-                      start_credit: sum('start_credit'),
                       opening_debit: sum('opening_debit'),
                       opening_credit: sum('opening_credit'),
                       closing_debit: sum('closing_debit'),

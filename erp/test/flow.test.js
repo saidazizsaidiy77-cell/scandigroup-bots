@@ -3493,21 +3493,18 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
     .find((x) => x.id === mijoz);
   assert.equal(Number(r2.closing), Number(c.balance));
 
-  //  Butun tarix: davr boshlang'ich qarz sanasidan ham oldin boshlansa
-  //  «boshiga» bo'sh bo'ladi va hamma narsa aylanmaga tushadi.
+  //  ★ BOSHLANG'ICH QARZ HAR DOIM «DAVR BOSHIGA» DA (zavod qarori,
+  //  2026-10). Oraliq uning sanasidan ham oldin boshlansa ham u
+  //  AYLANMAGA tushmaydi: «oy ichida qancha mahsulot chiqdi» degan
+  //  savolga javob shundan chiqadi. Shart SANA bo'yicha emas, kind
+  //  ustuni bo'yicha — ya'ni javob oraliqqa bog'liq emas.
   const butun = (await admin('GET',
     '/api/sales/debts?from=1900-01-01&to=2030-01-01')).body.rows
     .find((x) => x.id === mijoz);
-  assert.equal(Number(butun.opening), 0);
-  //  ★ Boshlang'ich qarz O'Z USTUNIDA turadi, qarzdor aylanmasiga
-  //  qo'shilmaydi (zavod qarori, 2026-10; ta'minot hisoboti bilan
-  //  aynan bir xil shakl). Ilgari ikkalasi bitta raqam edi va «oy
-  //  ichida qancha mahsulot chiqdi» degan savolga javob yo'qolardi.
-  assert.equal(Number(butun.start_debit), 500, 'boshlang\'ich qarz alohida');
+  assert.equal(Number(butun.opening), 500, 'boshlang\'ich qarz davr boshida');
   assert.equal(
-    Number(butun.start_debit) - Number(butun.start_credit)
-      + Number(butun.debit) - Number(butun.credit),
-    Number(r2.closing), 'ikkalasi birga olinganda eski javob chiqadi');
+    Number(butun.opening) + Number(butun.debit) - Number(butun.credit),
+    Number(r2.closing), 'boshiga + qarzdor \u2212 haqdor = oxiriga');
 
   //  Harakatlar: qaysi konver, qaysi kun. Yugurib boradigan qoldiq
   //  sahifada shundan chiziladi.
@@ -3540,12 +3537,13 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
     '/api/sales/debts?from=2026-08-01&to=2026-09-30')).body.rows
     .find((x) => x.id === mijoz);
   assert.equal(Number(t2.debit) >= 0, true, String(t2.debit));
-  //  Ishorali maydon TOMONGA ajraladi — bu o'zgarmadi. O'zgargani
-  //  ustuni: boshlang'ich qarz endi aylanmaga qo'shilmaydi, o'z
-  //  ustunida turadi (zavod qarori, 2026-10).
-  assert.equal(Number(t2.start_credit), 200,
-    'ortiqcha to\'lov boshlang\'ich qoldiqning haqdor tomonida');
-  assert.equal(Number(t2.start_debit), 0, 'qarzdor tomonda minus turmaydi');
+  //  Ishorali maydon TOMONGA ajraladi — manfiy boshlang'ich qarz
+  //  qarzdor ustunidagi minus emas, HAQDOR yozuvi bo'ladi. U «davr
+  //  boshiga» da turadi va aylanmaga qo'shilmaydi (zavod qarori,
+  //  2026-10): sanasi oraliq ichiga tushgani bu javobni o'zgartirmaydi.
+  assert.equal(Number(t2.opening_credit), 200,
+    'ortiqcha to\'lov davr boshining haqdor tomonida');
+  assert.equal(Number(t2.opening_debit), 0, 'qarzdor tomonda minus turmaydi');
   assert.equal(Number(t2.credit), 0, 'aylanmaga qo\'shilmaydi');
   await H.id(`UPDATE customers SET opening_debt = 500 WHERE id = $1`, [mijoz]);
 
@@ -5261,10 +5259,6 @@ test('ta\'minot qarzdorligi: boshiga + haqdor − qarzdor = oxiriga', async () =
   //  Davr ichida: to'lov qarzdor tomonda
   assert.equal(Number(r.debit), 250);
   assert.equal(Number(r.credit), 0);
-  //  Boshlang'ich qoldiq ustuni bo'sh: uning sanasi oraliqdan OLDIN
-  //  va u allaqachon «davr boshiga» da turibdi.
-  assert.equal(Number(r.start_credit), 0);
-  assert.equal(Number(r.start_debit), 0);
   //  boshiga + haqdor − qarzdor = oxiriga
   assert.equal(Number(r.closing_credit), 550);
 
@@ -5277,27 +5271,27 @@ test('ta\'minot qarzdorligi: boshiga + haqdor − qarzdor = oxiriga', async () =
   assert.equal(ich.rows[0].kind, 'payment');
   assert.ok(ich.rows[0].doc_no, 'to\'lov hujjat raqami bilan');
 
-  //  ★ «Hammasi» oralig'ida boshlang'ich qarz O'Z USTUNIDA turadi,
-  //  HAQDOR aylanmasiga qo'shilmaydi (zavod qarori, 2026-10). Ilgari
-  //  u «kelgan mol» bilan bitta raqamga qo'shilardi va «oy ichida
-  //  qancha mol keldi» degan savolga javob yo'q edi.
+  //  ★ «Hammasi» oralig'ida ham boshlang'ich qarz «DAVR BOSHIGA» da
+  //  turadi va HAQDOR aylanmasiga qo'shilmaydi (zavod qarori,
+  //  2026-10). Ilgari u «kelgan mol» bilan bitta raqamga qo'shilardi
+  //  va «oy ichida qancha mol keldi» degan savolga javob yo'q edi.
+  //  Shart SANA bo'yicha emas, kind ustuni bo'yicha — ya'ni oraliq
+  //  uning kunidan oldin boshlansa ham javob o'zgarmaydi.
   const hammasi = (await admin(
     'GET', '/api/purchasing/debts?from=1900-01-01&to=2026-12-31')).body;
   const h = hammasi.rows.find((x) => x.id === tam);
-  assert.equal(Number(h.opening_credit), 0, 'davr boshi bo\'sh');
-  assert.equal(Number(h.start_credit), 800, 'boshlang\'ich qoldiq o\'z ustunida');
+  assert.equal(Number(h.opening_credit), 800, 'davr boshida turadi');
   assert.equal(Number(h.credit), 0, 'haqdor aylanmada kelgan mol yo\'q');
   assert.equal(Number(h.debit), 250);
   assert.equal(Number(h.closing_credit), 550);
-  //  boshiga + boshlang'ich qoldiq + haqdor − qarzdor = oxiriga
+  //  boshiga + haqdor − qarzdor = oxiriga
   assert.equal(
-    Number(h.opening) + Number(h.start_credit) - Number(h.start_debit)
-      + Number(h.credit) - Number(h.debit),
+    Number(h.opening) + Number(h.credit) - Number(h.debit),
     Number(h.closing), 'tenglama saqlanadi');
   //  Yig'indi ham o'sha ustunda: kartochka jadval bilan bitta raqamni
   //  aytishi kerak (menyudagi navbat belgisi bilan bir xil qoida).
-  const yig = hammasi.rows.reduce((a, x) => a + Number(x.start_credit), 0);
-  assert.equal(Number(hammasi.total.start_credit).toFixed(2), yig.toFixed(2));
+  const yig = hammasi.rows.reduce((a, x) => a + Number(x.opening_credit), 0);
+  assert.equal(Number(hammasi.total.opening_credit).toFixed(2), yig.toFixed(2));
 });
 
 //  ★ SOF AYLANMA KAPITAL — sana HOLATIGA olingan surat. Ustun oyning

@@ -920,37 +920,39 @@ foydalanolmasdi. Ekrandagi maslahat yozuvi («qatorni bossangiz
 harakatlari chiqadi») qog'ozga chiqmaydi, ustunlarni tushuntiradigan
 izoh esa chiqadi — u hujjatning o'zi.
 
-**★ BOSHLANG'ICH QOLDIQ — ALOHIDA USTUN, AYLANMA EMAS** (zavod
-qarori, 2026-10). Boshlang'ich qarz lentada SANALI qator bo'lib turadi
-(`opening_debt_on`), ya'ni o'sha sana tanlangan oraliqqa tushsa u
-AYLANMAGA qo'shilib ketardi: ta'minotchida kartochka «kelgan mol va
-boshlang'ich qarz» deb turardi va «oy ichida qancha mol keldi» degan
-savolga javob yo'q edi — 20 833 ning qancha qismi haqiqiy yetkazib
-berish ekanini faqat qatorni ochib, lentani ko'zdan kechirib bilish
-mumkin edi.
+**★ BOSHLANG'ICH QOLDIQ — «DAVR BOSHIGA» NING ICHIDA, AYLANMADA
+EMAS** (zavod qarori, 2026-10). Boshlang'ich qarz lentada SANALI qator
+bo'lib turadi (`opening_debt_on`), ya'ni o'sha sana tanlangan oraliqqa
+tushsa u AYLANMAGA qo'shilib ketardi: ta'minotchida kartochka «kelgan
+mol va boshlang'ich qarz» deb turardi va «oy ichida qancha mol keldi»
+degan savolga javob yo'q edi — 20 833 ning qancha qismi haqiqiy
+yetkazib berish ekanini faqat qatorni ochib bilish mumkin edi.
 
-**«Davr boshiga» ga ko'chirish YO'L EMAS edi**: zavod tizimni
-15-sentabrda ishga tushirgan bo'lsa, 1-sentabrdan boshlangan oraliqda
-u qarz 1-sentabrda ham bor edi degan YOLG'ON da'vo bo'lardi. Shuning
-uchun UCHINCHI ustun — u na saldo, na aylanma: tizim ishga tushgan
-kundagi raqam, va ekranda aynan shunday ataladi.
+Birinchi yechim ALOHIDA, uchinchi ustun bo'lgan edi: na saldo, na
+aylanma — tizim ishga tushgan kundagi raqam. U bir necha kun turdi va
+tuzoq ko'rindi: sana oraliqqa faqat BIR MARTA, tizim ishga tushgan
+oyda tushadi. Undan keyingi har oraliqda boshlang'ich qoldiq o'tmishda
+qoladi, ya'ni ustun HAR DOIM nol bo'lib turaveradi — jadvalda ikkita
+bo'sh ustun va yuqorida nol turgan kartochka. Bo'sh ustun savol
+beradi, javob emas.
 
-    boshiga + boshlang'ich qoldiq + qarzdor − haqdor = oxiriga   (mijoz)
-    boshiga + boshlang'ich qoldiq + haqdor − qarzdor = oxiriga   (ta'minotchi)
+Endi u **«Davr boshiga» ning ichida** va aylanmadan TASHQARIDA:
 
-Ajratuvchi belgi — lentadagi **`kind = 'opening'`**, ya'ni shart
-BITTA joyda (`v_customer_ledger`, `v_supplier_ledger`) va sana bo'yicha
-taxmin qilinmaydi. Qator ochilganda lentada ham o'sha qator O'Z
-ustunida turadi: jadval yuqorida uni ajratib ko'rsatib, ochilganda yana
-aylanmaning ichida ko'rsatsa ikki javob bir-biriga zid bo'lardi.
+    boshiga + qarzdor − haqdor = oxiriga   (mijoz)
+    boshiga + haqdor − qarzdor = oxiriga   (ta'minotchi)
 
-**HAVING sharti ham alohida so'raydi**: aylanma endi boshlang'ich
-qoldiqni ichiga olmaydi, ya'ni faqat boshlang'ich qarzi bor mijoz
-hisobotdan butunlay tushib qolardi.
+**Shart SANA bo'yicha emas, `kind` bo'yicha** (`kind = 'opening'`):
+boshlang'ich qarz — «davr boshidagi saldo» degani va uning sanasi
+oraliqning ichiga tushgani bu javobni o'zgartirmaydi. «Hammasi»
+oralig'ida ham, kelasi oyda ham bitta raqam chiqadi.
+
+Shu bilan birinchi muammo ham joyida hal bo'lib qoladi: boshlang'ich
+qarz «kelgan mol» ga QO'SHILMAYDI, ya'ni haqdor aylanmasi faqat
+davr ichida kelgan molni aytadi.
 
 **Ikkala hisobotda ham bir vaqtda qilindi** — ular ataylab bir xil
 shaklda (ОСВ) va bitta ko'z bilan o'qiladi: bittasida ustun paydo
-bo'lib, ikkinchisida chiqmasa shakl buzilardi.
+bo'lib yoki yo'qolib, ikkinchisida qolsa shakl buzilardi.
 
 **Solishtirma dalolatnoma** (`/dalolatnoma.html`) — o'sha lentaning
 MIJOZGA beriladigan ko'rinishi: bitta mijoz, bitta oraliq, boshiga va
@@ -3353,11 +3355,11 @@ keladi. Shuning uchun avval kiritish, keyin modul.
      **Qarzdor** (debet) — qarzimiz KAMAYADI: to'lov; oldindan to'lov
      ham shu tomonda.
 
-         boshiga + boshlang'ich qoldiq + haqdor − qarzdor = oxiriga
+         boshiga + haqdor − qarzdor = oxiriga
 
-   **Boshlang'ich qoldiq ALOHIDA ustun** va haqdor aylanmasiga
-   qo'shilmaydi — mijozlar hisoboti bilan aynan bir xil qoida va
-   bir xil sabab (izoh yuqorida, «★ BOSHLANG'ICH QOLDIQ»).
+   **Boshlang'ich qoldiq «Davr boshiga» ning ichida** va haqdor
+   aylanmasiga qo'shilmaydi — mijozlar hisoboti bilan aynan bir xil
+   qoida va bir xil sabab (izoh yuqorida, «★ BOSHLANG'ICH QOLDIQ»).
 
    Saldo = `kredit − debet`, ya'ni musbat bo'lsa BIZ qarzdormiz —
    `v_supplier_debt.balance` bilan bir xil raqam. Sahifa ostida
