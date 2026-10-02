@@ -1432,7 +1432,11 @@ async function sonniTogrila(client, req, id, nextQty, opts = {}) {
   await audit(req, { module: 'production', action: 'qty', entity: 'unit',
                      entity_id: id,
                      payload: { from: u.qty, to: nextQty,
-                                note: opts.note || null } }, client);
+                                note: opts.note || null,
+                                //  Sanoq kuni — ombor sanog'idan keladi
+                                //  (`POST /api/warehouse/fg/count`);
+                                //  jurnaldagi tahrirda bo'sh qoladi.
+                                on: opts.on || null } }, client);
   return { changed: true, unit: u };
 }
 

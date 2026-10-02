@@ -3310,9 +3310,44 @@ bron tekshiruvi, jamlanma `flow_log` va `fg_stock` uchalasi bir xil
 bo'ladi. Ikki nusxada yozilsa bir ekranda bron tekshirilib,
 ikkinchisida tekshirilmasdi.
 
-**Sabab MAJBURIY**: raqam jimgina o'zgarmasin — o'zgarish ombor
-qiymatiga ham, ishbay hisobga ham tegadi va «nega 4 emas, 2 ta»
-degan savol keyin beriladi; javobi audit jurnalida qoladi.
+**★ RAQAM JIMGINA O'ZGARMAYDI — HUJJAT BO'LIB O'ZGARADI** (zavod
+qarori, 2026-10; `fg_counts`, `sql/warehouse.sql`). O'zgarishning
+O'ZI yetarli emas: «qachon sanadik, kim sanadi va nimadan nimaga
+o'zgardi» degan savol oy oxirida beriladi va javobi faqat audit
+jurnalida qolardi — u esa ombor mudiriga ochilmaydi. Shuning uchun
+har sanoq **SANA** bilan yoziladi va hujjat raqami oladi
+(**`SN26-0001`**): bitta varaqda to'g'rilangan konverlarning hammasi
+BITTA raqam ostida turadi. «S» yolg'iz o'zi band (stul konveri
+`S26-...`), shuning uchun ikki harf — matras `MT` bilan bir xil
+sabab. **Sabab ham MAJBURIY**: o'zgarish ombor qiymatiga ham,
+ishbay hisobga ham tegadi.
+
+**★ SANA — SANOQ KUNI, HISOB KUNI EMAS**, va bu farq muhim. Javon
+ertalab sanaladi, kompyuterga esa kechqurun yoki ertasiga yoziladi —
+«qachon sanadik» degan savolga `created_at` emas, o'sha KUN javob
+beradi. Lekin QOLDIQQA u tegmaydi: farq yuqoridagi sababdan
+retroaktiv tuzatiladi va `fg_counts` faqat HUJJAT bo'lib turadi.
+Teskarisi qilinsa bitta farq ikki marta hisoblanardi — biri
+konverning yangi sonida, ikkinchisi harakat qatorida.
+
+**Kelajakdagi sana RAD ETILADI** (tekshiruv serverda): sanoq bo'lib
+o'tgan ish va bo'lmagan kunni yozib qo'yish hujjatni yolg'on
+qilardi (aylanma kapital hisobotidagi «kelajakdagi sana ustun
+bo'lmaydi» bilan bir xil qoida).
+
+**Qatorlar alohida jadvalda emas, SHU jadvalning o'zida**: bitta
+sanoq o'ntacha konverga tegadi va ikkinchi jadval «qaysi varaqda
+nima bor» degan savolni ikki manbaga bo'lardi (xom ashyo kirimining
+qatorlari `material_moves` da turgani bilan bir xil qoida).
+
+**★ OXIRGI SANOQLAR OYNANING O'ZIDA** (`GET /api/warehouse/fg/counts`):
+mudir varaqni ochganda bugun allaqachon sanalganini ko'rishi kerak,
+aks holda o'sha javonni ikkinchi marta sanab, ikkinchi hujjat
+yozardi va tarixda bitta farq ikkita qator bo'lib turardi. Alohida
+tab qilinmadi: savol faqat sanoq payti beriladi va tab qolgan kun
+bo'yi bo'sh turardi (tsex ekranidagi «javob ish qilayotgan joyida
+bo'lsin» bilan bir xil sabab). Ro'yxat OMBOR bo'yicha va doirasi
+ham o'sha — ko'rinmaydigan omborning sanog'i ham uniki emas.
 
 **Sanoq varag'i bitta tugmada**: `GET /api/warehouse/fg/units` da
 `product_id` endi IXTIYORIY — bo'sh bo'lsa butun omborning

@@ -737,6 +737,20 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
 //
 //  Doira bu yerda ham CHEGARA: id ni qo'lda yuborib ko'rmaydigan
 //  omborning konverini to'g'rilab bo'lmaydi.
+//  Raqam SAQLASHDA beriladi (kassa orderi va kirim hujjati bilan bir
+//  xil qoida): oldindan band qilib qo'yilsa bekor qilingan oynadan
+//  bo'sh raqam qolardi. `SN` — sanoq; «S» yolg'iz o'zi band (stul
+//  konveri `S26-...`) va bitta harf ikki xil hujjatni atasa ekrandagi
+//  raqam qaysi biri ekani noaniq qolardi (matras `MT` bilan bir xil
+//  sabab).
+async function nextCountNo(client) {
+  const prefix = `SN${String(new Date().getFullYear()).slice(-2)}-`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
+       FROM fg_counts WHERE doc_no LIKE $1`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(4, '0');
+}
+
 router.post('/fg/count', need('warehouse.manage', 'production.manage'),
   wrap(async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items
@@ -745,11 +759,24 @@ router.post('/fg/count', need('warehouse.manage', 'production.manage'),
     const sabab = String(req.body.note || '').trim();
     if (!sabab) throw bad('Sabab yozilmagan');
 
+    //  ★ SANOQ KUNI SO'RALADI, standarti bugun. Javon ertalab
+    //  sanaladi, kompyuterga esa kechqurun yoki ertasiga yoziladi —
+    //  «qachon sanadik» degan savolga `created_at` emas, o'sha KUN
+    //  javob beradi.
+    //
+    //  Kelajakdagi sana RAD ETILADI: sanoq bo'lib o'tgan ish, bo'lmagan
+    //  kunni yozib qo'yish hujjatni yolg'on qilardi (aylanma kapital
+    //  hisobotidagi «kelajakdagi sana ustun bo'lmaydi» bilan bir xil
+    //  qoida).
+    const kun = String(req.body.on || '').trim() || null;
+    if (kun && !/^\d{4}-\d{2}-\d{2}$/.test(kun)) throw bad("Sana noto'g'ri");
+    if (kun && kun > today()) throw bad('Sanoq kuni kelajakda bo\'lmaydi');
+
     const client = await db.connect();
     try {
       await client.query('BEGIN');
       const [perms, ids] = whScope(req);
-      let n = 0;
+      let n = 0, doc = null;
       const nomlar = [];
       for (const it of items) {
         const u = (await client.query(
@@ -773,25 +800,66 @@ router.post('/fg/count', need('warehouse.manage', 'production.manage'),
             `bo'lishi kerak — javonda umuman yo'q konverni bekor qilish ` +
             `ishlab chiqarish boshlig'ining ishi`);
         const r = await sonniTogrila(client, req, Number(it.unit_id), to,
-                                     { unit: u, note: sabab });
+                                     { unit: u, note: sabab, on: kun });
         //  Farqi yo'q qator O'TKAZIB YUBORILADI, xato emas: ro'yxat
         //  ochilgandan keyin soni allaqachon to'g'rilangan bo'lishi
         //  mumkin (xom ashyodagi sanoq bilan bir xil qoida).
         if (!r.changed) continue;
+        //  Hujjat raqami BIRINCHI o'zgargan qatorda olinadi: farqi yo'q
+        //  varaq saqlansa raqam bekorga yonib ketardi.
+        if (!doc) doc = await nextCountNo(client);
+        await client.query(
+          `INSERT INTO fg_counts (doc_no, warehouse_id, unit_id, conveyor_no,
+                                  was_qty, qty, counted_on, note, worker_id)
+           VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7::date, CURRENT_DATE), $8,$9)`,
+          [doc, wh.id, it.unit_id, u.conveyor_no, u.qty, to, kun, sabab,
+           req.user.id]);
         n++;
         nomlar.push(u.conveyor_no);
       }
       if (!n) throw new Error("To'g'rilanadigan qator yo'q");
       await audit(req, { module: 'warehouse', action: 'count', entity: 'unit',
                          entity_id: n,
-                         payload: { count: n, note: sabab, units: nomlar } }, client);
+                         payload: { doc_no: doc, count: n, note: sabab,
+                                    on: kun, units: nomlar } }, client);
       await client.query('COMMIT');
-      res.json({ saved: n, units: nomlar });
+      res.json({ saved: n, doc_no: doc, units: nomlar });
     } catch (e) {
       await client.query('ROLLBACK');
       return res.status(e.status || 400).json({ error: e.message });
     } finally { client.release(); }
   }));
+
+
+//  ★ SANOQ TARIXI — «qachon sanadik» degan savolning javobi, va u
+//  sanoq oynasining O'ZIDA turadi: mudir varaqni ochganda bugun
+//  allaqachon sanalganini ko'rishi kerak, aks holda o'sha javonni
+//  ikkinchi marta sanab, ikkinchi hujjat yozardi.
+//
+//  Ro'yxat OMBOR bo'yicha: har ombor o'z sanog'ini ko'radi (kirim va
+//  chiqim tarixi bilan bir xil qoida). Doira ham o'sha — `whOf`
+//  ko'rmaydigan omborni umuman bermaydi.
+router.get('/fg/counts', need(...READ), wrap(async (req, res) => {
+  const wh = await whOf(req, req.query.w);
+  const { rows } = await db.query(
+    `SELECT c.id, c.doc_no, c.conveyor_no, c.was_qty, c.qty,
+            (c.qty - c.was_qty) AS farq,
+            c.counted_on, c.note, w.name AS by_name,
+            p.name AS product, g.name AS product_type
+       FROM fg_counts c
+       LEFT JOIN workers w ON w.id = c.worker_id
+       LEFT JOIN production_units u ON u.id = c.unit_id
+       LEFT JOIN products p       ON p.id = u.product_id
+       LEFT JOIN product_groups g ON g.id = p.group_id
+      WHERE c.warehouse_id = $1
+        AND ($2::date IS NULL OR c.counted_on >= $2)
+        AND ($3::date IS NULL OR c.counted_on <= $3)
+      ORDER BY c.counted_on DESC, c.id DESC
+      LIMIT $4`,
+    [wh.id, req.query.from || null, req.query.to || null,
+     Math.min(Number(req.query.limit) || 50, 500)]);
+  res.json({ rows });
+}));
 
 
 // ══════════════════════════════════════════ VITRINADAN QAYTARISH

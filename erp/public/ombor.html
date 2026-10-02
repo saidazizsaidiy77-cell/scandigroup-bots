@@ -964,9 +964,17 @@ function openMove(id, no, qty, bron) {
             </div></div>
           <!--  ★ SABAB MAJBURIY: soni qoldiqqa ham, jamlanma
                 hisobotga ham tegadi va «nega 4 emas, 2 ta» degan savol
-                keyin beriladi. Javobi audit jurnalida qoladi. -->
-          <div><label>Sabab</label>
-            <input id="fxNote" placeholder="masalan: sanoq — javonda 2 ta"></div>
+                keyin beriladi. Javobi HUJJATDA (SN26-0001) va audit
+                jurnalida qoladi.
+                ★ SANA — SANOQ KUNI: javon ertalab sanaladi,
+                kompyuterga esa kechqurun yoki ertasiga yoziladi. -->
+          <div class="row" style="gap:12px">
+            <div><label>Sanoq kuni</label>
+              <input id="fxOn" type="date" value="${isoDay(new Date())}"
+                max="${isoDay(new Date())}" style="max-width:150px"></div>
+            <div style="flex:1"><label>Sabab</label>
+              <input id="fxNote" placeholder="masalan: sanoq — javonda 2 ta"></div>
+          </div>
           <p class="muted" style="font-size:12px;margin:0">Hozir <b>${qty}</b> ta${
             bron ? `, shundan <b>${bron}</b> tasi bronda` : ''}. Qoldiq va
             hisobotlar darrov to'g'rilanadi. Javonda <b>umuman yo'q</b>
@@ -1015,10 +1023,11 @@ async function doFixQty(id, eski) {
   if (!sabab) return toast('Sabab yozilmagan', true);
   if (!confirm(`Soni ${eski} \u2192 ${n} qilib to'g'rilansinmi?`)) return;
   try {
-    await App.api('/api/warehouse/fg/count', { method: 'POST',
-      body: JSON.stringify({ unit_id: id, to_qty: n, note: sabab }) });
+    const r = await App.api('/api/warehouse/fg/count', { method: 'POST',
+      body: JSON.stringify({ unit_id: id, to_qty: n, note: sabab,
+                             on: $('fxOn')?.value || null }) });
     closeMove();
-    toast(`Soni ${n} ta qilib to'g'rilandi`);
+    toast(`${r.doc_no} · soni ${n} ta qilib to'g'rilandi`);
     await loadStock();
   } catch (e) { toast(e.message, true); }
 }
@@ -1046,7 +1055,7 @@ const closeMove = () => { $('modalRoot').innerHTML = ''; };
 //  yuzta qatorli va bo'sh qoldirilgani «nol sanadim» deb o'qilsa
 //  bitta tasodifiy bosish butun javonni nolga tushirardi. Farqi yo'q
 //  qator serverda baribir o'tkazib yuboriladi.
-let szRows = [], szQ = '';
+let szRows = [], szQ = '', szTarix = [];
 
 async function sanoqOch() {
   $('modalRoot').innerHTML = `
@@ -1061,8 +1070,16 @@ async function sanoqOch() {
   const q = $('sQ')?.value.trim(); if (q) p.set('q', q);
   if (sel.type.size) p.set('product_type', [...sel.type].join(','));
   let d;
-  try { d = await App.api('/api/warehouse/fg/units?' + p); }
-  catch (e) { closeMove(); return toast(e.message, true); }
+  try {
+    //  Varaq va TARIX birga o'qiladi: ikkita so'rov ketma-ket
+    //  yuborilsa oyna bir marta bo'sh, keyin to'la chizilardi.
+    const [u, t] = await Promise.all([
+      App.api('/api/warehouse/fg/units?' + p),
+      App.api('/api/warehouse/fg/counts?' + wq(new URLSearchParams({ limit: 20 })))
+        .catch(() => ({ rows: [] })),
+    ]);
+    d = u; szTarix = t.rows || [];
+  } catch (e) { closeMove(); return toast(e.message, true); }
   szRows = d.rows.map(r => ({ ...r, to_qty: Number(r.qty) }));
   szQ = '';
   $('modalRoot').innerHTML = `
@@ -1073,9 +1090,17 @@ async function sanoqOch() {
           <button onclick="closeMove()">Yopish</button></div>
         ${!szRows.length ? `<p class="muted">Javonda konver yo'q.</p>` : `
         <div class="row" style="gap:12px;align-items:flex-end;margin-bottom:12px">
-          <div style="flex:1;min-width:220px"><label>Sabab</label>
+          <!--  ★ SANOQ KUNI, standarti bugun: javon ertalab sanaladi,
+                kompyuterga esa kechqurun yoki ertasiga yoziladi —
+                «qachon sanadik» degan savolga yozilgan vaqt emas,
+                o'sha KUN javob beradi. Kelajakdagi sana serverda rad
+                etiladi: sanoq bo'lib o'tgan ish. -->
+          <div><label>Sanoq kuni</label>
+            <input id="szOn" type="date" value="${isoDay(new Date())}"
+              max="${isoDay(new Date())}" style="max-width:150px"></div>
+          <div style="flex:1;min-width:200px"><label>Sabab</label>
             <input id="szNote" placeholder="masalan: oylik sanoq"></div>
-          <div style="flex:1;min-width:180px"><label>Qidiruv</label>
+          <div style="flex:1;min-width:160px"><label>Qidiruv</label>
             <input id="szFind" placeholder="konveyer №, mahsulot, rang"
               oninput="sanoqFind(this.value)"></div>
         </div>
@@ -1092,8 +1117,41 @@ async function sanoqOch() {
         <button class="primary" id="szSave" style="margin-top:14px"
           onclick="sanoqSaqla()">To'g'rilash</button>
         <div id="szMsg"></div>`}
+        ${sanoqTarix()}
       </div></div>`;
   if (szRows.length) sanoqChiz();
+}
+
+//  ★ OXIRGI SANOQLAR OYNANING O'ZIDA. «Qachon sanadik» degan savol
+//  aynan shu yerda beriladi: mudir varaqni ochganda bugun allaqachon
+//  sanalganini ko'rishi kerak, aks holda o'sha javonni ikkinchi marta
+//  sanab, ikkinchi hujjat yozardi va tarixda bitta farq ikkita qator
+//  bo'lib turardi.
+//
+//  Alohida tab qilinmadi: savol faqat sanoq payti beriladi va tab
+//  qolgan kun bo'yi bo'sh turardi (tsex ekranidagi «javob ish
+//  qilayotgan joyida bo'lsin» bilan bir xil sabab).
+function sanoqTarix() {
+  if (!szTarix.length) return '';
+  return `<div style="margin-top:20px;border-top:1px solid var(--line);
+      padding-top:14px">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Oxirgi
+      sanoqlar — ${esc(stock?.warehouse?.name || '')}</div>
+    <div style="max-height:200px;overflow:auto">
+    <table><thead><tr><th>Hujjat</th><th>Sanoq kuni</th><th>Konveyer №</th>
+      <th class="num">Edi</th><th class="num">Bo'ldi</th>
+      <th>Kim · sabab</th></tr></thead>
+    <tbody>${szTarix.map(r => `<tr>
+      <td><b>${esc(r.doc_no)}</b></td>
+      <td>${d8(r.counted_on)}</td>
+      <td>${esc(r.conveyor_no)}${r.product
+        ? ` <span class="muted" style="font-size:12px">${esc(r.product)}</span>` : ''}</td>
+      <td class="num muted">${r.was_qty}</td>
+      <td class="num"><b>${r.qty}</b> <span class="${r.farq > 0 ? '' : 'late'}"
+        >${r.farq > 0 ? '+' : ''}${r.farq}</span></td>
+      <td class="muted" style="font-size:12px">${esc(r.by_name || '—')}${
+        r.note ? ' · ' + esc(r.note) : ''}</td>
+    </tr>`).join('')}</tbody></table></div></div>`;
 }
 
 const sanoqKor = () => {
@@ -1159,9 +1217,9 @@ async function sanoqSaqla() {
   if (!confirm(`${items.length} ta konverning soni to'g'rilansinmi?`)) return;
   try {
     const r = await App.api('/api/warehouse/fg/count', { method: 'POST',
-      body: JSON.stringify({ note: sabab, items }) });
+      body: JSON.stringify({ note: sabab, on: $('szOn').value || null, items }) });
     closeMove();
-    toast(`${r.saved} ta konver to'g'rilandi`);
+    toast(`${r.doc_no} · ${r.saved} ta konver to'g'rilandi`);
     await loadStock();
   } catch (e) { toast(e.message, true); }
 }

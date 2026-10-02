@@ -1382,16 +1382,26 @@ test('sanoq: ombor mudiri konverning sonini to\'g\'rilaydi — kam ham, ko\'p ha
   assert.equal(sabsiz.status, 400);
   assert.match(sabsiz.body.error, /Sabab/);
 
-  //  KAM chiqdi: 4 → 2
-  assert.equal((await mudir('POST', '/api/warehouse/fg/count',
-    { unit_id: u.id, to_qty: 2, note: 'sanoq' })).status, 200);
+  //  ★ KELAJAKDAGI SANOQ KUNI RAD ETILADI: sanoq bo'lib o'tgan ish
+  const kelasi = await mudir('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 2, note: 'sanoq', on: '2099-01-01' });
+  assert.equal(kelasi.status, 400);
+  assert.match(kelasi.body.error, /kelajakda/);
+
+  //  KAM chiqdi: 4 → 2, sanoq kuni bilan
+  const kam = await mudir('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 2, note: 'sanoq', on: '2026-09-20' });
+  assert.equal(kam.status, 200, kam.text);
+  assert.match(kam.body.doc_no, /^SN\d\d-\d{4}$/, 'hujjat raqami beriladi');
   assert.equal((await qoldiq()).total.qty, 2, 'qoldiq darrov kamaydi');
 
   //  KO'P chiqdi: 2 → 5, to'dalab yuborilgan ro'yxat bilan
   const kop = await mudir('POST', '/api/warehouse/fg/count',
-    { items: [{ unit_id: u.id, to_qty: 5 }], note: 'sanoq — ortiqcha' });
+    { items: [{ unit_id: u.id, to_qty: 5 }], note: 'sanoq — ortiqcha',
+      on: '2026-09-21' });
   assert.equal(kop.status, 200, kop.text);
   assert.equal(kop.body.saved, 1);
+  assert.notEqual(kop.body.doc_no, kam.body.doc_no, 'har varaq o\'z raqami');
   assert.equal((await qoldiq()).total.qty, 5, 'ortiqcha chiqqani hisobga olindi');
 
   //  Farqi yo'q qator — to'g'rilanadigan narsa qolmadi
@@ -1419,6 +1429,26 @@ test('sanoq: ombor mudiri konverning sonini to\'g\'rilaydi — kam ham, ko\'p ha
   assert.equal(varaq[0].qty, 5);
   assert.equal(varaq[0].conveyor_no, u.conveyor_no);
   assert.ok(varaq[0].product, 'varaqda mahsulot nomi ham turadi');
+
+  //  ★ SANOQ TARIXI: «qachon sanadik» degan savolning javobi.
+  //  Hujjat, sanoq kuni, nimadan nimaga va kim — hammasi bitta
+  //  qatorda; sana oraliq bo'yicha ham so'raladi.
+  const tarix = (await mudir('GET',
+    '/api/warehouse/fg/counts?w=TM&from=2026-09-01&to=2026-09-30')).body.rows;
+  const meniki = tarix.filter((r) => r.conveyor_no === u.conveyor_no);
+  assert.equal(meniki.length, 2, 'ikkala sanoq ham tarixda');
+  //  Oxirgisi tepada: sanoq kuni bo'yicha teskari tartib
+  assert.equal(String(meniki[0].counted_on).slice(0, 10), '2026-09-21');
+  assert.equal(meniki[0].was_qty, 2);
+  assert.equal(meniki[0].qty, 5);
+  assert.equal(Number(meniki[0].farq), 3, 'ortiqcha chiqqani musbat');
+  assert.equal(Number(meniki[1].farq), -2, 'kam chiqqani manfiy');
+  assert.ok(meniki[0].by_name, 'kim sanaganini ham yozadi');
+
+  //  Oraliqdan tashqarisi chiqmaydi
+  assert.equal((await mudir('GET',
+    '/api/warehouse/fg/counts?w=TM&from=2026-10-01')).body.rows
+    .filter((r) => r.conveyor_no === u.conveyor_no).length, 0);
 });
 
 test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri vitrinaga kiritiladi', async () => {

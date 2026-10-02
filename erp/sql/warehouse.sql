@@ -681,3 +681,56 @@ SELECT r.*,
       JOIN products p       ON p.id = u.product_id
       JOIN product_groups g ON g.id = p.group_id
      WHERE u.fg_receipt_id = r.id AND u.status <> 'cancelled') i ON true;
+
+
+-- ═══════════════════════════════════════════ SANOQ — QOLDIQNI TO'G'RILASH
+--
+--  ★ RAQAM JIMGINA O'ZGARMAYDI — HUJJAT BO'LIB O'ZGARADI (zavod qarori,
+--  2026-10). Ombor mudiri javonni sanaydi va farq chiqsa konverning
+--  soni to'g'rilanadi (`sonniTogrila`, modules/units.js). O'zgarishning
+--  O'ZI yetarli emas: «qachon sanadik, kim sanadi va nimadan nimaga
+--  o'zgardi» degan savol oy oxirida beriladi va javobi faqat audit
+--  jurnalida qolardi — u esa mudirga ochilmaydi.
+--
+--  Shuning uchun har sanoq SANA bilan yoziladi va hujjat raqami oladi
+--  (`SN26-0001`): bitta varaqda to'g'rilangan konverlarning hammasi
+--  BITTA raqam ostida turadi. «S» band (stul konveri `S26-...`),
+--  shuning uchun ikki harf — matras `MT` bilan bir xil sabab.
+--
+--  ★ SANA — SANOQ KUNI, hisob kuni EMAS, va bu muhim. Tayyor mahsulot
+--  qoldig'i KONVERLARDAN hisoblanadi (`v_fg_units`): farq har doim
+--  bitta konverning soni haqida («2 talik mahsulot 4 ta bo'lib
+--  yozilgan»), ya'ni YOZUVDAGI xato — javonda hech qachon 4 ta
+--  turmagan. Tuzatish shu sababdan retroaktiv va «oraliq oxiriga»
+--  ham to'g'ri chiqadi. Bu jadval esa qoldiqqa UMUMAN tegmaydi: u
+--  faqat hujjat. Aks holda bitta farq ikki marta hisoblanardi — biri
+--  konverning yangi sonida, ikkinchisi harakat qatorida.
+--
+--  Xom ashyoda teskari: u yerda farq SANASI bilan harakat bo'lib
+--  yoziladi (`material_moves`, `writeoff`), chunki material haqiqatan
+--  sarflanib ketgan bo'lishi mumkin. Ikki xil haqiqat — ikki xil
+--  mexanizm.
+--
+--  Qatorlar alohida jadvalda emas, SHU jadvalning o'zida: bitta sanoq
+--  o'ntacha konverga tegadi va ikkinchi jadval «qaysi varaqda nima
+--  bor» degan savolni ikki manbaga bo'lardi (xom ashyo kirimining
+--  qatorlari `material_moves` da turgani bilan bir xil qoida).
+CREATE TABLE IF NOT EXISTS fg_counts (
+  id           SERIAL PRIMARY KEY,
+  doc_no       TEXT NOT NULL,
+  warehouse_id INT  NOT NULL REFERENCES warehouses(id),
+  -- Konver keyin bo'linib yoki boshqa bo'lakka qo'shilib ketishi
+  -- mumkin, shuning uchun raqami NUSXA bo'lib yoziladi
+  -- (`warehouse_moves.conveyor_no` bilan bir xil sabab).
+  unit_id      INT  REFERENCES production_units(id) ON DELETE SET NULL,
+  conveyor_no  TEXT NOT NULL,
+  was_qty      INT  NOT NULL,
+  qty          INT  NOT NULL CHECK (qty > 0),
+  counted_on   DATE NOT NULL DEFAULT CURRENT_DATE,
+  note         TEXT,
+  worker_id    INT  REFERENCES workers(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fg_counts_on  ON fg_counts(counted_on);
+CREATE INDEX IF NOT EXISTS idx_fg_counts_wh  ON fg_counts(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_fg_counts_doc ON fg_counts(doc_no);
