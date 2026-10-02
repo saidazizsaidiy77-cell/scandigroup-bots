@@ -28,6 +28,20 @@
 
 <div class="card">
   <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <!--  ★ KONVEYER RAQAMI BO'YICHA FILTR (zavod qarori, 2026-10).
+          Server uni boshidanoq qabul qilardi (`conveyor_no`), lekin
+          ekranda katak yo'q edi — ya'ni jurnalda konverni RAQAMI
+          bo'yicha topadigan joy umuman qolmagandi. Eng ko'p
+          beriladigan savol esa aynan shu: «S26-474 qani».
+
+          Boshlang'ich qoldiq ham shu katakdan topiladi: tizim
+          qo'ygan raqam «Q» bilan boshlanadi (izoh: CLAUDE.md), ya'ni
+          «Q26» deb yozilsa hammasi bitta ro'yxatda chiqadi.
+
+          Zakaz raqamining YONIDA: ikkalasi ham raqam bo'yicha
+          qidiradi va ko'z ularni birga topsin. -->
+    <div style="flex:1;min-width:160px"><label>Konveyer &#8470;</label>
+      <input id="fNo" placeholder="S26-474 · Q26" oninput="deb()"></div>
     <div style="flex:1;min-width:160px"><label>Zakaz raqami</label>
       <input id="fOrder" placeholder="Z-1024" oninput="deb()"></div>
     <div style="flex:1;min-width:160px"><label>Maxsulot nomi</label>
@@ -204,11 +218,12 @@ async function boot(){
 
 // Filtr va saralash bitta joyda yig'iladi: jurnal ham, Excel fayli ham
 // aynan shu so'rovdan chiqadi.
-// Zakaz raqami, mahsulot nomi, guruh, tsex va mijoz — zavod jurnalni shu
-// besh kesimda qidiradi. API boshqa kesimlarni ham qabul qiladi (holat,
-// sana oralig'i, erkin qidiruv), lekin ular sahifada ko'rsatilmaydi: kunda
-// ishlatilmaydigan katak faqat panelni og'irlashtiradi.
-const FILTERS = ['fOrder', 'fFason', 'fShop', 'fSection', 'fCust'];
+// Konveyer raqami, zakaz raqami, mahsulot nomi, guruh, tsex va mijoz —
+// zavod jurnalni shu olti kesimda qidiradi. API boshqa kesimlarni ham
+// qabul qiladi (holat, sana oralig'i, erkin qidiruv), lekin ular
+// sahifada ko'rsatilmaydi: kunda ishlatilmaydigan katak faqat panelni
+// og'irlashtiradi.
+const FILTERS = ['fNo', 'fOrder', 'fFason', 'fShop', 'fSection', 'fCust'];
 
 //  Bo'lim ro'yxatining doimiy boshi. «Boshlanmagan» — bo'lim EMAS,
 //  «bo'limi yo'q» degani: konver tasdiqlangan, raqami bor, lekin hali
@@ -271,6 +286,7 @@ function toggleGroup(id){
 
 function params(){
   const p = new URLSearchParams();
+  if ($('fNo').value.trim())     p.set('conveyor_no', $('fNo').value.trim());
   if ($('fOrder').value.trim())  p.set('order_no', $('fOrder').value.trim());
   if ($('fFason').value)         p.set('fason_id', $('fFason').value);
   if (!groupAll())               p.set('group_ids', [...groupSel].join(','));
@@ -305,6 +321,7 @@ function filterText(){
     const e = $(id);
     if (e && e.value && e.selectedOptions[0]) bits.push(`${nom}: ${e.selectedOptions[0].text}`);
   };
+  if ($('fNo').value.trim()) bits.push(`Konveyer \u2116: ${$('fNo').value.trim()}`);
   if ($('fOrder').value.trim()) bits.push(`Zakaz: ${$('fOrder').value.trim()}`);
   sel('fFason', 'Maxsulot');
   sel('fShop',  'Tsex');

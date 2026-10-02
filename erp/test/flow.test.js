@@ -1456,6 +1456,68 @@ test('ko\'chirish bekor qilinadi va bo\'lak qaytib qo\'shiladi', async () => {
     [u.conveyor_no]);
 });
 
+//  ★ JURNALDA KONVEYER RAQAMI BO'YICHA QIDIRUV (zavod qarori, 2026-10).
+//  Server shartni boshidanoq qabul qilardi, lekin ekranda katak yo'q
+//  edi \u2014 ya'ni konverni RAQAMI bo'yicha topadigan joy jurnalda
+//  umuman qolmagandi. Boshlang'ich qoldiq ham shu bilan topiladi:
+//  tizim qo'ygan raqam «Q» bilan boshlanadi.
+//
+//  ★ OMBORGA TUSHGANI BARIBIR CHIQMAYDI, va bu ATAYLAB: jurnal \u2014
+//  ISHLAB CHIQARISH jurnali va ombor qabul qilgan konver undan
+//  chiqadi (zavod qarori). Raqam bo'yicha qidirilganda chegarani
+//  ochish ham sinab ko'rildi va u o'sha qoidani buzdi \u2014 oltita
+//  test shuni tutdi. Omborga tushganining javobi boshqa joyda:
+//  ombor qoldig'ida va konver pasportida (`/konver.html`).
+test('jurnalda konveyer raqami bo\'yicha qidiriladi', async () => {
+  const { db } = require('../db');
+  const ARRA = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+  const RANG = 'Qidiruv sinov rangi';
+  //  Ikkita boshlang'ich qoldiq: biri tsexda, ikkinchisi T/M omborda.
+  const tsexda = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: RANG, is_opening: true,
+      section_id: ARRA },
+  ] })).body.created[0];
+  const omborda = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 3, color: RANG, is_opening: true,
+      fg_on: '2026-09-05' },
+  ] })).body.created[0];
+  //  Raqamni TIZIM qo'yadi va u «Q» bilan boshlanadi: zavod daftarida
+  //  bunday raqam yo'q (izoh: CLAUDE.md).
+  assert.match(tsexda.conveyor_no, /^Q\d\d-/, 'tizim qo\'ygan raqam Q bilan');
+  assert.match(omborda.conveyor_no, /^Q\d\d-/);
+
+  const jurnal = async (q) => (await admin('GET', '/api/units?' + q)).body;
+
+  //  Raqamning O'ZI bo'yicha \u2014 bitta qator.
+  const bitta = await jurnal('conveyor_no=' + encodeURIComponent(tsexda.conveyor_no));
+  assert.equal(bitta.length, 1, bitta.length + ' ta chiqdi');
+  assert.equal(bitta[0].conveyor_no, tsexda.conveyor_no);
+
+  //  PREFIKS bo'yicha ham: «Q26» deb yozilsa hammasi bitta ro'yxatda
+  //  \u2014 boshlang'ich qoldiqni ko'rishning yo'li aynan shu.
+  const prefiks = await jurnal('conveyor_no=' + tsexda.conveyor_no.slice(0, 3));
+  assert.ok(prefiks.length >= 1);
+  assert.ok(prefiks.every((r) => r.conveyor_no.startsWith(tsexda.conveyor_no.slice(0, 3))),
+    'prefiksga tushmaydigan qator chiqmasin');
+  assert.ok(prefiks.some((r) => r.conveyor_no === tsexda.conveyor_no));
+
+  //  Omborga tushgani jurnalda YO'Q \u2014 raqami bilan so'ralganda ham.
+  assert.equal((await jurnal(
+    'conveyor_no=' + encodeURIComponent(omborda.conveyor_no))).length, 0,
+    'ombor qabul qilgan konver ishlab chiqarish jurnalida turmaydi');
+  //  Lekin ombor qoldig'ida turadi: javob yo'qolmagan, joyi boshqa.
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const javon = (await mudir('GET',
+    `/api/warehouse/fg/units?w=TM&q=${encodeURIComponent(RANG)}`)).body.rows;
+  assert.ok(javon.some((u) => u.conveyor_no === omborda.conveyor_no),
+    'omborga kiritilgani qoldiqda turadi');
+
+  //  Tozalash: sinov konverlari boshqa testlarning qoldig'iga
+  //  aralashmasin.
+  await db.query(
+    `UPDATE production_units SET status = 'cancelled' WHERE color = $1`, [RANG]);
+});
+
 //  ★ SANOQ — javondagi dona hisobdagidan kam ham, ko'p ham chiqadi va
 //  ikkalasini JAVONNI SANAGAN odam to'g'rilaydi (zavod qarori, 2026-10).
 test('sanoq: ombor mudiri konverning sonini to\'g\'rilaydi — kam ham, ko\'p ham', async () => {
