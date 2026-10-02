@@ -550,8 +550,18 @@ function drawStock() {
               sarflangan degani — kirim hujjati yozilmagan. Raqamni
               nolga qisish yolg'on bo'lardi, yashirish esa xatoni
               ko'rinmas qilardi. -->
-        <td class="num"><b${Number(r.qty) < 0 ? ' class="late"' : ''}>${
-          son(r.qty)}</b></td>
+        <!--  ★ VA U BOSILADI (zavod qarori, 2026-10): «nega minusda»
+              degan savolga javob O'SHA raqamning ichida bo'lsin.
+              Qizil rang muammoni ko'rsatardi, lekin sababini
+              aytmasdi — odam «Ombor qoldig'i minusga tushmasin»
+              kalitini qayta-qayta tekshirib yurardi, holbuki kalit
+              faqat BUNDAN KEYINGI chiqimni to'xtatadi. Musbat
+              qoldiqda tugma chizilmaydi: u yerda savol yo'q. -->
+        <td class="num">${Number(r.qty) < 0
+          ? `<b class="late" style="cursor:pointer;text-decoration:underline
+              dotted" title="Nega minusda?" onclick="minusOch(${
+              r.material_id}, ${r.warehouse_id})">${son(r.qty)}</b>`
+          : `<b>${son(r.qty)}</b>`}</td>
         <td class="muted">${esc(r.uom_name || r.uom)}</td>
         <td class="num muted">${r.price == null ? '—' : pul(r.price)}</td>
         <td class="num">${r.amount == null ? '—' : pul(r.amount)}</td>
@@ -1763,6 +1773,118 @@ async function boshSaqla() {
     toast(`${r.saved} ta qator yozildi${wh ? ' · ' + wh.name : ''}`);
     tab = 'stock'; drawTabs(); await load();
   } catch (e) { saqlanmadi('oSave', e); }
+}
+
+//  ──────────────────────────────── «NEGA MINUSDA» — EKRANDAGI JAVOB
+//
+//  ★ SAVOL BERILGAN JOYDA JAVOB BERILADI (zavod qarori, 2026-10;
+//  izoh: modules/materials.js). Qizil raqam bosiladi va oyna uchta
+//  narsani YONMA-YON qo'yadi: minus QACHON paydo bo'lgani, kalit
+//  QACHON yoqilgani va tuzatishning uchta yo'li.
+//
+//  Ikki javob bir-biridan ATAYLAB ajratiladi va rangi ham boshqa:
+//  minus kalitdan OLDIN yozilgan bo'lsa — savol tugadi; KEYIN
+//  yozilgan bo'lsa — bu kodning xatosi va ekran shuni ochiq aytadi.
+//  Aralashtirilsa «kalit ishlamayapti» degan shubha har safar
+//  qolardi va haqiqiy teshik o'sha shubhaning ichida ko'rinmay
+//  ketardi.
+async function minusOch(materialId, warehouseId) {
+  let d;
+  try {
+    d = await App.api(`/api/materials/minus?material_id=${materialId
+      }&warehouse_id=${warehouseId}`);
+  } catch (e) { return toast(e.message, true); }
+
+  const bosh = d.boshlanish;
+  //  Minus paydo bo'lgan KUN — sahifaning `kun()` i bilan (hamma
+  //  joyda bir xil ko'rinish). Kalit yoqilgan PAYT esa soat bilan:
+  //  bir kunning ichida yoqilgani va yozilgani solishtirilishi kerak
+  //  bo'lishi mumkin.
+  const payt = (v) => {
+    if (!v) return null;
+    const t = new Date(v);
+    return `${kun(v)} ${String(t.getHours()).padStart(2, '0')}:${
+      String(t.getMinutes()).padStart(2, '0')}`;
+  };
+
+  //  Qaysi tomonga ketgani: konver RAQAMI, ombor nomi yoki yorliq —
+  //  «sarf» degan so'zning o'zi qaysi konverga ketganini aytmaydi.
+  const tomon = !bosh ? '' : (bosh.conveyor_no ? `konver ${bosh.conveyor_no}`
+    : bosh.other_wh ? bosh.other_wh
+    : bosh.other_sup ? bosh.other_sup
+    : bosh.other_kind === 'writeoff' ? 'hisobdan chiqarish'
+    : bosh.other_kind === 'order' ? 'talabnoma' : '');
+
+  //  Minus kalitdan KEYIN paydo bo'lganmi: shart BITTA joyda va
+  //  javobning rangi ham shundan chiqadi.
+  const keyin = !!(bosh && d.kalit.on && d.kalit.on_at
+    && new Date(bosh.created_at) > new Date(d.kalit.on_at));
+
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:620px">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px">
+          <h1>Nega minusda?</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <div class="muted" style="margin-bottom:14px">${esc(d.material)}
+          &middot; ${esc(d.warehouse)} &middot; hozir
+          <b class="late">${son(d.bor)} ${esc(d.uom || '')}</b></div>
+
+        ${!bosh ? `<p class="muted">Minus topilmadi — qoldiq hozir
+          manfiy emas yoki harakatlari bekor qilingan.</p>` : `
+        <table style="margin-bottom:14px"><tbody>
+          <tr><td class="muted">Minus paydo bo'lgan kun</td>
+              <td><b>${kun(bosh.moved_on)}</b></td></tr>
+          <tr><td class="muted">Qaysi yozuv bilan</td>
+              <td>${son(Math.abs(bosh.qty))} ${esc(d.uom || '')} chiqdi${
+                tomon ? ` &rarr; ${esc(tomon)}` : ''}</td></tr>
+          <tr><td class="muted">Qoldiq</td>
+              <td>${son(bosh.edi)} &rarr;
+                <b class="late">${son(bosh.saldo)}</b></td></tr>
+          <tr><td class="muted">Kim yozgan</td>
+              <td>${esc(bosh.worker || '—')}</td></tr>
+          ${bosh.note ? `<tr><td class="muted">Izoh</td>
+              <td>${esc(bosh.note)}</td></tr>` : ''}
+          <tr><td class="muted">Kompyuterga tushgan payt</td>
+              <td class="muted">${payt(bosh.created_at) || '—'}</td></tr>
+        </tbody></table>
+
+        <!--  ★ KALIT — JAVOBNING IKKINCHI YARMI. «Yoqib qo'ydim,
+              lekin minus turibdi» degan savolning javobi aynan shu
+              ikki sana solishtirilganda chiqadi. -->
+        ${!d.kalit.on
+          ? `<div class="tag warn">«Ombor qoldig'i minusga tushmasin»
+              kaliti O'CHIQ — chiqim qoldiqdan ko'p bo'lsa ham
+              to'xtatilmaydi.</div>`
+          : keyin
+            ? `<div class="tag warn"><b>Bu yozuv kalit yoqilgandan
+                KEYIN tushgan</b> (kalit ${payt(d.kalit.on_at)} da
+                yoqilgan) — ya'ni to'siq chetlab o'tilgan. Bu
+                tizimning xatosi, shuni aytib qo'ying.</div>`
+            : `<div class="tag">Kalit <b>${payt(d.kalit.on_at) || '—'}</b>
+                da yoqilgan, bu yozuv esa undan OLDIN tushgan. Kalit
+                faqat BUNDAN KEYINGI chiqimni to'xtatadi —
+                o'tmishda yozilgan minusni o'zi tuzatmaydi.</div>`}`}
+
+        <!--  ★ TUZATISHNING TO'RTTA YO'LI VA HAMMASI SABABNIKI
+              (izoh: modules/materials.js). Ro'yxat bo'lmasa odam
+              minusni «⚖ Sanoq» bilan jimgina nolga tushirardi —
+              holbuki mol kelgan bo'lsa ta'minotchining qarzi
+              yozilmay qolardi. -->
+        <div style="margin-top:14px"><b>Tuzatish yo'li</b></div>
+        <ul class="muted"
+            style="margin:6px 0 0;padding-left:20px;line-height:1.7">
+          <li>Mol kelgan, hujjati yozilmagan &rarr; <b>Kirim</b>
+              (ta'minotchining qarzi oshadi).</li>
+          <li>Tizimdan oldin javonda turgan &rarr;
+              <b>Boshlang'ich qoldiq</b> (qarzsiz).</li>
+          <li>Sarf adashib yozilgan &rarr; <b>Harakat</b> tabida o'sha
+              qatorni bekor qilish.</li>
+          <li>Sababi topilmadi &rarr; <b>&#9878; Sanoq</b> — hujjat,
+              sana va sabab bilan.</li>
+        </ul>
+      </div>
+    </div>`;
 }
 
 // ────────────────────────────────────────────── QOLDIQNI TO'G'RILASH

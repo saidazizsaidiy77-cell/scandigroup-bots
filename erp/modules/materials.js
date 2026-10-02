@@ -497,6 +497,94 @@ router.get('/moves', need(...VIEW), wrap(async (req, res) => {
   res.json({ rows });
 }));
 
+// ──────────────────────────────────────── «NEGA MINUSDA» — BITTA JAVOB
+//
+//  ★ QIZIL RAQAM O'ZINI TUSHUNTIRADI (zavod qarori, 2026-10).
+//  Manfiy qoldiq kirim hujjati yozilmaganining BELGISI va u ekranda
+//  allaqachon qizil bo'lib turadi — lekin belgi savolni beradi,
+//  javobni bermaydi. «Ombor qoldig'i minusga tushmasin» kaliti YOQIQ
+//  turganda ham eski minus joyida qolaveradi (kalit faqat BUNDAN
+//  KEYINGI chiqimni to'xtatadi, o'tmishdagi yozuvni tuzatmaydi) va
+//  ekran buni aytmasdi: odam kalitni qayta-qayta tekshirib, «nega
+//  ishlamayapti» degan savol bilan qolardi. Javob esa bazada bor.
+//
+//  Javob HARAKATLARDAN chiqadi, saqlangan ustundan emas (ombor
+//  aylanmasi bilan bir xil qoida): qatorlar SANA bo'yicha yugurib
+//  qo'shiladi va saldo BIRINCHI marta noldan pastga tushgan qator
+//  topiladi — qachon, kim, qaysi hujjat, nechta edi va nechta bo'ldi.
+//
+//  Yoniga KALITNING O'ZI qo'yiladi (`app_settings.updated_at`) va
+//  ikkisi solishtiriladi. Ikki javob bir-biridan ATAYLAB ajratiladi:
+//
+//    minus kalitdan OLDIN   →  savol tugadi, tuzatish yo'li uchta
+//    minus kalitdan KEYIN   →  bu KODNING xatosi va ekran shuni aytadi
+//
+//  Ajratmaslik eng yomon yo'l edi: «kalit ishlamayapti» degan shubha
+//  har safar qolardi va haqiqiy teshik o'sha shubhaning ichida
+//  ko'rinmay ketardi (bron belgisi bilan bir xil sabab).
+//
+//  Doira bu yerda ham CHEGARA: ko'rinmaydigan omborning minusi ham
+//  uniki emas.
+router.get('/minus', need(...VIEW), wrap(async (req, res) => {
+  const doira = whDoira(req);
+  const mId = Number(req.query.material_id) || 0;
+  const wId = Number(req.query.warehouse_id) || 0;
+  if (!mId || !wId) return res.status(400).json({ error: 'Material tanlanmagan' });
+
+  const bosh = (await db.query(
+    `SELECT m.name AS material, COALESCE(s.qty, 0)::NUMERIC(14,3) AS bor,
+            COALESCE(s.uom, m.uom) AS uom, w.name AS warehouse
+       FROM materials m
+       JOIN warehouses w ON w.id = $2
+       LEFT JOIN v_material_stock s
+              ON s.material_id = m.id AND s.warehouse_id = w.id
+      WHERE m.id = $1
+        AND ($3::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($3))`,
+    [mId, wId, doira])).rows[0];
+  if (!bosh) return res.status(404).json({ error: 'Topilmadi' });
+
+  //  Saldo yugurib boradi: `SUM(...) OVER (ORDER BY ...)`. `id`
+  //  UNIQUE, ya'ni teng qator yo'q va tartib har safar bir xil
+  //  chiqadi — aks holda javob so'rovdan so'rovga o'zgarib turardi.
+  const qator = (await db.query(
+    `WITH f AS (
+       SELECT f.id, f.moved_on, f.qty, f.note, f.doc_kind, f.doc_id,
+              f.other_kind, f.other_id, f.worker_id, f.created_at,
+              SUM(f.qty) OVER (ORDER BY f.moved_on, f.id) AS saldo
+         FROM v_material_flow f
+        WHERE f.material_id = $1 AND f.kind = 'warehouse' AND f.place_id = $2
+     )
+     SELECT f.id, f.moved_on, f.qty, f.note, f.doc_kind, f.created_at,
+            f.other_kind, f.saldo, (f.saldo - f.qty) AS edi,
+            wk.name AS worker, ow.name AS other_wh, sp.name AS other_sup,
+            u.conveyor_no
+       FROM f
+       LEFT JOIN workers wk  ON wk.id = f.worker_id
+       LEFT JOIN warehouses ow ON ow.id = f.other_id
+                              AND f.other_kind = 'warehouse'
+       LEFT JOIN suppliers sp  ON sp.id = f.other_id
+                              AND f.other_kind = 'supplier'
+       LEFT JOIN production_units u ON u.id = f.other_id
+                                   AND f.other_kind = 'unit'
+      WHERE f.saldo < 0
+      ORDER BY f.moved_on, f.id
+      LIMIT 1`, [mId, wId])).rows[0] || null;
+
+  const k = (await db.query(
+    `SELECT val, updated_at FROM app_settings WHERE key = 'minus_material'`
+  )).rows[0] || null;
+
+  res.json({
+    material: bosh.material, uom: bosh.uom, warehouse: bosh.warehouse,
+    bor: Number(bosh.bor),
+    //  Kalitning holati va QACHON o'zgargani: javobning yarmi shu
+    //  sanada turadi.
+    kalit: { on: String(k?.val || '0') === '1', on_at: k?.updated_at || null },
+    boshlanish: qator,
+  });
+}));
+
 // ─────────────────────────────────────────────── BOSHLANG'ICH QOLDIQ
 //
 //  Tizim ishga tushgan kundagi holat: qaysi omborda qaysi materialdan

@@ -8404,6 +8404,42 @@ test('minus_material: bekor qilish va tiklash ham minusga tushirmaydi', async ()
     { note: 'sinov' })).status, 200);
   assert.equal(await qoldiq(), -6, 'o\'chiq kalitda minus yoziladi');
 
+  //  ★ «NEGA MINUSDA» — EKRAN JAVOBNI O'ZI BERADI (zavod qarori,
+  //  2026-10). Qizil raqamning o'zi muammoni ko'rsatardi, lekin
+  //  sababini aytmasdi: kalit YOQIQ turganda ham eski minus joyida
+  //  qolaveradi va odam «kalit ishlamayapti» degan xulosaga kelardi.
+  //  Javob harakatlardan chiqadi: saldo BIRINCHI marta noldan pastga
+  //  tushgan qator — qachon, kim, nechta edi va nechta bo'ldi.
+  const neg = await admin(
+    'GET', `/api/materials/minus?material_id=${mat}&warehouse_id=${wh}`);
+  assert.equal(neg.status, 200, neg.text);
+  assert.equal(neg.body.bor, -6);
+  const bb = neg.body.boshlanish;
+  assert.ok(bb, 'minus boshlangan qator topilishi kerak');
+  assert.ok(Number(bb.saldo) < 0, 'saldo manfiy bo\'lishi kerak');
+  assert.ok(Number(bb.edi) >= 0,
+    'minusdan OLDINGI qoldiq manfiy bo\'lmaydi — aks holda bu birinchi qator emas');
+  assert.ok(bb.moved_on && bb.created_at, 'sana ham, payt ham kerak');
+  //  Kalitning holati javobning IKKINCHI yarmi: ikki sana
+  //  solishtirilmasa «yoqib qo'ydim, lekin minus turibdi» degan
+  //  savol javobsiz qolardi.
+  assert.equal(neg.body.kalit.on, false, 'kalit hozir o\'chiq');
+  await yoq('minus_material', true);
+  const neg2 = await admin(
+    'GET', `/api/materials/minus?material_id=${mat}&warehouse_id=${wh}`);
+  assert.equal(neg2.body.kalit.on, true);
+  assert.ok(neg2.body.kalit.on_at, 'kalit QACHON yoqilgani yozilishi kerak');
+  await yoq('minus_material', false);
+
+  //  Material tanlanmagan so'rov — 400: bo'sh javob «minus yo'q»
+  //  degan yolg'on xulosa berardi.
+  assert.equal((await admin('GET', '/api/materials/minus')).status, 400);
+  //  Xom ashyo huquqi yo'q xodimga javob berilmaydi.
+  const sv = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await sv(
+    'GET', `/api/materials/minus?material_id=${mat}&warehouse_id=${wh}`)
+  ).status, 403);
+
   //  Tozalash: sinov qatorlari boshqa testlarga aralashmasin.
   await db.query(
     `UPDATE material_moves SET status = 'cancelled' WHERE material_id = $1`,
