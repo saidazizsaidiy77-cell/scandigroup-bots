@@ -9477,6 +9477,85 @@ test('ta\'minotchiga to\'lov kassa orderi bo\'lib ochiladi', async () => {
   assert.equal((await kassir('PATCH', '/api/cash/ops/' + id)).status, 200);
 });
 
+//  ★ XARID NARXLARI (zavod qarori, 2026-10). Narx MATERIALDA emas,
+//  KIRIM qatorida turadi — bugun 3 $, ertaga 4 $. Shuning uchun «bu
+//  material qancha turadi» degan savolga javob beradigan joy yo'q
+//  edi: raqam har hujjatning ichida yotardi va ta'minot xodimi yangi
+//  narxni eskisi bilan solishtirish uchun hujjatlarni birma-bir ochib
+//  chiqishi kerak bo'lardi.
+test('xarid narxlari: oxirgi, oldingi va o\'rtacha', async () => {
+  const xom = H.api(base, await H.sessionFor('Sinov xom ombor'));
+  const zavod = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const m = (await H.id(
+    `INSERT INTO materials (name, uom) VALUES ('Narx sinov materiali', 'dona')
+     ON CONFLICT (lower(name)) DO UPDATE SET uom = 'dona' RETURNING id`)).id;
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Narx Taminot', category: 'MDF' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Sinov Narx Taminot'`)).id;
+
+  //  Ikkita kirim: 10 ta 3 $ dan, keyin 30 ta 4 $ dan.
+  for (const [qty, price, on] of [[10, 3, '2026-09-05'], [30, 4, '2026-09-20']])
+    assert.equal((await xom('POST', '/api/materials/receipts', {
+      supplier_id: tam, warehouse_id: zavod, doc_on: on,
+      items: [{ material_id: m, qty, price }] })).status, 200);
+
+  const narx = async (q = '') =>
+    (await xom('GET', '/api/materials/prices?' + q)).body.rows;
+  const r = (await narx('q=' + encodeURIComponent('Narx sinov')))
+    .find((x) => x.material_id === m);
+  assert.ok(r, 'material narxlar ro\'yxatida');
+  assert.equal(Number(r.last_price), 4, 'oxirgi narx');
+  assert.equal(Number(r.prev_price), 3, 'oldingisi \u2014 o\'zgarish shundan');
+  assert.equal(r.n, 2, 'ikkita kirim');
+  //  ★ O'RTACHA — OG'IRLANGAN: (10×3 + 30×4) / 40 = 3,75.
+  //  Oddiy o'rtacha (3,5) yolg'on javob berardi va ombor qoldig'idagi
+  //  raqamdan ham farq qilardi.
+  assert.equal(Number(r.avg_price), 3.75, 'og\'irlangan o\'rtacha');
+  assert.equal(r.last_supplier, 'Sinov Narx Taminot');
+  assert.ok(r.last_doc, 'oxirgi kirimning hujjat raqami');
+
+  //  ★ O'RTACHA OMBOR QOLDIG'IDAGI BILAN BIR XIL: ikki joyda ikki xil
+  //  hisoblansa ombor qiymati bilan bu sahifa bir-biridan ajralib
+  //  ketardi.
+  const qoldiq = (await xom('GET', '/api/materials/stock?w=XOM&q='
+    + encodeURIComponent('Narx sinov'))).body.rows.find((x) => x.material_id === m);
+  assert.equal(Number(qoldiq.price), Number(r.avg_price),
+    'o\'rtacha narx qoldiq bilan bitta formuladan');
+
+  //  Tarix: eng yangisi tepada, har qatorda hujjat va ta'minotchi.
+  const tarix = (await xom('GET', `/api/materials/prices/${m}`)).body.rows;
+  assert.equal(tarix.length, 2);
+  assert.equal(Number(tarix[0].price_usd), 4, 'eng yangisi tepada');
+  assert.equal(Number(tarix[0].qty), 30);
+  assert.ok(tarix[0].doc_no && tarix[0].supplier);
+
+  //  Ta'minotchi filtri: boshqa ta'minotchi tanlansa bu material
+  //  ro'yxatdan tushadi.
+  assert.ok(!(await narx('supplier_id=' + (tam + 100000)))
+    .some((x) => x.material_id === m));
+  assert.ok((await narx('supplier_id=' + tam)).some((x) => x.material_id === m));
+
+  //  ★ NARXI YO'Q MATERIAL RO'YXATDA TURMAYDI: nol yozilsa u «bepul»
+  //  degan ma'no berardi (o'rtacha narx qoidasi bilan bir xil sabab).
+  const bosh = (await H.id(
+    `INSERT INTO materials (name, uom) VALUES ('Narxsiz sinov materiali', 'dona')
+     ON CONFLICT (lower(name)) DO UPDATE SET uom = 'dona' RETURNING id`)).id;
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ warehouse_id: zavod, material_id: bosh, qty: 5 }] })).status, 200);
+  assert.ok(!(await narx('q=' + encodeURIComponent('Narxsiz sinov')))
+    .some((x) => x.material_id === bosh), 'narxsiz material chizilmaydi');
+
+  //  ★ HUQUQI MENYUDAGI BILAN AYNAN TENG. Tsex boshlig'ida
+  //  `materials.view` BOR (u tsex omborining qoldig'ini narxi bilan
+  //  ko'radi) va shu sababdan narxlar ham unga ochiq \u2014 ikki ekranda
+  //  ikki xil qoida turishi mumkin emas. Savdoda esa xom ashyo ham,
+  //  ta'minot ham yo'q: unga berilmaydi.
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await savdo('GET', '/api/materials/prices')).status, 403);
+  assert.equal((await savdo('GET', `/api/materials/prices/${m}`)).status, 403);
+});
+
 //  ★ XOM ASHYO QOLDIG'I HAM AYLANMA (zavod qarori, 2026-10). Mudir
 //  javondagi raqamni ko'radi-yu, «shu oyda qancha keldi» degan
 //  savolga javob topolmasdi — harakatlar tabiga o'tib, bitta

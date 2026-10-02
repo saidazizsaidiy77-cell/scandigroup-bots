@@ -497,6 +497,114 @@ router.get('/moves', need(...VIEW), wrap(async (req, res) => {
   res.json({ rows });
 }));
 
+// ═══════════════════════════════════ XARID NARXLARI
+//
+//  ★ NARX MATERIALDA EMAS, KIRIM QATORIDA (izoh: yuqorida va
+//  CLAUDE.md) — bugun LDSP 250 000, ertaga 270 000. Shuning uchun
+//  «bu material qancha turadi» degan savolga javob beradigan joy
+//  yo'q edi: raqam har kirim qatorida alohida yotardi va ta'minot
+//  xodimi yangi narxni eskisi bilan solishtirish uchun kirim
+//  hujjatlarini birma-bir ochib chiqishi kerak bo'lardi.
+//
+//  Savol UCHTA va uchalasi ham bitta qatorda javob topadi:
+//
+//      OXIRGI narx     bugun qancha so'rashyapti
+//      OLDINGI narx    o'tgan safar qancha edi \u2014 o'zgarish shundan
+//      O'RTACHA narx   ombor qoldig'i qaysi bahoda turibdi
+//
+//  ★ O'RTACHA NARX — `v_material_stock` dagi bilan BIR XIL formula
+//  (`SUM(qty × narx) / SUM(qty)`, faqat KIRGAN qatorlar bo'yicha):
+//  ikki joyda ikki xil hisoblansa ombor qiymati bilan bu sahifa
+//  bir-biridan ajralib ketardi.
+//
+//  ★ FAQAT NARXI BOR QATORLAR. Narx IXTIYORIY (javonda turgan
+//  materialning bahosi hali ma'lum bo'lmasligi mumkin) va narxsiz
+//  qator o'rtachaga umuman qo'shilmaydi \u2014 na surat, na maxraj.
+//  Shu sababdan ro'yxatda ham faqat narxi borlari turadi: narxsiz
+//  material «0 $» bo'lib ko'rinsa u «bepul» degan ma'no berardi.
+const NARX_KIRIM = `
+  SELECT mv.id, mv.material_id, mv.moved_on, mv.qty,
+         mv.price, mv.price_usd, mv.ccy, mv.rate,
+         mv.from_kind, mv.note,
+         r.doc_no, r.supplier_id, sp.name AS supplier
+    FROM material_moves mv
+    --  Hujjat IXTIYORIY: boshlang'ich qoldiq ham narx bilan kiradi va
+    --  u ham javobning bir qismi \u2014 javon o'sha bahoda turibdi.
+    LEFT JOIN mat_receipts r ON r.id = mv.doc_id
+                            AND mv.doc_kind = 'receipt' AND r.status = 'ok'
+    LEFT JOIN suppliers sp   ON sp.id = r.supplier_id
+   WHERE mv.status = 'ok' AND mv.to_kind = 'warehouse'
+     AND mv.price_usd IS NOT NULL AND mv.qty > 0`;
+
+//  ★ HUQUQI MENYUDAGI BILAN AYNAN TENG va `materials.request` UNGA
+//  KIRMAYDI: tsex boshlig'i talabnoma yozadi va sarfni yozadi, mol
+//  qancha turgani esa uning ishi emas \u2014 narx ta'minot va rahbariyat
+//  savoli. `...VIEW` ishlatilsa u o'z ichiga `materials.request` ni ham
+//  olardi va sahifa menyuda chizilmay, API esa ochiq qolardi.
+const NARX_HUQUQ = ['purchasing.view', 'purchasing.manage',
+                    'materials.view', 'materials.manage'];
+
+router.get('/prices', need(...NARX_HUQUQ), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `WITH kirim AS (${NARX_KIRIM}),
+          nom AS (
+       SELECT k.*, ROW_NUMBER() OVER (PARTITION BY k.material_id
+                                      ORDER BY k.moved_on DESC, k.id DESC) AS rn
+         FROM kirim k),
+          ort AS (
+       SELECT material_id,
+              (SUM(qty * price_usd) / NULLIF(SUM(qty), 0))::numeric(16,4) AS avg_price,
+              COUNT(*)::int AS n,
+              MIN(price_usd)::numeric(16,4) AS min_price,
+              MAX(price_usd)::numeric(16,4) AS max_price
+         FROM kirim GROUP BY material_id)
+     SELECT m.id AS material_id, m.name AS material, m.code,
+            COALESCE(u.name, m.uom) AS uom, c.name AS category_name,
+            a.price_usd AS last_price, a.moved_on AS last_on,
+            a.price AS last_raw, a.ccy AS last_ccy, a.rate AS last_rate,
+            a.supplier AS last_supplier, a.doc_no AS last_doc,
+            b.price_usd AS prev_price,
+            o.avg_price, o.n, o.min_price, o.max_price
+       FROM materials m
+       JOIN nom a ON a.material_id = m.id AND a.rn = 1
+       LEFT JOIN nom b ON b.material_id = m.id AND b.rn = 2
+       LEFT JOIN ort o ON o.material_id = m.id
+       LEFT JOIN material_categories c ON c.code = m.category
+       LEFT JOIN material_uoms u       ON u.code = m.uom
+      WHERE m.active
+        --  Qidiruv NOM va KOD bo'yicha: zavodda uch yuzdan ortiq nom
+        --  bor va mudir ko'pincha kodni yozadi (qoldiqdagi bilan bir
+        --  xil shart).
+        AND ($1::text IS NULL OR m.name ILIKE '%' || $1 || '%'
+             OR m.code ILIKE '%' || $1 || '%')
+        --  Ta'minotchi filtri: «shu odamdan nima olganmiz». Shart
+        --  OXIRGI kirimga emas, MATERIALGA tegadi \u2014 u hech
+        --  bo'lmaganda bir marta o'shandan kelgan bo'lsa ro'yxatda
+        --  turadi, aks holda ta'minotchi almashgan material javobdan
+        --  jimgina tushib qolardi.
+        AND ($2::int IS NULL OR EXISTS (
+              SELECT 1 FROM kirim k2
+               WHERE k2.material_id = m.id AND k2.supplier_id = $2))
+        AND ($3::text IS NULL OR m.category = $3)
+      ORDER BY m.name
+      LIMIT 2000`,
+    [trim(req.query.q), Number(req.query.supplier_id) || null,
+     trim(req.query.category)]);
+  res.json({ rows });
+}));
+
+//  Bitta materialning narx TARIXI — qator ochilganda. «Nega qimmat
+//  bo'ldi» degan savolning javobi shu yerda: qachon, kimdan, qancha
+//  dona va qaysi valyutada.
+router.get('/prices/:id', need(...NARX_HUQUQ), wrap(async (req, res) => {
+    const { rows } = await db.query(
+      `SELECT k.* FROM (${NARX_KIRIM}) k
+        WHERE k.material_id = $1
+        ORDER BY k.moved_on DESC, k.id DESC
+        LIMIT 200`, [Number(req.params.id) || 0]);
+    res.json({ rows });
+  }));
+
 // ──────────────────────────────────────── «NEGA MINUSDA» — BITTA JAVOB
 //
 //  ★ QIZIL RAQAM O'ZINI TUSHUNTIRADI (zavod qarori, 2026-10).

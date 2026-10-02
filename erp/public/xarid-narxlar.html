@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xarid narxlari · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top no-print">
+  <div class="brand"><span class="dot"></span><h1>Xarid narxlari</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<!-- Faqat qog'ozda: varaq qaysi filtr bilan olingani o'zi aytsin -->
+<div id="printHead" class="print-only print-head"></div>
+
+<div class="card no-print">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div style="flex:1;min-width:200px"><label>Qidiruv</label>
+      <input id="fQ" placeholder="material nomi yoki kodi" oninput="deb()"></div>
+    <div style="flex:1;min-width:200px"><label>Ta'minotchi</label>
+      <select id="fS" onchange="load()"></select></div>
+    <div style="flex:1;min-width:160px"><label>Turkum</label>
+      <select id="fC" onchange="load()"></select></div>
+    <button onclick="tozala()">Tozalash</button>
+    <button onclick="chop()">Chop etish</button>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    Narx KIRIM qatorida turadi va o'sha qator bilan qotadi &middot;
+    o'rtacha narx ombor qoldig'idagi bilan bir xil formula &middot;
+    narxi yozilmagan material ro'yxatda turmaydi</p>
+</div>
+
+<div id="body" style="margin-top:16px"><p class="muted">Yuklanmoqda…</p></div>
+
+<script>
+//  ═══════════════════════ XARID NARXLARI ══════════════════════════
+//
+//  ★ NARX MATERIALDA EMAS, KIRIM QATORIDA (izoh: CLAUDE.md va
+//  modules/materials.js) — bugun LDSP 250 000, ertaga 270 000.
+//  Shuning uchun «bu material qancha turadi» degan savolga javob
+//  beradigan joy yo'q edi: raqam har kirim hujjatining ichida yotardi
+//  va ta'minot xodimi yangi narxni eskisi bilan solishtirish uchun
+//  hujjatlarni birma-bir ochib chiqishi kerak bo'lardi.
+//
+//  Uchta savol, bitta qator:
+//      OXIRGI narx    bugun qancha so'rashyapti
+//      O'ZGARISH      o'tgan safarga nisbatan — qimmatlashdimi
+//      O'RTACHA narx  ombor qoldig'i qaysi bahoda turibdi
+//
+//  ★ O'ZGARISH FOIZ bilan va RANG bilan: qimmatlashgani qizil,
+//  arzonlashgani yashil. Ikki raqamni yonma-yon qo'yib, ayirmasini
+//  ko'z bilan hisoblash — aynan shu ishdan qochish uchun sahifa
+//  yozildi.
+//
+//  Qator bosilsa narx TARIXI chiqadi: qachon, kimdan, nechta va
+//  qaysi valyutada. «Nega qimmat bo'ldi» degan savolning javobi
+//  o'sha yerda.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const pul = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+//  Narx tiyinigacha ko'rsatiladi: material narxi ko'pincha kichik
+//  raqam («0,42 $/dona») va ikki kasr uni nolga aylantirib qo'yardi.
+const narx = v => v == null ? '—' : (Number(v)).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const son = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { maximumFractionDigits: 3 });
+const kun = d => !d ? '—' : String(d).slice(0, 10).split('-').reverse().join('.');
+
+let rows = [], ref = null, ochiq = new Map(), t = null;
+const deb = () => { clearTimeout(t); t = setTimeout(load, 300); };
+
+function tozala() {
+  $('fQ').value = ''; $('fS').value = ''; $('fC').value = '';
+  load();
+}
+
+//  ★ O'ZGARISH: oxirgi narx OLDINGISIGA nisbatan. Oldingisi yo'q
+//  bo'lsa katak BO'SH qoladi — nol yozilsa «o'zgarmadi» degan ma'no
+//  berardi, holbuki solishtiradigan narsa yo'q.
+function ozgarish(r) {
+  const a = Number(r.last_price), b = Number(r.prev_price);
+  if (!r.prev_price || !b) return '<span class="muted">—</span>';
+  const foiz = ((a - b) / b) * 100;
+  if (Math.abs(foiz) < 0.05) return '<span class="muted">o\'zgarmadi</span>';
+  //  Qimmatlashgani QIZIL: ta'minot uchun bu yomon xabar (savdodagi
+  //  kechikish belgisi bilan bir xil rang va bir xil sabab).
+  const klass = foiz > 0 ? 'late' : 'ok';
+  return `<b class="${klass}">${foiz > 0 ? '+' : ''}${
+    foiz.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%</b>
+    <div class="muted" style="font-size:11px">oldin ${narx(b)}</div>`;
+}
+
+function draw() {
+  if (!rows.length) return $('body').innerHTML =
+    `<div class="card"><h2>Narx topilmadi</h2>
+     <p class="muted" style="margin-top:8px">Narxi yozilgan kirim yo'q —
+     narx kirim hujjatida yoziladi va o'sha qator bilan qotadi.</p></div>`;
+
+  //  Yig'indi: nechta nomning narxi bor va qanchasi oxirgi kirimda
+  //  QIMMATLASHGAN. Ikkinchisi ta'minot xodimining birinchi savoli.
+  const qimmat = rows.filter(r => Number(r.prev_price)
+    && Number(r.last_price) > Number(r.prev_price)).length;
+  const arzon = rows.filter(r => Number(r.prev_price)
+    && Number(r.last_price) < Number(r.prev_price)).length;
+
+  $('body').innerHTML = `
+    <div class="grid g3 no-print">
+      <div class="card"><h2>Narxi bor</h2>
+        <div class="kpi">${rows.length}<small> nom</small></div></div>
+      <div class="card"><h2>Qimmatlashgan</h2>
+        <div class="kpi">${qimmat}<small> nom</small></div>
+        <p class="muted" style="margin-top:6px;font-size:12px">oxirgi kirimda
+          oldingisidan qimmat</p></div>
+      <div class="card"><h2>Arzonlashgan</h2>
+        <div class="kpi">${arzon}<small> nom</small></div></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="tbox"><table>
+        <thead><tr><th>Material</th><th>Turkum</th><th>O'lchov</th>
+          <th class="num">Oxirgi narx, $</th><th class="num">O'zgarish</th>
+          <th>Oxirgi kirim</th><th class="num">O'rtacha, $</th>
+          <th class="num">Kirimlar</th></tr></thead>
+        <tbody>${rows.map(r => {
+          const k = String(r.material_id);
+          const ich = ochiq.get(k);
+          return `<tr onclick="toggle('${k}')" style="cursor:pointer">
+            <td><b>${esc(r.material)}</b>${r.code
+              ? `<div class="muted" style="font-size:12px">${esc(r.code)}</div>` : ''}</td>
+            <td class="muted">${esc(r.category_name || '—')}</td>
+            <td class="muted">${esc(r.uom)}</td>
+            <td class="num"><b>${narx(r.last_price)}</b>${
+              r.last_ccy === 'UZS'
+                //  So'mda kelgan narx ASL holida ham yoziladi: hujjatda
+                //  o'sha raqam turadi va ta'minotchi bilan gap ham
+                //  so'mda boradi.
+                ? `<div class="muted" style="font-size:11px">${
+                    son(r.last_raw)} so'm</div>` : ''}</td>
+            <td class="num">${ozgarish(r)}</td>
+            <td>${kun(r.last_on)}<div class="muted" style="font-size:12px">${
+              esc(r.last_supplier || "ta'minotchisiz")}${r.last_doc
+                ? ' · ' + esc(r.last_doc) : ''}</div></td>
+            <td class="num">${narx(r.avg_price)}</td>
+            <td class="num muted">${r.n}</td></tr>
+          ${ich === undefined ? '' : `<tr><td colspan="8"
+            style="background:var(--bg);padding:10px 14px">${
+            !ich ? '<span class="muted">Yuklanmoqda…</span>'
+            : !ich.length ? '<span class="muted">Tarix yo\'q.</span>'
+            : `<table style="width:100%"><thead><tr><th>Sana</th>
+                 <th>Hujjat</th><th>Ta'minotchi</th>
+                 <th class="num">Soni</th><th class="num">Narx</th>
+                 <th class="num">Narx, $</th></tr></thead><tbody>${
+               ich.map(x => `<tr>
+                 <td>${kun(x.moved_on)}</td>
+                 <td>${x.doc_no ? `<span class="tag">${esc(x.doc_no)}</span>`
+                   //  Hujjatsiz kirim — BOSHLANG'ICH QOLDIQ: uning
+                   //  «qayerdan» i yo'q va ta'minotchisi ham yo'q.
+                   : `<span class="muted">${x.from_kind === 'opening'
+                       ? "boshlang'ich qoldiq" : '—'}</span>`}</td>
+                 <td class="muted">${esc(x.supplier || '—')}</td>
+                 <td class="num">${son(x.qty)}</td>
+                 <td class="num">${son(x.price)} ${esc(x.ccy || '')}${
+                   x.ccy === 'UZS' && x.rate
+                     ? `<div class="muted" style="font-size:11px">kurs ${
+                         son(x.rate)}</div>` : ''}</td>
+                 <td class="num"><b>${narx(x.price_usd)}</b></td></tr>`).join('')
+               }</tbody></table>`}</td></tr>`}`;
+        }).join('')}</tbody></table></div>
+      <p class="muted no-print" style="font-size:12px;margin-top:10px">
+        Qatorni bossangiz narx tarixi chiqadi</p>
+    </div>`;
+}
+
+//  Tarix KERAK BO'LGANDA so'raladi: uch yuz material uchun uch yuz
+//  qator tarixni oldindan yuklash sahifani sababsiz og'irlashtirardi
+//  (jurnaldagi bron ro'yxati bilan bir xil idiom).
+async function toggle(k) {
+  if (ochiq.has(k)) { ochiq.delete(k); return draw(); }
+  ochiq.set(k, null);
+  draw();
+  try {
+    ochiq.set(k, (await App.api(`/api/materials/prices/${k}`)).rows);
+  } catch { ochiq.set(k, []); }
+  draw();
+}
+
+function filtrMatn() {
+  const bits = [];
+  if ($('fQ').value.trim()) bits.push('Qidiruv: ' + $('fQ').value.trim());
+  const s = $('fS').selectedOptions[0];
+  if ($('fS').value && s) bits.push("Ta'minotchi: " + s.textContent.trim());
+  const c = $('fC').selectedOptions[0];
+  if ($('fC').value && c) bits.push('Turkum: ' + c.textContent.trim());
+  return bits.length ? bits.join('  ·  ') : 'Filtrsiz — barcha material';
+}
+
+//  Qog'ozdagi sarlavha: varaq ta'minotchi bilan gaplashishga olib
+//  boriladi va qaysi filtr bilan olingani o'zida yozilib tursin
+//  (qarzdorlik hisoboti bilan bir xil idiom).
+function chop() {
+  $('printHead').innerHTML = `
+    <div style="font-weight:600;letter-spacing:.08em">ZELTA PREMIUM</div>
+    <div style="font-size:17px;font-weight:600;margin-top:4px">Xarid narxlari</div>
+    <div style="font-size:12px;margin-top:4px">${esc(filtrMatn())} ·
+      ${rows.length} nom · ${new Date().toLocaleString('ru-RU')} ·
+      ${esc(App.me()?.name || '')}</div>`;
+  window.print();
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
+  if ($('fS').value) q.set('supplier_id', $('fS').value);
+  if ($('fC').value) q.set('category', $('fC').value);
+  ochiq.clear();
+  rows = (await App.api('/api/materials/prices?' + q)).rows;
+  draw();
+}
+
+App.start(async () => {
+  ref = await App.api('/api/materials/ref');
+  $('fS').innerHTML = "<option value=''>Barcha ta'minotchi</option>"
+    + (ref.suppliers || []).map(x =>
+        `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('fC').innerHTML = "<option value=''>Barcha turkum</option>"
+    + (ref.categories || []).map(x =>
+        `<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('');
+  await load();
+}, 'purchasing.view', 'purchasing.manage', 'materials.view', 'materials.manage');
+</script>
+</body>
+</html>

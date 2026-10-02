@@ -535,7 +535,15 @@ const App = (() => {
       title: 'Solishtirma dalolatnoma', lead: "Ta'minotchi bilan yuzma-yuz",
       text: "Bitta ta'minotchi, bitta oraliq \u00b7 davr boshiga, har harakat va davr oxiriga \u00b7 to'lov qatori bosilsa chiqim orderi ochiladi",
       perm: ['purchasing.view', 'purchasing.manage'] },
-    { mod: 'supply', nav: 'Narxlar (xarid)',         perm: ['purchasing.view'] },
+    //  ★ XARID narxlari — SOTUV narxlari bilan adashtirmaslik kerak:
+    //  ikkalasi ham «Narxlar», lekin biri savdoda va faqat direktorda
+    //  (`sales.discount`), bu esa ta'minotniki. Shuning uchun nomida
+    //  qaysi narx ekani YOZILIB turadi.
+    { href: '/xarid-narxlar.html', mod: 'supply', nav: 'Narxlar',
+      title: 'Xarid narxlari', lead: 'Qaysi materialni qancha olganmiz',
+      text: "Oxirgi narx \u00b7 o'tgan safarga nisbatan o'zgarish \u00b7 o'rtacha narx \u00b7 qator bosilsa narx tarixi: qachon, kimdan, qaysi valyutada",
+      perm: ['purchasing.view', 'purchasing.manage',
+             'materials.view', 'materials.manage'] },
     { mod: 'supply', nav: "Ta'minotchiga qaytarib berish",
       perm: ['purchasing.manage'] },
 
