@@ -3521,6 +3521,49 @@ bitta fayl (2-qoida).
 **Menyuning yagona manbai** — `public/app.js` dagi `MODULES` va `PAGES`.
 Yangi sahifa faqat shu ro'yxatga qo'shiladi.
 
+**★ TA'MINOT VA XOM ASHYO — BITTA BO'LIM** (zavod qarori, 2026-10;
+`supply`). Ilgari ikkita edi («Ta'minot» va «Xom ashyo») va chegarasi
+hech qayerda ko'rinmasdi: ta'minotchi birinchisida, undan kelgan mol
+ikkinchisida turardi, kirim hujjati esa ikkalasiga ham tegadi —
+omborni to'ldiradi VA qarzni oshiradi. Xodim uni qaysi bo'limdan
+izlashni har safar o'ylab topardi. Zanjir bitta: **ta'minotchi →
+buyurtma → kirim → talabnoma → qarz**, ya'ni bo'lim ham bitta va
+menyu shu tartibda o'qiladi.
+
+    Panel · Ta'minotchilar · Kirimlar · Talabnoma · Buyurtmalar ·
+    Qarzdorlik · [Dalolatnoma · Narxlar · Qaytarib berish — rejada]
+
+**★ TALABNOMA — «CHIQIM» NING O'ZI.** Alohida «Chiqim» bo'limi
+yozilmadi: zavod omboridan material FAQAT talabnoma bilan chiqadi,
+ya'ni ikkalasi bitta narsa va ikki nom bitta ishni ikki joyda
+qidirtirardi. **Harakat lentasi** esa shu sahifaning ichida ikkinchi
+tab bo'lib turadi — «qaysi talabnoma bilan ketdi» degan savoldan
+keyingi savol aynan o'sha yerda.
+
+**★ BITTA SAHIFA, BIR NECHTA KO'RINISH** (`KORINISH`,
+`public/materiallar.html`). «Kirimlar», «Talabnoma» va «Buyurtmalar»
+uchalasi ham `/materiallar.html` ni ochadi va faqat ko'rinishi boshqa
+(`?tab=`). Uch nusxa sahifa yozilsa qidiruv, chop etish, ombor doirasi
+va minus belgisi uch joyda turardi va biri ertaga ikkinchisidan
+ajralib ketardi. Tab qatori faqat IKKITASI birga o'qiladigan joyda
+chiziladi (talabnoma + harakat, qoldiq + harakat).
+
+Menyu havolasi endi `?tab=` ni ham oladi va qaysi qator «yoniq» ekani
+shundan chiqadi (`shuSahifa`, `public/app.js`): manzil bir xil VA
+havoladagi har parametr joriy manzilda ham shunday bo'lsa. `?m=`
+tekshirilmaydi — u qaysi BO'LIMDAN kirilganini aytadi, sahifani emas.
+
+**★ MATERIALLAR SPRAVOCHNIGI — MA'LUMOTNOMALARDA.** U kundalik ish
+emas: material bir marta kiritiladi va keyin faqat nomi tuzatiladi —
+katalog va mijozlar ro'yxati bilan bir xil. Ta'minot bo'limida esa kun
+bo'yi kirim va talabnoma ochiladi, spravochnik ularning orasida turib
+faqat chalg'itardi.
+
+**Ombor qoldig'i bu bo'limda YO'Q**: javob «Omborlar» da va u yerda
+har ombor o'z kartochkasidan ochiladi (`/materiallar.html?w=KOD`).
+Sahifaning qoldiq ko'rinishi joyida qolaveradi — faqat menyuda
+ikkinchi marta takrorlanmaydi.
+
 ---
 
 ## Bir martalik ma'lumot ko'chirishlar

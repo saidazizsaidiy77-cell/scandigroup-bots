@@ -200,18 +200,47 @@ let ref = { categories: [], uoms: [], warehouses: [] };
 //  bilan aynan bir xil qoida. Xodim o'z ro'yxatida O'ZI javobgar
 //  bo'lgan omborni ko'rishi kerak.
 const tsexi = (w) => w.owner_shop || w.shop || '';
-let rows = [], picked = null, tab = 'ref';
+let rows = [], picked = null, tab = 'stock';
 const boshqara = () => App.can('materials.manage', 'production.manage');
 
 //  Ikki savol, ikki tab: «qanday materiallar bor» (spravochnik) va
 //  «qaysi omborda nechta turibdi» (qoldiq). Alohida sahifa qilinmadi —
 //  ikkalasi bitta narsa haqida va xodim ular orasida kun bo'yi yuradi.
-const TABS = [['ref', 'Spravochnik'], ['stock', 'Qoldiq'],
-              ['kirim', 'Kirim'], ['talab', 'Talabnoma'],
-              ['zay', 'Zayavka'], ['moves', 'Harakat']];
+const NOM = { ref: 'Materiallar', stock: "Ombor qoldig'i",
+              kirim: 'Kirim hujjatlari', talab: 'Talabnomalar',
+              zay: 'Xarid buyurtmalari', moves: 'Harakat' };
+
+//  ★ BITTA SAHIFA, BIR NECHTA KO'RINISH (zavod qarori, 2026-10).
+//  Ilgari oltita tab bitta qatorda turardi va ularning yarmi
+//  bir-biriga aloqasiz edi: spravochnik oyda bir marta ochiladi,
+//  kirim esa kun bo'yi. Endi menyudagi har qator O'Z ko'rinishini
+//  ochadi (`?tab=`), tab qatori esa faqat ikkitasi birga
+//  o'qiladigan joyda chiziladi.
+//
+//  Uch nusxa sahifa yozilmadi: qidiruv, chop etish, ombor doirasi va
+//  minus belgisi uchalasida ham bir xil va ikki nusxada bo'lsa biri
+//  ertaga ikkinchisidan ajralib ketardi.
+const KORINISH = {
+  //  Spravochnik — Ma'lumotnomalarda: material bir marta kiritiladi.
+  ref:   ['ref'],
+  //  Kirim yolg'iz: hujjat yozilayotganda yonida boshqa savol yo'q.
+  kirim: ['kirim'],
+  //  ★ TALABNOMA VA HARAKAT BIRGA: «qaysi talabnoma bilan ketdi»
+  //  degan savoldan keyingi savol aynan lentada turadi.
+  talab: ['talab', 'moves'],
+  zay:   ['zay'],
+  //  Omborlar ro'yxatidan kirilganda (`?w=KOD`): javonda nima bor va
+  //  u qayerdan kelgan.
+  stock: ['stock', 'moves'],
+};
+let korinish = 'stock';
+const TABS = () => KORINISH[korinish].map((k) => [k, NOM[k]]);
 
 function drawTabs() {
-  $('tabs').innerHTML = TABS.map(([k, t]) =>
+  const bor = TABS();
+  //  Bitta ko'rinishda tab qatori chizilmaydi: bosiladigan joyi
+  //  bo'lmagan tugma «nega ishlamayapti» degan savol qoldirardi.
+  $('tabs').innerHTML = bor.length < 2 ? '' : bor.map(([k, t]) =>
     `<button ${k === tab ? 'class="primary"' : ''} onclick="go('${k}')"
       >${t}</button>`).join('');
   $('cardRef').hidden   = tab !== 'ref';
@@ -219,15 +248,23 @@ function drawTabs() {
   $('cardKirim').hidden = tab !== 'kirim';
   $('cardTalab').hidden = tab !== 'talab';
   $('cardZay').hidden   = tab !== 'zay';
-  $('h2').textContent = tab === 'ref' ? 'Materiallar'
-    : tab === 'stock' ? 'Ombor qoldig\'i'
-    : tab === 'kirim' ? 'Kirim hujjatlari'
-    : tab === 'talab' ? 'Talabnomalar'
-    : tab === 'zay'   ? 'Xarid zayavkalari' : 'Harakat';
+  $('h2').textContent = NOM[tab] || NOM.moves;
+}
+
+//  Tab ko'rinishning ICHIDAN tanlanadi, lekin saqlashdan keyin sahifa
+//  boshqa ko'rinishning tabiga ham o'tadi («kirim yozildi \u2192 kirimlar
+//  ro'yxati»). O'shanda ko'rinish ham almashadi, aks holda tab qatori
+//  bo'sh chizilib, kartochka yashirinib qolardi.
+function tabga(k) {
+  if (!KORINISH[korinish].includes(k))
+    korinish = Object.keys(KORINISH).find((v) => KORINISH[v].includes(k))
+               || korinish;
+  tab = k;
+  drawTabs();
 }
 
 function go(k) {
-  tab = k; drawTabs();
+  tabga(k);
   //  Qog'ozdagi sarlavha chop etishdan OLDIN to'ldiriladi, ya'ni
   //  boshqa tabga o'tilgach eskisi osilib qolardi: Ctrl+P bosgan odam
   //  qoldiq sarlavhasi bilan talabnomalar ro'yxatini chiqarardi.
@@ -308,13 +345,24 @@ async function boot() {
   //  kartochkasini bosadi va o'sha zahoti o'sha omborning qoldig'ida
   //  turadi. Ombor tanlash uchun ikkinchi bosish so'ralmaydi.
   const qs = new URLSearchParams(location.search);
+  //  ★ KO'RINISHNI MANZIL AYTADI (`?tab=`): menyudagi «Kirimlar»,
+  //  «Talabnoma» va «Buyurtmalar» uchalasi ham shu sahifani ochadi.
+  //  Noma'lum qiymat kelsa qoldiq ochiladi — ekran bo'sh qolmasin.
+  const kor = qs.get('tab');
+  if (kor && KORINISH[kor]) korinish = kor;
+  tab = KORINISH[korinish][0];
+
   const kod = qs.get('w');
   const kirdi = kod && ref.warehouses.find((w) => w.code === kod);
-  if (kirdi) { tab = 'stock'; $('sWh').value = kirdi.id; }
+  //  Ombordan kirilgani ko'rinishni ham qoldiqqa o'giradi: havola
+  //  `?w=` bilan keladi va `?tab=` yozilmagan bo'ladi.
+  if (kirdi) { korinish = 'stock'; tab = 'stock'; $('sWh').value = kirdi.id; }
   //  ★ PANELDAGI «MINUSGA TUSHGAN» KARTOCHKASI SHU YERGA OLIB KELADI.
   //  Ombor TANLANMAYDI: savol butun zavod bo'yicha va minusga tushgan
   //  qator qaysi omborda ekanini odam oldindan bilmaydi.
-  if (qs.get('minus') === '1') { tab = 'stock'; $('sMinus').checked = true; }
+  if (qs.get('minus') === '1') {
+    korinish = 'stock'; tab = 'stock'; $('sMinus').checked = true;
+  }
 
   $('kSup').innerHTML = "<option value=''>Barcha ta'minotchi</option>"
     + (ref.suppliers || []).map((x) =>
@@ -1254,7 +1302,7 @@ async function talabSaqla() {
       ? d.length + ' ta hujjat: ' + d.map((x) =>
           x.doc_no + (x.warehouse ? ' · ' + x.warehouse : '')).join(', ')
       : d[0].doc_no + ' yozildi');
-    tab = 'talab'; drawTabs(); await load();
+    tabga('talab'); await load();
   } catch (e) { saqlanmadi('tSave', e); }
 }
 
@@ -1593,7 +1641,7 @@ async function kirimSaqla() {
         rate: Number($('nRate').value) || null,
         items }) });
     yop(); toast(r.doc_no + ' yozildi');
-    tab = 'kirim'; drawTabs(); await load();
+    tabga('kirim'); await load();
   } catch (e) { saqlanmadi('nSave', e); }
 }
 
@@ -1775,7 +1823,7 @@ async function boshSaqla() {
     //  turadi (sahifaniki va oynaniki) va adashib boshqasiga
     //  yozilgani faqat qoldiqni ochib ko'rganda bilinardi.
     toast(`${r.saved} ta qator yozildi${wh ? ' · ' + wh.name : ''}`);
-    tab = 'stock'; drawTabs(); await load();
+    tabga('stock'); await load();
   } catch (e) { saqlanmadi('oSave', e); }
 }
 

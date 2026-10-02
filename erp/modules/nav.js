@@ -288,7 +288,11 @@ const NAVBATLAR = [
     const n = await son(
       `SELECT COUNT(*)::int AS n FROM mat_requests
         WHERE status IN ('new', 'ready')`);
-    return [{ page: '/materiallar.html', mod: 'materials', n,
+    //  Belgi TALABNOMA qatorida turadi — menyudagi havola bilan AYNAN
+    //  bir xil manzil (`?tab=talab`), aks holda raqam bo'lim nomida
+    //  turib, ostki qatorning qaysi biriga tegishli ekani
+    //  ko'rinmasdi.
+    return [{ page: '/materiallar.html?tab=talab', mod: 'supply', n,
               izoh: `${n} ta talabnoma sizni kutmoqda` }];
   },
 

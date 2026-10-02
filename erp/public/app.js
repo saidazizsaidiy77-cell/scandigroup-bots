@@ -210,12 +210,17 @@ const App = (() => {
     { code: 'main',       name: 'Bosh sahifa',          perm: [] },
     { code: 'cash',       name: 'Bank va kassa',        perm: ['cash.view', 'cash.entry', 'cash.manage'] },
     { code: 'sales',      name: 'Savdo',                perm: ['sales.view', 'sales.manage'] },
-    { code: 'purchasing', name: "Ta'minot",             perm: ['purchasing.view', 'purchasing.manage'] },
+    //  ★ TA'MINOT VA XOM ASHYO — BITTA BO'LIM (zavod qarori, 2026-10).
+    //  Ilgari ikkita edi va chegarasi hech qayerda ko'rinmasdi:
+    //  ta'minotchi «Ta'minot» da, undan kelgan mol esa «Xom ashyo» da
+    //  turardi; kirim hujjati ikkalasiga ham tegadi (omborni to'ldiradi
+    //  VA qarzni oshiradi) va xodim uni qaysi bo'limdan izlashni har
+    //  safar o'ylab topardi. Zanjir bitta: ta'minotchi → buyurtma →
+    //  kirim → talabnoma → qarz, ya'ni bo'lim ham bitta.
+    { code: 'supply',     name: "Ta'minot va xom ashyo",
+      perm: ['purchasing.view', 'purchasing.manage',
+             'materials.view', 'materials.request', 'materials.manage'] },
     { code: 'warehouse',  name: 'Ombor',                perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
-    //  Xom ashyo ALOHIDA bo'lim: «Ombor» da konver yuradi va uni ombor
-    //  mudiri yuritadi, bu yerda esa material va uni tsexga xom ashyo
-    //  ombori xodimi beradi — ikki xil ish, ikki xil odam.
-    { code: 'materials',  name: 'Xom ashyo',            perm: ['materials.view', 'materials.request', 'materials.manage'] },
     { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage', 'production.request', 'production.approve'] },
     { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
     { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
@@ -406,10 +411,21 @@ const App = (() => {
     //  tomonniki: ta'minot xodimida savdo huquqi yo'q.
     { href: '/kassa-orderi.html', mod: 'sales', nav: 'Kassa orderi', hidden: true,
       perm: ['sales.view', 'sales.manage', 'purchasing.view', 'purchasing.manage'] },
-    { href: '/taminotchilar.html', mod: ['purchasing', 'refs'], nav: "Ta'minotchilar",
+    { href: '/taminotchilar.html', mod: ['supply', 'refs'], nav: "Ta'minotchilar",
       title: "Ta'minotchilar", lead: "Kimdan sotib olinadi",
       text: "Nomi, yo'nalishi, region, telefon, STIR, mas'ul xodim \u00b7 kirim hujjati va qarzdorlik shunga tayanadi",
       perm: ['purchasing.view', 'purchasing.manage'] },
+    //  ★ MATERIALLAR SPRAVOCHNIGI — MA'LUMOTNOMALARDA (zavod qarori,
+    //  2026-10). U kundalik ish emas: material bir marta kiritiladi va
+    //  keyin faqat nomi tuzatiladi — katalog va mijozlar ro'yxati
+    //  bilan bir xil. Ta'minot bo'limida esa kun bo'yi KIRIM va
+    //  TALABNOMA ochiladi, spravochnik ularning orasida turib faqat
+    //  chalg'itardi.
+    { href: '/materiallar.html?tab=ref', mod: 'refs', nav: 'Materiallar',
+      title: 'Materiallar', lead: 'Xom ashyo ro\'yxati',
+      text: "Nomi \u00b7 o'lchov birligi \u00b7 turkumi \u00b7 ta'minotchilari \u00b7 har rang alohida material",
+      perm: ['materials.view', 'materials.request', 'materials.manage',
+             'production.manage'] },
     { href: '/katalog.html', mod: 'refs', nav: 'Katalog',
       title: 'Katalog', lead: 'Mahsulot nomi va guruhi',
       text: "Fason, guruh va marshrut \u2014 yangi mahsulot qo'shish uchun kod tegilmaydi",
@@ -458,48 +474,62 @@ const App = (() => {
     //  havola, ikkinchisi «rejada» degan kulrang yozuv.
     { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },
 
-    // Ta'minot
-    //  Xom ashyo
-    //  ★ PANEL IKKI MODULDA: T/M ombor mudiri bilan xom ashyo
-    //  mudiri IKKI xil odam va ularning huquqi ham boshqa. Sahifa
-    //  ikkalasini ham ko'rsatadi, lekin huquqi yo'q bloki UMUMAN
-    //  chizilmaydi — bo'sh blok «nega bo'sh» degan savol
-    //  qoldirardi.
-    { href: '/ombor-panel.html', mod: ['warehouse', 'materials'], nav: 'Panel',
+    // ═══════════════════════════════ TA'MINOT VA XOM ASHYO
+    //
+    //  Zanjir bo'yicha tartiblangan, ekranda ham shunday o'qiladi:
+    //  kimdan olamiz → nima so'raldi → nima keldi → tsexga nima berildi
+    //  → qancha qarzmiz → qanday narxda.
+    //
+    //  ★ PANEL IKKI MODULDA: T/M ombor mudiri bilan xom ashyo mudiri
+    //  IKKI xil odam va ularning huquqi ham boshqa. Sahifa ikkalasini
+    //  ham ko'rsatadi, lekin huquqi yo'q bloki UMUMAN chizilmaydi —
+    //  bo'sh blok «nega bo'sh» degan savol qoldirardi.
+    { href: '/ombor-panel.html', mod: ['warehouse', 'supply'], nav: 'Panel',
       title: 'Ombor paneli', lead: 'Javonda nima bor',
       text: "T/M ombor va vitrinalar qoldig'i \u00b7 kirim-chiqim oylar bo'yicha \u00b7 javonda ko'p turgan mahsulot \u00b7 xom ashyo qiymati, minus qoldiq, zayavka va talabnoma \u00b7 ta'minotchilarga qarz",
       perm: ['warehouse.view', 'warehouse.manage',
              'materials.view', 'materials.manage'] },
-    { href: '/materiallar.html', mod: 'materials', nav: 'Xom ashyo',
-      title: 'Xom ashyo', lead: 'Material spravochnigi',
-      text: "Nomi \u00b7 o'lchov birligi \u00b7 turkumi \u00b7 har rang alohida material",
+
+    //  ★ BITTA SAHIFA, UCH QATOR (izoh: `yoli`, `shuSahifa`).
+    //  Kirim, talabnoma va buyurtma uchalasi ham `/materiallar.html` ni
+    //  ochadi va faqat KO'RINISHI boshqa: qidiruv, chop etish va ombor
+    //  doirasi mantiqi bitta joyda qoladi.
+    { href: '/materiallar.html?tab=kirim', mod: 'supply', nav: 'Kirimlar',
+      title: "Kirim hujjatlari", lead: 'Ta\'minotchidan kelgan mol',
+      text: "Hujjat omborni to'ldiradi VA ta'minotchining qarzini oshiradi \u00b7 narx va valyuta hujjat bo'yicha",
+      perm: ['materials.view', 'materials.manage', 'purchasing.view'] },
+
+    //  ★ TALABNOMA — ZAVOD OMBORIDAN TSEXGA (zavod qarori, 2026-10).
+    //  Alohida «Chiqim» bo'limi yozilmadi: zavoddan material faqat
+    //  talabnoma bilan chiqadi, ya'ni ikkalasi BITTA narsa va ikki nom
+    //  bitta ishni ikki joyda qidirtirardi. Harakat lentasi esa shu
+    //  sahifaning ichida ikkinchi tab bo'lib turadi — «qaysi talabnoma
+    //  bilan ketdi» degan savoldan keyingi savol aynan shu.
+    { href: '/materiallar.html?tab=talab', mod: 'supply', nav: 'Talabnoma',
+      title: 'Talabnomalar', lead: 'Zavod omboridan tsexga',
+      text: "Tsex so'raydi, ombor chiqaradi \u00b7 yonida harakat lentasi: qaysi material qayerga ketdi",
+      perm: ['materials.view', 'materials.request', 'materials.manage'] },
+
+    { href: '/materiallar.html?tab=zay', mod: 'supply', nav: 'Buyurtmalar',
+      title: 'Xarid buyurtmalari', lead: 'Nima sotib olinadi',
+      text: "Ombor yozadi, ta'minot bajaradi \u00b7 kimdan olinishi va qachon kelishi shu yerda",
       perm: ['materials.view', 'materials.request', 'materials.manage',
-             'production.manage'] },
-    { mod: 'materials', nav: 'Tsex omborlari qoldig\'i', perm: ['materials.view'] },
-    { mod: 'materials', nav: 'Talabnoma',                perm: ['materials.request'] },
-    { mod: 'materials', nav: 'Sarf',                     perm: ['materials.request'] },
+             'purchasing.view'] },
 
-    { href: '/narxlar.html', mod: 'sales', nav: 'Narxlar',
-      title: 'Narxlar', lead: 'Ulgurji va chakana',
-      text: "Har mahsulotning ikki narxi \u00b7 menejer undan past sota olmaydi",
-      //  ★ FAQAT DIREKTORDA (zavod qarori, 2026-09): narx siyosati
-      //  uning ishi. `production.manage` yetarli emas \u2014 u katalog
-      //  huquqi. Tekshiruv baribir serverda.
-      perm: ['sales.discount'] },
-
-    { mod: 'purchasing', nav: 'Xaridlar',                          perm: ['purchasing.view'] },
-    { mod: 'purchasing', nav: 'Kirim shakllantirish',              perm: ['purchasing.manage'] },
-    { mod: 'purchasing', nav: 'Kirimlar arxivi',                   perm: ['purchasing.view'] },
-    { mod: 'purchasing', nav: "O'chirilgan kirimlar",              perm: ['purchasing.manage'] },
-    { mod: 'purchasing', nav: "Qaytarib berish (ta'minotchiga)",   perm: ['purchasing.manage'] },
-    { mod: 'purchasing', nav: 'Solishtirma dalolatnoma',           perm: ['purchasing.view'] },
     //  Aylanma-saldo qaydnomasi (ОСВ): saldo boshiga, davr aylanmasi
     //  va saldo oxiriga — har biri qarzdor/haqdor bo'lib. Mijozlar
     //  hisoboti bilan bir xil shakl, tomoni esa teskari.
-    { href: '/taminot-qarzdorlik.html', mod: 'purchasing', nav: 'Qarzdorlik',
+    { href: '/taminot-qarzdorlik.html', mod: 'supply', nav: 'Qarzdorlik',
       title: "Ta'minot qarzdorligi", lead: 'Kimga qancha qarzmiz',
       text: "Oraliq bo'yicha: davr boshiga \u00b7 davr ichida \u00b7 davr oxiriga",
       perm: ['purchasing.view', 'purchasing.manage'] },
+
+    //  Hali yozilmaganlar — reja sahifasida turadi va nima
+    //  kutilayotgani ko'rinib tursin.
+    { mod: 'supply', nav: 'Solishtirma dalolatnoma', perm: ['purchasing.view'] },
+    { mod: 'supply', nav: 'Narxlar (xarid)',         perm: ['purchasing.view'] },
+    { mod: 'supply', nav: "Ta'minotchiga qaytarib berish",
+      perm: ['purchasing.manage'] },
 
     // Ombor. Zavodda bir nechta ombor bor (tayyor mahsulot, xom ashyo,
     // va zavod aytadigan boshqalari), shuning uchun bo'limga kirilganda
@@ -551,7 +581,28 @@ const App = (() => {
 
   // Bir nechta modulda turgan sahifaga qaysi bo'limdan kirilgani manzilga
   // yoziladi — shunda menyu o'sha bo'limni yoqib turadi.
-  const hrefFor = (p, code) => Array.isArray(p.mod) ? `${p.href}?m=${code}` : p.href;
+  //  ★ SAHIFA MANZILIDA `?tab=` BO'LISHI MUMKIN (zavod qarori, 2026-10).
+  //  Bitta sahifa menyuda bir nechta qator bo'lib turadi: «Kirimlar»,
+  //  «Talabnoma» va «Buyurtmalar» uchalasi ham `/materiallar.html` ni
+  //  ochadi, faqat boshqa ko'rinish bilan. Uch nusxa sahifa yozilsa
+  //  qidiruv, chop etish va doira mantiqi uch joyda turardi va biri
+  //  ertaga ikkinchisidan ajralib ketardi.
+  const yoli = (p) => p.href.split('?')[0];
+  const hrefFor = (p, code) => {
+    if (!Array.isArray(p.mod)) return p.href;
+    return p.href + (p.href.includes('?') ? '&' : '?') + 'm=' + code;
+  };
+  //  Qaysi qator «yoniq»: manzil bir xil VA havoladagi har parametr
+  //  joriy manzilda ham shunday bo'lsa. `?m=` tekshirilmaydi — u
+  //  qaysi BO'LIMDAN kirilganini aytadi, sahifani emas.
+  const shuSahifa = (p) => {
+    const bu = location.pathname === '/index.html' ? '/' : location.pathname;
+    if (yoli(p) !== bu) return false;
+    const kerak = new URLSearchParams(p.href.split('?')[1] || '');
+    const bor = new URLSearchParams(location.search);
+    for (const [k, v] of kerak) if (bor.get(k) !== v) return false;
+    return true;
+  };
 
   // Xodimga ochiq sahifalar
   // `hidden` — sahifa boshqa sahifa orqali ochiladi, menyuda ham, bosh
@@ -572,7 +623,7 @@ const App = (() => {
     // bir nechta modulda turgan sahifa ham qaysi bo'limdan kirilganini
     // shu bilan aytadi.
     const q = new URLSearchParams(location.search).get('m');
-    const cur = PAGES.find((p) => p.href === here);
+    const cur = PAGES.find(shuSahifa) || PAGES.find((p) => yoli(p) === here);
     const active = (q && MODULES.some((m) => m.code === q)) ? q
       : cur ? (Array.isArray(cur.mod) ? cur.mod[0] : cur.mod) : null;
 
@@ -607,7 +658,8 @@ const App = (() => {
       ? `<a href="/modul.html?m=${active}"${here === '/modul.html' ? ' class="on"' : ''}>Bo'limlar</a>`
       : '';
     const links = sub.map((p) =>
-      `<a href="${hrefFor(p, active)}" data-page="${p.href}"${p.href === here ? ' class="on"' : ''}>${p.nav}</a>`).join('');
+      `<a href="${hrefFor(p, active)}" data-page="${p.href}"${
+        shuSahifa(p) ? ' class="on"' : ''}>${p.nav}</a>`).join('');
     const subRow = (sub.length + (plan ? 1 : 0)) > 1
       ? `<nav class="nav sub">${links}${plan}</nav>` : '';
 
