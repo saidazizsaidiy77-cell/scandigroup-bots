@@ -207,9 +207,6 @@ router.get('/list', need(...READ), wrap(async (req, res) => {
 //  «shu oraliqda omborga kirgan va hozir ham turganlari». Bu konverlar
 //  ro'yxatidagi filtr bilan bir xil, shunda ikki jadval bir-biriga
 //  qarama-qarshi javob bermaydi.
-const FROM_TO = `($1::date IS NULL OR fg_on >= $1)
-             AND ($2::date IS NULL OR fg_on <= $2)`;
-
 // Rang va mato bo'sh bo'lishi mumkin. Guruhlashda bo'sh satr va NULL
 // bitta qatorga tushsin: aks holda bitta mahsulot ikki qator bo'lib
 // ko'rinadi va «nechta qoldi» degan savolga ikki xil javob chiqadi.
@@ -593,6 +590,20 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
 //  Qidiruv va tur filtri EKRANDAGI bilan bir xil (`q`,
 //  `product_type` + tsex doirasi): varaq ekranda ko'rinib turgan
 //  qatorlardan boshqa javob bermasligi kerak.
+//
+//  ★ SANA ORALIG'I BU RO'YXATGA TEGMAYDI (zavod qarori, 2026-10).
+//  Ilgari tegardi va `fg_on` ni oraliqqa qisardi, ya'ni ro'yxat
+//  «o'sha oraliqda omborga KELGANLARI» degan savolga javob berardi —
+//  holbuki qator ochgan odamning savoli boshqa: «ustundagi qoldiq
+//  QAYSI konverlardan». Natijada avgustda kelib, javonda turgan
+//  konver sentabr oralig'ida ro'yxatdan tushib qolardi: ustunda 5 ta
+//  turib, ostida «hozir omborda yo'q» deb yozilardi va qator o'zini
+//  o'zi inkor qilardi.
+//
+//  Qolgan bitta hol — mahsulot oraliqdan KEYIN chiqib ketgan — da
+//  ro'yxat baribir bo'sh bo'ladi (`v_fg_units` faqat javonda
+//  turganini biladi) va buni EKRAN aytadi: «<sana> holatiga javonda
+//  turgan, keyin chiqib ketgan» (`yoqIzoh`, public/ombor.html).
 router.get('/fg/units', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);
   const pid = req.query.product_id ? Number(req.query.product_id) : null;
@@ -602,23 +613,21 @@ router.get('/fg/units', need(...READ), wrap(async (req, res) => {
             customer_name, is_stock, total_amount, reserved_qty,
             product, product_type, color, fabric, uom, product_id
        FROM v_fg_units
-      WHERE warehouse_id = $6
-        AND ($3::int IS NULL
-             OR (product_id = $3
-                 AND ${NORM('color')}  IS NOT DISTINCT FROM $4
-                 AND ${NORM('fabric')} IS NOT DISTINCT FROM $5))
-        AND ($7::text IS NULL OR product ILIKE '%' || $7 || '%'
-             OR product_type ILIKE '%' || $7 || '%'
-             OR color  ILIKE '%' || $7 || '%'
-             OR fabric ILIKE '%' || $7 || '%'
-             OR conveyor_no ILIKE '%' || $7 || '%')
-        AND ($8::text IS NULL OR product_type = ANY(string_to_array($8, ',')))
-        AND ${FROM_TO}
+      WHERE warehouse_id = $4
+        AND ($1::int IS NULL
+             OR (product_id = $1
+                 AND ${NORM('color')}  IS NOT DISTINCT FROM $2
+                 AND ${NORM('fabric')} IS NOT DISTINCT FROM $3))
+        AND ($5::text IS NULL OR product ILIKE '%' || $5 || '%'
+             OR product_type ILIKE '%' || $5 || '%'
+             OR color  ILIKE '%' || $5 || '%'
+             OR fabric ILIKE '%' || $5 || '%'
+             OR conveyor_no ILIKE '%' || $5 || '%')
+        AND ($6::text IS NULL OR product_type = ANY(string_to_array($6, ',')))
       ORDER BY product, ${NORM('color')} NULLS FIRST,
                ${NORM('fabric')} NULLS FIRST, fg_on, conveyor_no
       LIMIT 500`,
-    [req.query.from || null, req.query.to || null, pid,
-     req.query.color || null, req.query.fabric || null, wh.id,
+    [pid, req.query.color || null, req.query.fabric || null, wh.id,
      req.query.q || null, turlar]);
   res.json({ rows });
 }));

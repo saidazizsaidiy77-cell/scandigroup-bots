@@ -806,13 +806,32 @@ function jamiRows(d) {
 //  savdoga ko'rinmaydigan tabga yo'llash javobsiz savol bo'lardi.
 function yoqIzoh(r) {
   const kirdi = Number(r.kirdi) || 0, chiqdi = Number(r.chiqdi) || 0;
+  const harakat = !canLedger ? ''
+    : ' Qaysi konver ekani \u00ab<a href="#" onclick="event.preventDefault();'
+      + 'event.stopPropagation();go(\'moves\')">Harakat</a>\u00bb tabida.';
+
+  //  ★ «QOLDIQ 5» TURIB, RO'YXAT BO'SH CHIQISHI MUMKIN, va bu xato
+  //  emas. Oraliq tanlangan bo'lsa ustun O'SHA KUNNING qoldig'ini
+  //  aytadi (izoh: qoldiqVal), qator ochilganda chiqadigan konverlar
+  //  esa HOZIR javonda turganlari — ya'ni mahsulot oraliqdan
+  //  KEYIN chiqib ketgan bo'lsa ustunda raqam turadi, ro'yxatda esa
+  //  hech narsa yo'q.
+  //
+  //  Ilgari bu holda «Hozir omborda yo'q» deb, sababi yozilmasdi
+  //  (kirdi ham, chiqdi ham nol — harakat ORALIQDAN TASHQARIDA
+  //  bo'lgan) va qator o'zini o'zi inkor qilib turardi: yonida 5 ta,
+  //  ostida «yo'q». Endi IKKALA raqam ham tushuntiriladi.
+  if (davrKor() && qoldiqVal(r) && !Number(r.qty))
+    return `<span class="muted"><b>${d8(stock.to || stock.from)}</b> holatiga
+      javonda turgan, keyin chiqib ketgan — hozir omborda yo'q.${
+      harakat}</span>`;
+
   const sabab = kirdi && chiqdi ? 'oraliqda kirib, chiqib ketgan'
               : chiqdi          ? 'oraliqda chiqib ketgan'
               : kirdi           ? "kirgani keyin bekor qilingan yoki boshqa omborga ko'chgan"
               :                   '';
   return `<span class="muted">Hozir omborda yo'q${sabab ? ' \u2014 ' + sabab : ''}.${
-    canLedger ? ' Qaysi konver ekani \u00ab<a href="#" onclick="event.preventDefault();'
-      + 'event.stopPropagation();go(\'moves\')">Harakat</a>\u00bb tabida.' : ''}</span>`;
+    harakat}</span>`;
 }
 
 function drawStockRow(r) {
