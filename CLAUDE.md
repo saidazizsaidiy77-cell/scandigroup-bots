@@ -3029,10 +3029,27 @@ va bitta ko'z bilan o'qiladi:
 
     boshiga + kirdi − chiqdi = oxiriga
 
-**Ikkala javob YONMA-YON turadi va aralashmaydi, chunki nomi boshqa**:
-«Qoldiq» — bugun, **«Oraliq oxiriga»** — tanlangan kun. Bitta ustunni
-ikki ma'noda ishlatish «qoldiq nechta» savoli bilan bir xil
-chalkashlikni berardi (izoh: «★ NOMLAR OXIRGI MARTA AYTILDI»).
+**★ USTUN BITTA VA U SAVOLGA ERGASHADI** (zavod qarori, 2026-10).
+Birinchi urinishda ikkita ustun bo'lgan edi — «Qoldiq» (bugungi) va
+«Oraliq oxiriga» (tanlangan kun) — va niyat to'g'ri edi: bitta so'z
+bitta raqamni atasin. Natijasi esa teskari chiqdi. Sana filtri
+qo'yilgandan keyin mudirga BIR raqam kerak, ikkitasi emas, va
+yonma-yon turgan ikki son har safar «qaysi biri menikidir» degan
+savolni berardi; jadvalda to'qqizta ustun bo'lib, javob ularning
+orasida yo'qolardi.
+
+Endi **«Qoldiq» ning O'ZI oraliqqa ergashadi**: oraliq tanlanmagan
+bo'lsa bugungi qoldiq, tanlangan bo'lsa O'SHA KUNNING oxiridagi
+qoldiq. Shakl ham shundan to'liq bo'ladi — `kirdi − chiqdi` aynan
+qoldiqning o'zgarishini beradi.
+
+Qaysi kunniki ekanini **ekran o'zi aytadi** (jadval ustidagi izoh va
+kartochkaning ostidagi yozuv): nom bitta bo'lgach sana yozilmasa
+javob yana noaniq qolardi.
+
+Yozilishi BITTA joyda — `qoldiqVal()` (`public/ombor.html`): jadval,
+JAMI qatori, kartochka va saralash to'rttasi ham shundan o'qiydi,
+aks holda ekrandagi ustun o'z yig'indisiga mos kelmay qolardi.
 
 **Javob HARAKATDAN chiqadi, saqlangan ustundan emas**: omborda «o'sha
 kungi qoldiq» degan ustun yo'q va bo'lishi ham kerak emas — har kun
@@ -3050,10 +3067,11 @@ ro'yxatni butun tarix bilan to'ldirardi.
 «JAMI» ham, tepadagi kartochka ham BITTA manbadan o'qiydi: ikki joyda
 yozilgan shart bir kun ajralib ketardi.
 
-**Xom ashyo omborida ham AYNAN shu** (`/materiallar.html`): ikkala
-qoldiq bir xil savolga javob beradi va bittasida bo'lib, ikkinchisida
-bo'lmasa mudirning qo'lida ikki xil hisobot bo'lardi. U yerda minus
-oxiriga ham QIZIL bo'lib turadi.
+**Xom ashyo omborida ham AYNAN shu** (`/materiallar.html`): u yerda
+ham ustun bitta va oraliqqa ergashadi — ikkala sahifa ataylab bir xil
+shaklda va bitta ko'z bilan o'qiladi, bittasida bo'lib ikkinchisida
+bo'lmasa mudirning qo'lida ikki xil varaq bo'lardi. Minus o'sha
+kunniki bo'lganda ham QIZIL va bosilsa «nega minusda» ochiladi.
 
 **★ BO'SH QATOR SABABINI AYTADI** (zavod qarori, 2026-10). Shu
 qoidaning ko'rinadigan oqibati bor: kelib, o'sha davrning o'zida chiqib
@@ -3193,14 +3211,13 @@ o'rnida uch raqam turadi:
 
   · **Bronda** — buyurtmaga olingani (`unit_reservations`).
   · **Qoldiq** — broni AYIRILGANI, ya'ni sotish mumkin bo'lgani.
-  · **Jami** — omborda JISMONAN turgani, bronda turgani bilan birga: u
-    hali chiqib ketmagan, javonda turibdi. **Inventarizatsiyada
+  · **Qoldiq** — omborda JISMONAN turgani, bronda turgani bilan birga:
+    u hali chiqib ketmagan, javonda turibdi. **Inventarizatsiyada
     sanaladigan raqam shu** — mudir javondagi donani shu ustun bilan
-    solishtiradi.
+    solishtiradi. Sotish mumkin bo'lgani ikkovining ayirmasi.
 
-Yuqorida ham shu: «Jami» kartochkasi (bronda turgani bilan birga) va
-«Qoldiq» kartochkasi. Ikkalasi ham o'lchov birligi bilan — dona bilan
-komplektni qo'shib bo'lmaydi.
+Yuqorida ham shu: «Qoldiq» va «Bronda» kartochkalari. Ikkalasi ham
+o'lchov birligi bilan — dona bilan komplektni qo'shib bo'lmaydi.
 
 **★ «QOLDIQ» BITTA NARSANI ANGLAYDI** (zavod qarori, 2026-09).
 Ilgari bitta ustun IKKI xil raqamni ko'rsatardi: savdoga bo'sh
@@ -3209,28 +3226,34 @@ ikki raqamni atardi va «qoldiq nechta» degan savolga ikki odam ikki
 xil javob berardi — menejer 3 deydi, mudir 10; ikkalasi ham to'g'ri
 va ikkalasi ham bir-birini tushunmaydi.
 
-**★ NOMLAR OXIRGI MARTA AYTILDI** (zavod qarori, 2026-10). Birinchi
-urinishda qoldiq HAMMAGA bronni ayirgandagi bo'ldi va jismoniy soni
-«Jami» ga chiqdi. Nomlar baribir javobni aytmasdi: «Jami» nimaning
-jamisi ekani — javondagimi, bronda turgani bilanmi — faqat izohni
-o'qib bilinardi. Endi ikkalasi ham O'ZINI ataydi:
+**★ NOMLAR OXIRGI MARTA AYTILDI** (zavod qarori, 2026-10). Avval
+qoldiq HAMMAGA bronni ayirgandagi bo'ldi va jismoniy soni «Jami» ga
+chiqdi; keyin ikkalasi o'z nomini oldi — «Qoldiq» va «Bronsiz
+qoldiq». Nom to'g'rilandi, **savol esa qolaverdi**: ikkita qoldiq
+ustuni yonma-yon turgani ishni oson qilmadi, qiyin qildi — mudir ham,
+menejer ham har safar qaysi biri o'ziniki ekanini ajratib o'qishi
+kerak edi.
 
-    QOLDIQ            javonda JISMONAN turgani, bronda turgani bilan
-                      birga — inventarizatsiyada sanaladigan raqam
-    BRONSIZ QOLDIQ    bronni ayirgandagi, ya'ni sotish mumkin bo'lgani
+**★ QOLDIQ USTUNI BITTA** (zavod qarori, 2026-10) va u javonda
+JISMONAN turganini aytadi — bronda turgani bilan birga,
+inventarizatsiyada sanaladigan raqam. **«Bronsiz qoldiq» olib
+tashlandi**: sotish mumkin bo'lgani yo'qolmadi, u endi **qoldiq
+bilan bronda ning ayirmasi** va ikkala raqam ham yonma-yon turadi —
+«10 qoldiq, 6 bronda».
 
-Savdoga faqat **bronsiz qoldiq** chiziladi: uning savoli bitta —
-mijozga hozir nechtasini va'da qilaman. Vitrinada ustun bitta va
-«Qoldiq» bo'lib qolaveradi — u yerda bron bo'lmaydi (vitrina savdoga
-chiqmaydi) va ikkala ustun bir xil raqamni takrorlardi.
+**Bronda SAVDOGA ham chiziladi**, va aynan shu sababdan: menejer endi
+javondagi jismoniy sonni ko'radi va bron ko'rsatilmasa o'sha raqamni
+bo'sh deb o'qib, boshqa mijozga va'da qilingan mahsulotni ikkinchi
+marta va'da qilardi. Vitrinada ustun chizilmaydi — u yerda bron
+bo'lmaydi (vitrina savdoga chiqmaydi).
 
-**★ T/M OMBORDA TEPADA BESHTA KARTOCHKA** (zavod qarori, 2026-10):
-**kirdi · chiqdi · bronda · qoldiq · bronsiz qoldiq**. Mudirning
-savoli yuqoridan pastga o'qiladi — «bugun nima keldi, nima ketdi,
-nechtasi band, javonda nechta turibdi va shundan nechtasini sotish
-mumkin». Ilgari tepada uchta kartochka turardi («Omborda», «Jami»,
-«Qoldiq») va aylanma faqat jadvalda edi: «bu oyda qancha keldi»
-degan savolga javob uchun ustunlarni ko'z bilan qo'shish kerak edi.
+**★ T/M OMBORDA TEPADA TO'RTTA KARTOCHKA** (zavod qarori, 2026-10):
+**kirdi · chiqdi · qoldiq · bronda**. Mudirning savoli yuqoridan
+pastga o'qiladi — «nima keldi, nima ketdi, javonda nechta qoldi va
+shundan nechtasi band». Ilgari tepada uchta kartochka turardi
+(«Omborda», «Jami», «Qoldiq») va aylanma faqat jadvalda edi: «bu oyda
+qancha keldi» degan savolga javob uchun ustunlarni ko'z bilan qo'shish
+kerak edi.
 
 **Nomlar jadval ustunlari bilan AYNAN bir xil** va tartibi ham o'sha:
 bitta so'z bitta raqamni atashi kerak, aks holda tepadagi «Jami»
@@ -3238,8 +3261,8 @@ bilan ustundagi «Jami» boshqa-boshqa javob berardi. Konverlar soni
 yo'qolmadi — «Qoldiq» kartochkasining ostida, mayda yozuvda.
 
 Raqam O'LCHOV BIRLIGI bo'yicha ajratiladi (stul DONA, penal
-KOMPLEKT) va yozilishi BITTA joyda — `uomKpi()`: beshta kartochka
-beshta joyda bir xil chizilishi kerak. Nol ham yoziladi: bo'sh
+KOMPLEKT) va yozilishi BITTA joyda — `uomKpi()`: kartochkalar bir
+necha joyda bir xil chizilishi kerak. Nol ham yoziladi: bo'sh
 kartochka «hisoblanmadi» degan savol qoldirardi.
 
 Aylanma kartochkasi QAYSI oraliqniki ekanini o'zi aytadi
@@ -3252,18 +3275,20 @@ va to'qqiztasi ham BITTA nuqtada ustma-ust turardi: ko'rinadigani
 faqat oxirgisi edi, qolgan sakkiz raqam ostida yashirinib yotardi.
 Qotib turish USTUNLI jadvalda ma'noga ega, kartochkada emas.
 
-**★ SAVDO FAQAT QOLDIQNI KO'RADI** (zavod qarori, 2026-09). Ombor
-mudirining savoli AYLANMA — bugun nima keldi, nima chiqdi, nechtasi
-bronda va javonda nechta turibdi. Savdo xodimining savoli esa bitta:
-mijozga hozir nechtasini va'da qila olaman. Javob ham bitta raqam —
-bronni ayirgandagi qoldiq.
+**★ SAVDO AYLANMANI KO'RMAYDI** (zavod qarori, 2026-09). Ombor
+mudirining savoli AYLANMA — bugun nima keldi, nima chiqdi. Savdo
+xodimining savoli esa bitta: mijozga hozir nechtasini va'da qila
+olaman. Shuning uchun **kirdi, chiqdi va harakat sanasi filtri unga
+chizilmaydi**.
 
-Ilgari savdo to'rtta ustunni ko'rardi va o'z javobini ularning ichidan
-qidirardi; ustiga «Qoldiq» ustuni JISMONAN turganini ko'rsatardi, ya'ni
-bronda turganini ham — menejer o'sha raqamni bo'sh deb o'qib, boshqa
-mijozga va'da qilingan mahsulotni ikkinchi marta va'da qilardi. Endi
-kirdi/chiqdi/bronda/jami ustunlari va harakat sanasi filtri unga
-chizilmaydi, «Jami» kartochkasi ham (u inventarizatsiya raqami).
+**Qoldiq va bronda esa QOLADI** (zavod qarori, 2026-10). Ilgari savdo
+faqat bitta raqamni — bronni ayirgandagi qoldiqni — ko'rardi, chunki
+«Qoldiq» ustuni jismoniy sonni ko'rsatardi va menejer uni bo'sh deb
+o'qib, boshqa mijozga va'da qilingan mahsulotni ikkinchi marta va'da
+qilardi. «Bronsiz qoldiq» ustuni olib tashlangach javob IKKI raqamga
+bo'lindi — «10 qoldiq, 6 bronda» — va menejer ayirmani o'zi ko'radi.
+Bitta raqam qoldirilsa u yana jismoniy son bo'lib, o'sha eski xato
+qaytib kelardi.
 
 Chegara HUQUQDAN chiqadi, lavozimdan emas (4-qoida): omborga YOZADIGAN
 odamda aylanma qolaveradi. Bu KO'RINISH, himoya emas — server baribir
