@@ -2005,6 +2005,40 @@ menejerda chiqim, kassada kirim, va ikkalasi ham to'g'ri. Lentada
 ikkinchi tomon yoziladi, o'zi emas — har qatorda bittasi baribir
 «Asosiy kassa» bo'lardi.
 
+**★ ORALIQ TANLANGANDA O'SHA KUNNING QOLDIG'I CHIQADI** (zavod
+qarori, 2026-10; `davrHisobi`, `modules/cash.js`). Tepadagi
+kartochkalar BUGUNGI qoldiqni ko'rsatadi va bu to'g'ri — kassirning
+kunlik savoli shu. Lekin sana filtri qo'yilgach savol boshqa bo'ladi:
+«sentabr oxirida qancha edi». Javob ekranda YO'Q edi va buxgalter
+lentadagi qatorlarni ko'z bilan qo'shib chiqishi kerak bo'lardi;
+ustiga lenta 500 qator bilan cheklangan, ya'ni javob jimgina kam
+chiqardi.
+
+Shakl qarzdorlik hisoboti bilan AYNAN bir xil (ОСВ) va bitta ko'z
+bilan o'qiladi — filtr kartochkasining ostida to'rtta raqam:
+
+    boshiga + kirim − chiqim = oxiriga
+
+**Boshlang'ich qoldiq «DAVR BOSHIGA» ning ichida** va aylanmaga
+qo'shilmaydi — qarzdorlik hisobotidagi bilan bir xil qoida va bir xil
+sabab: u «davr boshidagi saldo» degani va uning sanasi oraliqning
+ichiga tushgani bu javobni o'zgartirmaydi. Aks holda «oy ichida qancha
+pul kirdi» degan savolga javob yo'qolardi.
+
+**Qidiruv va tab hisobga OLINMAYDI**: qoldiq — joyda turgan PULNING
+javobi, lentadagi qatorlarning emas. Hujjat raqami bo'yicha
+qisqartirilgan «oxiriga» yolg'on raqam bo'lardi (ombor qoldig'idagi
+kirim/chiqim filtri bilan bir xil qoida). Sahifa buni o'zi yozib
+turadi, «30.09.26 holatiga» degan sana bilan birga — aks holda
+tepadagi «Jami» bilan pastdagi «Davr oxiriga» ikkita boshqa raqam
+bo'lib, qaysi biri qaysi kunniki ekani noma'lum qolardi.
+
+**Oxiriga SERVERDA hisoblanadi**, sahifada emas: ikki joyda yozilgan
+shart bir kun ajralib ketardi va ekrandagi «boshiga + kirim − chiqim»
+yig'indisi «oxiriga» dan farq qilib qolardi (menyudagi navbat belgisi
+bilan bir xil qoida). Katta raqam JAMI dollarda, ostida esa so'm va
+dollar alohida — ular ikkita ALOHIDA pul.
+
 **★ YO'NALISHNI SERVER AYTADI** (`GET /api/cash/ops` javobidagi `side`,
 zavod qarori 2026-09). Lenta bitta JOY haqida va o'sha joy kim ekanini
 server allaqachon biladi — sahifa esa har qatorda «bu kirimmi yoki
@@ -3823,6 +3857,33 @@ bo'lardi, yashirish esa xatoni ko'rinmas qilardi.
 chiqadi, tarixda o'chirilgan holida qoladi (kassadagi operatsiya
 bilan bir xil qoida). Sarf PULGA tegadi va yo'qolgan qator savol
 qoldirardi — «men yozgan edim-ku».
+
+**★ BEKOR QILINGANI TIKLANADI** (zavod qarori, 2026-10;
+`POST /api/materials/consume/:id/restore` va `/moves/:id/restore`,
+ekranda **↩**). Bekor qilish bitta bosish va u ham bexosdan bosiladi —
+«×» o'tkazish tugmasining yonida turadi. Qaytaradigan joy esa YO'Q
+edi: yagona chora o'sha sarfni QAYTADAN yozish bo'lardi va tarixda
+ikkita qator qolardi — biri bekor qilingan, ikkinchisi yangi, boshqa
+sana va boshqa odam bilan. Konveyer raqami bo'yicha tannarx yig'indisi
+to'g'ri chiqardi-yu, «kim va qachon sarfladi» degan savolga ikkita
+javob bo'lib qolardi.
+
+**Tiklash YANGI QATOR YOZMAYDI**: o'sha qatorning O'ZI `ok` ga qaytadi
+— sanasi ham, soni ham, kim yozgani ham o'sha holda qoladi. Audit
+jurnalida esa uchala harakat ko'rinadi (`consume`, `consume-cancel`,
+`consume-restore`): «kim bekor qildi va kim tikladi» degan savol
+alohida javob talab qiladi.
+
+Huquqi va doirasi bekor qilish bilan AYNAN bir xil, yo'li ham o'sha
+ikkitadan: sarf konverning doirasidan (`materials.request`),
+boshlang'ich qoldiq va sanoq tuzatishi esa omborning doirasidan
+(`materials.manage`, shart `QOLDA` da — bitta joyda). Kirim hujjati va
+talabnoma bu yerdan tiklanmaydi: ularning O'Z hujjati bor.
+
+Tugma ikkala ekranda ham turadi — xom ashyo «Harakat» tabida va
+konverga material biriktirish oynasida (`/harakat.html` dagi ▣):
+bekor qilish ikkalasida ham bor va qaytarish faqat bittasida qolsa
+odam uni ikkinchi ekranda qidirib yurardi.
 
 **★ MINUS HUJJAT BILAN NOLGA KELADI** (zavod qarori, 2026-10;
 `POST /api/materials/adjust`, xom ashyo qoldig'idagi **«⚖ Qoldiqni

@@ -9332,6 +9332,149 @@ test('qoldiqni to\'g\'rilash: minus nolga keladi, hujjat bo\'lib qoladi',
   assert.equal(rad.status, 403, rad.text);
 });
 
+test('kassa lentasida oraliq: boshiga + kirim \u2212 chiqim = oxiriga',
+  async () => {
+  //  ★ Tepadagi kartochkalar BUGUNGI qoldiqni ko'rsatadi; oraliq
+  //  tanlangach savol boshqa bo'ladi \u2014 «sentabr oxirida qancha
+  //  edi» (izoh: modules/cash.js, davrHisobi).
+  const { db } = require('../db');
+  const kassir = await xodim('Sinov davr kassir', 'buxgalter');
+  const acc = (await H.id(
+    `SELECT id, code FROM cash_accounts WHERE code = 'MAIN'`));
+  const mijoz = (await H.id(
+    `INSERT INTO customers (name) VALUES ('Sinov davr mijozi') RETURNING id`)).id;
+
+  //  Boshlang'ich qoldiqni TOZA holatga keltirmaymiz \u2014 boshqa
+  //  testlar ham shu kassaga yozadi. Shuning uchun oldin va keyin
+  //  o'qib, AYIRMASI tekshiriladi.
+  const davr = async (q) => (await kassir('GET', '/api/cash/ops?a=MAIN&' + q))
+    .body.davr;
+
+  const oldin = await davr('from=2026-07-01&to=2026-07-31');
+  assert.ok(oldin, 'oraliq tanlanganda davr hisobi keladi');
+
+  //  Iyul oyiga ikkita operatsiya: 300 $ kirim va 120 $ chiqim.
+  const kir = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: mijoz, to_kind: 'account', to_id: acc.id,
+    currency: 'USD', amount: 300, op_date: '2026-07-10' });
+  assert.equal(kir.status, 200, kir.text);
+  const item = (await H.id(
+    `SELECT id FROM expense_items WHERE active ORDER BY id LIMIT 1`)).id;
+  const chiq = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: acc.id, to_kind: 'expense',
+    expense_item_id: item, pl_month: '2026-07-01',
+    currency: 'USD', amount: 120, op_date: '2026-07-20' });
+  assert.equal(chiq.status, 200, chiq.text);
+
+  const iyul = await davr('from=2026-07-01&to=2026-07-31');
+  assert.equal(Number(iyul.kirim.total_usd) - Number(oldin.kirim.total_usd), 300);
+  assert.equal(Number(iyul.chiqim.total_usd) - Number(oldin.chiqim.total_usd), 120);
+  //  ★ boshiga + kirim \u2212 chiqim = oxiriga
+  assert.equal(
+    Number((Number(iyul.bosh.total_usd) + Number(iyul.kirim.total_usd)
+          - Number(iyul.chiqim.total_usd)).toFixed(2)),
+    Number(iyul.oxir.total_usd));
+
+  //  ★ AVGUST: iyulning ikkala operatsiyasi «davr boshiga» ga o'tadi
+  //  va aylanmada QOLMAYDI.
+  const avg = await davr('from=2026-08-01&to=2026-08-31');
+  assert.equal(Number(avg.bosh.total_usd), Number(iyul.oxir.total_usd),
+    'oldingi davrning oxiri keyingisining boshi');
+
+  //  ★ ORALIQ OXIRIGA tanlangan kunning qoldig'i chiqadi, bugungisi
+  //  emas: iyul oxiriga 20-iyuldagi chiqim ham kirgan.
+  const yarim = await davr('from=2026-07-01&to=2026-07-15');
+  assert.equal(
+    Number(yarim.oxir.total_usd),
+    Number((Number(iyul.oxir.total_usd) + 120).toFixed(2)),
+    '15-iyulga 20-iyuldagi chiqim hali bo\'lmagan');
+
+  //  ★ QIDIRUV VA TAB raqamlarga TA'SIR QILMAYDI: qoldiq joydagi
+  //  pulning javobi, lentadagi qatorlarning emas.
+  const q = (await kassir('GET',
+    '/api/cash/ops?a=MAIN&from=2026-07-01&to=2026-07-31&dir=in&q=zzz')).body;
+  assert.equal(q.rows.length, 0, 'qidiruv lentani bo\'shatdi');
+  assert.equal(Number(q.davr.oxir.total_usd), Number(iyul.oxir.total_usd),
+    'qoldiq esa o\'sha holda qoladi');
+
+  //  Oraliq berilmasa davr hisobi ham chiqadi va oxiri BUGUNGI
+  //  qoldiqqa teng bo'ladi (tepadagi kartochka bilan bir xil raqam).
+  const hammasi = (await kassir('GET', '/api/cash/ops?a=MAIN')).body.davr;
+  const bal = (await kassir('GET', '/api/cash/balance')).body.accounts
+    .find((a) => a.id === acc.id);
+  assert.equal(Number(hammasi.oxir.total_usd), Number(bal.total_usd),
+    'oraliqsiz oxiri \u2014 bugungi qoldiq');
+  await db.query(`DELETE FROM customers WHERE id = $1`, [mijoz])
+    .catch(() => {});
+});
+
+test('bekor qilingan sarf tiklanadi \u2014 o\'sha qatorning o\'zi',
+  async () => {
+  //  ★ «×» bexosdan bosiladi va qaytaradigan joy yo'q edi: yagona
+  //  chora sarfni QAYTADAN yozish bo'lardi \u2014 tarixda ikkita
+  //  qator qolardi, biri bekor qilingan, ikkinchisi boshqa sana va
+  //  boshqa odam bilan (izoh: modules/materials.js).
+  const xom = await xodim('Sinov tiklash xodim', 'xom_ombor');
+  const wh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Tiklash sinov gruntofkasi', uom: 'kg', category: 'FURN' })).body;
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 40 }] })).status, 200);
+
+  const u = await newUnit();
+  await admin('POST', '/api/units/move', { unit_id: u.id, section_code: 'ARRA' });
+
+  const c = await admin('POST', `/api/materials/unit/${u.id}/consume`,
+    { warehouse_id: wh, items: [{ material_id: m.id, qty: 6 }] });
+  assert.equal(c.status, 200, c.text);
+
+  const sarf = async () => (await admin('GET', '/api/materials/unit/' + u.id))
+    .body.rows.find((r) => r.material === 'Tiklash sinov gruntofkasi');
+  const qoldiq = async () => Number(((await xom('GET',
+    '/api/materials/stock?warehouse_id=' + wh)).body.rows
+    .find((r) => r.material_id === m.id) || {}).qty || 0);
+
+  const mv = await sarf();
+  assert.equal(Number(mv.qty), 6);
+  assert.equal(await qoldiq(), 34, 'sarf qoldiqdan chiqdi');
+
+  //  Bekor qilish: qator TARIXDA qoladi, qoldiq qaytadi.
+  assert.equal((await admin('POST', `/api/materials/consume/${mv.id}/cancel`))
+    .status, 200);
+  assert.equal((await sarf()).status, 'cancelled');
+  assert.equal(await qoldiq(), 40, 'bekor qilingach qoldiq qaytdi');
+
+  //  ★ TIKLASH: yangi qator YOZILMAYDI \u2014 o'sha qatorning o'zi
+  //  `ok` ga qaytadi, sanasi ham, soni ham o'zgarmaydi.
+  const t = await admin('POST', `/api/materials/consume/${mv.id}/restore`);
+  assert.equal(t.status, 200, t.text);
+  const keyin = await sarf();
+  assert.equal(keyin.id, mv.id, 'o\'sha qatorning o\'zi');
+  assert.equal(keyin.status, 'ok');
+  assert.equal(Number(keyin.qty), 6, 'soni o\'zgarmadi');
+  assert.equal(Number(keyin.moved_on === mv.moved_on), 1, 'sanasi o\'zgarmadi');
+  assert.equal(await qoldiq(), 34, 'qoldiqdan yana chiqdi');
+  assert.equal((await admin('GET', '/api/materials/unit/' + u.id)).body.rows
+    .filter((r) => r.material === 'Tiklash sinov gruntofkasi').length, 1,
+    'ikkinchi qator yozilmadi');
+
+  //  Ikkinchi marta tiklab bo'lmaydi: u allaqachon `ok`.
+  assert.equal((await admin('POST', `/api/materials/consume/${mv.id}/restore`))
+    .status, 404);
+
+  //  Boshlang'ich qoldiq qatori ham shu yo'ldan qaytadi.
+  const op = (await xom('GET', '/api/materials/moves')).body.rows
+    .find((r) => r.material === 'Tiklash sinov gruntofkasi'
+               && r.from_kind === 'opening');
+  assert.equal((await xom('POST', `/api/materials/moves/${op.id}/cancel`))
+    .status, 200);
+  assert.equal(await qoldiq(), -6, 'boshlang\'ich qoldiqsiz minusga tushdi');
+  assert.equal((await xom('POST', `/api/materials/moves/${op.id}/restore`))
+    .status, 200);
+  assert.equal(await qoldiq(), 34, 'tiklangach qaytdi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

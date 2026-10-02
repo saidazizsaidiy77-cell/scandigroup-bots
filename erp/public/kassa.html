@@ -112,6 +112,9 @@ const isMe = () => A === 'me';
 const W = /^w\d+$/.test(A) ? Number(A.slice(1)) : null;
 const isAcc = () => !isMe() && !W;
 let refs = null, here = null, ops = [], tab = 'in', boss = false, side = null;
+//  Oraliq tanlanganda serverdan keladigan ОСВ: boshiga · kirim ·
+//  chiqim · oxiriga (izoh: modules/cash.js).
+let davr = null;
 const f = { from: '', to: '', q: '' };
 
 function toast(msg, bad) {
@@ -234,7 +237,7 @@ async function loadOps() {
   if (tab !== 'all') q.set('dir', tab);
   Object.entries(f).forEach(([k, v]) => v && q.set(k, v));
   const d = await App.api('/api/cash/ops?' + q);
-  ops = d.rows; side = d.side;
+  ops = d.rows; side = d.side; davr = d.davr;
   drawOps();
 }
 function setF(k, v) { f[k] = v; loadOps(); }
@@ -259,6 +262,52 @@ const kirimmi = o => buYer(o.to_kind, o.to_id);
 //  cho'zardi va har qatorda bittasi baribir «Asosiy kassa» bo'lardi.
 const other = o => kirimmi(o) ? o.from_name : o.to_name;
 
+//  ★ ORALIQ OXIRIDAGI QOLDIQ (zavod qarori, 2026-10). Tepadagi
+//  kartochkalar BUGUNGI qoldiqni ko'rsatadi va bu to'g'ri — kassirning
+//  kunlik savoli shu. Oraliq tanlangach savol boshqa bo'ladi:
+//  «sentabr oxirida qancha edi». Javob ekranda yo'q edi va buxgalter
+//  lentadagi qatorlarni ko'z bilan qo'shib chiqishi kerak bo'lardi;
+//  ustiga lenta 500 qator bilan cheklangan, ya'ni javob jimgina kam
+//  chiqardi.
+//
+//  Shakl qarzdorlik hisoboti bilan AYNAN bir xil (ОСВ) va bitta ko'z
+//  bilan o'qiladi: boshiga + kirim − chiqim = oxiriga. Raqamlar
+//  SERVERDA hisoblanadi — ikki joyda yozilgan shart bir kun ajralib
+//  ketardi.
+//
+//  Sana YOZILIB turadi: «30.09.26 holatiga» — aks holda tepadagi
+//  «Jami» bilan pastdagi «Davr oxiriga» ikkita boshqa raqam bo'lib,
+//  qaysi biri qaysi kunniki ekani noma'lum qolardi.
+function davrQator() {
+  if (!davr) return '';
+  const pul = (x) => {
+    //  Katta raqam — JAMI dollarda (kassaning ikkala valyutasi bir
+    //  o'qda), ostida esa so'm va dollar alohida: ular ikkita ALOHIDA
+    //  pul va ularni qo'shib bo'lmaydi (boshlang'ich qoldiq oynasi
+    //  bilan bir xil qoida).
+    const d = [x.uzs ? uzs(x.uzs) + " so'm" : '', x.usd ? usd(x.usd) + ' $' : '']
+      .filter(Boolean).join(' · ');
+    return `<div class="kpi" style="font-size:22px">${usd(x.total_usd)}<small> $</small></div>
+      <div class="muted" style="font-size:12px;min-height:16px">${d}</div>`;
+  };
+  const oraliq = `${davr.from ? d8(davr.from) : 'boshidan'} \u2014 ${
+    davr.to ? d8(davr.to) : 'bugungacha'}`;
+  return `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
+    <div class="grid g3">
+      <div><h2>Davr boshiga</h2>${pul(davr.bosh)}</div>
+      <div><h2>Kirim</h2>${pul(davr.kirim)}</div>
+      <div><h2>Chiqim</h2>${pul(davr.chiqim)}</div>
+      <div><h2>Davr oxiriga</h2>${pul(davr.oxir)}
+        <div class="muted" style="font-size:12px">${
+          davr.to ? d8(davr.to) + ' holatiga' : 'bugungi qoldiq'}</div></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:10px">${esc(oraliq)} \u00b7
+      boshlang'ich qoldiq «Davr boshiga» ning ichida, aylanmada emas \u00b7
+      qidiruv va tab bu raqamlarga ta'sir qilmaydi \u2014 qoldiq joydagi
+      PULNING javobi, lentadagi qatorlarning emas</p>
+  </div>`;
+}
+
 function drawOps() {
   const bor = f.from || f.to || f.q;
   $('body').innerHTML = `<div class="card" style="margin-bottom:16px">
@@ -272,7 +321,7 @@ function drawOps() {
           onchange="setF('q', this.value)"></div>
       <div>${bor ? `<label>&nbsp;</label>
         <button style="width:100%" onclick="clearF()">Tozalash</button>` : ''}</div>
-    </div></div>
+    </div>${davrQator()}</div>
     <div class="card">
     ${ops.length ? `<div style="overflow-x:auto"><table>
       <thead><tr><th>№</th><th>Sana</th><th>Kim</th><th class="num">Summa</th>

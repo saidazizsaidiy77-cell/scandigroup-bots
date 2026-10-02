@@ -290,8 +290,111 @@ router.get('/ops', need(...ANY), wrap(async (req, res) => {
   //  ko'rinardi — minus bilan, «Kim» ustunida esa o'sha xodimning O'Z
   //  ismi yozilib turardi. Qoida ikki joyda bo'lsa yana ajralib
   //  ketardi, shuning uchun u BITTA joyda.
-  res.json({ rows, boss, side: sideKind ? { kind: sideKind, id: sideId } : null });
+  const davr = sideKind
+    ? await davrHisobi(sideKind, sideId, req.query.from, req.query.to) : null;
+  res.json({ rows, boss, davr,
+             side: sideKind ? { kind: sideKind, id: sideId } : null });
 }));
+
+// ──────────────────────────────────────────── ORALIQNING OXIRIDAGI QOLDIQ
+//
+//  ★ ORALIQ TANLANGANDA O'SHA KUNNING QOLDIG'I CHIQADI (zavod qarori,
+//  2026-10). Tepadagi kartochkalar BUGUNGI qoldiqni ko'rsatadi va bu
+//  to'g'ri — kassirning kunlik savoli shu. Lekin oraliq tanlangach
+//  savol boshqa bo'ladi: «sentabr oxirida qancha edi». Javob ekranda
+//  yo'q edi va buxgalter lentadagi qatorlarni ko'z bilan qo'shib
+//  chiqishi kerak bo'lardi — ustiga lenta 500 qator bilan cheklangan,
+//  ya'ni javob jimgina kam chiqardi.
+//
+//  Shakl qarzdorlik hisoboti bilan AYNAN bir xil (ОСВ) va bitta ko'z
+//  bilan o'qiladi:
+//
+//      boshiga + kirim − chiqim = oxiriga
+//
+//  **Boshlang'ich qoldiq «DAVR BOSHIGA» ning ichida** va aylanmaga
+//  qo'shilmaydi — qarzdorlik hisobotidagi bilan bir xil qoida va bir
+//  xil sabab: u «davr boshidagi saldo» degani va uning sanasi
+//  oraliqning ichiga tushgani bu javobni o'zgartirmaydi. Aks holda
+//  «oy ichida qancha pul kirdi» degan savolga javob yo'qolardi.
+//
+//  **Qidiruv va tab hisobga OLINMAYDI**: qoldiq — joyda turgan PULNING
+//  javobi, lentadagi qatorlarning emas. Hujjat raqami bo'yicha
+//  qisqartirilgan «oxiriga» yolg'on raqam bo'lardi (ombor
+//  qoldig'idagi kirim/chiqim filtri bilan bir xil qoida). Sahifa buni
+//  o'zi yozib turadi.
+async function davrHisobi(kind, id, from, to) {
+  const ichida = `(($3::date IS NULL OR f.op_date >= $3)
+                   AND ($4::date IS NULL OR f.op_date <= $4))`;
+  //  Tomonning boshlang'ich qoldig'i ikki jadvaldan kelishi mumkin —
+  //  kassa yoki xodimning qo'li. Ikkita so'rov yozilmadi: shart
+  //  bittada turadi va ikkisi bir kun ajralib ketmaydi.
+  const { rows } = await db.query(
+    `WITH op AS (
+       SELECT a.opening_uzs, a.opening_usd, a.opening_rate
+         FROM cash_accounts a WHERE $1 = 'account' AND a.id = $2
+       UNION ALL
+       SELECT w.opening_uzs, w.opening_usd, w.opening_rate
+         FROM workers w WHERE $1 = 'worker' AND w.id = $2
+     )
+     SELECT
+       --  Boshlang'ich qoldiq: har doim «davr boshiga» ning ichida.
+       (o.opening_uzs)::numeric(18,2) AS op_uzs,
+       (o.opening_usd)::numeric(16,2) AS op_usd,
+       (o.opening_usd + CASE WHEN o.opening_rate > 0
+          THEN ROUND(o.opening_uzs / o.opening_rate, 2) ELSE 0 END)::numeric(16,2)
+         AS op_total,
+       --  Oraliqdan OLDINGI harakat. Oraliq boshi berilmagan bo'lsa
+       --  «oldin» degan narsa yo'q: shart NULL bo'lib qoladi va
+       --  FILTER qatorni umuman olmaydi.
+       COALESCE(SUM(f.amount) FILTER (
+         WHERE f.currency = 'UZS' AND f.op_date < $3), 0)::numeric(18,2) AS old_uzs,
+       COALESCE(SUM(f.amount) FILTER (
+         WHERE f.currency = 'USD' AND f.op_date < $3), 0)::numeric(16,2) AS old_usd,
+       COALESCE(SUM(f.amount_usd) FILTER (
+         WHERE f.op_date < $3), 0)::numeric(16,2) AS old_total,
+       --  Davr ichida: kirim musbat, chiqim manfiy tomonda turadi —
+       --  oqim ko'rinishi har operatsiyani ikki qator qilib ochadi.
+       COALESCE(SUM(f.amount) FILTER (
+         WHERE f.currency = 'UZS' AND f.amount > 0 AND ${ichida}), 0)::numeric(18,2)
+         AS in_uzs,
+       COALESCE(SUM(f.amount) FILTER (
+         WHERE f.currency = 'USD' AND f.amount > 0 AND ${ichida}), 0)::numeric(16,2)
+         AS in_usd,
+       COALESCE(SUM(f.amount_usd) FILTER (
+         WHERE f.amount > 0 AND ${ichida}), 0)::numeric(16,2) AS in_total,
+       COALESCE(SUM(-f.amount) FILTER (
+         WHERE f.currency = 'UZS' AND f.amount < 0 AND ${ichida}), 0)::numeric(18,2)
+         AS out_uzs,
+       COALESCE(SUM(-f.amount) FILTER (
+         WHERE f.currency = 'USD' AND f.amount < 0 AND ${ichida}), 0)::numeric(16,2)
+         AS out_usd,
+       COALESCE(SUM(-f.amount_usd) FILTER (
+         WHERE f.amount < 0 AND ${ichida}), 0)::numeric(16,2) AS out_total
+       FROM op o
+       LEFT JOIN v_cash_flow f ON f.side_kind = $1 AND f.side_id = $2
+      GROUP BY o.opening_uzs, o.opening_usd, o.opening_rate`,
+    [kind, id, from || null, to || null]);
+  const r = rows[0];
+  if (!r) return null;
+  const n = (v) => Number(v) || 0;
+  const bosh = {
+    uzs: n(r.op_uzs) + n(r.old_uzs),
+    usd: n(r.op_usd) + n(r.old_usd),
+    total_usd: n(r.op_total) + n(r.old_total),
+  };
+  const kirim  = { uzs: n(r.in_uzs),  usd: n(r.in_usd),  total_usd: n(r.in_total) };
+  const chiqim = { uzs: n(r.out_uzs), usd: n(r.out_usd), total_usd: n(r.out_total) };
+  //  Oxiriga SERVERDA hisoblanadi, sahifada emas: shart ikki joyda
+  //  yozilsa bir kun bir-biridan ajralib ketardi va ekrandagi
+  //  «boshiga + kirim − chiqim» yig'indisi «oxiriga» dan farq qilib
+  //  qolardi (menyudagi navbat belgisi bilan bir xil qoida).
+  const oxir = {
+    uzs: bosh.uzs + kirim.uzs - chiqim.uzs,
+    usd: bosh.usd + kirim.usd - chiqim.usd,
+    total_usd: Number((bosh.total_usd + kirim.total_usd - chiqim.total_usd).toFixed(2)),
+  };
+  return { from: from || '', to: to || '', bosh, kirim, chiqim, oxir };
+}
 
 // ═══════════════════════════════════════════════════ OPERATSIYA YOZISH
 //

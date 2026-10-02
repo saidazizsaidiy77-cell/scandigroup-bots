@@ -770,9 +770,18 @@ function xomChiz(d) {
               r.worker ? ' · ' + esc(r.worker) : ''}</div></div>
           <div class="row" style="gap:8px;align-items:center">
             <span>${son(r.qty)} <span class="muted">${esc(r.uom)}</span></span>
+            <!--  ★ ADASHIB BEKOR QILINGANI QAYTARILADI (zavod qarori,
+                  2026-10). «×» bexosdan bosiladi va qaytaradigan joy
+                  yo'q edi: yagona chora sarfni QAYTADAN yozish
+                  bo'lardi — tarixda ikkita qator qolardi, biri bekor
+                  qilingan, ikkinchisi boshqa sana va boshqa odam
+                  bilan. Tiklash yangi qator yozmaydi: o'sha qatorning
+                  O'ZI qaytadi. -->
             ${r.status === 'ok'
               ? `<button class="ic" title="Bekor qilish"
-                   onclick="xomBekor(${r.id})">&times;</button>` : ''}
+                   onclick="xomBekor(${r.id})">&times;</button>`
+              : `<button class="ic" title="Bekor qilishni qaytarish"
+                   onclick="xomQaytar(${r.id})">&#8617;</button>`}
           </div></div>`).join('')}</div>` : ''}
 
     <div style="margin-top:16px">
@@ -883,6 +892,20 @@ async function xomBekor(id) {
   try {
     await App.api('/api/materials/consume/' + id + '/cancel', { method: 'POST' });
     toast('Bekor qilindi');
+    const u = xomUnit;
+    xomYop();
+    xomOch(u);
+  } catch (e) { toast(e.message, true); }
+}
+
+//  Bekor qilish bilan BITTA idiomdan: huquqi ham, doirasi ham bir
+//  xil, faqat yo'nalishi teskari (izoh: modules/materials.js).
+//  Tasdiq so'ralmaydi: qaytarish hech narsani yo'qotmaydi — adashib
+//  bosilgani bekor qilish bilan yana olinadi.
+async function xomQaytar(id) {
+  try {
+    await App.api('/api/materials/consume/' + id + '/restore', { method: 'POST' });
+    toast('Tiklandi');
     const u = xomUnit;
     xomYop();
     xomOch(u);

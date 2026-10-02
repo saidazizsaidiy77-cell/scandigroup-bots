@@ -637,9 +637,19 @@ function drawMoves() {
   //  ★ SANOQ TUZATISHI ham shu yerdan bekor qilinadi (zavod qarori,
   //  2026-10): u ham hujjatsiz harakat va uning O'Z oynasi yo'q —
   //  ikkala tomoni ham `writeoff`.
-  const ochirsaBoladi = (r) => boshqara() && r.status === 'ok' && !r.doc_kind
+  //  ★ ADASHIB BEKOR QILINGANI QAYTARILADI (zavod qarori, 2026-10).
+  //  «×» o'tkazish tugmasining yonida turadi va u ham bexosdan
+  //  bosiladi — qaytaradigan joy esa yo'q edi: yagona chora sarfni
+  //  QAYTADAN yozish bo'lardi va tarixda ikkita qator qolardi, biri
+  //  bekor qilingan, ikkinchisi boshqa sana va boshqa odam bilan.
+  //
+  //  Qaytarish YANGI QATOR YOZMAYDI: o'sha qatorning o'zi tiklanadi
+  //  (izoh: modules/materials.js).
+  const tegsaBoladi = (r) => boshqara() && !r.doc_kind
     && (r.from_kind === 'opening' || r.to_kind === 'unit'
         || r.from_kind === 'writeoff' || r.to_kind === 'writeoff');
+  const ochirsaBoladi = (r) => tegsaBoladi(r) && r.status === 'ok';
+  const qaytsaBoladi  = (r) => tegsaBoladi(r) && r.status === 'cancelled';
   $('body').innerHTML = `<div style="overflow-x:auto"><table>
     <thead><tr><th>Sana</th><th>Material</th><th>Qayerdan</th><th>Qayerga</th>
       <th class="num">Soni</th><th>Kim</th><th></th></tr></thead>
@@ -654,7 +664,11 @@ function drawMoves() {
       <td>${ochirsaBoladi(r)
         ? `<button class="ic" title="Bekor qilish"
              onclick="qoldiqOchir(${r.id}, '${r.to_kind}', '${r.from_kind}')"
-             >&times;</button>` : ''}</td>
+             >&times;</button>`
+        : qaytsaBoladi(r)
+        ? `<button class="ic" title="Bekor qilishni qaytarish"
+             onclick="qoldiqQaytar(${r.id}, '${r.to_kind}', '${r.from_kind}')"
+             >&#8617;</button>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -681,6 +695,26 @@ async function qoldiqOchir(id, kind, from) {
 }
 
 const yop = () => { $('modalRoot').innerHTML = ''; };
+
+//  Bekor qilish va qaytarish BITTA idiomdan: yo'li ham, huquqi ham,
+//  doirasi ham bir xil — faqat yo'nalishi teskari (izoh:
+//  modules/materials.js).
+async function qoldiqQaytar(id, kind, from) {
+  const sarf = kind === 'unit';
+  const tuz = kind === 'writeoff' || from === 'writeoff';
+  const nomi = sarf ? 'Konverga sarf'
+             : tuz  ? "Qoldiq to'g'rilash" : "Boshlang'ich qoldiq";
+  if (!confirm(`${nomi} qatori tiklansinmi?`
+             + '\nQoldiqqa qaytadi, sanasi va kim yozgani o\'zgarmaydi.'))
+    return;
+  const yol = sarf ? `/api/materials/consume/${id}/restore`
+                   : `/api/materials/moves/${id}/restore`;
+  try {
+    await App.api(yol, { method: 'POST' });
+    toast('Tiklandi');
+    await load();
+  } catch (e) { toast(e.message, true); }
+}
 
 // ─────────────────────────────────────────────────────── KIRIM HUJJATI
 //

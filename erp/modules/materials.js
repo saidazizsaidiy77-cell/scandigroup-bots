@@ -879,6 +879,65 @@ const QOLDA = `((m.from_kind = 'opening'   AND m.to_kind = 'warehouse')
              OR (m.from_kind = 'writeoff'  AND m.to_kind = 'warehouse')
              OR (m.from_kind = 'warehouse' AND m.to_kind = 'writeoff'))`;
 
+// ───────────────────────────────────────── BEKOR QILISHNI QAYTARISH
+//
+//  ★ ADASHIB BEKOR QILINGANI QAYTARILADI (zavod qarori, 2026-10).
+//  Bekor qilish bitta bosish va u ham bexosdan bosiladi — «×»
+//  o'tkazish tugmasining yonida turadi. Qaytaradigan joy esa YO'Q edi:
+//  yagona chora o'sha sarfni QAYTADAN yozish bo'lardi va o'shanda
+//  tarixda ikkita qator qolardi — biri bekor qilingan, ikkinchisi
+//  yangi, boshqa sana va boshqa odam bilan. Konveyer raqami bo'yicha
+//  tannarx yig'indisi to'g'ri chiqardi-yu, «kim va qachon sarfladi»
+//  degan savolga ikkita javob bo'lib qolardi.
+//
+//  Qaytarish YANGI QATOR YOZMAYDI: o'sha qatorning o'zi `ok` ga
+//  qaytadi — sanasi ham, soni ham, kim yozgani ham o'sha holda
+//  qoladi. Audit jurnalida esa uchala harakat ham ko'rinadi
+//  (`consume`, `consume-cancel`, `consume-restore`): «kim bekor
+//  qildi va kim qaytardi» degan savol alohida javob talab qiladi.
+//
+//  Huquqi va doirasi bekor qilish bilan AYNAN bir xil: qaytarish ham
+//  o'sha qatorga tegadi va ikkinchi qoida yozilsa bir kun biri
+//  ikkinchisidan ajralib ketardi.
+router.post('/consume/:id/restore', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
+  const mv = (await db.query(
+    `SELECT id, to_id FROM material_moves
+      WHERE id = $1 AND to_kind = 'unit' AND status = 'cancelled'`,
+    [req.params.id])).rows[0];
+  if (!mv) return res.status(404).json({
+    error: 'Bekor qilingan sarf topilmadi' });
+  await konverDoira(req, mv.to_id);
+  await db.query(`UPDATE material_moves SET status = 'ok' WHERE id = $1`, [mv.id]);
+  await audit(req, { module: 'materials', action: 'consume-restore',
+                     entity: 'material_moves', entity_id: mv.id });
+  res.json({ ok: true });
+}));
+
+//  Boshlang'ich qoldiq va sanoq tuzatishi ham shu yo'ldan qaytadi —
+//  shart QOLDA da, bitta joyda (bekor qilish bilan bir xil).
+router.post('/moves/:id/restore', need(...MANAGE), wrap(async (req, res) => {
+  const mv = (await db.query(
+    `SELECT m.id, w.name AS ombor FROM material_moves m
+       JOIN warehouses w
+         ON w.id = CASE WHEN m.to_kind = 'warehouse' THEN m.to_id ELSE m.from_id END
+      WHERE m.id = $1 AND m.status = 'cancelled'
+        AND ${QOLDA}
+        AND m.doc_kind IS NULL
+        AND ($2::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
+    [req.params.id, whDoira(req)])).rows[0];
+  if (!mv) return res.status(404).json({
+    error: "Bekor qilingan qator topilmadi. Kirim hujjati o'z oynasidan, "
+         + "talabnomaniki esa hujjatdan tiklanadi" });
+
+  await db.query(`UPDATE material_moves SET status = 'ok' WHERE id = $1`, [mv.id]);
+  await audit(req, { module: 'materials', action: 'move-restore',
+                     entity: 'material_moves', entity_id: mv.id,
+                     payload: { warehouse: mv.ombor } });
+  res.json({ ok: true });
+}));
+
 router.post('/moves/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
   const mv = (await db.query(
     `SELECT m.id, w.name AS ombor,
