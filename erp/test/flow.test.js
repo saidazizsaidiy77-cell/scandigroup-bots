@@ -8323,6 +8323,93 @@ test('kalit yoqilsa kassa va ombor qoldig\'i minusga tushmaydi', async () => {
   await yoq('minus_material', false);
 });
 
+//  ★ TO'SIQ QOLDIQ KAMAYADIGAN HAR JOYDA, faqat sarf yozishda emas
+//  (zavod qarori, 2026-10). Bekor qilish va tiklash TESKARI tomondan
+//  ishlaydi: kirimni bekor qilish uni qoldiqdan olib tashlaydi, bekor
+//  qilingan sarfni tiklash esa qaytadan ayiradi — ikkalasi ham chiqim
+//  va ikkalasi ham kalitga bo'ysunadi. Aks holda bekor qilib, darrov
+//  tiklash to'siqni bitta bosishda chetlab o'tardi.
+test('minus_material: bekor qilish va tiklash ham minusga tushirmaydi', async () => {
+  const yoq = async (kod, on) => assert.equal((await admin(
+    'PATCH', '/api/admin/settings/' + kod, { on: !!on })).status, 200);
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const mat = (await H.id(
+    `INSERT INTO materials (name, uom) VALUES ('Chetlab sinov material', 'dona')
+     ON CONFLICT (lower(name)) DO UPDATE SET uom = 'dona' RETURNING id`)).id;
+  const u = await newUnit();
+  //  Qoldiq BAZADAN o'qiladi: savol «ekranda nima turibdi» emas,
+  //  «javonda nechta» — va u bitta manbadan (`v_material_stock`).
+  const { db } = require('../db');
+  const qoldiq = async () => Number((await db.query(
+    `SELECT COALESCE(SUM(qty), 0) AS q FROM v_material_flow
+      WHERE material_id = $1 AND kind = 'warehouse' AND place_id = $2`,
+    [mat, wh])).rows[0].q);
+  const mv = async (shart) => (await admin(
+    'GET', '/api/materials/moves?material_id=' + mat)).body.rows.find(shart);
+
+  //  Boshlang'ich qoldiq 10 ta, hammasi sarflandi — javonda nol.
+  const bosh = await admin('POST', '/api/materials/opening', {
+    items: [{ warehouse_id: wh, material_id: mat, qty: 10 }] });
+  assert.equal(bosh.status, 200, bosh.text);
+  assert.equal((await admin('POST', `/api/materials/unit/${u.id}/consume`,
+    { warehouse_id: wh, items: [{ material_id: mat, qty: 10 }] })).status, 200);
+  assert.equal(await qoldiq(), 0);
+
+  await yoq('minus_material', true);
+
+  //  1. BOSHLANG'ICH QOLDIQNI bekor qilish — kirimni olib tashlaydi
+  const boshl = await mv((x) => x.from_kind === 'opening' && x.status === 'ok');
+  const b1 = await admin('POST', `/api/materials/moves/${boshl.id}/cancel`);
+  assert.equal(b1.status, 400, b1.text);
+  assert.match(b1.body.error, /Chetlab sinov material/);
+  assert.match(b1.body.error, /sarfni bekor qiling/);
+  assert.equal(await qoldiq(), 0, 'qoldiq qimirlamadi');
+
+  //  2. SARFNI TIKLASH — bekor qilib, darrov tiklash bilan chetlab
+  //  o'tib bo'lmaydi.
+  const sarf = await mv((x) => x.to_kind === 'unit' && x.status === 'ok');
+  assert.equal((await admin('POST',
+    `/api/materials/consume/${sarf.id}/cancel`)).status, 200);
+  assert.equal(await qoldiq(), 10, 'bekor qilingach qoldiq qaytdi');
+  //  Endi boshlang'ich qoldiq bekor qilinadi (javonda 10 ta bor edi)
+  assert.equal((await admin('POST',
+    `/api/materials/moves/${boshl.id}/cancel`)).status, 200);
+  assert.equal(await qoldiq(), 0);
+  const t = await admin('POST', `/api/materials/consume/${sarf.id}/restore`);
+  assert.equal(t.status, 400, t.text);
+  assert.match(t.body.error, /sarfni bekor qiling/);
+  assert.equal(await qoldiq(), 0, 'tiklash o\'tmadi — qoldiq o\'sha');
+
+  //  3. KIRIM HUJJATINI bekor qilish ham shu qoidada.
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Chetlab sinov taminot', category: 'MDF' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Chetlab sinov taminot'`)).id;
+  const k = await admin('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh,
+    items: [{ material_id: mat, qty: 6, price: 2 }] });
+  assert.equal(k.status, 200, k.text);
+  assert.equal((await admin('POST', `/api/materials/unit/${u.id}/consume`,
+    { warehouse_id: wh, items: [{ material_id: mat, qty: 6 }] })).status, 200);
+  const kb = await admin('POST', `/api/materials/receipts/${k.body.id}/cancel`,
+    { note: 'sinov' });
+  assert.equal(kb.status, 400, kb.text);
+  assert.match(kb.body.error, /Chetlab sinov material/);
+  assert.equal(await qoldiq(), 0, 'hujjat ham, qatorlari ham joyida');
+
+  //  Kalit O'CHIQ bo'lsa uchalasi ham eskicha o'tadi: qoida BITTA
+  //  kalitda va u zavodning qo'lida.
+  await yoq('minus_material', false);
+  assert.equal((await admin('POST', `/api/materials/receipts/${k.body.id}/cancel`,
+    { note: 'sinov' })).status, 200);
+  assert.equal(await qoldiq(), -6, 'o\'chiq kalitda minus yoziladi');
+
+  //  Tozalash: sinov qatorlari boshqa testlarga aralashmasin.
+  await db.query(
+    `UPDATE material_moves SET status = 'cancelled' WHERE material_id = $1`,
+    [mat]);
+});
+
 //  Kalit SAHIFADAN qo'yiladi va faqat administrator yoza oladi:
 //  qoida pulga va ombor qoldig'iga tegadi.
 test('zavod kalitlari: ko\'radi hamma, yoqadi administrator', async () => {

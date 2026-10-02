@@ -317,7 +317,24 @@ async function chiqishNarxi(client, whId, materialId) {
 //  Xato xabarida NOMI, omborda nechta borligi va nechta so'ralgani
 //  yoziladi: «yetmaydi» degan xabar qaysi qator ekanini aytmasdi va
 //  boshliq hujjatni birma-bir ochib chiqardi.
-async function yetarlimi(client, whId, materialId, qty, nomi) {
+//  ★ TO'SIQ SARF YOZISHDA EMAS, QOLDIQ KAMAYADIGAN HAR JOYDA
+//  (zavod qarori, 2026-10). Ilgari u faqat IKKI yo'lda turardi —
+//  konverga sarf va talabnoma chiqarish — lekin qoldiqni kamaytiradigan
+//  yo'l beshta va qolgan uchtasi TESKARI tomondan ishlaydi: kirim
+//  hujjatini yoki boshlang'ich qoldiqni BEKOR qilish o'sha kirimni
+//  qoldiqdan olib tashlaydi, bekor qilingan sarfni TIKLASH esa uni
+//  qaytadan ayiradi.
+//
+//  Natijada kalit yoqilgan bo'lsa ham qoldiq minusga tushaverardi va
+//  eng yomoni — bekor qilib, darrov tiklash to'siqni bitta bosishda
+//  chetlab o'tardi: yozilgan, lekin chetlab o'tiladigan qoida —
+//  yozilmagan qoida bilan bir xil (kassadagi kalit bilan bir xil
+//  sabab).
+//
+//  `nega` — oxirgi jumla: «kirim yozing» degan maslahat sarfga
+//  to'g'ri keladi, bekor qilishga esa yo'q — u yerda javob boshqa:
+//  avval o'sha materialning sarfini bekor qilish kerak.
+async function yetarlimi(client, whId, materialId, qty, nomi, nega) {
   if (!await kalit('minus_material', client)) return;
   const r = (await client.query(
     `SELECT COALESCE(s.qty, 0) AS bor, COALESCE(s.uom, m.uom) AS uom,
@@ -330,11 +347,17 @@ async function yetarlimi(client, whId, materialId, qty, nomi) {
   if (Number(qty) <= bor) return;
   const e = new Error(
     `«${r?.name || nomi || 'Material'}» — omborda ${son(bor)} ${r?.uom || ''}`
-    + ` bor, ${son(qty)} so'ralmoqda.`
-    + ` Avval kirim yoki boshlang'ich qoldiq yozing.`);
+    + ` bor, ${son(qty)} ${nega ? 'chiqariladi' : "so'ralmoqda"}.`
+    + ` ${nega || "Avval kirim yoki boshlang'ich qoldiq yozing."}`);
   e.status = 400;
   throw e;
 }
+
+//  Bekor qilish va tiklashda beriladigan maslahat: o'sha qoldiqdan
+//  allaqachon sarflangan, ya'ni yo'l kirim yozish emas — avval
+//  sarfning o'zini bekor qilish.
+const SARF_BOR = "Bu qoldiqdan allaqachon sarflangan — avval o'sha "
+               + "sarfni bekor qiling yoki kirim yozing.";
 
 //  ★ XOM ASHYO QOLDIG'I HAM AYLANMA (zavod qarori, 2026-10). Tayyor
 //  mahsulot ombori bilan AYNAN bir xil idiom va bir xil sabab: mudir
@@ -936,67 +959,120 @@ const QOLDA = `((m.from_kind = 'opening'   AND m.to_kind = 'warehouse')
 //  ikkinchisidan ajralib ketardi.
 router.post('/consume/:id/restore', need('materials.request', ...MANAGE),
   wrap(async (req, res) => {
-  const mv = (await db.query(
-    `SELECT id, to_id FROM material_moves
-      WHERE id = $1 AND to_kind = 'unit' AND status = 'cancelled'`,
-    [req.params.id])).rows[0];
-  if (!mv) return res.status(404).json({
-    error: 'Bekor qilingan sarf topilmadi' });
-  await konverDoira(req, mv.to_id);
-  await db.query(`UPDATE material_moves SET status = 'ok' WHERE id = $1`, [mv.id]);
-  await audit(req, { module: 'materials', action: 'consume-restore',
-                     entity: 'material_moves', entity_id: mv.id });
-  res.json({ ok: true });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const mv = (await client.query(
+      `SELECT id, to_id, from_id, material_id, qty FROM material_moves
+        WHERE id = $1 AND to_kind = 'unit' AND status = 'cancelled'
+        FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!mv) { const e = new Error('Bekor qilingan sarf topilmadi');
+               e.status = 404; throw e; }
+    await konverDoira(req, mv.to_id);
+    //  Tiklash sarfni QAYTA ayiradi — ya'ni u yozishning o'zi bilan
+    //  bir xil qoidaga bo'ysunadi. Aks holda bekor qilib, darrov
+    //  tiklash to'siqni bitta bosishda chetlab o'tardi.
+    await yetarlimi(client, mv.from_id, mv.material_id, mv.qty, null, SARF_BOR);
+    await client.query(`UPDATE material_moves SET status = 'ok' WHERE id = $1`,
+                       [mv.id]);
+    await audit(req, { module: 'materials', action: 'consume-restore',
+                       entity: 'material_moves', entity_id: mv.id }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
 }));
 
 //  Boshlang'ich qoldiq va sanoq tuzatishi ham shu yo'ldan qaytadi —
 //  shart QOLDA da, bitta joyda (bekor qilish bilan bir xil).
 router.post('/moves/:id/restore', need(...MANAGE), wrap(async (req, res) => {
-  const mv = (await db.query(
-    `SELECT m.id, w.name AS ombor FROM material_moves m
-       JOIN warehouses w
-         ON w.id = CASE WHEN m.to_kind = 'warehouse' THEN m.to_id ELSE m.from_id END
-      WHERE m.id = $1 AND m.status = 'cancelled'
-        AND ${QOLDA}
-        AND m.doc_kind IS NULL
-        AND ($2::int[] IS NULL
-             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
-    [req.params.id, whDoira(req)])).rows[0];
-  if (!mv) return res.status(404).json({
-    error: "Bekor qilingan qator topilmadi. Kirim hujjati o'z oynasidan, "
-         + "talabnomaniki esa hujjatdan tiklanadi" });
-
-  await db.query(`UPDATE material_moves SET status = 'ok' WHERE id = $1`, [mv.id]);
-  await audit(req, { module: 'materials', action: 'move-restore',
-                     entity: 'material_moves', entity_id: mv.id,
-                     payload: { warehouse: mv.ombor } });
-  res.json({ ok: true });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const mv = (await client.query(
+      `SELECT m.id, w.name AS ombor, m.material_id, m.qty, m.from_kind, m.from_id
+         FROM material_moves m
+         JOIN warehouses w
+           ON w.id = CASE WHEN m.to_kind = 'warehouse' THEN m.to_id ELSE m.from_id END
+        WHERE m.id = $1 AND m.status = 'cancelled'
+          AND ${QOLDA}
+          AND m.doc_kind IS NULL
+          AND ($2::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))
+        FOR UPDATE OF m`,
+      [req.params.id, whDoira(req)])).rows[0];
+    if (!mv) {
+      const e = new Error(
+        "Bekor qilingan qator topilmadi. Kirim hujjati o'z oynasidan, "
+        + "talabnomaniki esa hujjatdan tiklanadi");
+      e.status = 404; throw e;
+    }
+    //  Qator IKKI tomonlama: ombor QABUL QILUVCHI tomonda bo'lsa
+    //  tiklash qoldiqni oshiradi (boshlang'ich qoldiq, sanoqdagi
+    //  «hisobda yo'q edi») — unga to'siq kerak emas. Ombor
+    //  BERUVCHI tomonda bo'lsa (sanoqdagi «hisobdan chiqarildi»)
+    //  tiklash qoldiqni KAMAYTIRADI va qoida o'sha: minusga
+    //  tushirmaydi.
+    if (mv.from_kind === 'warehouse')
+      await yetarlimi(client, mv.from_id, mv.material_id, mv.qty, null, SARF_BOR);
+    await client.query(`UPDATE material_moves SET status = 'ok' WHERE id = $1`,
+                       [mv.id]);
+    await audit(req, { module: 'materials', action: 'move-restore',
+                       entity: 'material_moves', entity_id: mv.id,
+                       payload: { warehouse: mv.ombor } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
 }));
 
 router.post('/moves/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
-  const mv = (await db.query(
-    `SELECT m.id, w.name AS ombor,
-            (m.from_kind = 'opening') AS boshlangich
-       FROM material_moves m
-       JOIN warehouses w
-         ON w.id = CASE WHEN m.to_kind = 'warehouse' THEN m.to_id ELSE m.from_id END
-      WHERE m.id = $1 AND m.status = 'ok'
-        AND ${QOLDA}
-        AND m.doc_kind IS NULL
-        AND ($2::int[] IS NULL
-             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
-    [req.params.id, whDoira(req)])).rows[0];
-  if (!mv) return res.status(404).json({
-    error: "Boshlang'ich qoldiq yoki to'g'rilash qatori topilmadi. Kirim "
-         + "hujjati o'z oynasidan, talabnomaniki esa hujjatdan bekor qilinadi" });
-
-  await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`,
-                 [mv.id]);
-  await audit(req, { module: 'materials',
-                     action: mv.boshlangich ? 'opening-cancel' : 'adjust-cancel',
-                     entity: 'material_moves', entity_id: mv.id,
-                     payload: { warehouse: mv.ombor } });
-  res.json({ ok: true });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const mv = (await client.query(
+      `SELECT m.id, w.name AS ombor, m.material_id, m.qty,
+              m.to_kind, m.to_id,
+              (m.from_kind = 'opening') AS boshlangich
+         FROM material_moves m
+         JOIN warehouses w
+           ON w.id = CASE WHEN m.to_kind = 'warehouse' THEN m.to_id ELSE m.from_id END
+        WHERE m.id = $1 AND m.status = 'ok'
+          AND ${QOLDA}
+          AND m.doc_kind IS NULL
+          AND ($2::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))
+        FOR UPDATE OF m`,
+      [req.params.id, whDoira(req)])).rows[0];
+    if (!mv) {
+      const e = new Error(
+        "Boshlang'ich qoldiq yoki to'g'rilash qatori topilmadi. Kirim "
+        + "hujjati o'z oynasidan, talabnomaniki esa hujjatdan bekor qilinadi");
+      e.status = 404; throw e;
+    }
+    //  Bekor qilish TESKARI tomonga ishlaydi: ombor qabul qiluvchi
+    //  tomonda bo'lsa (boshlang'ich qoldiq, «hisobda yo'q edi») bekor
+    //  qilish o'sha kirimni qoldiqdan OLIB TASHLAYDI — ya'ni u ham
+    //  chiqim va o'sha qoidaga bo'ysunadi.
+    if (mv.to_kind === 'warehouse')
+      await yetarlimi(client, mv.to_id, mv.material_id, mv.qty, null, SARF_BOR);
+    await client.query(
+      `UPDATE material_moves SET status = 'cancelled' WHERE id = $1`, [mv.id]);
+    await audit(req, { module: 'materials',
+                       action: mv.boshlangich ? 'opening-cancel' : 'adjust-cancel',
+                       entity: 'material_moves', entity_id: mv.id,
+                       payload: { warehouse: mv.ombor } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
 }));
 
 // ════════════════════════════════════════════════════ KIRIM HUJJATI
@@ -1249,6 +1325,20 @@ router.post('/receipts/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
         FOR UPDATE OF r`,
       [req.params.id, whDoira(req)])).rows[0];
     if (!r) throw new Error('Kirim hujjati topilmadi');
+
+    //  Kirimni bekor qilish uning qatorlarini qoldiqdan olib
+    //  tashlaydi, ya'ni har qator CHIQIM bo'lib ishlaydi va o'sha
+    //  qoidaga bo'ysunadi: kelgan moldan allaqachon sarflangan
+    //  bo'lsa hujjat bekor qilinmaydi — avval sarf bekor qilinadi.
+    const qatorlar = (await client.query(
+      `SELECT m.material_id, m.qty, m.to_id, mt.name
+         FROM material_moves m
+         JOIN materials mt ON mt.id = m.material_id
+        WHERE m.doc_kind = 'receipt' AND m.doc_id = $1 AND m.status = 'ok'
+          AND m.to_kind = 'warehouse'
+        FOR UPDATE OF m`, [r.id])).rows;
+    for (const q of qatorlar)
+      await yetarlimi(client, q.to_id, q.material_id, q.qty, q.name, SARF_BOR);
 
     await client.query(
       `UPDATE material_moves SET status = 'cancelled'

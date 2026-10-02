@@ -3994,6 +3994,40 @@ keyin spravochnikning qolgani. Qidiruv yozilmaguncha butun
 spravochnik chiqarilmaydi — omborda turgani odatda o'ntacha va javob
 ko'pincha o'sha yerda.
 
+**★ TO'SIQ QOLDIQ KAMAYADIGAN HAR JOYDA, faqat sarf yozishda emas**
+(zavod qarori, 2026-10; `yetarlimi`, `modules/materials.js`). Kalit
+(`minus_material`) ikki yo'lda turardi — konverga sarf va talabnoma
+chiqarish — lekin qoldiqni kamaytiradigan yo'l BESHTA va qolgan
+uchtasi TESKARI tomondan ishlaydi:
+
+    kirim hujjatini bekor qilish   kelgan molni qoldiqdan olib tashlaydi
+    boshlang'ich qoldiqni bekor    o'sha kirimni olib tashlaydi
+    bekor qilingan sarfni tiklash  uni qaytadan ayiradi
+
+Natijada kalit YOQILGAN bo'lsa ham qoldiq minusga tushaverardi, va
+eng yomoni: sarfni bekor qilib, darrov tiklash to'siqni BITTA
+bosishda chetlab o'tardi. **Yozilgan, lekin chetlab o'tiladigan
+qoida — yozilmagan qoida bilan bir xil** (kassadagi kalit bilan bir
+xil sabab).
+
+Endi beshala yo'l ham `yetarlimi()` dan o'tadi va xabar HOLATGA
+qarab o'zgaradi: sarfda «avval kirim yozing», bekor qilishda esa
+javob boshqa — «bu qoldiqdan allaqachon sarflangan, avval o'sha
+sarfni bekor qiling». Birinchi maslahat u yerda yo'l emas edi:
+kirim yozish bekor qilinayotgan hujjatni tuzatmaydi.
+
+**Ombor tomoni qaysi tarafda turgani qaraladi**: `moves/:id/cancel`
+da ombor QABUL QILUVCHI tomonda bo'lsa bekor qilish chiqim bo'ladi,
+`moves/:id/restore` da esa teskari — ombor BERUVCHI tomonda bo'lsa
+(sanoqdagi «hisobdan chiqarildi») tiklash chiqim bo'ladi. Shart
+`QOLDA` bilan bir xil joyda o'qiladi.
+
+**★ O'TMISHDAGI MINUSNI KALIT TUZATMAYDI** — u faqat BUNDAN
+KEYINGI chiqimni to'xtatadi (kassadagi bilan AYNAN bir xil qoida).
+Kalit yoqilgandan keyin ham qizil raqam turgan bo'lsa, u o'sha
+kungacha yozilgan sarf: tuzatish yo'li uchta va hammasi pastda
+(«★ MINUS HUJJAT BILAN NOLGA KELADI»).
+
 **★ QOLDIQDAN KO'P SARFLASH TO'XTATILMAYDI, lekin AYTILADI** (zavod
 qarori). Material allaqachon kesilgan — yozuvni rad etish taxtani
 qaytarmaydi, faqat yozuvni yo'qotadi. To'siq qo'yilsa modul birinchi
