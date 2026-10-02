@@ -101,13 +101,66 @@ const App = (() => {
           <button class="primary" style="width:100%;margin-top:14px" id="erpGo">Kirish</button>
         </div>
       </div>`);
+    //  ★ AYLANAYOTGAN EKRAN SABABINI AYTADI (zavod qarori, 2026-10).
+    //
+    //  Kirish so'rovi javob bermasa tugma jimgina aylanib turardi va
+    //  odam «programma osilib qolgan» degan xulosaga kelardi —
+    //  holbuki sabab UCHTA va ularning har birining yo'li boshqa:
+    //
+    //    server umuman javob bermaydi  →  deploy yiqilgan yoki to'xtagan
+    //    server javob beradi, baza yo'q  →  baza to'xtagan (`/health` 503)
+    //    PIN noto'g'ri                 →  xodimning o'z xatosi
+    //
+    //  Birinchi ikkitasi SAYTNI ochgan odamga ko'rinmasdi: javob
+    //  kelmaguncha ekranda hech narsa yozilmasdi. Endi kutish
+    //  o'n ikki soniyadan oshsa ekran `/health` dan SO'RAYDI va
+    //  topganini yozadi.
+    //
+    //  ★ SO'ROV TO'XTATILMAYDI, faqat sabab yoziladi: qat'iy
+    //  muddat qo'yilsa sekin internetdagi haqiqiy kirish uzilib
+    //  ketardi va tsexdagi telefon umuman kira olmasdi. Ekran
+    //  gapiradi, so'rov esa kutaveradi.
+    const sabab = async () => {
+      const el = document.getElementById('erpKut');
+      if (!el) return;
+      el.textContent = 'Server javob bermayapti \u2014 tekshirilmoqda\u2026';
+      try {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 8000);
+        const r = await fetch('/health', { signal: c.signal });
+        clearTimeout(t);
+        const j = await r.json().catch(() => ({}));
+        el.innerHTML = j.ok
+          //  Server tirik va baza ham javob beradi: muammo tarmoqda
+          //  yoki PIN so'rovining o'zida.
+          ? 'Server ishlayapti (baza ham javob beradi) \u2014 kutilmoqda\u2026'
+          : 'Baza javob bermayapti. Railway\u2019da Postgres xizmati '
+            + "to'xtagan yoki hisob uzilgan bo'lishi mumkin."
+            + (j.error ? '<br><span class="muted">' + j.error + '</span>' : '');
+      } catch {
+        //  `/health` ning O'ZI javob bermadi: server ko'tarilmagan.
+        //  Migratsiya yiqilsa sayt umuman ko'tarilmaydi (1-qoida) —
+        //  javobni Railway'ning deploy jurnali beradi.
+        el.innerHTML = "Server ko'tarilmagan \u2014 Railway'da oxirgi "
+          + 'deploy jurnalini ochib ko\u2019ring.';
+      }
+    };
+
     const go = async () => {
+      const g0 = document.getElementById('erpGate');
+      if (g0 && !document.getElementById('erpKut'))
+        g0.querySelector('.modal').insertAdjacentHTML('beforeend',
+          '<p class="muted" id="erpKut" style="margin:12px 0 0;font-size:13px">'
+          + 'Kutilmoqda\u2026</p>');
+      const kech = setTimeout(sabab, 12000);
       try {
         const r = await api('/api/auth/pin',
           { method: 'POST', body: JSON.stringify({ pin: document.getElementById('erpPin').value }) });
+        clearTimeout(kech);
         setToken(r.token);
         location.reload();
       } catch (e) {
+        clearTimeout(kech);
         const g = document.getElementById('erpGate');
         if (g) g.remove();
         gate(e.message);
