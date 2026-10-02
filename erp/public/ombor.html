@@ -1639,6 +1639,9 @@ function drawMoves() {
               yetishmaganda savol aynan shu bo'ladi va javobi shu
               ustunda turadi — audit jurnalini ochish kerak emas. -->
         <th>Kim</th>
+        <!--  ★ ADASHIB BOSILGAN KO'CHIRISH ORQAGA OLINADI. Ustun faqat
+              huquqi borida chiziladi: tekshiruv baribir SERVERDA. -->
+        ${canMove ? '<th></th>' : ''}
       </tr></thead>
       <tbody>${d.rows.map(r => `
         <tr>
@@ -1659,7 +1662,44 @@ function drawMoves() {
           <td>${r.by_name ? esc(r.by_name)
             : '<span class="muted">&mdash;</span>'}<div class="muted"
             style="font-size:12px">${r.kind === 'kirim' ? 'qabul qildi' : 'chiqardi'}</div></td>
+          <!--  Tugma FAQAT ko'chirish qatorida: ishlab chiqarishdan
+                kirimda va mijozga chiqimda ko'chirish yo'q, ya'ni
+                bekor qilinadigan narsa ham yo'q (move_id bo'sh).
+                Kichik: lentadagi asosiy ish o'qish, bu esa kunda
+                bir-ikki marta bosiladi (xom ashyodagi qaytarish
+                tugmasi bilan bir xil sabab).
+                Izohda BACKTICK yo'q: bu matn JS shablonining ICHIDA
+                turadi va backtick uni o'sha yerda tugatib qo'yardi. -->
+          ${!canMove ? '' : `<td class="num">${r.move_id
+            ? `<button class="ic" title="Ko'chirishni bekor qilish"
+                 onclick="kochBekor(${r.move_id}, '${esc(r.conveyor_no)}')"
+                 >↩</button>` : ''}</td>`}
         </tr>`).join('')}</tbody></table></div>`}`;
+}
+
+//  ★ KO'CHIRISHNI BEKOR QILISH (zavod qarori, 2026-10; izoh:
+//  modules/warehouse.js). Vitrinaga ko'chirish bitta bosish va u ham
+//  bexosdan bosiladi — qaytaradigan joy esa yo'q edi: mahsulot
+//  vitrinada ko'rinib qolar, mudir uni QAYTARISH HUJJATI bilan
+//  qaytarishi kerak bo'lardi, holbuki mahsulot javondan qimirlamagan
+//  ham.
+//
+//  Yangi harakat yozilmaydi — o'sha qatorning O'ZI bekor qilinadi:
+//  teskari ko'chirish tarixda ikkita yolg'on qator qoldirardi.
+//
+//  Sabab MAJBURIY: qator tarixda «bekor qilingan» bo'lib turadi va
+//  «nega» degan savol keyin beriladi.
+async function kochBekor(id, no) {
+  const sabab = prompt(`${no} — ko'chirish bekor qilinsinmi?\n` +
+    'Sababini yozing (adashib bosildi, mahsulot ketmadi…)');
+  if (sabab === null) return;
+  if (!sabab.trim()) return toast('Sabab yozilmagan', true);
+  try {
+    const r = await App.api(`/api/warehouse/fg/moves/${id}/cancel`,
+      { method: 'POST', body: JSON.stringify({ note: sabab.trim() }) });
+    toast(`${no} · ${r.qty} ta ${r.to} ga qaytarildi`);
+    await loadMoves();
+  } catch (e) { toast(e.message, true); }
 }
 
 function period(days) {

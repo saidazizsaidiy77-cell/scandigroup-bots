@@ -16,7 +16,8 @@
 const express = require('express');
 const { db, wrap, audit, today } = require('../db');
 const { need } = require('../auth');
-const { clonePart, scopeOf, sonniTogrila } = require('./units');
+const { clonePart, scopeOf, sonniTogrila, birlashtir,
+        refreshStock } = require('./units');
 const notify = require('../notify');
 
 const router = express.Router();
@@ -699,6 +700,147 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+
+// ═══════════════════════════ KO'CHIRISHNI BEKOR QILISH — «ATMEN»
+//
+//  ★ ADASHIB BOSILGAN KO'CHIRISH ORQAGA OLINADI (zavod qarori,
+//  2026-10). Vitrinaga ko'chirish BITTA bosish va u ham bexosdan
+//  bosiladi — qoldiqdagi konver raqamining ichida turadi. Qaytaradigan
+//  joy esa yo'q edi va mudirda ikki yomon yo'l qolardi: yo mahsulotni
+//  QAYTARISH HUJJATI bilan qaytarish (uch odam, uch bosqich —
+//  holbuki mahsulot javondan qimirlamagan ham), yo vitrinada
+//  turgancha qoldirish.
+//
+//  ★ YANGI HARAKAT YOZILMAYDI, o'sha qatorning O'ZI bekor qilinadi:
+//  teskari ko'chirish yozilsa tarixda ikkita qator qolardi — «ketdi»
+//  va «qaytdi» — va ikkalasi ham yolg'on bo'lardi, chunki mahsulot
+//  hech qayerga bormagan. Tayyor mahsulot sanog'i bilan bir xil
+//  qoida: bu YOZUVDAGI xato. Qator tarixda bekor qilingan holida
+//  qoladi — o'chirilgan qator savol qoldirardi (xom ashyo sarfi bilan
+//  bir xil idiom).
+//
+//  Uch holda bekor qilinmaydi va uchalasining sababi boshqa:
+//
+//    HUJJAT bilan kelgan    uning O'Z yo'li bor (`/reject`); faqat
+//                           harakatni bekor qilish hujjatni «qabul
+//                           qilingan» holida qoldirardi
+//    OXIRGISI emas          konver undan keyin yana ko'chgan —
+//                           orqaga surish uni o'tmagan ombordan
+//                           o'tgan qilib ko'rsatardi (`production.undo`
+//                           bilan bir xil qoida)
+//    BRONDA turgani         mijozga va'da qilingan dona vitrinaga
+//                           qaytib ketardi, vitrina esa savdoga
+//                           umuman chiqmaydi
+//
+//  ★ IKKALA OMBOR HAM DOIRADA bo'lishi shart: ko'chirishning o'zi
+//  ikkala tomonni ham tekshiradi va bekor qilish undan yumshoqroq
+//  bo'lishi mumkin emas — aks holda ko'rmaydigan omboriga mahsulot
+//  qaytarib yuborilardi.
+//
+//  ★ BO'LINGAN BO'LAK QAYTGANDA QO'SHILADI (`birlashtir`): ko'chirish
+//  10 talikdan 3 tasini olgan bo'lsa yangi qator yaratilgan va u
+//  qaytganda eski qator yonida ikkinchi bo'lib turib qolardi. Qoida
+//  bitta joyda — jurnaldagi bo'laklar bilan bir xil.
+//
+//  Sabab MAJBURIY: tarixda qator «bekor qilingan» bo'lib turadi va
+//  «nega» degan savol keyin beriladi (kirim hujjati bilan bir xil).
+router.post('/fg/moves/:id/cancel', need(...MOVE), wrap(async (req, res) => {
+  const sabab = String(req.body.note || '').trim();
+  if (!sabab) throw bad('Sabab yozilmagan');
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const m = (await client.query(
+      `SELECT m.*, r.doc_no,
+              wf.name AS from_name, wt.name AS to_name
+         FROM warehouse_moves m
+         JOIN warehouses wf ON wf.id = m.from_warehouse_id
+         JOIN warehouses wt ON wt.id = m.to_warehouse_id
+         LEFT JOIN wh_returns r ON r.id = m.doc_id
+        WHERE m.id = $1 FOR UPDATE OF m`, [req.params.id])).rows[0];
+    if (!m) throw new Error('Harakat topilmadi');
+    if (m.status !== 'ok') throw new Error('Allaqachon bekor qilingan');
+    if (m.doc_id)
+      throw new Error(`${m.conveyor_no}: bu ${m.doc_no || 'hujjat'} bilan ` +
+        'kelgan — hujjatning o\'zidan bekor qilinadi');
+
+    //  Doira IKKALA tomonda ham. So'rov TRANZAKSIYANING `client` idan
+    //  ketadi (CLAUDE.md, 3-qoida).
+    const [perms, ids] = whScope(req);
+    const ko = (await client.query(
+      `SELECT COUNT(*)::int AS n FROM warehouses w
+        WHERE w.id = ANY($3::int[]) AND ${SCOPE}`,
+      [perms, ids, [m.from_warehouse_id, m.to_warehouse_id]])).rows[0].n;
+    if (ko < 2) throw new Error('Bu ombor sizga ochiq emas');
+
+    const u = (await client.query(
+      `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh,
+              COALESCE((SELECT SUM(x.qty) FROM unit_reservations x
+                         WHERE x.unit_id = u.id), 0)::int AS reserved
+         FROM production_units u
+         LEFT JOIN warehouses tm ON tm.code = 'TM'
+        WHERE u.id = $1 FOR UPDATE OF u`, [m.unit_id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+    if (u.status !== 'fg')
+      throw new Error(`${m.conveyor_no}: omborda emas — ${
+        u.status === 'shipped' ? 'mijozga chiqib ketgan'
+        : 'bekor qilingan'}`);
+    //  FAQAT OXIRGI ko'chirish: konver hali o'sha omborda turgan
+    //  bo'lsagina orqaga olinadi.
+    if (u.at_wh !== m.to_warehouse_id)
+      throw new Error(`${m.conveyor_no}: keyin yana ko'chirilgan — ` +
+        'avval oxirgi ko\'chirishni bekor qiling');
+    if (u.reserved)
+      throw new Error(`${m.conveyor_no}: ${u.reserved} tasi buyurtmada — ` +
+        'avval konverni qaytaring');
+
+    await client.query(
+      `UPDATE production_units SET warehouse_id = $2 WHERE id = $1`,
+      [u.id, m.from_warehouse_id]);
+    await client.query(
+      `UPDATE warehouse_moves SET status = 'cancelled', cancelled_by = $2,
+              cancelled_at = NOW(), cancel_note = $3 WHERE id = $1`,
+      [m.id, req.user.id, sabab]);
+
+    //  Ko'chirishda konver BO'LINGAN bo'lsa (`clonePart`) bo'lak
+    //  qaytib keladi va eski qator yonida ikkinchi bo'lib turardi.
+    //  Uchrashgan bo'laklar QO'SHILADI — jurnal bilan bir xil qoida.
+    const juft = (await client.query(
+      `SELECT id, qty FROM production_units
+        WHERE conveyor_no = $1 AND id <> $2 AND status = 'fg'
+          AND COALESCE(warehouse_id, (SELECT id FROM warehouses WHERE code = 'TM'))
+              = $3
+          AND product_id = $4
+          AND color IS NOT DISTINCT FROM $5
+          AND fabric IS NOT DISTINCT FROM $6
+        ORDER BY id LIMIT 1 FOR UPDATE`,
+      [m.conveyor_no, u.id, m.from_warehouse_id, u.product_id,
+       u.color, u.fabric])).rows[0];
+    let tirik = u.id;
+    if (juft) {
+      await client.query(
+        `UPDATE production_units SET qty = qty + $2 WHERE id = $1`,
+        [juft.id, u.qty]);
+      await birlashtir(client, u.id, juft.id);
+      await client.query(`DELETE FROM production_units WHERE id = $1`, [u.id]);
+      tirik = juft.id;
+    }
+    await refreshStock(client, u.product_id);
+
+    await audit(req, { module: 'warehouse', action: 'transfer-cancel',
+                       entity: 'warehouse_moves', entity_id: m.id,
+                       payload: { conveyor_no: m.conveyor_no, qty: m.qty,
+                                  from: m.to_name, to: m.from_name,
+                                  note: sabab, unit_id: tirik } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, to: m.from_name, qty: m.qty });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
   } finally { client.release(); }
 }));
 

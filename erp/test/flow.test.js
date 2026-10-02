@@ -1364,6 +1364,98 @@ test('mahsulot T/M ombordan vitrinaga ko\'chiriladi, bir qismi ham', async () =>
     { unit_id: vitr.id, to_code: 'TM' })).status, 403);
 });
 
+//  ★ ADASHIB BOSILGAN KO'CHIRISH ORQAGA OLINADI (zavod qarori,
+//  2026-10). Vitrinaga ko'chirish bitta bosish va u ham bexosdan
+//  bosiladi; qaytaradigan joy esa yo'q edi va mudir mahsulotni
+//  QAYTARISH HUJJATI bilan qaytarishi kerak bo'lardi — holbuki
+//  mahsulot javondan qimirlamagan ham.
+test('ko\'chirish bekor qilinadi va bo\'lak qaytib qo\'shiladi', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const { db } = require('../db');
+  const RANG = 'Bekor sinov rangi';
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: RANG, is_opening: true, fg_on: '2026-09-05' },
+  ] })).body.created[0];
+  const qoldiq = async (w) => (await mudir(
+    'GET', `/api/warehouse/fg/summary?w=${w}&q=${encodeURIComponent(RANG)}`)).body;
+  //  Qidiruv KONVEYER raqami bo'yicha: lenta butun omborniki va
+  //  boshqa testning konveri ham o'sha oraliqda, o'sha vitrinada
+  //  turadi — filtr bo'lmasa yig'indi ikkalasini qo'shib berardi.
+  const harakat = async (w) => (await mudir('GET',
+    `/api/units/stock/moves?w=${w}&from=2026-09-01&to=2026-09-30`
+    + `&q=${encodeURIComponent(u.conveyor_no)}`)).body;
+
+  //  3 tasi vitrinaga — konver BO'LINADI.
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: u.id, qty: 3, to_code: 'VITR-ABU', moved_on: '2026-09-10' })
+  ).status, 200);
+  assert.equal((await qoldiq('TM')).total.qty, 7);
+  assert.equal((await qoldiq('VITR-ABU')).total.qty, 3);
+
+  //  Harakat qatorining id si lentadan keladi: ekrandagi tugma aynan
+  //  shuni yuboradi (`move_id`).
+  const qator = (await harakat('VITR-ABU')).rows.find((r) => r.color === RANG);
+  assert.ok(qator && qator.move_id, 'ko\'chirish qatorida move_id turishi kerak');
+
+  //  Sabab MAJBURIY: qator tarixda «bekor qilingan» bo'lib turadi va
+  //  «nega» degan savol keyin beriladi.
+  const sababsiz = await mudir(
+    'POST', `/api/warehouse/fg/moves/${qator.move_id}/cancel`, {});
+  assert.equal(sababsiz.status, 400);
+  assert.match(sababsiz.body.error, /Sabab/);
+
+  //  Savdoda ko'chirish huquqi yo'q — bekor qilish ham yo'q.
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await savdo(
+    'POST', `/api/warehouse/fg/moves/${qator.move_id}/cancel`,
+    { note: 'sinov' })).status, 403);
+
+  const ok = await mudir('POST', `/api/warehouse/fg/moves/${qator.move_id}/cancel`,
+    { note: 'adashib bosildi' });
+  assert.equal(ok.status, 200, ok.text);
+
+  //  ★ BO'LAK QAYTGANDA QO'SHILADI: ikkita qator qolib ketsa jurnalda
+  //  bitta raqam ikki marta turardi.
+  assert.equal((await qoldiq('VITR-ABU')).total.qty, 0, 'vitrinada qolmadi');
+  assert.equal((await qoldiq('TM')).total.qty, 10, 'hammasi T/M ga qaytdi');
+  const bolaklar = (await db.query(
+    `SELECT COUNT(*)::int AS n FROM production_units
+      WHERE conveyor_no = $1 AND status = 'fg'`, [u.conveyor_no])).rows[0].n;
+  assert.equal(bolaklar, 1, 'bo\'laklar bitta qatorga qo\'shildi');
+
+  //  ★ AYLANMADAN HAM CHIQADI: mahsulot hech qayerga bormagan, ya'ni
+  //  «kirdi 3» degan qator yolg'on bo'lardi.
+  assert.equal((await harakat('VITR-ABU')).kirim, 0, 'vitrinada kirim qolmadi');
+  assert.equal((await harakat('TM')).chiqim, 0, 'T/M da chiqim qolmadi');
+
+  //  Ikkinchi marta bekor qilinmaydi.
+  const ikki = await mudir('POST', `/api/warehouse/fg/moves/${qator.move_id}/cancel`,
+    { note: 'yana' });
+  assert.equal(ikki.status, 400);
+  assert.match(ikki.body.error, /Allaqachon/);
+
+  //  ★ FAQAT OXIRGISI: konver undan keyin yana ko'chgan bo'lsa orqaga
+  //  surish uni o'tmagan ombordan o'tgan qilib ko'rsatardi.
+  const butun = (await db.query(
+    `SELECT id FROM production_units WHERE conveyor_no = $1 AND status = 'fg'`,
+    [u.conveyor_no])).rows[0].id;
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: butun, to_code: 'VITR-ABU', moved_on: '2026-09-12' })).status, 200);
+  const birinchi = (await harakat('VITR-ABU')).rows
+    .find((r) => r.color === RANG && r.move_id).move_id;
+  assert.equal((await mudir('POST', '/api/warehouse/fg/transfer',
+    { unit_id: butun, to_code: 'VITR-PALMA', moved_on: '2026-09-13' })).status, 200);
+  const eski = await mudir('POST', `/api/warehouse/fg/moves/${birinchi}/cancel`,
+    { note: 'sinov' });
+  assert.equal(eski.status, 400);
+  assert.match(eski.body.error, /ko'chirilgan/);
+
+  //  Tozalash: sinov konveri boshqa testlarning qoldig'iga aralashmasin.
+  await db.query(
+    `UPDATE production_units SET status = 'cancelled' WHERE conveyor_no = $1`,
+    [u.conveyor_no]);
+});
+
 //  ★ SANOQ — javondagi dona hisobdagidan kam ham, ko'p ham chiqadi va
 //  ikkalasini JAVONNI SANAGAN odam to'g'rilaydi (zavod qarori, 2026-10).
 test('sanoq: ombor mudiri konverning sonini to\'g\'rilaydi — kam ham, ko\'p ham', async () => {

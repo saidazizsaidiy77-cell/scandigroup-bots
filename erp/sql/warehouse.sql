@@ -309,6 +309,40 @@ BEGIN
   END IF;
 END $$;
 
+-- ═══════════════════════════════════════ KO'CHIRISH BEKOR QILINADI
+--
+--  ★ ADASHIB BOSILGAN KO'CHIRISH ORQAGA OLINADI (zavod qarori,
+--  2026-10). «Vitrinaga ko'chirish» bitta bosish va u ham bexosdan
+--  bosiladi — qoldiqdagi konver raqamining ichida turadi. Qaytaradigan
+--  joy esa YO'Q edi: mahsulot vitrinada ko'rinib qolar, mudir uni
+--  qaytarish HUJJATI bilan qaytarishi kerak bo'lardi — holbuki
+--  mahsulot javondan qimirlamagan ham.
+--
+--  ★ YANGI HARAKAT YOZILMAYDI, o'sha qatorning O'ZI bekor qilinadi.
+--  Teskari ko'chirish bo'lib yozilsa tarixda ikkita qator qolardi —
+--  biri «vitrinaga ketdi», ikkinchisi «qaytib keldi» — va ikkalasi
+--  ham YOLG'ON bo'lardi: mahsulot hech qayerga bormagan. Tayyor
+--  mahsulot sanog'idagi bilan bir xil qoida: bu YOZUVDAGI xato, qator
+--  esa tarixda bekor qilingan holida qoladi (xom ashyo sarfining
+--  bekor qilinishi bilan ham bir xil idiom).
+--
+--  ★ HUJJAT BILAN KELGAN QATOR BU YERDAN BEKOR QILINMAYDI: vitrinadan
+--  qaytarish uch bosqichdan o'tadi va uning O'Z yo'li bor (`/reject`).
+--  Faqat harakatni bekor qilish hujjatni «qabul qilingan» holida
+--  qoldirardi — ikki ro'yxat bir-biridan ajralib ketardi. Bog'lanish
+--  STRUKTURA bo'lib yoziladi (`doc_id`), izoh matni bo'yicha emas:
+--  matn saytdan tahrirlanadi va shart bir kun jimgina ishlamay
+--  qolardi.
+ALTER TABLE warehouse_moves
+  ADD COLUMN IF NOT EXISTS status       TEXT NOT NULL DEFAULT 'ok',
+  --  FK pastda, `wh_returns` yaratilgandan KEYIN qo'yiladi: bu fayl
+  --  yuqoridan pastga o'qiladi va jadval hali yo'q.
+  ADD COLUMN IF NOT EXISTS doc_id       INT,
+  ADD COLUMN IF NOT EXISTS cancelled_by INT REFERENCES workers(id),
+  ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS cancel_note  TEXT;
+CREATE INDEX IF NOT EXISTS idx_wh_moves_unit ON warehouse_moves(unit_id);
+
 CREATE OR REPLACE VIEW v_fg_moves AS
 SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        u.conveyor_no, u.order_no, p.name AS product, g.name AS product_type,
@@ -321,8 +355,11 @@ SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        --  yoziladi — hozir turganiga emas. Aks holda T/M ombordan
        --  vitrinaga ko'chirilgan mahsulot vitrinada ikki marta kirim
        --  bo'lib ko'rinardi: biri ko'chirishdan, ikkinchisi shu yerdan.
+       --  Bekor qilingan ko'chirish hisobga olinmaydi: u bo'lmagan
+       --  harakat va kirimni yolg'on omborga yozib qo'yardi.
        COALESCE((SELECT m.from_warehouse_id FROM warehouse_moves m
-                  WHERE m.unit_id = u.id ORDER BY m.moved_on, m.id LIMIT 1),
+                  WHERE m.unit_id = u.id AND m.status = 'ok'
+                  ORDER BY m.moved_on, m.id LIMIT 1),
                 u.warehouse_id, tm.id) AS warehouse_id,
        fgw.name AS by_name,
        --  Jamlanma aylanma shu ikkovi bo'yicha guruhlanadi: mahsulot
@@ -332,7 +369,12 @@ SELECT 'kirim'::text AS kind, u.fg_on AS on_date, u.id AS unit_id,
        --  Qaysi hujjat bilan chiqqani: yuk xati BUYURTMAga tegishli va
        --  tarixdan unga o'tish uchun id kerak. Konverda zakaz raqami
        --  MATN bo'lib turadi, shuning uchun nomi bo'yicha bog'lanadi.
-       (SELECT o.id FROM orders o WHERE o.order_no = u.order_no) AS order_id
+       (SELECT o.id FROM orders o WHERE o.order_no = u.order_no) AS order_id,
+       --  ★ KO'CHIRISH QATORINING ID si — ekrandagi «bekor qilish»
+       --  tugmasi shuni yuboradi. Ishlab chiqarishdan kirimda va
+       --  chiqimda ko'chirish YO'Q, ya'ni bekor qilinadigan narsa ham
+       --  yo'q: katak bo'sh qoladi va tugma umuman chizilmaydi.
+       NULL::int AS move_id
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
@@ -349,7 +391,7 @@ SELECT 'chiqim', u.ship_on, u.id,
        COALESCE(c.name, 'T/M ombor'), u.total_amount,
        COALESCE(u.warehouse_id, tm.id),
        shw.name, u.product_id, g.uom,
-       (SELECT o.id FROM orders o WHERE o.order_no = u.order_no)
+       (SELECT o.id FROM orders o WHERE o.order_no = u.order_no), NULL::int
 FROM production_units u
 JOIN products p       ON p.id = u.product_id
 JOIN product_groups g ON g.id = p.group_id
@@ -371,13 +413,17 @@ SELECT 'chiqim', m.moved_on, m.unit_id,
        -- ustida CREATE OR REPLACE VIEW yiqiladi (CLAUDE.md, 2-qoida).
        wt.name, NULL::numeric(16,2),
        m.from_warehouse_id,
-       mw1.name, u.product_id, g.uom, NULL::int
+       mw1.name, u.product_id, g.uom, NULL::int, m.id
 FROM warehouse_moves m
 JOIN production_units u ON u.id = m.unit_id
 JOIN products p         ON p.id = u.product_id
 JOIN product_groups g   ON g.id = p.group_id
 JOIN warehouses wt      ON wt.id = m.to_warehouse_id
 LEFT JOIN workers mw1   ON mw1.id = m.worker_id
+--  Bekor qilingan ko'chirish qoldiqqa ham, aylanmaga ham qo'shilmaydi:
+--  mahsulot hech qayerga bormagan. Tarixda esa qoladi — o'chirilgan
+--  qator savol qoldirardi.
+WHERE m.status = 'ok'
 
 UNION ALL
 
@@ -386,13 +432,14 @@ SELECT 'kirim', m.moved_on, m.unit_id,
        m.qty, u.color, u.fabric,
        wf.name, NULL::numeric(16,2),
        m.to_warehouse_id,
-       mw2.name, u.product_id, g.uom, NULL::int
+       mw2.name, u.product_id, g.uom, NULL::int, m.id
 FROM warehouse_moves m
 JOIN production_units u ON u.id = m.unit_id
 JOIN products p         ON p.id = u.product_id
 JOIN product_groups g   ON g.id = p.group_id
 JOIN warehouses wf      ON wf.id = m.from_warehouse_id
-LEFT JOIN workers mw2   ON mw2.id = m.worker_id;
+LEFT JOIN workers mw2   ON mw2.id = m.worker_id
+WHERE m.status = 'ok';
 
 -- ═══════════════════════════════════════════ VITRINADAN QAYTARISH
 --
@@ -478,6 +525,36 @@ CREATE TABLE IF NOT EXISTS wh_return_items (
   qty         INT  NOT NULL CHECK (qty > 0)
 );
 CREATE INDEX IF NOT EXISTS idx_wh_ret_items ON wh_return_items(return_id);
+
+--  Hujjatga bog'lanish FK bo'lib shu yerda qo'yiladi: ustunning O'ZI
+--  yuqorida, view undan oldin o'qiydi. `IF NOT EXISTS` qo'llab
+--  quvvatlanmaydi, shuning uchun katalogdan tekshiriladi (1-qoida).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'warehouse_moves_doc_id_fkey') THEN
+    ALTER TABLE warehouse_moves
+      ADD CONSTRAINT warehouse_moves_doc_id_fkey
+      FOREIGN KEY (doc_id) REFERENCES wh_returns(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+--  Eski qatorlarda hujjat izohda MATN bo'lib turardi («Hujjat
+--  V26-0001») — bir martalik ko'chirish uni strukturaga o'tkazadi,
+--  aks holda deploy kunigacha yozilgan hujjat qatorlari bu yerdan
+--  bekor qilinib ketardi. Bayroq O'TMISHDAGI ma'lumot uchun, qoida
+--  esa kodda turadi (CLAUDE.md: doimiy qoida va bir martalik
+--  ko'chirishni ajratish).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'wh-move-hujjat') THEN
+    UPDATE warehouse_moves m SET doc_id = r.id
+      FROM wh_returns r
+     WHERE m.doc_id IS NULL AND m.note = 'Hujjat ' || r.doc_no;
+    INSERT INTO migration_flags (key) VALUES ('wh-move-hujjat');
+  END IF;
+END $$;
+
 
 --  Hujjat ro'yxati: sahifa shundan o'qiydi. Qatorlar soni va jami
 --  donasi shu yerda sanaladi — ro'yxat uchun ikkinchi so'rov yozilmadi.

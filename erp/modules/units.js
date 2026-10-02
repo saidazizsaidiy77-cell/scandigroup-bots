@@ -3824,6 +3824,11 @@ module.exports.refreshStock = refreshStock;
 // Savdo buyurtmaga konverning bir qismini biriktirganda ishlatadi
 // (modules/sales.js): bo'lish qoidasi bitta joyda tursin.
 module.exports.clonePart = clonePart;
+//  Bo'laklar uchrashganda qator birlashadi — ombor ko'chirishini bekor
+//  qilish ham shu yo'ldan o'tadi (`modules/warehouse.js`): ikki nusxa
+//  yozilsa biri ertaga ikkinchisidan orqada qolardi va ko'chirilgan
+//  bo'lak qaytganda jurnalda ikkita qator bo'lib turardi.
+module.exports.birlashtir = birlashtir;
 //  Tsex doirasi ombor sahifasida ham kerak: stul kiritadigan xodimga
 //  T/M omborda faqat stullar ko'rinadi (izoh: modules/warehouse.js).
 //  Konverdagi zakaz raqami va mijoz bronlardan qaytadan yoziladi.
