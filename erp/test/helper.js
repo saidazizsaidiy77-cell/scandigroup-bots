@@ -37,6 +37,21 @@ async function freshDatabase() {
   process.env.PGSSL = 'off';
   const { migrate } = require('../migrate');
   await migrate({ quiet: true });
+
+  //  ★ «KASSA MINUSGA TUSHMASIN» KALITI SINOVDA O'CHIRILADI, lekin
+  //  avval O'QIB olinadi (`seedMinusCash`). Zavodda u YOQIQ tug'iladi
+  //  — bu qoidaning o'zi va unga alohida test bor. Qolgan testlar esa
+  //  boshqa narsani sinaydi: ularning kassasi bo'sh tug'iladi va har
+  //  biriga boshlang'ich qoldiq kiritish o'nlab qatorni, ustiga
+  //  qoldiq raqamiga tayanadigan tekshiruvlarni ham o'zgartirardi.
+  //
+  //  Qoidaning O'ZI o'z testlarida tekshiriladi: ular kalitni ataylab
+  //  yoqib, keyin o'chiradi.
+  const { db } = require('../db');
+  module.exports.seedMinusCash = String((await db.query(
+    `SELECT val FROM app_settings WHERE key = 'minus_cash'`)).rows[0]?.val || '')
+    .trim() !== '';
+  await db.query(`UPDATE app_settings SET val = '' WHERE key = 'minus_cash'`);
 }
 
 // Server va baza moduli DATABASE_URL ni o'qib bo'lgan bo'lishi kerak,

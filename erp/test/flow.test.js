@@ -9475,6 +9475,31 @@ test('bekor qilingan sarf tiklanadi \u2014 o\'sha qatorning o\'zi',
   assert.equal(await qoldiq(), 34, 'tiklangach qaytdi');
 });
 
+test('minus_cash kaliti YOQIQ tug\'iladi', async () => {
+  //  ★ Yozilgan, lekin yoqilmagan qoida — yozilmagan qoida bilan bir
+  //  xil (zavod qarori, 2026-10). Kalit o'chiq tug'ilgani uchun u
+  //  saytda ham o'chiq turdi va kassa qoldig'i o'tmishda minusga
+  //  tushib ketdi; buni faqat oraliq hisoboti ochilganda ko'rindi.
+  //  Migratsiyadan KEYINGI holat — sinov uchun o'chirilishidan oldin
+  //  o'qib olingani (izoh: test/helper.js).
+  assert.equal(H.seedMinusCash, true, 'kassa kaliti yoqiq tug\'iladi');
+  assert.ok((await admin('GET', '/api/admin/settings')).body.rows
+    .some((x) => x.kod === 'minus_cash'), 'kalit ro\'yxatda turadi');
+
+  //  Bir martalik yoqish bayrog'i: ishlayotgan bazada qator allaqachon
+  //  bor va `ON CONFLICT DO NOTHING` unga tegmasdi — ya'ni standart
+  //  faqat toza bazaga tushardi va saytdagi kalit o'chiq qolaverardi.
+  assert.ok(await H.id(
+    `SELECT key FROM migration_flags WHERE key = 'kassa-minus-yoq'`),
+    'bir martalik yoqish bayrog\'i qo\'yilgan');
+
+  //  Ombornikida sabab boshqa va u O'CHIQ qolaveradi: deploy kuni
+  //  o'ttizta material minusda turardi va to'siq tsexni to'xtatardi.
+  assert.equal((await admin('GET', '/api/admin/settings')).body.rows
+    .find((x) => x.kod === 'minus_material').on, false,
+    'ombor kaliti eskicha o\'chiq');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

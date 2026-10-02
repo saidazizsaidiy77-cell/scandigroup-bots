@@ -117,6 +117,18 @@ let refs = null, here = null, ops = [], tab = 'in', boss = false, side = null;
 let davr = null;
 const f = { from: '', to: '', q: '' };
 
+//  ★ MINUS QOLDIQ — XATO BELGISI, javob emas (zavod qarori, 2026-10;
+//  kalit `minus_cash`). Javonda manfiy pul turmaydi: raqam minusga
+//  tushgan bo'lsa yo boshlang'ich qoldiq kiritilmagan, yo kalit
+//  o'chiq turganda qoldiqdan ko'p pul chiqarilgan.
+//
+//  Ilgari u oddiy qora raqam bo'lib turardi va ko'z undan o'tib
+//  ketardi — buni faqat oraliq hisoboti ochilganda ko'rindi.
+//  Qizil rang ham, sababi ham shu yerda: bo'sh izoh savol qoldirardi
+//  (xom ashyodagi minus bilan bir xil qoida va bir xil sabab).
+const MINUS_IZOH = "minusda \u2014 boshlang'ich qoldiq kiritilmagan "
+                 + "yoki qoldiqdan ko'p chiqarilgan";
+
 function toast(msg, bad) {
   const el = document.createElement('div');
   el.className = 'toast' + (bad ? ' bad' : '');
@@ -138,13 +150,16 @@ function drawHead() {
   //  Ro'yxatning o'zi o'zgarmaydi — faqat tartibi.
   const somOldin = here.main_ccy === 'UZS';
   const kpi = [
-    ["So'm", uzs(here.uzs), 'naqd so\'m'],
-    ['Dollar', usd(here.usd), 'naqd dollar'],
+    ["So'm", uzs(here.uzs), 'naqd so\'m', here.uzs],
+    ['Dollar', usd(here.usd), 'naqd dollar', here.usd],
   ];
   $('kpis').innerHTML = (somOldin ? kpi : [kpi[1], kpi[0]])
-    .concat([['Jami', usd(here.total_usd) + ' $', 'kirgan kurs bilan']])
-    .map(([t, v, s]) => `<div class="card"><h2>${t}</h2><div class="kpi">${v}</div>
-      <div class="muted" style="font-size:13px">${s}</div></div>`).join('');
+    .concat([['Jami', usd(here.total_usd) + ' $', 'kirgan kurs bilan',
+              here.total_usd]])
+    .map(([t, v, s, n]) => `<div class="card"><h2>${t}</h2>
+      <div class="kpi${Number(n) < 0 ? ' late' : ''}">${v}</div>
+      <div class="muted" style="font-size:13px">${
+        Number(n) < 0 ? MINUS_IZOH : s}</div></div>`).join('');
 
   //  Kirim har doim bor. Chiqim va ko'chirish faqat KASSADA va faqat
   //  kassirda: menejer o'z qo'lidagi pulni faqat kassirga topshiradi,
@@ -287,7 +302,10 @@ function davrQator() {
     //  bilan bir xil qoida).
     const d = [x.uzs ? uzs(x.uzs) + " so'm" : '', x.usd ? usd(x.usd) + ' $' : '']
       .filter(Boolean).join(' · ');
-    return `<div class="kpi" style="font-size:22px">${usd(x.total_usd)}<small> $</small></div>
+    //  Minus bu yerda ham QIZIL: «davr boshiga −624,09 $» degan raqam
+    //  oddiy qora bo'lib tursa ko'z undan o'tib ketardi.
+    return `<div class="kpi${Number(x.total_usd) < 0 ? ' late' : ''}"
+      style="font-size:22px">${usd(x.total_usd)}<small> $</small></div>
       <div class="muted" style="font-size:12px;min-height:16px">${d}</div>`;
   };
   const oraliq = `${davr.from ? d8(davr.from) : 'boshidan'} \u2014 ${
@@ -301,6 +319,10 @@ function davrQator() {
         <div class="muted" style="font-size:12px">${
           davr.to ? d8(davr.to) + ' holatiga' : 'bugungi qoldiq'}</div></div>
     </div>
+    ${[davr.bosh, davr.oxir].some((x) => Number(x.total_usd) < 0)
+      ? `<p class="late" style="font-size:12px;margin-top:10px">Qoldiq
+          MINUSDA \u2014 ${MINUS_IZOH}. Boshlang'ich qoldiqni «\u270e
+          Boshlang'ich qoldiq» tugmasidan kiriting.</p>` : ''}
     <p class="muted" style="font-size:12px;margin-top:10px">${esc(oraliq)} \u00b7
       boshlang'ich qoldiq «Davr boshiga» ning ichida, aylanmada emas \u00b7
       qidiruv va tab bu raqamlarga ta'sir qilmaydi \u2014 qoldiq joydagi

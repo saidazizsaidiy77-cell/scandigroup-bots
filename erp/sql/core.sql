@@ -222,7 +222,32 @@ CREATE TABLE IF NOT EXISTS app_settings (
 --
 --  Qator YO'Q = o'chiq (`COALESCE`), ya'ni jadval bo'sh bo'lsa ham
 --  hech narsa buzilmaydi.
+--  ★ KASSA KALITI YOQIQ TUG'ILADI (zavod qarori, 2026-10). Yuqoridagi
+--  «standarti o'chiq» OMBORNIKIGA tegishli bo'lib qoldi: u yerda
+--  deploy kuni o'ttizta qator minusda turardi va to'siq ishni
+--  to'xtatardi. Kassada bunday sabab YO'Q — zavod qarori bitta va
+--  qat'iy: «programmaning hech bir yerida minusga ishlamasin».
+--
+--  Kalit o'chiq tug'ilgani uchun u saytda ham o'chiq turdi va hech
+--  kim yoqmadi: natijada kassa qoldig'i o'tmishda minusga tushib
+--  ketdi va buni faqat oraliq hisoboti ochilganda ko'rindi. Yozilgan,
+--  lekin yoqilmagan qoida — yozilmagan qoida bilan bir xil.
 INSERT INTO app_settings (key, val) VALUES
-  ('minus_cash',     ''),
+  ('minus_cash',     '1'),
   ('minus_material', '')
 ON CONFLICT (key) DO NOTHING;
+
+--  Ishlayotgan bazada qator ALLAQACHON bor va `DO NOTHING` unga
+--  tegmaydi — ya'ni yuqoridagi standart faqat toza bazaga tushadi.
+--  Shuning uchun bir martalik: kalit bir marta yoqiladi va keyin
+--  saytdan o'chirilgani QAYTARIB yoqilmaydi (zavod bir kunga
+--  o'chirishi mumkin — masalan xodimning qo'lidagi qoldiq minusda
+--  turgan bo'lsa, boshlang'ich qoldiq kiritilgunga qadar).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'kassa-minus-yoq') THEN
+    INSERT INTO app_settings (key, val, updated_at) VALUES ('minus_cash', '1', NOW())
+    ON CONFLICT (key) DO UPDATE SET val = '1', updated_at = NOW();
+    INSERT INTO migration_flags (key) VALUES ('kassa-minus-yoq');
+  END IF;
+END $$;

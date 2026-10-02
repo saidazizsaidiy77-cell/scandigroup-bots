@@ -2005,6 +2005,42 @@ menejerda chiqim, kassada kirim, va ikkalasi ham to'g'ri. Lentada
 ikkinchi tomon yoziladi, o'zi emas — har qatorda bittasi baribir
 «Asosiy kassa» bo'lardi.
 
+**★ KASSA MINUSGA TUSHMAYDI, VA KALIT YOQIQ TUG'ILADI** (zavod
+qarori, 2026-10; `minus_cash`). Qoida allaqachon yozilgan edi
+(`POST /api/cash/ops`: kassadan va xodimning qo'lidan turganidan ko'p
+pul chiqarib bo'lmaydi, valyuta alohida, topshirishga qo'yilgani ham
+band) — lekin kalit **o'chiq tug'ilardi** va saytda ham o'chiq turdi:
+hech kim yoqmadi. Natijada kassa qoldig'i o'tmishda minusga tushib
+ketdi va buni faqat oraliq hisoboti ochilganda ko'rindi.
+
+**Yozilgan, lekin yoqilmagan qoida — yozilmagan qoida bilan bir xil.**
+Shuning uchun standart o'zgardi: `minus_cash` endi `'1'` bo'lib
+tug'iladi, ishlayotgan bazada esa bir martalik yoqiladi
+(`migration_flags`: `kassa-minus-yoq`) — `ON CONFLICT DO NOTHING`
+mavjud qatorga tegmaydi, ya'ni standartning o'zi faqat toza bazaga
+tushardi. Keyin saytdan o'chirilgani QAYTARIB yoqilmaydi: zavod bir
+kunga o'chirishi mumkin (masalan xodimning qo'lidagi qoldiq minusda
+turgan bo'lsa, boshlang'ich qoldiq kiritilgunga qadar).
+
+**Ombor kaliti esa O'CHIQ qolaveradi** va sababi boshqa: deploy kuni
+o'ttizga yaqin material minusda turardi va to'siq tsexni birinchi
+kundanoq to'xtatardi. Kassada bunday sabab yo'q — ikkita kalit aynan
+shuning uchun alohida.
+
+**★ MINUS QOLDIQ — XATO BELGISI, javob emas.** Javonda manfiy pul
+turmaydi: raqam minusga tushgan bo'lsa yo **boshlang'ich qoldiq
+kiritilmagan**, yo kalit o'chiq turganda qoldiqdan ko'p chiqarilgan.
+Ilgari u oddiy qora raqam bo'lib turardi va ko'z undan o'tib ketardi.
+Endi qizil (`.late`) va sababi yonida yozilib turadi — tepadagi
+kartochkalarda ham, «Davr boshiga / Davr oxiriga» da ham (xom
+ashyodagi minus bilan bir xil qoida va bir xil sabab: nolga qisish
+yolg'on bo'lardi, yashirish esa xatoni ko'rinmas qilardi).
+
+**O'tmishdagi minusni kalit tuzatmaydi** — u faqat bundan keyingi
+chiqimni to'xtatadi. Tuzatish yo'li bitta va u materialdagi bilan bir
+xil: **boshlang'ich qoldiqni kiritish** («✎ Boshlang'ich qoldiq»),
+ya'ni tizim ishga tushgan kuni javonda turgan pulni yozish.
+
 **★ ORALIQ TANLANGANDA O'SHA KUNNING QOLDIG'I CHIQADI** (zavod
 qarori, 2026-10; `davrHisobi`, `modules/cash.js`). Tepadagi
 kartochkalar BUGUNGI qoldiqni ko'rsatadi va bu to'g'ri — kassirning
