@@ -32,6 +32,10 @@ const TURLAR = [
   { kod: 'mat_done',       bolim: "Xom ashyo", nom: 'Talabnoma chiqarildi' },
   { kod: 'mat_order',      bolim: "Xom ashyo", nom: 'Xarid zayavkasi' },
   { kod: 'mat_receipt',    bolim: "Xom ashyo", nom: 'Kirim hujjati' },
+  //  Qaytarish ALOHIDA tur: u kirimning teskarisi va qarzni
+  //  KAMAYTIRADI — ikkalasini bitta belgi ostiga qo'yish «qarz oshdimi
+  //  yoki kamaydimi» degan savolni xabarning ichiga yashirardi.
+  { kod: 'mat_return',     bolim: "Xom ashyo", nom: "Ta'minotchiga qaytarildi" },
   { kod: 'supply_saldo',   bolim: "Xom ashyo", nom: "Ta'minotchilar saldosi (har kuni)" },
 
   { kod: 'cash_pending',   bolim: 'Kassa', nom: 'Pul topshirildi — qabul qilinmagan' },

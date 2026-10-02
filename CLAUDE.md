@@ -3959,6 +3959,69 @@ yuk xati bilan bir xil sabab). To'lov raqami bosilsa kirim orderi
 ochiladi, kirim raqami esa faqat yoziladi: hujjatning alohida sahifasi
 yo'q, u xom ashyo modulining ichida ochiladi.
 
+**★ MOL HUJJAT BILAN QAYTADI HAM** (`mat_returns`, `QT26-0001`, xom
+ashyo sahifasidagi **«Ta'minotchiga qaytarilgan»**; zavod qarori
+2026-10). Brak chiqadi, o'lchami to'g'ri kelmaydi, ortiqcha kelgani
+qaytariladi — va buning yo'li YO'Q edi. Ikki yomon chora qolardi: yo
+kirim hujjati butunlay bekor qilinardi (holbuki molning qolgani
+javonda turibdi va qarzning o'sha qismi haqiqiy), yo sanoq bilan
+hisobdan chiqarilardi — o'shanda ombor to'g'ri bo'lardi-yu,
+ta'minotchining qarzi o'z joyida qolardi va biz qaytarib bergan mol
+uchun ikkinchi marta to'lab yurardik.
+
+**QAYTARISH — KIRIMNING TESKARISI** va shu sababdan AYNAN o'sha
+oynadan yoziladi (`kirimOch('return')`, `kMod`): ta'minotchi, ombor,
+sana, valyuta, kurs, material qidiruvi, soni, narx va «jami» — hammasi
+bir xil, farqi faqat YO'NALISHIDA. Ikkinchi oyna yozilsa qidiruv, kurs
+va jami hisobi ikki joyda turardi va biri ertaga ikkinchisidan ajralib
+ketardi (yuk xati hujjatining bitta faylda turgani bilan bir xil
+idiom).
+
+Hujjat IKKI ishni birga qiladi, kirim bilan AYNAN bir xil sababdan:
+**omborni kamaytiradi** va **ta'minotchining qarzini kamaytiradi**.
+Qatorlari ham alohida jadvalda emas, `material_moves` ning O'ZIDA
+(`doc_kind = 'return'`, `from_kind = 'warehouse'`, `to_kind =
+'supplier'`) — «omborda qancha bor» degan savol bitta manbadan
+hisoblanishi kerak.
+
+**★ SABAB MAJBURIY** (`mat_returns.note NOT NULL`) — kirimdan FARQI
+shu. «Nega qaytarildi» degan savol ta'minotchi bilan solishtirishda
+birinchi beriladi va javobi HUJJATNING O'ZIDA turishi kerak: audit
+jurnalida yozuv bor, lekin u ombor xodimiga ochilmaydi. Kirimda
+bunday savol yo'q — mol keldi.
+
+**★ NARX HAM MAJBURIY, va u QARZNING O'ZI**: nechta qaytgani emas,
+QANCHAGA qaytgani qarzni kamaytiradi. Raqam o'rtacha kirim narxidan
+OLINMAYDI va olinishi ham kerak emas — o'rtacha BIZNING hisobimiz,
+qaytarishdagi narx esa ta'minotchi bilan KELISHILGANI; u hujjat bilan
+qotadi. Valyuta va kurs hujjat bo'yicha bitta, kurs qator bilan
+qotadi (kirim bilan bir xil idiom).
+
+**★ ZAVOD OMBORIDAN** (Xom ashyo, MDF, Furnitura) — kirim bilan bir
+xil qoida va bir xil sabab: mol ta'minotchidan ZAVODGA keldi va unga
+zavoddan qaytadi. Tsexda topilgan brak avval zavod omboriga
+qaytariladi, aks holda material zavod qoldig'idan UMUMAN o'tmagan
+holda ta'minotchiga ketardi.
+
+**★ TO'SIQ BU YERDA HAM** (`yetarlimi`, `minus_material`): javonda
+yo'q molni qaytarib bo'lmaydi — bunday yozuv qoldiqni minusga
+tushirardi. Qoldiqni kamaytiradigan yo'l shu bilan OLTITA bo'ldi va
+oltalasi ham bitta funksiyadan o'tadi.
+
+**O'CHIRILMAYDI, bekor qilinadi**: qoldiq ham, qarz ham qaytadi,
+hujjat esa tarixda qoladi. Huquqi **`materials.manage`** — javondagi
+molni qaytarib beradigan odam o'sha molni qabul qilgan odam; tsex
+boshlig'ida u yo'q. Ombor doirasi bu yerda ham CHEGARA.
+
+Raqami **`QT26-0001`**: `Q` yolg'iz o'zi band (tizim qo'ygan konver
+raqami `Q26-0007`), shuning uchun ikki harf — matras `MT` va sanoq
+`SN` bilan bir xil sabab.
+
+Ta'minotchi qarzdorligi lentasida qaytarish **QARZDOR** tomonda
+turadi — to'lov bilan BIR tomonda: ikkalasi ham bizning qarzimizni
+kamaytiradi. Qatorda sabab ham yoziladi, chunki jadvaldagi raqamning
+o'zi «bu 200 dollar qayerdan chiqdi» degan savolga javob bermaydi.
+
 **★ XOM ASHYO OMBORI RO'YXATDA OCHIQ** (zavod qarori, 2026-09).
 Boshlang'ich qoldiq omborning ICHIDA kiritiladi — mudir «Arra ombori»
 kartochkasini bosadi va o'sha zahoti o'sha omborning qoldig'ida turadi

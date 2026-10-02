@@ -7660,6 +7660,129 @@ test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
     items: [{ material_id: m.id, qty: 5, price: 20 }] })).status, 403);
 });
 
+test("ta'minotchiga qaytarish: ombor kamayadi, qarz kamayadi", async () => {
+  //  ★ QAYTARISH — KIRIMNING TESKARISI (zavod qarori, 2026-10).
+  //  Hujjat IKKITA ishni birga qiladi: omborni KAMAYTIRADI va
+  //  ta'minotchining oldidagi qarzni KAMAYTIRADI. Ikkalasi ham SHU
+  //  testda tekshiriladi — biri ishlab, ikkinchisi jim qolsa farq
+  //  faqat oy oxirida, solishtirma dalolatnomada bilinardi (kirim
+  //  testi bilan bir xil sabab).
+  const xom = await xodim('Sinov qayt xodim', 'xom_ombor');
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const tsexWh = (await H.id(
+    `SELECT id FROM warehouses WHERE code = 'TSEX-KOR-ARRA'`)).id;
+
+  await admin('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov Qayt Mdf', category: 'MDF' });
+  const tam = (await H.id(
+    `SELECT id FROM suppliers WHERE name = 'Sinov Qayt Mdf'`)).id;
+  const qarz = async () => Number((await H.id(
+    `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance);
+
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Sinov Qayt MDF 16mm', uom: 'list', category: 'MDF' })).body;
+
+  //  Avval mol KELADI: qaytarish faqat javondagi molga yoziladi.
+  const k = await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh, doc_on: '2026-09-10',
+    ccy: 'USD', items: [{ material_id: m.id, qty: 50, price: 20 }] });
+  assert.equal(k.status, 200, k.text);
+  assert.equal(await qarz(), 1000, '50 × 20 = 1 000 $ qarz');
+
+  //  ★ SABAB MAJBURIY — kirimdan FARQI shu: «nega qaytarildi» degan
+  //  savol ta'minotchi bilan solishtirishda birinchi beriladi.
+  const sababsiz = await xom('POST', '/api/materials/returns', {
+    supplier_id: tam, warehouse_id: wh,
+    items: [{ material_id: m.id, qty: 5, price: 20 }] });
+  assert.equal(sababsiz.status, 400, sababsiz.text);
+  assert.match(sababsiz.body.error, /[Ss]abab/);
+
+  //  Narx ham majburiy: nechta qaytgani emas, QANCHAGA qaytgani
+  //  qarzni kamaytiradi.
+  assert.equal((await xom('POST', '/api/materials/returns', {
+    supplier_id: tam, warehouse_id: wh, note: 'brak',
+    items: [{ material_id: m.id, qty: 5 }] })).status, 400);
+
+  //  ★ ZAVOD OMBORIDAN — kirim bilan bir xil qoida: tsexdagi brak
+  //  avval zavod omboriga qaytariladi. Tekshiruv SERVERDA.
+  const tsexdan = await xom('POST', '/api/materials/returns', {
+    supplier_id: tam, warehouse_id: tsexWh, note: 'brak',
+    items: [{ material_id: m.id, qty: 5, price: 20 }] });
+  assert.equal(tsexdan.status, 400, tsexdan.text);
+  assert.match(tsexdan.body.error, /tsex ombori/);
+
+  //  ★ JAVONDA YO'Q MOLNI QAYTARIB BO'LMAYDI (`yetarlimi`): bunday
+  //  yozuv qoldiqni minusga tushirardi. Kalit yoqiladi — standarti
+  //  o'chiq (deploy kuni o'ttizga yaqin material minusda turardi).
+  await admin('PATCH', '/api/admin/settings/minus_material', { on: true });
+  const kop = await xom('POST', '/api/materials/returns', {
+    supplier_id: tam, warehouse_id: wh, note: 'brak',
+    items: [{ material_id: m.id, qty: 500, price: 20 }] });
+  assert.equal(kop.status, 400, kop.text);
+  assert.match(kop.body.error, /qoldiq|yetarli|50/i);
+  await admin('PATCH', '/api/admin/settings/minus_material', { on: false });
+
+  //  ── Hujjat yoziladi: 10 list × 20 $ = 200 $
+  const q = await xom('POST', '/api/materials/returns', {
+    supplier_id: tam, warehouse_id: wh, doc_on: '2026-09-15',
+    supplier_doc: 'QT-5', ccy: 'USD', note: 'brak — qirrasi singan',
+    items: [{ material_id: m.id, qty: 10, price: 20 }] });
+  assert.equal(q.status, 200, q.text);
+  assert.match(q.body.doc_no, /^QT\d\d-\d{4}$/, 'raqam QT26-0001 shaklida');
+  assert.equal(q.body.lines, 1);
+
+  //  1. OMBOR kamaydi.
+  const st = (await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id);
+  assert.equal(Number(st.qty), 40, '50 − 10 = 40');
+
+  //  2. TA'MINOTCHINING QARZI kamaydi — aynan o'sha summaga.
+  assert.equal(await qarz(), 800, '1 000 − 200');
+
+  //  Lentada QARZDOR tomonda: ta'minotchi passiv hisob, qaytarish
+  //  bizning qarzimizni kamaytiradi — to'lov bilan bir tomonda.
+  const lenta = (await admin('GET',
+    '/api/purchasing/debts/' + tam + '?from=2026-09-01&to=2026-09-30')).body;
+  const qator = lenta.rows.find((r) => r.kind === 'return');
+  assert.ok(qator, 'qaytarish lentada turadi');
+  assert.equal(Number(qator.debit), 200, 'qarzdor tomonda');
+  assert.equal(Number(qator.credit), 0);
+  assert.equal(qator.doc_no, q.body.doc_no);
+  assert.match(qator.note, /qirrasi singan/, 'sabab qatorda yoziladi');
+
+  //  Hujjat ICHIDA nima borligi ro'yxatda turadi — ochib ko'rmasdan.
+  const ro = (await xom('GET', '/api/materials/returns')).body.rows
+    .find((r) => r.id === q.body.id);
+  assert.equal(ro.lines, 1);
+  assert.equal(Number(ro.amount), 200);
+  assert.equal(ro.note, 'brak — qirrasi singan');
+  assert.equal(ro.items[0].material, 'Sinov Qayt MDF 16mm');
+
+  //  ── Bekor qilish: ikkala tomon ham QAYTADI.
+  const b = await xom('POST',
+    '/api/materials/returns/' + q.body.id + '/cancel', { note: 'adashib' });
+  assert.equal(b.status, 200, b.text);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id).qty), 50, 'qoldiq qaytdi');
+  assert.equal(await qarz(), 1000, 'qarz ham qaytdi');
+
+  //  Tarixda QOLADI (kirim bilan bir xil qoida) va ikkinchi marta
+  //  bekor qilib bo'lmaydi.
+  const bekor = (await xom('GET', '/api/materials/returns')).body.rows
+    .find((r) => r.id === q.body.id);
+  assert.equal(bekor.status, 'cancelled');
+  assert.equal(bekor.cancel_note, 'adashib');
+  assert.equal((await xom('POST',
+    '/api/materials/returns/' + q.body.id + '/cancel', {})).status, 400);
+
+  //  Tsex boshlig'ida `materials.manage` yo'q: u sarfni yozadi, mol
+  //  qaytarishni emas.
+  const usta = await xodim('Sinov qayt usta', 'tsex_usta');
+  assert.equal((await usta('POST', '/api/materials/returns', {
+    supplier_id: tam, warehouse_id: wh, note: 'brak',
+    items: [{ material_id: m.id, qty: 1, price: 20 }] })).status, 403);
+});
+
 test('buyurtmalar: tab yonidagi jami summa ro\'yxat bilan bir xil', async () => {
   //  ★ TAB BO'YICHA JAMI SUMMA (zavod qarori, 2026-09). Qatorda summa
   //  ilgari ham bor edi, lekin menejerning savoli boshqa: «bu tabda

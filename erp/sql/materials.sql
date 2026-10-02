@@ -236,7 +236,7 @@ CREATE INDEX IF NOT EXISTS material_moves_to_idx
 ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS doc_kind TEXT;
 ALTER TABLE material_moves DROP CONSTRAINT IF EXISTS material_moves_doc_check;
 ALTER TABLE material_moves ADD CONSTRAINT material_moves_doc_check
-  CHECK (doc_kind IS NULL OR doc_kind IN ('receipt', 'request'));
+  CHECK (doc_kind IS NULL OR doc_kind IN ('receipt', 'request', 'return'));
 CREATE INDEX IF NOT EXISTS material_moves_doc_idx
   ON material_moves (doc_kind, doc_id) WHERE doc_id IS NOT NULL;
 
@@ -825,6 +825,100 @@ SELECT r.*,
       JOIN materials mt ON mt.id = mm.material_id
      WHERE mm.doc_kind = 'receipt' AND mm.doc_id = r.id) i ON true;
 
+-- ═════════════════════════ TA'MINOTCHIGA QAYTARIB BERISH
+--
+--  ★ MOL QAYTIB KETADI, QARZ ESA QOLIB KETARDI (zavod qarori,
+--  2026-10). Brak chiqadi, o'lcham to'g'ri kelmaydi, ortiqcha
+--  keltiriladi — mol ta'minotchiga QAYTARILADI. Tizimda esa buning
+--  yo'li yo'q edi va ikki yomon chora qolardi: yo kirim hujjatini
+--  BEKOR qilish (holbuki qolgan qatorlari haqiqatda kelgan va
+--  javonda turibdi), yo materialni «sanoq» bilan hisobdan chiqarish
+--  (o'shanda ta'minotchining qarzi KAMAYMAY qolardi va biz unga
+--  qaytarib bergan mol uchun ham qarzdor bo'lib turardik).
+--
+--  ★ KIRIMNING TESKARISI, va ataylab AYNAN SHU SHAKLDA: hujjat IKKI
+--  ishni birga qiladi — omborni kamaytiradi va ta'minotchining
+--  oldidagi qarzni KAMAYTIRADI. Ikkinchi mexanizm yozilmadi: shakli
+--  bir xil bo'lgani uchun ro'yxat, bekor qilish, doira va qoldiq
+--  hisobi ham bitta idiomdan o'tadi (vitrinadan qaytarish hujjatining
+--  ikki tomonli bo'lgani bilan bir xil sabab).
+--
+--  Qatorlari alohida jadvalda emas, `material_moves` ning O'ZIDA
+--  (`doc_kind = 'return'`, `to_kind = 'supplier'`): «omborda qancha
+--  bor» degan savol BITTA manbadan hisoblanishi kerak — qatorlar
+--  ikkinchi jadvalda tursa hujjatda 10 list, qoldiqda 12 bo'lib
+--  qolardi (kirim bilan bir xil qoida).
+--
+--  ★ NARX MAJBURIY va u QARZNING O'ZI: nechta qaytgani emas, QANCHAGA
+--  qaytgani qarzni kamaytiradi. Ekran uni omborning o'rtacha kirim
+--  narxidan to'ldiradi, lekin raqam HUJJATDA qotadi — ta'minotchi
+--  bilan kelishilgani o'sha. Valyuta va kurs hujjat bo'yicha bitta
+--  (kirim va kassadagi order bilan bir xil idiom).
+CREATE TABLE IF NOT EXISTS mat_returns (
+  id           SERIAL PRIMARY KEY,
+  doc_no       TEXT UNIQUE,
+  supplier_id  INT  NOT NULL REFERENCES suppliers(id),
+  warehouse_id INT  NOT NULL REFERENCES warehouses(id),
+  doc_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  --  Ta'minotchining O'Z hujjat raqami: qaytarishda ham qog'oz
+  --  bo'ladi va solishtirishda aynan shu raqam so'raladi.
+  supplier_doc TEXT,
+  ccy          TEXT NOT NULL DEFAULT 'USD' CHECK (ccy IN ('USD', 'UZS')),
+  rate         NUMERIC(14,4),
+  --  ★ SABAB MAJBURIY (kirimdan FARQI shu): «nega qaytarildi» degan
+  --  savol ta'minotchi bilan solishtirishda birinchi beriladi va
+  --  javobi hujjatning o'zida turishi kerak — brakmi, o'lchammi,
+  --  ortiqchami.
+  note         TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'cancelled')),
+  created_by   INT REFERENCES workers(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  cancelled_by INT REFERENCES workers(id),
+  cancelled_at TIMESTAMPTZ,
+  cancel_note  TEXT
+);
+
+--  So'mdagi narx uchun kurs SHART — kirim bilan bir xil sabab: kursi
+--  yo'q so'm dollarga aylanmaydi va hujjat qiymatsiz qolardi,
+--  ta'minotchining qarzi esa buni aytmasdi, shunchaki kamaymasdi.
+ALTER TABLE mat_returns DROP CONSTRAINT IF EXISTS mat_returns_rate_check;
+ALTER TABLE mat_returns ADD CONSTRAINT mat_returns_rate_check
+  CHECK (ccy <> 'UZS' OR rate IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS mat_returns_sup_idx ON mat_returns(supplier_id);
+CREATE INDEX IF NOT EXISTS mat_returns_on_idx  ON mat_returns(doc_on);
+
+DROP VIEW IF EXISTS v_mat_returns CASCADE;
+CREATE VIEW v_mat_returns AS
+SELECT r.*,
+       s.name  AS supplier,
+       s.phone AS supplier_phone,
+       w.name  AS warehouse,
+       w.code  AS warehouse_code,
+       w.shop_id,
+       cw.name AS created_by_name,
+       xw.name AS cancelled_by_name,
+       COALESCE(i.lines, 0)::int            AS lines,
+       COALESCE(i.amount, 0)::numeric(16,2) AS amount,
+       COALESCE(i.items, '[]'::json)        AS items
+  FROM mat_returns r
+  JOIN suppliers  s ON s.id = r.supplier_id
+  JOIN warehouses w ON w.id = r.warehouse_id
+  LEFT JOIN workers cw ON cw.id = r.created_by
+  LEFT JOIN workers xw ON xw.id = r.cancelled_by
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS lines,
+           SUM(mm.qty * mm.price_usd) AS amount,
+           JSON_AGG(JSON_BUILD_OBJECT(
+             'move_id', mm.id, 'material_id', mm.material_id,
+             'material', mt.name, 'uom', mt.uom,
+             'qty', mm.qty, 'price', mm.price,
+             'price_usd', mm.price_usd,
+             'amount', ROUND(mm.qty * mm.price_usd, 2)) ORDER BY mt.name) AS items
+      FROM material_moves mm
+      JOIN materials mt ON mt.id = mm.material_id
+     WHERE mm.doc_kind = 'return' AND mm.doc_id = r.id) i ON true;
+
 -- ══════════════════════════════════════════ TA'MINOTCHINING QARZI
 --
 --  ★ IKKALA VIEW HAM `sql/cash.sql` DAN SHU YERGA KO'CHDI. Sabab —
@@ -856,8 +950,13 @@ SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
        --  va ular SHU YERDA qo'shiladi. Bittasi unutilsa oy oxirida
        --  solishtirma dalolatnoma zavodnikidan kam chiqardi.
        (got.received + gotfg.received)::numeric(16,2) AS received,
+       --  ★ QAYTARILGAN MOL QARZNI KAMAYTIRADI: biz unga qaytarib
+       --  bergan mol uchun qarzdor bo'lib turishimiz mumkin emas.
+       --  Formula to'ldi:
+       --      boshlang'ich + kelgan mol − qaytarilgani − to'langani
+       ret.returned,
        (COALESCE(s.opening_debt, 0) + got.received + gotfg.received
-        - pay.paid)::numeric(16,2) AS balance
+        - ret.returned - pay.paid)::numeric(16,2) AS balance
   FROM suppliers s
   LEFT JOIN LATERAL (
     SELECT COALESCE(SUM(f.amount_usd), 0)::numeric(16,2) AS paid
@@ -872,6 +971,11 @@ SELECT s.id, s.name, s.category, s.opening_debt, s.opening_debt_on,
     SELECT COALESCE(SUM(r.amount), 0)::numeric(16,2) AS received
       FROM v_fg_receipts r
      WHERE r.supplier_id = s.id AND r.status = 'ok') gotfg ON true
+  --  Bekor qilingan qaytarish qarzga qaytmaydi: `r.status = 'ok'`.
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(r.amount), 0)::numeric(16,2) AS returned
+      FROM v_mat_returns r
+     WHERE r.supplier_id = s.id AND r.status = 'ok') ret ON true
  WHERE s.active;
 
 -- ══════════════════════════ TA'MINOTCHI QARZI — HARAKATLAR LENTASI
@@ -956,6 +1060,22 @@ SELECT r.supplier_id,
        r.amount,
        r.doc_no, NULL::int, NULL::int
   FROM v_fg_receipts r
+ WHERE r.status = 'ok' AND r.amount <> 0
+UNION ALL
+--  ★ QAYTARIB BERILGAN MOL — QARZDOR tomonda, to'lov bilan BIR
+--  QATORDA: ikkalasi ham bizning qarzimizni KAMAYTIRADI. Pul bilan
+--  emas, MOL bilan to'langan degani, shuning uchun izohida sababi
+--  ham turadi — ta'minotchi bilan solishtirganda birinchi beriladigan
+--  savol «nega qaytardingiz» bo'ladi.
+SELECT r.supplier_id,
+       r.doc_on,
+       'return'::text,
+       ('Qaytarildi — ' || r.doc_no || ' · ' || r.warehouse
+         || ' · ' || r.note)::text,
+       r.amount,
+       0::numeric(16,2),
+       r.doc_no, NULL::int, NULL::int
+  FROM v_mat_returns r
  WHERE r.status = 'ok' AND r.amount <> 0;
 
 -- ═══════════════════════════ TA'MINOT XABARLARI — XODIM BELGISI

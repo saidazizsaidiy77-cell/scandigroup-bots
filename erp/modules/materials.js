@@ -1557,6 +1557,219 @@ router.post('/receipts/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
   } finally { client.release(); }
 }));
 
+// ═════════════════════════ TA'MINOTCHIGA QAYTARIB BERISH
+//
+//  ★ MOL QAYTIB KETADI, QARZ ESA QOLIB KETARDI (zavod qarori,
+//  2026-10; izoh: sql/materials.sql). Brak chiqadi, o'lcham to'g'ri
+//  kelmaydi, ortiqcha keltiriladi — mol ta'minotchiga qaytariladi.
+//  Tizimda yo'li yo'q edi va ikki yomon chora qolardi: yo kirim
+//  hujjatini BEKOR qilish (holbuki qolgan qatorlari javonda turibdi),
+//  yo sanoq bilan hisobdan chiqarish — o'shanda ta'minotchining qarzi
+//  KAMAYMASDI va biz qaytarib bergan mol uchun ham qarzdor bo'lib
+//  turardik.
+//
+//  Kirimning TESKARISI va ataylab AYNAN shu shaklda: ro'yxat, bekor
+//  qilish, doira va qoldiq hisobi bitta idiomdan o'tadi.
+async function nextReturnNo(client) {
+  //  `QT` — ikki harf: «Q» yolg'iz o'zi band (tizim qo'ygan konver
+  //  raqami `Q26-...`) va bitta harf ikki xil hujjatni atasa ekrandagi
+  //  raqam qaysi biri ekani noaniq qolardi (matras `MT`, sanoq `SN`
+  //  bilan bir xil sabab).
+  const prefix = `QT${String(new Date().getFullYear()).slice(-2)}-`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(doc_no FROM '\\d+$')::int), 0) + 1 AS n
+       FROM mat_returns WHERE doc_no LIKE $1`, [`${prefix}%`]);
+  return prefix + String(rows[0].n).padStart(4, '0');
+}
+
+router.get('/returns', need(...VIEW), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM v_mat_returns
+      WHERE ($1::int[] IS NULL OR COALESCE(shop_id, 0) = ANY($1))
+        AND ($2::int IS NULL OR supplier_id = $2)
+        AND ($3::date IS NULL OR doc_on >= $3)
+        AND ($4::date IS NULL OR doc_on <= $4)
+      ORDER BY doc_on DESC, id DESC
+      LIMIT 500`,
+    [whDoira(req), Number(req.query.supplier_id) || null,
+     SANA(req.query.from), SANA(req.query.to)]);
+  res.json({ rows });
+}));
+
+router.get('/returns/:id', need(...VIEW), wrap(async (req, res) => {
+  const r = (await db.query(
+    `SELECT r.* FROM v_mat_returns r
+       JOIN warehouses w ON w.id = r.warehouse_id
+      WHERE r.id = $1
+        AND ($2::int[] IS NULL
+             OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
+    [req.params.id, whDoira(req)])).rows[0];
+  if (!r) return res.status(404).json({ error: 'Qaytarish hujjati topilmadi' });
+  res.json(r);
+}));
+
+router.post('/returns', need(...MANAGE), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
+
+  //  ★ SABAB MAJBURIY (kirimdan FARQI shu): «nega qaytarildi» degan
+  //  savol ta'minotchi bilan solishtirishda birinchi beriladi va
+  //  javobi hujjatning o'zida turishi kerak.
+  const sabab = trim(req.body.note);
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+
+  const ccy  = req.body.ccy === 'UZS' ? 'UZS' : 'USD';
+  const rate = Number(req.body.rate) || null;
+  if (ccy === 'UZS' && !rate)
+    return res.status(400).json({ error: "So'mdagi hujjat uchun kurs kerak" });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const sup = (await client.query(
+      `SELECT id, name FROM suppliers WHERE id = $1 AND active`,
+      [req.body.supplier_id])).rows[0];
+    if (!sup) throw new Error("Ta'minotchi tanlanmagan");
+
+    //  Qaytarish ham ZAVOD omboridan — kirim bilan bir xil qoida:
+    //  mol ta'minotchidan zavodga keladi va unga zavoddan qaytadi.
+    //  Tsexda topilgan brak avval zavod omboriga qaytariladi.
+    const wh = (await client.query(
+      `SELECT w.id, w.name, w.shop_id FROM warehouses w
+        WHERE w.id = $1 AND w.kind = 'material' AND w.is_active
+          AND ($2::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))`,
+      [req.body.warehouse_id, whDoira(req)])).rows[0];
+    if (!wh) throw new Error('Ombor tanlanmagan');
+    if (wh.shop_id) throw new Error(
+      `«${wh.name}» — tsex ombori. Qaytarish zavod omboridan yoziladi, `
+      + 'tsexdagi mol avval zavod omboriga qaytariladi');
+
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('mat_return_no'))`);
+    const doc_no = await nextReturnNo(client);
+
+    const r = (await client.query(
+      `INSERT INTO mat_returns (doc_no, supplier_id, warehouse_id, doc_on,
+                                supplier_doc, ccy, rate, note, created_by)
+       VALUES ($1,$2,$3,COALESCE($4::date, CURRENT_DATE),$5,$6,$7,$8,$9)
+       RETURNING id`,
+      [doc_no, sup.id, wh.id, SANA(req.body.doc_on), trim(req.body.supplier_doc),
+       ccy, ccy === 'UZS' ? rate : null, sabab, req.user.id])).rows[0];
+
+    let n = 0;
+    for (const it of items) {
+      const qty   = Number(it.qty);
+      const price = Number(it.price);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const mt = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1`, [it.material_id])).rows[0];
+      if (!mt) throw new Error('Material topilmadi');
+      //  ★ NARX MAJBURIY va u QARZNING O'ZI: nechta qaytgani emas,
+      //  QANCHAGA qaytgani qarzni kamaytiradi. Raqam o'rtacha kirim
+      //  narxidan OLINMAYDI va olinishi ham kerak emas: o'rtacha —
+      //  bizning hisobimiz, qaytarishdagi narx esa ta'minotchi bilan
+      //  KELISHILGANI va u hujjat bilan qotadi. Qo'lda yoziladi.
+      if (!Number.isFinite(price) || price <= 0)
+        throw new Error(`«${mt.name}» — narx yozilmagan`);
+
+      //  ★ QOLDIQ KAMAYADI, ya'ni to'siq SHU YERDA HAM (izoh:
+      //  `yetarlimi`): javonda yo'q molni ta'minotchiga qaytarib
+      //  bo'lmaydi va bunday yozuv qoldiqni minusga tushirardi.
+      await yetarlimi(client, wh.id, mt.id, qty, mt.name);
+
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                     to_kind, to_id, moved_on, note,
+                                     doc_kind, doc_id, worker_id,
+                                     price, ccy, rate)
+         VALUES ($1,$2,'warehouse',$3,'supplier',$4,
+                 COALESCE($5::date, CURRENT_DATE), $6, 'return', $7, $8,
+                 $9, $10, $11)`,
+        [mt.id, qty, wh.id, sup.id, SANA(req.body.doc_on), trim(it.note),
+         r.id, req.user.id, price, ccy, ccy === 'UZS' ? rate : null]);
+      n++;
+    }
+    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+
+    //  Xabar kirimnikisi bilan bir xil shaklda va bir xil sababdan:
+    //  hujjat ikki ishni birga qiladi — omborni kamaytiradi va
+    //  qarzni kamaytiradi. Ikkinchisi yozilmasa nazorat qiladigan
+    //  odam qarzni bilish uchun sahifani ochib ko'rishi kerak
+    //  bo'lardi. Qarz SHU tranzaksiyaning `client` idan o'qiladi
+    //  (3-qoida).
+    const hujjat = (await client.query(
+      `SELECT doc_on, amount, items FROM v_mat_returns WHERE id = $1`,
+      [r.id])).rows[0];
+    const qarz = (await client.query(
+      `SELECT balance FROM v_supplier_debt WHERE id = $1`, [sup.id])).rows[0];
+    await notify.queueSupply({
+      module: 'materials', kind: 'mat_return',
+      title: `Qaytarildi ${doc_no} · ${sup.name}`,
+      body: [
+        `${kun(hujjat.doc_on)} · ${wh.name} · ${sabab}`,
+        '',
+        ...(hujjat.items || []).map((x) =>
+          `${x.material} · ${son(x.qty)} ${x.uom || ''} × ${pul(x.price)}`
+          + ` ${ccy === 'UZS' ? "so'm" : '$'} = ${pul(x.amount)} $`),
+        '',
+        `Jami: ${pul(hujjat.amount)} $`,
+        qarz ? qarzQatori(sup.name, qarz.balance) : '',
+      ].filter((x) => x !== null).join('\n'),
+    }, client);
+
+    await audit(req, { module: 'materials', action: 'return',
+                       entity: 'mat_returns', entity_id: r.id,
+                       payload: { doc_no, supplier: sup.name,
+                                  warehouse: wh.name, lines: n,
+                                  note: sabab } }, client);
+    await client.query('COMMIT');
+    res.json({ id: r.id, doc_no, lines: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  Adashib yozilgani O'CHIRILMAYDI, bekor qilinadi — kirim bilan bir
+//  xil qoida. Bekor qilish mol OMBORGA QAYTADI degani, ya'ni qoldiq
+//  OSHADI va to'siq bu yerda kerak emas; ta'minotchining qarzi esa
+//  qaytib ko'tariladi.
+router.post('/returns/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const r = (await client.query(
+      `SELECT r.id, r.doc_no FROM mat_returns r
+         JOIN warehouses w ON w.id = r.warehouse_id
+        WHERE r.id = $1 AND r.status = 'ok'
+          AND ($2::int[] IS NULL
+               OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($2))
+        FOR UPDATE OF r`,
+      [req.params.id, whDoira(req)])).rows[0];
+    if (!r) throw new Error('Qaytarish hujjati topilmadi');
+
+    await client.query(
+      `UPDATE material_moves SET status = 'cancelled'
+        WHERE doc_kind = 'return' AND doc_id = $1`, [r.id]);
+    await client.query(
+      `UPDATE mat_returns
+          SET status = 'cancelled', cancelled_by = $2,
+              cancelled_at = NOW(), cancel_note = $3
+        WHERE id = $1`, [r.id, req.user.id, trim(req.body.note)]);
+
+    await audit(req, { module: 'materials', action: 'return-cancel',
+                       entity: 'mat_returns', entity_id: r.id,
+                       payload: { doc_no: r.doc_no,
+                                  note: trim(req.body.note) } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 // ═══════════════════ KUNLIK TA'MINOTCHILAR SALDOSI
 //
 //  ★ ZAVOD QARORI (2026-09): har kuni ertalab «kimga qancha

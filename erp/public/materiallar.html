@@ -208,7 +208,8 @@ const boshqara = () => App.can('materials.manage', 'production.manage');
 //  ikkalasi bitta narsa haqida va xodim ular orasida kun bo'yi yuradi.
 const NOM = { ref: 'Materiallar', stock: "Ombor qoldig'i",
               kirim: 'Kirim hujjatlari', talab: 'Talabnomalar',
-              zay: 'Xarid buyurtmalari', moves: 'Harakat' };
+              zay: 'Xarid buyurtmalari', moves: 'Harakat',
+              qayt: "Ta'minotchiga qaytarilgan" };
 
 //  ★ BITTA SAHIFA, BIR NECHTA KO'RINISH (zavod qarori, 2026-10).
 //  Ilgari oltita tab bitta qatorda turardi va ularning yarmi
@@ -229,6 +230,12 @@ const KORINISH = {
   //  degan savoldan keyingi savol aynan lentada turadi.
   talab: ['talab', 'moves'],
   zay:   ['zay'],
+  //  ★ QAYTARISH — KIRIMNING TESKARISI va ataylab AYNAN shu oynadan
+  //  yoziladi (izoh: `kirimOch`): maydonlari bir xil, faqat
+  //  yo'nalishi teskari va sababi majburiy. Ikkinchi oyna yozilsa
+  //  material qidiruvi, valyuta, kurs va «jami» hisobi ikki joyda
+  //  turardi va biri ertaga ikkinchisidan ajralib ketardi.
+  qayt:  ['qayt'],
   //  Omborlar ro'yxatidan kirilganda (`?w=KOD`): javonda nima bor va
   //  u qayerdan kelgan.
   stock: ['stock', 'moves'],
@@ -245,7 +252,9 @@ function drawTabs() {
       >${t}</button>`).join('');
   $('cardRef').hidden   = tab !== 'ref';
   $('cardStock').hidden = tab !== 'stock';
-  $('cardKirim').hidden = tab !== 'kirim';
+  //  Kirim va qaytarish filtrlari AYNAN bir xil (ta'minotchi, ombor,
+  //  sana, qidiruv) — bitta kartochka ikkalasiga ham xizmat qiladi.
+  $('cardKirim').hidden = tab !== 'kirim' && tab !== 'qayt';
   $('cardTalab').hidden = tab !== 'talab';
   $('cardZay').hidden   = tab !== 'zay';
   $('h2').textContent = NOM[tab] || NOM.moves;
@@ -376,8 +385,15 @@ async function boot() {
   //
   //  Bu QULAYLIK, himoya emas: tekshiruv serverda (`modules/materials.js`).
   $('kWh').innerHTML = '<option value="">Barcha ombor</option>' + omborlar(zavodniki);
-  $('kirimTools').innerHTML = boshqara()
-    ? '<button class="primary" onclick="kirimOch()">+ Kirim</button>' : '';
+  //  ★ TUGMA TAB'GA QARAB: kartochka ikkala ro'yxatga ham xizmat
+  //  qiladi (kirim va qaytarish), lekin yoziladigan hujjat boshqa.
+  //  Ikkalasi ham chizilsa odam qaytarish ro'yxatida turib kirim
+  //  yozib qo'yardi va qarz teskari tomonga ketardi.
+  $('kirimTools').innerHTML = !boshqara() ? ''
+    : tab === 'qayt'
+      ? '<button class="primary" onclick="kirimOch(\'return\')">'
+        + '+ Qaytarish</button>'
+      : '<button class="primary" onclick="kirimOch()">+ Kirim</button>';
 
   $('stockTools').innerHTML = boshqara()
     ? `<button onclick="boshlangich(${kirdi ? kirdi.id : 'null'})">
@@ -445,6 +461,11 @@ async function load() {
     if ($('kTo').value)       q.set('to', $('kTo').value);
     if ($('kQ').value.trim()) q.set('q', $('kQ').value.trim());
     rows = (await App.api('/api/materials/receipts?' + q)).rows;
+  } else if (tab === 'qayt') {
+    if ($('kSup').value)      q.set('supplier_id', $('kSup').value);
+    if ($('kFrom').value)     q.set('from', $('kFrom').value);
+    if ($('kTo').value)       q.set('to', $('kTo').value);
+    rows = (await App.api('/api/materials/returns?' + q)).rows;
   } else if (tab === 'talab') {
     if ($('tStatus').value) q.set('status', $('tStatus').value);
     if ($('tKind').value)   q.set('kind', $('tKind').value);
@@ -481,7 +502,7 @@ const tomonTo = (kind, nom) => kind === 'writeoff' && !nom
 function draw() {
   $('cnt').textContent = rows.length ? `${rows.length} ta` : '';
   if (tab === 'stock') return drawStock();
-  if (tab === 'kirim') return drawKirim();
+  if (tab === 'kirim' || tab === 'qayt') return drawKirim();
   if (tab === 'talab') return drawTalab();
   if (tab === 'zay') return drawZay();
   if (tab === 'moves') return drawMoves();
@@ -803,15 +824,23 @@ async function qoldiqQaytar(id, kind, from) {
 //  farq qiladi: kirimda narx QARZNING O'ZI. Tekshiruv serverda.
 const kun = (d) => String(d).slice(0, 10).split('-').reverse().join('.');
 
+//  Kirim va qaytarish RO'YXATI bir xil shaklda: ikkalasi ham hujjat,
+//  ikkalasida ham ta'minotchi, ombor, qatorlar va summa. Farqi faqat
+//  sarlavhada va qaytarishdagi SABABDA — u majburiy va ro'yxatda
+//  turadi, aks holda «nega qaytarildi» degan savol uchun har hujjatni
+//  ochib ko'rish kerak bo'lardi.
 function drawKirim() {
+  const q = tab === 'qayt';
   if (!rows.length) {
-    $('body').innerHTML = '<p class="muted">Kirim hujjati yo\'q.'
-      + (boshqara() ? ' «+ Kirim» bilan yozing.' : '') + '</p>';
+    $('body').innerHTML = '<p class="muted">'
+      + (q ? 'Qaytarish hujjati yo\'q.' : 'Kirim hujjati yo\'q.')
+      + (boshqara() ? (q ? ' «+ Qaytarish» bilan yozing.'
+                         : ' «+ Kirim» bilan yozing.') : '') + '</p>';
     return;
   }
   $('body').innerHTML = '<div style="overflow-x:auto"><table>'
     + '<thead><tr><th>Hujjat</th><th>Sana</th><th>Ta\'minotchi</th>'
-    + '<th>Ombor</th><th>Nima keldi</th>'
+    + '<th>Ombor</th><th>' + (q ? 'Nima qaytdi' : 'Nima keldi') + '</th>'
     + '<th class="num">Summa, $</th></tr></thead><tbody>'
     + rows.map((r) => {
         const bekor = r.status !== 'ok';
@@ -836,7 +865,14 @@ function drawKirim() {
           + '<td class="muted">' + kun(r.doc_on) + '</td>'
           + '<td>' + esc(r.supplier) + '</td>'
           + '<td class="muted">' + esc(r.warehouse) + '</td>'
-          + '<td style="font-size:13px">' + (nima || '—') + '</td>'
+          + '<td style="font-size:13px">' + (nima || '—')
+          //  Sabab qaytarishda MAJBURIY va ro'yxatda turadi: «nega
+          //  qaytarildi» ta'minotchi bilan solishtirishda birinchi
+          //  beriladigan savol.
+          + (q && r.note
+             ? '<div class="muted" style="font-size:12px">' + esc(r.note)
+               + '</div>' : '')
+          + '</td>'
           + '<td class="num"><b>' + pul(r.amount) + '</b></td></tr>';
       }).join('')
     + '</tbody></table></div>';
@@ -1402,15 +1438,17 @@ const talabRad = (id) => {
 //  hujjat ochilmasdan turib bekor qilinsa qaysi biri ekani
 //  ko'rinmasdi.
 async function kirimKor(id) {
+  const q = tab === 'qayt';
   let r;
-  try { r = await App.api('/api/materials/receipts/' + id); }
-  catch (e) { return toast(e.message, true); }
+  try {
+    r = await App.api(`/api/materials/${q ? 'returns' : 'receipts'}/${id}`);
+  } catch (e) { return toast(e.message, true); }
   const it = r.items || [];
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:720px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
-          <h1>Kirim ${esc(r.doc_no)}</h1>
+          <h1>${q ? 'Qaytarish' : 'Kirim'} ${esc(r.doc_no)}</h1>
           <button onclick="yop()">Yopish</button></div>
         ${r.status === 'ok' ? ''
           : `<p class="tag bad" style="margin-bottom:12px">Bekor qilingan${
@@ -1447,6 +1485,9 @@ async function kirimKor(id) {
         ${r.status === 'ok' && boshqara()
           ? `<button style="margin-top:12px"
                onclick="kirimBekor(${r.id})">Hujjatni bekor qilish</button>` : ''}
+        ${!q ? '' : `<p class="muted" style="margin-top:10px;font-size:12px">
+          Bekor qilinsa mol omborga qaytadi va ta'minotchining qarzi
+          yana ko'tariladi.</p>`}
       </div></div>`;
 }
 
@@ -1454,10 +1495,11 @@ async function kirimKor(id) {
 //  qarzidan ham chiqadi, tarixda esa qoladi. Sabab so'raladi —
 //  konver so'rovi va kassadagi operatsiya bilan bir xil idiom.
 async function kirimBekor(id) {
+  const q = tab === 'qayt';
   const sabab = prompt('Nega bekor qilinmoqda?');
   if (sabab === null) return;
   try {
-    await App.api('/api/materials/receipts/' + id + '/cancel',
+    await App.api(`/api/materials/${q ? 'returns' : 'receipts'}/${id}/cancel`,
       { method: 'POST', body: JSON.stringify({ note: sabab }) });
     yop(); toast('Hujjat bekor qilindi'); await load();
   } catch (e) { toast(e.message, true); }
@@ -1471,13 +1513,24 @@ async function kirimBekor(id) {
 //  yozilmaguncha ro'yxat chiqarilmaydi.
 let kQator = [];
 
-function kirimOch() {
+//  ★ BITTA OYNA — IKKI HUJJAT (zavod qarori, 2026-10). Qaytarish
+//  kirimning TESKARISI: maydonlari bir xil (ta'minotchi, ombor,
+//  sana, valyuta, kurs, material qidiruvi, soni, narx va «jami»),
+//  farqi faqat yo'nalishida va sababning majburiyligida. Ikkinchi
+//  oyna yozilsa qidiruv, kurs va jami hisobi ikki joyda turardi va
+//  biri ertaga ikkinchisidan ajralib ketardi (yuk xati hujjatining
+//  bitta faylda turgani bilan bir xil idiom).
+let kMod = 'receipt';
+
+function kirimOch(mod) {
+  kMod = mod === 'return' ? 'return' : 'receipt';
+  const q = kMod === 'return';
   kQator = [];
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:760px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
-          <h1>Kirim hujjati</h1>
+          <h1>${q ? "Ta'minotchiga qaytarish" : 'Kirim hujjati'}</h1>
           <button onclick="yop()">Yopish</button></div>
         <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;
           margin-bottom:12px">
@@ -1506,11 +1559,23 @@ function kirimOch() {
             <input id="nRate" type="number" min="0" step="0.01"
               value="${ref.rate || ''}" oninput="kirimJami()"></div>
         </div>
+        <!--  ★ SABAB FAQAT QAYTARISHDA, va u MAJBURIY: «nega
+              qaytarildi» degan savol ta'minotchi bilan solishtirishda
+              birinchi beriladi va javobi hujjatning O'ZIDA turishi
+              kerak — audit jurnalida emas, u ombor xodimiga
+              ochilmaydi. Kirimda bunday savol yo'q: mol keldi. -->
+        ${q ? `<div style="margin-bottom:12px"><label>Sabab</label>
+          <input id="nNote" placeholder="brak, o'lchami to'g'ri kelmadi…"
+            ></div>` : ''}
         <!--  Narx MAJBURIY: u ta'minotchining qarzini yozadi. Narxsiz
               qator omborni to'ldirib, qarzni oshirmasdi va farqi faqat
-              oy oxirida, solishtirma dalolatnomada bilinardi. -->
+              oy oxirida, solishtirma dalolatnomada bilinardi.
+              Qaytarishda ham majburiy va sababi aynan o'sha, faqat
+              teskari tomonda: nechta qaytgani emas, QANCHAGA
+              qaytgani qarzni kamaytiradi. -->
         <p class="muted" style="margin-bottom:10px">Har qatorda narx
-          <b>majburiy</b> — u ta'minotchining qarzini yozadi.</p>
+          <b>majburiy</b> — u ta'minotchining qarzini ${
+          q ? 'kamaytiradi' : 'yozadi'}.</p>
         <input id="nQ" placeholder="material nomini yozing" autocomplete="off"
           oninput="kirimTop()" style="margin-bottom:8px">
         <div id="nList" style="max-height:190px;overflow:auto;
@@ -1629,19 +1694,28 @@ async function kirimSaqla() {
     return saqlanmadi('nSave', new Error('Ta\'minotchi tanlanmadi'));
   if (!$('nWh').value)
     return saqlanmadi('nSave', new Error('Ombor tanlanmadi'));
+  const q = kMod === 'return';
+  //  Tekshiruv SERVERDA ham (`POST /returns`): katakni bo'sh
+  //  yuborishga ekrandan ham, qo'ldan ham yo'l qoldirilmaydi.
+  const note = q ? ($('nNote')?.value || '').trim() : '';
+  if (q && !note)
+    return saqlanmadi('nSave', new Error('Sabab yozilmadi'));
   saqlanmoqda('nSave');
   try {
-    const r = await App.api('/api/materials/receipts', { method: 'POST',
-      body: JSON.stringify({
-        supplier_id: Number($('nSup').value),
-        warehouse_id: Number($('nWh').value),
-        doc_on: $('nOn').value || null,
-        supplier_doc: $('nDoc').value.trim() || null,
-        ccy: $('nCcy').value,
-        rate: Number($('nRate').value) || null,
-        items }) });
+    const r = await App.api(
+      q ? '/api/materials/returns' : '/api/materials/receipts',
+      { method: 'POST',
+        body: JSON.stringify({
+          supplier_id: Number($('nSup').value),
+          warehouse_id: Number($('nWh').value),
+          doc_on: $('nOn').value || null,
+          supplier_doc: $('nDoc').value.trim() || null,
+          ccy: $('nCcy').value,
+          rate: Number($('nRate').value) || null,
+          note: note || null,
+          items }) });
     yop(); toast(r.doc_no + ' yozildi');
-    tabga('kirim'); await load();
+    tabga(q ? 'qayt' : 'kirim'); await load();
   } catch (e) { saqlanmadi('nSave', e); }
 }
 

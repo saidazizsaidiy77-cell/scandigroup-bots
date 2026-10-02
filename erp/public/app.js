@@ -544,8 +544,18 @@ const App = (() => {
       text: "Oxirgi narx \u00b7 o'tgan safarga nisbatan o'zgarish \u00b7 o'rtacha narx \u00b7 qator bosilsa narx tarixi: qachon, kimdan, qaysi valyutada",
       perm: ['purchasing.view', 'purchasing.manage',
              'materials.view', 'materials.manage'] },
-    { mod: 'supply', nav: "Ta'minotchiga qaytarib berish",
-      perm: ['purchasing.manage'] },
+    //  ★ QAYTARISH — KIRIMNING TESKARISI va shuning uchun o'sha
+    //  sahifaning yana bir ko'rinishi (izoh: `KORINISH`,
+    //  `materiallar.html`): hujjat ikki ishni birga qiladi —
+    //  omborni KAMAYTIRADI va ta'minotchining qarzini KAMAYTIRADI.
+    //  Huquqi kirim bilan bir xil (`materials.manage`): javondagi
+    //  molni qaytarib beradigan odam o'sha molni qabul qilgan odam.
+    { href: '/materiallar.html?tab=qayt', mod: 'supply',
+      nav: "Ta'minotchiga qaytarib berish",
+      title: "Ta'minotchiga qaytarilgan",
+      lead: 'Brak yoki kelishmagan mol',
+      text: "Hujjat omborni kamaytiradi VA ta'minotchining qarzini kamaytiradi \u00b7 sabab majburiy \u00b7 zavod omboridan yoziladi",
+      perm: ['materials.view', 'materials.manage', 'purchasing.view'] },
 
     // Ombor. Zavodda bir nechta ombor bor (tayyor mahsulot, xom ashyo,
     // va zavod aytadigan boshqalari), shuning uchun bo'limga kirilganda
