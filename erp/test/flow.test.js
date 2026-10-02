@@ -5524,6 +5524,24 @@ test('ta\'minot qarzdorligi: boshiga + haqdor − qarzdor = oxiriga', async () =
   assert.equal(ich.rows[0].kind, 'payment');
   assert.ok(ich.rows[0].doc_no, 'to\'lov hujjat raqami bilan');
 
+  //  ★ SOLISHTIRMA DALOLATNOMA SHU YO'LDAN O'QIYDI
+  //  (`/taminot-dalolatnoma.html`): bitta ta'minotchi, bitta oraliq
+  //  va yonida yugurib boradigan qoldiq. Ekranda qator ustma-ust
+  //  qo'shiladi, ya'ni tenglik SERVERDAN chiqqan raqamlar bilan ham
+  //  to'g'ri bo'lishi shart \u2014 aks holda jadvalning oxirgi qatori
+  //  «Davr oxiriga» kartochkasidan farq qilib qolardi.
+  //
+  //  Tomoni MIJOZNIKIGA teskari: ta'minotchi passiv hisob va
+  //  haqdor qarzimizni OSHIRADI.
+  assert.equal(
+    Number(ich.opening) + Number(ich.total.credit) - Number(ich.total.debit),
+    Number(ich.closing), 'boshiga + haqdor \u2212 qarzdor = oxiriga');
+  //  Ekrandagi yuguruvchi qoldiq ham o'sha yo'l bilan yig'iladi.
+  let yugurik = Number(ich.opening);
+  for (const q of ich.rows) yugurik += Number(q.credit) - Number(q.debit);
+  assert.equal(yugurik, Number(ich.closing),
+    'qatorma-qator yig\'ilgani ham oxirgi raqamga teng');
+
   //  ★ «Hammasi» oralig'ida ham boshlang'ich qarz «DAVR BOSHIGA» da
   //  turadi va HAQDOR aylanmasiga qo'shilmaydi (zavod qarori,
   //  2026-10). Ilgari u «kelgan mol» bilan bitta raqamga qo'shilardi

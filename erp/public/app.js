@@ -526,7 +526,15 @@ const App = (() => {
 
     //  Hali yozilmaganlar — reja sahifasida turadi va nima
     //  kutilayotgani ko'rinib tursin.
-    { mod: 'supply', nav: 'Solishtirma dalolatnoma', perm: ['purchasing.view'] },
+    //  ★ MIJOZLARNIKI BILAN BIR XIL SHAKL (`/dalolatnoma.html`):
+    //  ikkalasi bitta ko'z bilan o'qiladi va bittasida bo'lgan narsa
+    //  ikkinchisida bo'lmasa shakl buzilardi. Tomoni esa TESKARI —
+    //  ta'minotchi passiv hisob (izoh: sahifaning ichida).
+    { href: '/taminot-dalolatnoma.html', mod: 'supply',
+      nav: 'Solishtirma dalolatnoma',
+      title: 'Solishtirma dalolatnoma', lead: "Ta'minotchi bilan yuzma-yuz",
+      text: "Bitta ta'minotchi, bitta oraliq \u00b7 davr boshiga, har harakat va davr oxiriga \u00b7 to'lov qatori bosilsa chiqim orderi ochiladi",
+      perm: ['purchasing.view', 'purchasing.manage'] },
     { mod: 'supply', nav: 'Narxlar (xarid)',         perm: ['purchasing.view'] },
     { mod: 'supply', nav: "Ta'minotchiga qaytarib berish",
       perm: ['purchasing.manage'] },
