@@ -405,13 +405,41 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
   //  kelib, o'sha davrning o'zida chiqib ketgan mahsulot ham qatorda
   //  ko'rinishi kerak, garchi undan omborda hech narsa qolmagan bo'lsa ham.
   const mFrom = req.query.from || null, mTo = req.query.to || null;
+
+  //  ★ ORALIQ OXIRIDAGI QOLDIQ (zavod qarori, 2026-10). Qoldiq
+  //  USTUNI hozirgi holat va u shunday qoladi — mudirning kunlik
+  //  savoli shu. Lekin oraliq tanlangach savol boshqa bo'ladi:
+  //  «30-sentabrda javonda nechta turgan edi». Javob ekranda YO'Q
+  //  edi — sana faqat kirdi/chiqdi ga tegardi va odam «oraliq
+  //  tanladim, lekin qoldiq o'sha-o'sha» degan savol bilan qolardi.
+  //
+  //  Javob HARAKATDAN chiqadi, saqlangan ustundan emas: omborda
+  //  «o'sha kungi qoldiq» degan ustun yo'q va bo'lishi ham kerak
+  //  emas — har kun uchun bitta qator yozib boriladigan jadval
+  //  birinchi esdan chiqqan joyda haqiqatdan uzilib ketardi.
+  //
+  //      boshiga + kirdi − chiqdi = oxiriga
+  //
+  //  `boshiga` — oraliqdan OLDINGI harakatning sof yig'indisi. Shu
+  //  sababdan AYL endi oraliqdan oldingisini ham o'qiydi (`<= $2`
+  //  gacha), kirdi/chiqdi esa FILTER bilan oraliqqa qisiladi.
+  //
+  //  Shart `HAVING` da: oraliqdan oldin kelib, o'sha oraliqdan oldin
+  //  chiqib ketgan mahsulot uchala raqam ham nol bo'lib qatorda
+  //  turardi va ro'yxatni butun tarix bilan to'ldirardi.
+  const ichida = `(($1::date IS NULL OR m.on_date >= $1)
+                   AND ($2::date IS NULL OR m.on_date <= $2))`;
+  const ichida2 = ichida.replace(/m\.on_date/g, 'm2.on_date');
   const AYL = `
     SELECT m.product_id, ${NORM('m.color')} AS color, ${NORM('m.fabric')} AS fabric,
-           COALESCE(SUM(m.qty) FILTER (WHERE m.kind = 'kirim'), 0)::int  AS kirdi,
-           COALESCE(SUM(m.qty) FILTER (WHERE m.kind = 'chiqim'), 0)::int AS chiqdi
+           COALESCE(SUM(m.qty) FILTER (
+             WHERE m.kind = 'kirim'  AND ${ichida}), 0)::int AS kirdi,
+           COALESCE(SUM(m.qty) FILTER (
+             WHERE m.kind = 'chiqim' AND ${ichida}), 0)::int AS chiqdi,
+           COALESCE(SUM(CASE WHEN m.kind = 'kirim' THEN m.qty ELSE -m.qty END)
+             FILTER (WHERE m.on_date < $1), 0)::int AS bosh
       FROM v_fg_moves m
      WHERE m.warehouse_id = $4
-       AND ($1::date IS NULL OR m.on_date >= $1)
        AND ($2::date IS NULL OR m.on_date <= $2)
        AND ($3::text IS NULL OR m.product ILIKE '%' || $3 || '%'
             OR m.product_type ILIKE '%' || $3 || '%'
@@ -419,7 +447,13 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
             OR m.fabric ILIKE '%' || $3 || '%'
             OR m.conveyor_no ILIKE '%' || $3 || '%')
        AND ($5::text IS NULL OR m.product_type = ANY(string_to_array($5, ',')))
-     GROUP BY m.product_id, ${NORM('m.color')}, ${NORM('m.fabric')}`;
+     GROUP BY m.product_id, ${NORM('m.color')}, ${NORM('m.fabric')}
+    HAVING COALESCE(SUM(m.qty) FILTER (
+             WHERE m.kind = 'kirim'  AND ${ichida}), 0) <> 0
+        OR COALESCE(SUM(m.qty) FILTER (
+             WHERE m.kind = 'chiqim' AND ${ichida}), 0) <> 0
+        OR COALESCE(SUM(CASE WHEN m.kind = 'kirim' THEN m.qty ELSE -m.qty END)
+             FILTER (WHERE m.on_date < $1), 0) <> 0`;
 
   const [rows, total, byUom, facets] = await Promise.all([
     db.query(
@@ -460,7 +494,14 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
               COALESCE(q.amount, 0) AS amount,
               q.first_on, q.oldest_days, q.price_min, q.price_max,
               COALESCE(a.kirdi, 0)  AS kirdi,
-              COALESCE(a.chiqdi, 0) AS chiqdi
+              COALESCE(a.chiqdi, 0) AS chiqdi,
+              --  Oraliq boshiga va oxiriga: oxiri SERVERDA hisoblanadi,
+              --  sahifada emas — ikki joyda yozilgan shart bir kun
+              --  ajralib ketardi va jadvaldagi «oxiriga» tepadagi
+              --  kartochkadan farq qilib qolardi.
+              COALESCE(a.bosh, 0) AS bosh,
+              (COALESCE(a.bosh, 0) + COALESCE(a.kirdi, 0)
+                 - COALESCE(a.chiqdi, 0)) AS oxir
          FROM qold q
          FULL JOIN ayl a
            ON a.product_id = q.product_id
@@ -491,7 +532,14 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
               COALESCE(SUM(q.bron), 0)::int AS bron,
               COALESCE(SUM(q.free), 0)::int AS free,
               COALESCE(SUM(m.kirdi), 0)::int  AS kirdi,
-              COALESCE(SUM(m.chiqdi), 0)::int AS chiqdi
+              COALESCE(SUM(m.chiqdi), 0)::int AS chiqdi,
+              --  Oraliq boshiga va oxiriga (izoh: AYL). Jadval ostidagi
+              --  «JAMI» ham, tepadagi kartochka ham SHU yerdan oladi:
+              --  ikki joyda hisoblansa bir kun bir-biridan ajralib
+              --  ketardi.
+              COALESCE(SUM(m.bosh), 0)::int AS bosh,
+              (COALESCE(SUM(m.bosh), 0) + COALESCE(SUM(m.kirdi), 0)
+                 - COALESCE(SUM(m.chiqdi), 0))::int AS oxir
          FROM (SELECT DISTINCT uom FROM product_groups WHERE uom IS NOT NULL) u
          LEFT JOIN LATERAL (
            SELECT COALESCE(SUM(qty), 0) AS qty,
@@ -499,15 +547,18 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
                   COALESCE(SUM(qty - reserved_qty), 0) AS free
              FROM v_fg_units WHERE uom = u.uom AND ${search}) q ON true
          LEFT JOIN LATERAL (
-           SELECT COALESCE(SUM(qty) FILTER (WHERE kind = 'kirim'), 0) AS kirdi,
-                  COALESCE(SUM(qty) FILTER (WHERE kind = 'chiqim'), 0) AS chiqdi
+           SELECT COALESCE(SUM(qty) FILTER (
+                    WHERE kind = 'kirim'  AND ${ichida2}), 0) AS kirdi,
+                  COALESCE(SUM(qty) FILTER (
+                    WHERE kind = 'chiqim' AND ${ichida2}), 0) AS chiqdi,
+                  COALESCE(SUM(CASE WHEN kind = 'kirim' THEN qty ELSE -qty END)
+                    FILTER (WHERE m2.on_date < $1), 0) AS bosh
              FROM v_fg_moves m2
             WHERE m2.uom = u.uom AND m2.warehouse_id = $4
-              AND ($1::date IS NULL OR m2.on_date >= $1)
               AND ($2::date IS NULL OR m2.on_date <= $2)
               AND ($5::text IS NULL
                    OR m2.product_type = ANY(string_to_array($5, ',')))) m ON true
-        WHERE q.qty <> 0 OR m.kirdi <> 0 OR m.chiqdi <> 0
+        WHERE q.qty <> 0 OR m.kirdi <> 0 OR m.chiqdi <> 0 OR m.bosh <> 0
         GROUP BY u.uom ORDER BY u.uom`, params),
 
     //  Tanlov ro'yxati filtrning O'ZIDAN qat'i nazar tuziladi: aks holda
@@ -518,8 +569,12 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
          FROM v_fg_units WHERE warehouse_id = $1
         GROUP BY product_type ORDER BY product_type`, [wh.id]),
   ]);
-  const ayl = byUom.rows.reduce((a, r) =>
-    ({ kirdi: a.kirdi + r.kirdi, chiqdi: a.chiqdi + r.chiqdi }), { kirdi: 0, chiqdi: 0 });
+  //  Oraliq boshiga va oxiriga ham shu yerdan: jadval ostidagi «JAMI»
+  //  ham, tepadagi kartochka ham BITTA manbadan o'qiydi.
+  const ayl = byUom.rows.reduce((a, r) => ({
+    kirdi: a.kirdi + r.kirdi, chiqdi: a.chiqdi + r.chiqdi,
+    bosh: a.bosh + r.bosh,    oxir: a.oxir + r.oxir,
+  }), { kirdi: 0, chiqdi: 0, bosh: 0, oxir: 0 });
   res.json({ warehouse: wh, rows: rows.rows,
              total: { ...total.rows[0], ...ayl, by_uom: byUom.rows },
              facets: facets.rows });

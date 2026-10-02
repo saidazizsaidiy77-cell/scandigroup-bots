@@ -233,7 +233,7 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
 .tbox{overflow:auto;max-height:70vh}
 .stock .s-qty,.stock .s-price,.stock .s-amount,
 .stock .s-bron,.stock .s-free,.stock .s-all,
-.stock .s-in,.stock .s-out{text-align:right}
+.stock .s-in,.stock .s-out,.stock .s-end{text-align:right}
 /* «Jami» — javondagi jismoniy soni: mudir uni inventarizatsiyada
    sanaydi, kunlik savoli esa QOLDIQ (sotish mumkin bo'lgani).
    Shuning uchun yonidagi ustun kuchsizroq — ko'z avval qoldiqqa
@@ -263,6 +263,13 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
      va summa: shuning uchun ikki xil panjara. */
   .stock.tm   tbody tr,.stock.tm    tfoot tr{
     grid-template-areas:"name qty" "color in" "fabric out" "type bron" ". jami"}
+  /*  Oraliq tanlanganda beshinchi qator qo'shiladi. */
+  .stock.tm.davr tbody tr,.stock.tm.davr tfoot tr{
+    grid-template-areas:"name qty" "color in" "fabric out" "type bron"
+                        ". oxir" ". jami"}
+  .stock.shop.davr tbody tr,.stock.shop.davr tfoot tr{
+    grid-template-areas:"name qty" "color in" "fabric out" ". oxir"
+                        "price amount" "type type"}
   /*  Savdoda uchta ustun yo'q (kirdi, chiqdi, bronda) — qolgani
       to'rt qator emas, ikki qatorga sig'adi. */
   .stock.savdo tbody tr,.stock.savdo tfoot tr{
@@ -292,6 +299,12 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
   .stock .s-all {grid-area:jami;font-size:13px}
   .stock .s-in::before  {content:'kirdi ';color:var(--muted)}
   .stock .s-out::before {content:'chiqdi ';color:var(--muted)}
+  /*  ★ ORALIQ OXIRIGA — tanlangan kuni javonda turgani (izoh:
+      public/ombor.html, `davrKor`). Telefonda ham yozuvi bilan
+      turadi: «qoldiq» bilan yonma-yon tursa qaysi biri qaysi kunniki
+      ekani faqat shundan bilinadi. */
+  .stock .s-end{grid-area:oxir;font-size:13px}
+  .stock .s-end::before {content:'oraliq oxiriga ';color:var(--muted)}
   .stock .s-bron::before{content:'bronda ';color:var(--muted)}
   /*  ★ T/M omborda yozuv «qoldiq» (javondagi, inventarizatsiya
       raqami), katta raqam esa BRONSIZ qoldiq — sotish mumkin

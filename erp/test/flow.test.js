@@ -9500,6 +9500,83 @@ test('minus_cash kaliti YOQIQ tug\'iladi', async () => {
     'ombor kaliti eskicha o\'chiq');
 });
 
+test('oraliq oxiridagi qoldiq: ombor ham, xom ashyo ham', async () => {
+  //  ★ Qoldiq USTUNI hozirgi holat va u shunday qoladi; oraliq
+  //  tanlangach savol boshqa bo'ladi \u2014 «o'sha kuni javonda
+  //  nechta turgan edi» (izoh: modules/warehouse.js, modules/materials.js).
+  //
+  //      boshiga + kirdi \u2212 chiqdi = oxiriga
+  const xom = await xodim('Sinov oraliq xodim', 'xom_ombor');
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code = 'XOM'`)).id;
+  const tam = (await H.id(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Oraliq sinov lagi', uom: 'kg', category: 'FURN' })).body;
+
+  //  Sentabrda 100 boshlang'ich qoldiq, oktabrda 40 kirim.
+  assert.equal((await xom('POST', '/api/materials/opening', {
+    on: '2026-09-05',
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 100 }] })).status, 200);
+  assert.equal((await xom('POST', '/api/materials/receipts', {
+    supplier_id: tam, warehouse_id: wh, doc_on: '2026-10-03',
+    items: [{ material_id: m.id, qty: 40, price: 5 }] })).status, 200);
+
+  const q = async (s) => (await xom('GET', '/api/materials/stock' + s))
+    .body.rows.find((r) => r.material_id === m.id);
+
+  //  SENTABR: boshiga 0, kirdi 100, oxiriga 100 \u2014 oktabrdagi
+  //  kirim hali bo'lmagan, qoldiq ustuni esa BUGUNGI 140 bo'lib
+  //  turaveradi.
+  const sen = await q('?from=2026-09-01&to=2026-09-30');
+  assert.equal(Number(sen.bosh), 0);
+  assert.equal(Number(sen.kirdi), 100);
+  assert.equal(Number(sen.oxir), 100, 'sentabr oxiriga 100');
+  assert.equal(Number(sen.qty), 140, 'qoldiq ustuni \u2014 hozirgi holat');
+
+  //  OKTABR: sentabrniki «davr boshiga» ga o'tadi va aylanmada
+  //  QOLMAYDI \u2014 qarzdorlik hisoboti bilan bir xil qoida.
+  const okt = await q('?from=2026-10-01&to=2026-10-31');
+  assert.equal(Number(okt.bosh), 100, 'oldingi davrning oxiri \u2014 boshi');
+  assert.equal(Number(okt.kirdi), 40);
+  assert.equal(Number(okt.oxir), 140);
+
+  //  Oraliqdan OLDINGI kun: hali hech narsa kelmagan.
+  const avg = await q('?from=2026-08-01&to=2026-08-31');
+  assert.equal(Number(avg.oxir), 0, 'avgust oxiriga javonda yo\'q edi');
+
+  // ── TAYYOR MAHSULOT OMBORI: aynan shu idiom ────────────────────────
+  //  Rangi ATAYLAB yagona: qator mahsulot + rang + mato bo'yicha
+  //  guruhlanadi va boshqa testlarning konverlari bilan qo'shilib
+  //  ketsa raqam o'sha testlarga bog'lanib qolardi.
+  const u = await newUnit({ qty: 7, color: 'Oraliq sinov rangi' });
+  await H.id(`UPDATE production_units SET status = 'fg', fg_on = '2026-09-10',
+                     current_section_id = NULL WHERE id = $1`, [u.id]);
+  const fg = async (s) => (await admin('GET', '/api/warehouse/fg/summary' + s)).body;
+
+  const pid = (await H.id(
+    `SELECT product_id FROM production_units WHERE id = $1`, [u.id])).product_id;
+  const s9 = await fg('?from=2026-09-01&to=2026-09-30');
+  const r9 = s9.rows.find((r) => r.product_id === pid
+    && r.color === 'Oraliq sinov rangi');
+  assert.ok(r9, 'sentabrda kelgani qatorda turadi');
+  assert.equal(Number(r9.kirdi), 7, 'sentabrda kirdi');
+  assert.equal(Number(r9.oxir), 7, 'sentabr oxiriga javonda turgan');
+
+  //  ★ ORALIQDAN OLDINGI oy: o'sha kuni omborda YO'Q edi.
+  const s8 = await fg('?from=2026-08-01&to=2026-08-31');
+  const r8 = s8.rows.find((r) => r.product_id === pid
+    && r.color === 'Oraliq sinov rangi');
+  assert.equal(r8 ? Number(r8.oxir) : 0, 0, 'avgust oxiriga omborda yo\'q');
+
+  //  ★ boshiga + kirdi \u2212 chiqdi = oxiriga \u2014 YIG'INDIDA ham,
+  //  va u SERVERDA hisoblanadi: ikki joyda yozilgan shart bir kun
+  //  ajralib ketardi.
+  (s9.total.by_uom || []).forEach((x) => assert.equal(
+    Number(x.bosh) + Number(x.kirdi) - Number(x.chiqdi), Number(x.oxir),
+    `${x.uom}: yig'indi ham tenglikni saqlaydi`));
+  assert.equal(Number(s9.total.bosh) + Number(s9.total.kirdi)
+             - Number(s9.total.chiqdi), Number(s9.total.oxir));
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

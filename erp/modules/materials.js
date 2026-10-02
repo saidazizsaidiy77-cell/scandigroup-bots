@@ -356,22 +356,50 @@ async function yetarlimi(client, whId, materialId, qty, nomi) {
 //  bo'lmasdi. Oraliq BERILMAGANDA esa qo'shiladigan narsa yo'q:
 //  `ay` bo'sh qoladi va ro'yxat eskicha, faqat javondagisi bo'lib
 //  turaveradi.
+//  ★ ORALIQ OXIRIDAGI QOLDIQ (zavod qarori, 2026-10). Qoldiq USTUNI
+//  hozirgi holat va u shunday qoladi — mudirning kunlik savoli shu.
+//  Oraliq tanlangach savol boshqa bo'ladi: «30-sentabrda javonda
+//  nechta turgan edi», va ilgari javob ekranda YO'Q edi.
+//
+//  Javob HARAKATDAN chiqadi, saqlangan ustundan emas: «o'sha kungi
+//  qoldiq» degan ustun yo'q va bo'lishi ham kerak emas — har kun
+//  uchun bitta qator yozib boriladigan jadval birinchi esdan chiqqan
+//  joyda haqiqatdan uzilib ketardi.
+//
+//      boshiga + kirdi − chiqdi = oxiriga
+//
+//  Shart `HAVING` da: oraliqdan oldin kelib, o'sha oraliqdan oldin
+//  sarflanib bo'lingan material uchala raqam ham nol bo'lib qatorda
+//  turardi va ro'yxatni butun tarix bilan to'ldirardi.
+const ICHIDA = `(($5::date IS NULL OR f.moved_on >= $5)
+                 AND ($6::date IS NULL OR f.moved_on <= $6))`;
+
 router.get('/stock', need(...VIEW), wrap(async (req, res) => {
   const doira = whDoira(req);
   const from = trim(req.query.from), to = trim(req.query.to);
   const { rows } = await db.query(
     `WITH ay AS (
        SELECT f.place_id AS warehouse_id, f.material_id,
-              COALESCE(SUM(f.qty)  FILTER (WHERE f.qty > 0), 0)::NUMERIC(14,3) AS kirdi,
-              COALESCE(SUM(-f.qty) FILTER (WHERE f.qty < 0), 0)::NUMERIC(14,3) AS chiqdi
+              COALESCE(SUM(f.qty) FILTER (
+                WHERE f.qty > 0 AND ${ICHIDA}), 0)::NUMERIC(14,3) AS kirdi,
+              COALESCE(SUM(-f.qty) FILTER (
+                WHERE f.qty < 0 AND ${ICHIDA}), 0)::NUMERIC(14,3) AS chiqdi,
+              --  ★ ORALIQ BOSHIGA — oraliqdan OLDINGI harakatning sof
+              --  yig'indisi (izoh pastda).
+              COALESCE(SUM(f.qty) FILTER (
+                WHERE f.moved_on < $5), 0)::NUMERIC(14,3) AS bosh
          FROM v_material_flow f
         WHERE f.kind = 'warehouse'
           --  Oraliq berilmasa aylanma SO'RALMAGAN: shart yolg'on
           --  bo'lib qoladi va FULL JOIN eski ro'yxatni beradi.
           AND ($5::date IS NOT NULL OR $6::date IS NOT NULL)
-          AND ($5::date IS NULL OR f.moved_on >= $5)
           AND ($6::date IS NULL OR f.moved_on <= $6)
         GROUP BY f.place_id, f.material_id
+       HAVING COALESCE(SUM(f.qty) FILTER (
+                WHERE f.qty > 0 AND ${ICHIDA}), 0) <> 0
+           OR COALESCE(SUM(-f.qty) FILTER (
+                WHERE f.qty < 0 AND ${ICHIDA}), 0) <> 0
+           OR COALESCE(SUM(f.qty) FILTER (WHERE f.moved_on < $5), 0) <> 0
      )
      SELECT COALESCE(s.warehouse_id, ay.warehouse_id) AS warehouse_id,
             w.code AS warehouse_code, w.name AS warehouse, w.shop_id,
@@ -381,6 +409,13 @@ router.get('/stock', need(...VIEW), wrap(async (req, res) => {
             s.price, s.amount,
             COALESCE(ay.kirdi, 0)  AS kirdi,
             COALESCE(ay.chiqdi, 0) AS chiqdi,
+            --  Oraliq boshiga va oxiriga. Oxiri SERVERDA hisoblanadi,
+            --  sahifada emas: ikki joyda yozilgan shart bir kun
+            --  ajralib ketardi (tayyor mahsulot ombori bilan bir xil
+            --  qoida va bir xil sabab).
+            COALESCE(ay.bosh, 0) AS bosh,
+            (COALESCE(ay.bosh, 0) + COALESCE(ay.kirdi, 0)
+               - COALESCE(ay.chiqdi, 0))::NUMERIC(14,3) AS oxir,
             c.name AS category_name, u.name AS uom_name
        FROM v_material_stock s
        FULL JOIN ay ON ay.warehouse_id = s.warehouse_id

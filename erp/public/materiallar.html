@@ -507,8 +507,8 @@ function drawStock() {
       Faqat hozir javonda turganlari — sanoq varag'i. Aylanma (kirdi va
       chiqdi) chizilmaydi: u oraliq savoli, bu esa javon savoli</p>`
     : ay ? `<p class="muted" style="font-size:12px;margin:0 0 4px">
-      Kirdi va chiqdi — tanlangan oraliq bo'yicha &middot;
-      qoldiq, narx va summa — hozirgi holat</p>` : '')
+      Davr boshiga + kirdi &minus; chiqdi = oraliq oxiriga &middot;
+      qoldiq, narx va summa — HOZIRGI holat</p>` : '')
     + gr.map((g) => {
     const jami = g.items.reduce((a, r) => a + (Number(r.amount) || 0), 0);
     const yoq  = g.items.filter((r) => r.price == null).length;
@@ -518,11 +518,18 @@ function drawStock() {
       <h3 style="margin:0">${esc(g.name)}</h3>
       <div class="muted" style="font-size:13px">${g.items.length} nom${
         jami ? ` · $${pul(jami)}` : ''}${
+        //  Oraliq tanlangan bo'lsa o'sha kungi nomlar soni ham
+        //  yoziladi: «30-sentabrda nechta nom turgan edi» degan savol
+        //  inventarizatsiyada aynan shu yerda beriladi.
+        ay ? ` · oraliq oxiriga <b>${
+          g.items.filter((r) => Number(r.oxir)).length}</b> nom` : ''}${
         yoq ? ` · <span class="tag warn">${yoq} tasida narx yo'q</span>` : ''}</div>
     </div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Material</th><th>Turkum</th>
-        ${ay ? '<th class="num">Kirdi</th><th class="num">Chiqdi</th>' : ''}
+        ${ay ? `<th class="num">Davr boshiga</th><th class="num">Kirdi</th>
+                <th class="num">Chiqdi</th>
+                <th class="num">Oraliq oxiriga</th>` : ''}
         <th class="num">Qoldiq</th><th>O'lchov</th>
         <th class="num">Narx, $</th><th class="num">Summa, $</th></tr></thead>
       <tbody>${g.items.map((r) => `<tr>
@@ -530,8 +537,15 @@ function drawStock() {
         <td class="muted">${esc(r.category_name || '—')}</td>
         <!--  Nol bu yerda HAQIQIY javob («bu oyda kelmadi»), bo'sh
               katak emas: ombor qoldig'idagi bilan bir xil qoida. -->
-        ${!ay ? '' : `<td class="num">${son(r.kirdi)}</td>
-        <td class="num">${son(r.chiqdi)}</td>`}
+        <!--  ★ ORALIQ OXIRIGA — o'sha kuni javonda turgani (izoh:
+              modules/materials.js). «Qoldiq» ustuni yonida turadi va
+              ikkalasi aralashmaydi: biri tanlangan kun, ikkinchisi
+              bugun. Minus bu yerda ham QIZIL. -->
+        ${!ay ? '' : `<td class="num">${son(r.bosh)}</td>
+        <td class="num">${son(r.kirdi)}</td>
+        <td class="num">${son(r.chiqdi)}</td>
+        <td class="num"><b${Number(r.oxir) < 0 ? ' class="late"' : ''}>${
+          son(r.oxir)}</b></td>`}
         <!--  ★ MANFIY QOLDIQ QIZIL: material omborga kirmasdan
               sarflangan degani — kirim hujjati yozilmagan. Raqamni
               nolga qisish yolg'on bo'lardi, yashirish esa xatoni

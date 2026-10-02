@@ -3017,6 +3017,44 @@ Qator IKKI manbadan tushadi (`FULL JOIN`): hozir omborda turgani
 davrning o'zida chiqib ketgan mahsulot ham qatorda ko'rinishi kerak,
 garchi undan omborda hech narsa qolmagan bo'lsa ham.
 
+**★ ORALIQ TANLANGANDA O'SHA KUNNING QOLDIG'I CHIQADI** (zavod
+qarori, 2026-10). «Qoldiq» ustuni HOZIRGI holat va u shunday qoladi —
+mudirning kunlik savoli shu. Lekin oraliq tanlangach savol boshqa
+bo'ladi: «30-sentabrda javonda nechta turgan edi». Javob ekranda YO'Q
+edi: sana faqat kirdi/chiqdi ga tegardi va odam «oraliq tanladim,
+lekin qoldiq o'sha-o'sha» degan savol bilan qolardi.
+
+Shakl qarzdorlik hisoboti va kassa lentasi bilan AYNAN bir xil (ОСВ)
+va bitta ko'z bilan o'qiladi:
+
+    boshiga + kirdi − chiqdi = oxiriga
+
+**Ikkala javob YONMA-YON turadi va aralashmaydi, chunki nomi boshqa**:
+«Qoldiq» — bugun, **«Oraliq oxiriga»** — tanlangan kun. Bitta ustunni
+ikki ma'noda ishlatish «qoldiq nechta» savoli bilan bir xil
+chalkashlikni berardi (izoh: «★ NOMLAR OXIRGI MARTA AYTILDI»).
+
+**Javob HARAKATDAN chiqadi, saqlangan ustundan emas**: omborda «o'sha
+kungi qoldiq» degan ustun yo'q va bo'lishi ham kerak emas — har kun
+uchun bitta qator yozib boriladigan jadval birinchi esdan chiqqan
+joyda haqiqatdan uzilib ketardi. `boshiga` — oraliqdan OLDINGI
+harakatning sof yig'indisi, shuning uchun aylanma endi oraliqdan
+oldingisini ham o'qiydi (`<= to` gacha) va kirdi/chiqdi `FILTER`
+bilan oraliqqa qisiladi.
+
+**Shart `HAVING` da**: oraliqdan oldin kelib, o'sha oraliqdan oldin
+chiqib ketgan mahsulot uchala raqam ham nol bo'lib qatorda turardi va
+ro'yxatni butun tarix bilan to'ldirardi.
+
+**Oxiriga SERVERDA hisoblanadi**, sahifada emas — jadval ostidagi
+«JAMI» ham, tepadagi kartochka ham BITTA manbadan o'qiydi: ikki joyda
+yozilgan shart bir kun ajralib ketardi.
+
+**Xom ashyo omborida ham AYNAN shu** (`/materiallar.html`): ikkala
+qoldiq bir xil savolga javob beradi va bittasida bo'lib, ikkinchisida
+bo'lmasa mudirning qo'lida ikki xil hisobot bo'lardi. U yerda minus
+oxiriga ham QIZIL bo'lib turadi.
+
 **★ BO'SH QATOR SABABINI AYTADI** (zavod qarori, 2026-10). Shu
 qoidaning ko'rinadigan oqibati bor: kelib, o'sha davrning o'zida chiqib
 ketgan mahsulot qatorda **Qoldiq 0 · Jami 0** bo'lib turadi, qator

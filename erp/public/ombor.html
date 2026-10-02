@@ -130,6 +130,19 @@ let faktOnly = false;
 //  Aylanma ustunlari: savdoga umuman chizilmaydi (izoh:
 //  `faqatQoldiq`), inventarizatsiya varag'ida esa vaqtincha yopiladi.
 const aylKor = () => !faqatQoldiq() && !faktOnly;
+//  ★ ORALIQ TANLANGANDA O'SHA KUNNING QOLDIG'I (zavod qarori,
+//  2026-10). «Qoldiq» ustuni HOZIRGI holat va u shunday qoladi —
+//  mudirning kunlik savoli shu. Oraliq tanlangach savol boshqa
+//  bo'ladi: «30-sentabrda javonda nechta turgan edi», va ilgari
+//  javob ekranda YO'Q edi: sana faqat kirdi/chiqdi ga tegardi va
+//  odam «oraliq tanladim, lekin qoldiq o'sha-o'sha» degan savol
+//  bilan qolardi.
+//
+//  Ikkala javob YONMA-YON turadi va aralashmaydi, chunki ularning
+//  nomi boshqa: «Qoldiq» — bugun, «Oraliq oxiriga» — tanlangan kun.
+//  Bitta ustunni ikki ma'noda ishlatish kassadagi «qoldiq nechta»
+//  savoli bilan bir xil chalkashlikni berardi.
+const davrKor = () => aylKor() && !!(stock && (stock.from || stock.to));
 //  Bronda — HOZIRGI holat, ya'ni «faqat fakt» da ham qoladi: javonda
 //  turgan mahsulotning qanchasi mijozniki ekani sanoqda ham kerak.
 const bronUstun = () => isTM() && !faqatQoldiq();
@@ -137,8 +150,8 @@ const bronUstun = () => isTM() && !faqatQoldiq();
 //  shartga qarab paydo bo'lib yo'qoladi, shuning uchun soni BITTA
 //  joyda sanaladi: ikki nusxada bo'lsa biri ertaga ikkinchisidan
 //  ajralib, konver ro'yxati jadvalni surib yuborardi.
-const ustunSoni = () => 4 + (aylKor() ? 2 : 0) + (bronUstun() ? 1 : 0)
-  + (jamiUstun() ? 1 : 0) + 1 + (isTM() ? 0 : 2);
+const ustunSoni = () => 4 + (aylKor() ? 2 : 0) + (davrKor() ? 1 : 0)
+  + (bronUstun() ? 1 : 0) + (jamiUstun() ? 1 : 0) + 1 + (isTM() ? 0 : 2);
 //  Huquqlar App.start() ICHIDA o'qiladi: undan oldin sessiya hali
 //  yuklanmagan va App.can() hamma narsaga «yo'q» deydi.
 //
@@ -445,6 +458,9 @@ function toggleType(t) {
 //  ustunlari («kirdi») tanlangan ORALIQNIKI — saralash ham o'sha
 //  raqam bo'yicha bo'ladi va boshqa savolga javob bermaydi.
 const SORT = {
+  //  Oraliq oxiriga ham saralanadi: «o'sha kuni nimadan ko'p turgan»
+  //  degan savol inventarizatsiyada aynan shu ustundan beriladi.
+  oxir:    r => Number(r.oxir) || 0,
   product: r => r.product,
   type:    r => r.product_type,
   color:   r => r.color,
@@ -469,7 +485,8 @@ const SORT = {
 //  Raqamli ustunda birinchi bosish KO'PDAN kichikka: savol «qaysi
 //  mahsulot ko'p turibdi» va eng kichik qatorni tepaga chiqarish
 //  javobni ikkinchi bosishga surardi. Matnda esa A→Z.
-const RAQAM = new Set(['kirdi', 'chiqdi', 'bron', 'free', 'jami', 'narx', 'summa']);
+const RAQAM = new Set(['kirdi', 'chiqdi', 'oxir', 'bron', 'free', 'jami',
+                       'narx', 'summa']);
 
 //  Standarti — SERVERNIKI (mahsulot · turi · rang · mato). Sahifa
 //  ochilganda hech narsa saralanmaydi: mudir kechagi tartibni
@@ -603,6 +620,10 @@ function drawStock() {
         : faktOnly
         ? 'Faqat hozir javonda turganlari — sanoq varag\'i. Aylanma '
           + '(kirdi va chiqdi) chizilmaydi: u oraliq savoli, bu esa javon savoli'
+        : davrKor()
+        ? 'Davr boshiga, kirdi, chiqdi va oraliq oxiriga — tanlangan '
+          + 'oraliq bo\'yicha &middot; Bronda, qoldiq va bronsiz qoldiq '
+          + '— HOZIRGI holat'
         : 'Kirdi va chiqdi — tanlangan oraliq bo\'yicha &middot; '
           + 'Bronda, qoldiq va bronsiz qoldiq — hozirgi holat'}</p>
       ${!jamiUstun() ? '' : `<p class="muted" style="font-size:12px;margin-top:4px">
@@ -682,12 +703,13 @@ function drawStock() {
             hozirgi holat. «1-sentabrdagi qoldiq» boshqa savol va uni oraliq
             filtri bilan aralashtirib bo'lmaydi. -->
       <table class="stock ${faqatQoldiq() ? 'savdo' : isTM() ? 'tm' : 'shop'}${
-        faktOnly ? ' fakt' : ''}">
+        faktOnly ? ' fakt' : ''}${davrKor() ? ' davr' : ''}">
         <thead><tr>
           ${th('product', 's-name', 'Mahsulot')}${th('type', 's-type', 'Turi')}
           ${th('color', 's-color', 'Rang')}${th('fabric', 's-fabric', 'Mato')}
           ${aylKor() ? `${th('kirdi', 's-in', 'Kirdi')}
           ${th('chiqdi', 's-out', 'Chiqdi')}` : ''}
+          ${davrKor() ? th('oxir', 's-end', 'Oraliq oxiriga') : ''}
           ${bronUstun() ? th('bron', 's-bron', 'Bronda') : ''}
           <!--  Nomlar YUQORIDAGI kartochkalar bilan bir xil: bitta
                 so'z bitta raqamni atashi kerak. Savdoga «Qoldiq»
@@ -743,7 +765,7 @@ function jamiRows(d) {
   //  chizilmagan joyda ular bo'yicha qator qoldirish «nimaning
   //  jamisi» degan savol berardi.
   const u = (d.total.by_uom || []).filter(x => faqatQoldiq() ? x.free
-    : faktOnly ? x.qty : (x.qty || x.kirdi || x.chiqdi));
+    : faktOnly ? x.qty : (x.qty || x.kirdi || x.chiqdi || x.bosh));
   if (!u.length) return '';
   const son = (v) => v ? `<b>${v}</b>` : '<span class="muted">\u2014</span>';
   return u.map((x, i) => `<tr>
@@ -752,6 +774,7 @@ function jamiRows(d) {
     <td class="s-color"></td><td class="s-fabric"></td>
     ${!aylKor() ? '' : `<td class="s-in">${son(x.kirdi)}</td>
     <td class="s-out">${son(x.chiqdi)}</td>`}
+    ${davrKor() ? `<td class="s-end">${son(x.oxir)}</td>` : ''}
     ${bronUstun() ? `<td class="s-bron">${son(x.bron)}</td>` : ''}
     ${(() => {
       const kat = (cls, v) => `<td class="${cls}"><b>${v}</b> <span class="muted"
@@ -809,6 +832,11 @@ function drawStockRow(r) {
         : '<span class="muted">&mdash;</span>'}</td>
       <td class="s-out">${r.chiqdi ? `<b>${r.chiqdi}</b>`
         : '<span class="muted">&mdash;</span>'}</td>`}
+      <!--  ★ ORALIQ OXIRIGA — o'sha kuni javonda turgani (izoh:
+            davrKor). «Qoldiq» ustuni yonida turadi va ikkalasi
+            aralashmaydi: biri tanlangan kun, ikkinchisi bugun. -->
+      ${!davrKor() ? '' : `<td class="s-end">${r.oxir
+        ? `<b>${r.oxir}</b>` : '<span class="muted">&mdash;</span>'}</td>`}
       ${!bronUstun() ? ''
       //  Bronda turgan mahsulot OMBORDA: u hali chiqib ketmagan,
       //  shuning uchun qoldiqdan ayrilmaydi — sotib bo'lmasligi
