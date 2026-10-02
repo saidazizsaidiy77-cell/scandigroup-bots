@@ -1375,6 +1375,67 @@ router.post('/', need('production.manage'), wrap(async (req, res) => {
   }
 }));
 
+// ═══════════════════════════════ SONINI TO'G'RILASH
+//
+//  ★ QOIDA BITTA JOYDA. Soni IKKI ekrandan to'g'rilanadi — jurnaldagi
+//  konver kartochkasidan (`PATCH /api/units/:id`) va OMBOR
+//  qoldig'idagi sanoq oynasidan (`POST /api/warehouse/fg/count`) —
+//  lekin u uchta joyga tegadi: konverning o'zi, jamlanma `flow_log`
+//  va T/M ombor qoldig'i (`fg_stock`). Ikki nusxada yozilsa bir kun
+//  biri ikkinchisidan ajralib ketardi: bir ekranda bron tekshirilib,
+//  ikkinchisida tekshirilmasdi va mijozga va'da qilingan mahsulot
+//  jimgina yo'qolib qolardi.
+//
+//  `client` — TRANZAKSIYANING ulanishi: qoldiq ham, audit ham o'sha
+//  tranzaksiyada yozilishi kerak (CLAUDE.md, 3-qoida).
+//
+//  `opts.unit` — chaqiruvchi konverni allaqachon `FOR UPDATE` bilan
+//  qulflagan bo'lsa o'sha qator; bo'lmasa shu yerda qulflanadi.
+//  `opts.no` — raqam SHU so'rovda almashayotgan bo'lsa yangisi:
+//  `flow_log` qatorlari izoh bo'yicha ham topiladi va raqam yuqorida
+//  allaqachon yangilangan bo'ladi.
+async function sonniTogrila(client, req, id, nextQty, opts = {}) {
+  const u = opts.unit || (await client.query(
+    `SELECT conveyor_no, qty, product_id, status FROM production_units
+      WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+  if (!u) { const e = new Error('Konver topilmadi'); e.status = 404; throw e; }
+  if (nextQty === u.qty) return { changed: false, unit: u };
+
+  //  Bron qo'yilgan donadan kam qilib bo'lmaydi: mijozga va'da
+  //  qilingan mahsulot jimgina yo'qolib qolardi. Avval bron olinadi,
+  //  keyin soni to'g'rilanadi.
+  const bron = (await client.query(
+    `SELECT COALESCE(SUM(qty), 0)::int AS n FROM unit_reservations
+      WHERE unit_id = $1`, [id])).rows[0].n;
+  if (nextQty < bron)
+    throw new Error(`${u.conveyor_no}: ${bron} tasi buyurtmada — ` +
+      `sonini ${bron} tadan kam qilib bo'lmaydi`);
+
+  await client.query(
+    `UPDATE production_units SET qty = $2 WHERE id = $1`, [id, nextQty]);
+
+  // Konverning har harakati jamlanma yozuv qoldirgan — hammasida
+  // o'sha paytdagi soni turibdi. Bog'lanish ustuni (flow_log_id)
+  // qo'shilishidan oldingi harakatlarda u yo'q, ular izoh bo'yicha
+  // topiladi.
+  const no = opts.no || u.conveyor_no;
+  await client.query(
+    `UPDATE flow_log SET qty_ok = $2
+      WHERE id IN (SELECT flow_log_id FROM unit_moves
+                    WHERE unit_id = $1 AND flow_log_id IS NOT NULL)
+         OR note = $3 OR note LIKE $3 || ' ·%'`,
+    [id, nextQty, no]);
+
+  // Soni o'zgargani qoldiqni ham o'zgartiradi — konverlardan qayta
+  // hisoblanadi.
+  if (u.status === 'fg') await refreshStock(client, u.product_id);
+  await audit(req, { module: 'production', action: 'qty', entity: 'unit',
+                     entity_id: id,
+                     payload: { from: u.qty, to: nextQty,
+                                note: opts.note || null } }, client);
+  return { changed: true, unit: u };
+}
+
 // Zakaz raqami, mijoz, narx, chiqish sanasi — savdo qo'yadi.
 // Rang va matoni ishlab chiqarish qo'yadi, lak/qadoqlash rejasini esa
 // tsex boshlig'i — hammasi bitta jurnal qatorida turadi.
@@ -1468,39 +1529,9 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
                            payload: { from: u.conveyor_no, to: nextNo } }, client);
       }
 
-      if (nextQty != null && nextQty !== u.qty) {
-        //  Bron qo'yilgan donadan kam qilib bo'lmaydi: mijozga va'da
-        //  qilingan mahsulot jimgina yo'qolib qolardi. Avval bron
-        //  olinadi, keyin soni to'g'rilanadi.
-        const bron = (await client.query(
-          `SELECT COALESCE(SUM(qty), 0)::int AS n FROM unit_reservations
-            WHERE unit_id = $1`, [req.params.id])).rows[0].n;
-        if (nextQty < bron)
-          throw new Error(`${u.conveyor_no}: ${bron} tasi buyurtmada — ` +
-            `sonini ${bron} tadan kam qilib bo'lmaydi`);
-
-        await client.query(
-          `UPDATE production_units SET qty = $2 WHERE id = $1`, [req.params.id, nextQty]);
-
-        // Konverning har harakati jamlanma yozuv qoldirgan — hammasida
-        // o'sha paytdagi soni turibdi. Bog'lanish ustuni (flow_log_id)
-        // qo'shilishidan oldingi harakatlarda u yo'q, ular izoh bo'yicha
-        // topiladi — raqam yuqorida allaqachon yangilangani uchun izlash
-        // YANGI raqam bilan ketadi.
-        const no = nextNo || u.conveyor_no;
-        await client.query(
-          `UPDATE flow_log SET qty_ok = $2
-            WHERE id IN (SELECT flow_log_id FROM unit_moves
-                          WHERE unit_id = $1 AND flow_log_id IS NOT NULL)
-               OR note = $3 OR note LIKE $3 || ' ·%'`,
-          [req.params.id, nextQty, no]);
-
-        // Soni o'zgargani qoldiqni ham o'zgartiradi — konverlardan qayta hisoblanadi
-        if (u.status === 'fg') await refreshStock(client, u.product_id);
-        await audit(req, { module: 'production', action: 'qty', entity: 'unit',
-                           entity_id: req.params.id,
-                           payload: { from: u.qty, to: nextQty } }, client);
-      }
+      if (nextQty != null)
+        await sonniTogrila(client, req, Number(req.params.id), nextQty,
+                           { unit: u, no: nextNo });
 
       //  ★ MAHSULOTNI ALMASHTIRISH.
       //
@@ -3818,3 +3849,7 @@ module.exports.requestOne = requestOne;
 //  Konverdagi mijoz va zakaz raqami bronlardan qaytadan yoziladi.
 //  Savdo ham, tasdiqlash ham shu yerdan chaqiradi.
 module.exports.stampUnit = stampUnit;
+//  Sonini to'g'rilash OMBOR sahifasidan ham chaqiriladi (sanoq):
+//  qoida bitta joyda tursin — bron tekshiruvi, jamlanma yozuv va
+//  T/M ombor qoldig'i bilan.
+module.exports.sonniTogrila = sonniTogrila;

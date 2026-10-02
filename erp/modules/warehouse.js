@@ -16,7 +16,7 @@
 const express = require('express');
 const { db, wrap, audit, today } = require('../db');
 const { need } = require('../auth');
-const { clonePart, scopeOf } = require('./units');
+const { clonePart, scopeOf, sonniTogrila } = require('./units');
 const notify = require('../notify');
 
 const router = express.Router();
@@ -582,21 +582,43 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
 
 // Jamlanma qatorini ochish: aynan shu mahsulot + rang + mato bo'yicha
 // qaysi konverlar turganini ko'rsatadi.
+//
+//  ★ MAHSULOT IXTIYORIY — bo'sh bo'lsa butun OMBORNING konverlari
+//  keladi. Sanoq varag'i aynan shu: mudir javon oldiga bitta ro'yxat
+//  bilan boradi, har qatorda konver raqami va soni turadi. Ilgari
+//  `product_id` shart edi va mudir sanoq uchun har qatorni birma-bir
+//  ochib chiqishi kerak edi — o'ttizta mahsulot, o'ttizta so'rov.
+//
+//  Qidiruv va tur filtri EKRANDAGI bilan bir xil (`q`,
+//  `product_type` + tsex doirasi): varaq ekranda ko'rinib turgan
+//  qatorlardan boshqa javob bermasligi kerak.
 router.get('/fg/units', need(...READ), wrap(async (req, res) => {
   const wh = await whOf(req, req.query.w);
+  const pid = req.query.product_id ? Number(req.query.product_id) : null;
+  const turlar = await typeScope(req, req.query.product_type);
   const { rows } = await db.query(
     `SELECT id, conveyor_no, order_no, qty, fg_on, days_in_stock,
-            customer_name, is_stock, total_amount, reserved_qty
+            customer_name, is_stock, total_amount, reserved_qty,
+            product, product_type, color, fabric, uom, product_id
        FROM v_fg_units
-      WHERE product_id = $3
-        AND ${NORM('color')}  IS NOT DISTINCT FROM $4
-        AND ${NORM('fabric')} IS NOT DISTINCT FROM $5
-        AND warehouse_id = $6
+      WHERE warehouse_id = $6
+        AND ($3::int IS NULL
+             OR (product_id = $3
+                 AND ${NORM('color')}  IS NOT DISTINCT FROM $4
+                 AND ${NORM('fabric')} IS NOT DISTINCT FROM $5))
+        AND ($7::text IS NULL OR product ILIKE '%' || $7 || '%'
+             OR product_type ILIKE '%' || $7 || '%'
+             OR color  ILIKE '%' || $7 || '%'
+             OR fabric ILIKE '%' || $7 || '%'
+             OR conveyor_no ILIKE '%' || $7 || '%')
+        AND ($8::text IS NULL OR product_type = ANY(string_to_array($8, ',')))
         AND ${FROM_TO}
-      ORDER BY fg_on, conveyor_no
+      ORDER BY product, ${NORM('color')} NULLS FIRST,
+               ${NORM('fabric')} NULLS FIRST, fg_on, conveyor_no
       LIMIT 500`,
-    [req.query.from || null, req.query.to || null, req.query.product_id,
-     req.query.color || null, req.query.fabric || null, wh.id]);
+    [req.query.from || null, req.query.to || null, pid,
+     req.query.color || null, req.query.fabric || null, wh.id,
+     req.query.q || null, turlar]);
   res.json({ rows });
 }));
 
@@ -679,6 +701,97 @@ router.post('/fg/transfer', need(...MOVE), wrap(async (req, res) => {
     return res.status(400).json({ error: e.message });
   } finally { client.release(); }
 }));
+
+
+// ════════════════════════════════ SANOQ — QOLDIQNI TO'G'RILASH
+//
+//  ★ SANOQNI JAVONNI SANAGAN ODAM TO'G'RILAYDI (zavod qarori,
+//  2026-10). Inventarizatsiyada sanaladigan raqam T/M ombor
+//  qoldig'ining «Qoldiq» ustuni — mudir javondagi donani aynan shu
+//  bilan solishtiradi. Farq chiqsa (ko'p ham, kam ham) tuzatadigan joy
+//  esa UNDA yo'q edi: «Sonini to'g'rilash» faqat `production.manage`
+//  da turardi va mudir har farq uchun boshliqqa qo'ng'iroq qilardi —
+//  ya'ni sanoq ko'pincha umuman yozilmasdi.
+//
+//  ★ FARQ BU YERDA RETROAKTIV TUZATILADI, va bu ataylab. Tayyor
+//  mahsulot qoldig'i KONVERLARDAN hisoblanadi (`v_fg_units`), ya'ni
+//  «3 ta kam» degan javob har doim bitta konverning soni haqida:
+//  «2 talik mahsulot 4 ta bo'lib yozilgan». Bu KEYINGI yo'qotish emas,
+//  YOZUVDAGI xato — javonda hech qachon 4 ta turmagan. Shuning uchun
+//  sana qo'yilgan hujjat emas, konverning O'ZI to'g'rilanadi va
+//  «oraliq oxiriga» ham to'g'ri chiqadi. Xom ashyoda teskari: u yerda
+//  farq sana bilan yoziladi (`writeoff`), chunki material haqiqatan
+//  sarflanib ketgan bo'lishi mumkin.
+//
+//  Shu sababdan haqiqatan YO'QOLGAN konver bu yerdan bekor
+//  QILINMAYDI: u sanoq xatosi emas, zarar — va uning hujjati tizimda
+//  hali yo'q. Bekor qilish `production.manage` da qolaveradi.
+//
+//  Qoida BITTA joyda: soni jurnaldagi kartochkada ham, shu yerda ham
+//  `sonniTogrila()` dan o'tadi (izoh: modules/units.js) — bron
+//  tekshiruvi, jamlanma `flow_log` va `fg_stock` uchalasi bilan.
+//
+//  ★ SABAB MAJBURIY: raqam jimgina o'zgarmasin. Ombor qiymatiga ham,
+//  ishbay hisobga ham tegadigan o'zgarish — «nega 4 emas, 2 ta»
+//  degan savol keyin beriladi va javobi audit jurnalida qoladi.
+//
+//  Doira bu yerda ham CHEGARA: id ni qo'lda yuborib ko'rmaydigan
+//  omborning konverini to'g'rilab bo'lmaydi.
+router.post('/fg/count', need('warehouse.manage', 'production.manage'),
+  wrap(async (req, res) => {
+    const items = Array.isArray(req.body.items) ? req.body.items
+      : (req.body.unit_id ? [{ unit_id: req.body.unit_id, to_qty: req.body.to_qty }] : []);
+    if (!items.length) throw bad("Qator yo'q");
+    const sabab = String(req.body.note || '').trim();
+    if (!sabab) throw bad('Sabab yozilmagan');
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const [perms, ids] = whScope(req);
+      let n = 0;
+      const nomlar = [];
+      for (const it of items) {
+        const u = (await client.query(
+          `SELECT u.conveyor_no, u.qty, u.product_id, u.status,
+                  COALESCE(u.warehouse_id, tm.id) AS at_wh
+             FROM production_units u
+             LEFT JOIN warehouses tm ON tm.code = 'TM'
+            WHERE u.id = $1 FOR UPDATE OF u`, [it.unit_id])).rows[0];
+        if (!u) throw new Error('Konver topilmadi');
+        if (u.status !== 'fg') throw new Error(`${u.conveyor_no}: omborda emas`);
+        //  So'rov TRANZAKSIYANING `client` idan yuboriladi — hovuzdan
+        //  yangi ulanish olinmaydi (CLAUDE.md, 3-qoida).
+        const wh = (await client.query(
+          `SELECT w.id FROM warehouses w WHERE w.id = $3 AND ${SCOPE}`,
+          [perms, ids, u.at_wh])).rows[0];
+        if (!wh) throw new Error(`${u.conveyor_no}: bu ombor sizga ochiq emas`);
+
+        const to = Number(it.to_qty);
+        if (!Number.isInteger(to) || to < 1)
+          throw new Error(`${u.conveyor_no}: sanoq soni butun va noldan katta ` +
+            `bo'lishi kerak — javonda umuman yo'q konverni bekor qilish ` +
+            `ishlab chiqarish boshlig'ining ishi`);
+        const r = await sonniTogrila(client, req, Number(it.unit_id), to,
+                                     { unit: u, note: sabab });
+        //  Farqi yo'q qator O'TKAZIB YUBORILADI, xato emas: ro'yxat
+        //  ochilgandan keyin soni allaqachon to'g'rilangan bo'lishi
+        //  mumkin (xom ashyodagi sanoq bilan bir xil qoida).
+        if (!r.changed) continue;
+        n++;
+        nomlar.push(u.conveyor_no);
+      }
+      if (!n) throw new Error("To'g'rilanadigan qator yo'q");
+      await audit(req, { module: 'warehouse', action: 'count', entity: 'unit',
+                         entity_id: n,
+                         payload: { count: n, note: sabab, units: nomlar } }, client);
+      await client.query('COMMIT');
+      res.json({ saved: n, units: nomlar });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(e.status || 400).json({ error: e.message });
+    } finally { client.release(); }
+  }));
 
 
 // ══════════════════════════════════════════ VITRINADAN QAYTARISH

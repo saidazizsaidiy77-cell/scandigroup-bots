@@ -3277,11 +3277,52 @@ faqat joy egallardi.
 bo'ladi: 2 talik mahsulot 4 ta bo'lib yozilib ketadi. Omborga tushgan
 konver jurnaldan chiqadi, ya'ni uni tahrirlaydigan joy qolmasdi —
 shuning uchun ombor qoldig'ida konver raqamini bosganda «Sonini
-to'g'rilash» turadi. Yo'l o'sha: `PATCH /api/units/:id` bilan `qty`,
-ya'ni qoldiq, jamlanma hisobot va audit birga yangilanadi. Ombor
-mudirida bu ko'rinmaydi — soni tarixga tegadi. **Bron qo'yilgan donadan
-kam qilib bo'lmaydi**: mijozga va'da qilingan mahsulot jimgina
-yo'qolib qolardi.
+to'g'rilash» turadi. **Bron qo'yilgan donadan kam qilib bo'lmaydi**:
+mijozga va'da qilingan mahsulot jimgina yo'qolib qolardi.
+
+**★ SANOQNI JAVONNI SANAGAN ODAM TO'G'RILAYDI** (zavod qarori,
+2026-10; `POST /api/warehouse/fg/count`, qoldiqdagi **«⚖ Sanoq —
+qoldiqni to'g'rilash»**). Ilgari soni faqat `production.manage` da
+edi va ombor mudirida tugma UMUMAN chizilmasdi. Savol esa aynan
+uning ekranida beriladi: inventarizatsiyada sanaladigan raqam
+«Qoldiq» ustuni va javondagi donani u solishtiradi. Farq chiqsa (kam
+ham, ko'p ham) mudir boshliqqa qo'ng'iroq qilardi — ya'ni sanoq
+ko'pincha umuman yozilmasdi.
+
+**★ FARQ RETROAKTIV TUZATILADI, va bu ataylab.** Tayyor mahsulot
+qoldig'i KONVERLARDAN hisoblanadi (`v_fg_units`), ya'ni «3 ta kam»
+degan javob har doim bitta konverning soni haqida: «2 talik mahsulot
+4 ta bo'lib yozilgan». Bu KEYINGI yo'qotish emas, YOZUVDAGI xato —
+javonda hech qachon 4 ta turmagan. Shuning uchun sana qo'yilgan
+hujjat emas, konverning O'ZI to'g'rilanadi va «oraliq oxiriga» ham
+to'g'ri chiqadi. **Xom ashyoda teskari**: u yerda farq SANA bilan
+yoziladi (`writeoff`), chunki material haqiqatan sarflanib ketgan
+bo'lishi mumkin. Ikki xil haqiqat — ikki xil mexanizm.
+
+Shu sababdan javonda **umuman yo'q** konver bu yerdan bekor
+QILINMAYDI (`to_qty` noldan katta): u sanoq xatosi emas, ZARAR — va
+uning hujjati tizimda hali yo'q. Bekor qilish `production.manage` da
+qolaveradi.
+
+**Qoida BITTA joyda** — `sonniTogrila()` (`modules/units.js`):
+jurnaldagi kartochka ham, ombordagi sanoq ham shundan o'tadi, ya'ni
+bron tekshiruvi, jamlanma `flow_log` va `fg_stock` uchalasi bir xil
+bo'ladi. Ikki nusxada yozilsa bir ekranda bron tekshirilib,
+ikkinchisida tekshirilmasdi.
+
+**Sabab MAJBURIY**: raqam jimgina o'zgarmasin — o'zgarish ombor
+qiymatiga ham, ishbay hisobga ham tegadi va «nega 4 emas, 2 ta»
+degan savol keyin beriladi; javobi audit jurnalida qoladi.
+
+**Sanoq varag'i bitta tugmada**: `GET /api/warehouse/fg/units` da
+`product_id` endi IXTIYORIY — bo'sh bo'lsa butun omborning
+konverlari keladi, har qatorda raqami va soni bilan. Ilgari u shart
+edi va mudir sanoq uchun har qatorni birma-bir ochib chiqishi kerak
+bo'lardi. Varaq EKRANDAGI filtr bilan bir xil (qidiruv va turlar),
+lekin sana oralig'isiz: sanoq «javonda hozir nima turibdi» degan
+savol. Huquqi **`warehouse.manage`** — «Inventarizatsiya, hisobdan
+chiqarish»; ombor doirasi bu yerda ham CHEGARA va tekshiruv
+SERVERDA.
 
 **Noto'g'ri kiritilgan konverni bekor qilish** — xuddi shu oynada,
 «Konverni bekor qilish». Jurnaldagi «×» bilan bitta yo'l
@@ -3960,8 +4001,8 @@ bekor qilish ikkalasida ham bor va qaytarish faqat bittasida qolsa
 odam uni ikkinchi ekranda qidirib yurardi.
 
 **★ MINUS HUJJAT BILAN NOLGA KELADI** (zavod qarori, 2026-10;
-`POST /api/materials/adjust`, xom ashyo qoldig'idagi **«⚖ Qoldiqni
-to'g'rilash»**). Minusni o'chiradigan uchta to'g'ri yo'l bor va
+`POST /api/materials/adjust`, xom ashyo qoldig'idagi **«⚖ Sanoq —
+qoldiqni to'g'rilash»**). Minusni o'chiradigan uchta to'g'ri yo'l bor va
 ularning hammasi MA'LUM SABABNIKI:
 
     mol kelgan, hujjati yozilmagan   →  KIRIM (ta'minotchi qarzi oshadi)
@@ -3993,17 +4034,30 @@ ajralib ketardi (vitrinadan qaytarish hujjatining ikki tomonli
 bo'lgani bilan bir xil sabab). Shu sababdan oynaning nomi «hisobdan
 chiqarish» emas: u faqat bitta yo'nalishni atardi.
 
-**★ NECHTAGA emas, NECHTA BO'LISHI KERAKLIGI yuboriladi** (`to_qty`,
-standarti nol). Farqni SERVER hisoblaydi: ekran ochilgandan keyin
+**★ NECHTAGA emas, NECHTA BO'LISHI KERAKLIGI yuboriladi** (`to_qty`). Farqni SERVER hisoblaydi: ekran ochilgandan keyin
 kirim yozilgan bo'lsa, ekrandagi farq allaqachon eskirgan bo'lardi va
 tuzatish qoldiqni boshqa tomonga og'dirib yuborardi. Sanoqda
 beriladigan savol ham aynan shu: «javonda nechta chiqdi». Farqi yo'q
 qator o'tkazib yuboriladi, xato emas.
 
-**Oyna ro'yxatni O'ZI yig'adi**: ekranda turgan qatorlarning minusga
-tushganlari, hammasi belgilangan holda — zavodda o'n to'rtta ombor va
-uch yuzdan ortiq nom bor, o'ttizta qizil qatorni birma-bir ochib
-tuzatish yarim kunlik ish bo'lardi. Qatorni belgidan chiqarish ham
+**★ OYNA EKRANDAGI HAMMA QATORNI YIG'ADI** (zavod qarori, 2026-10),
+faqat minuslarni emas: server ikkala yo'nalishni boshidanoq bilardi,
+lekin ortiqcha chiqqan dona uchun EKRANDA joy yo'q edi va mudir uni
+hech qayerda yoza olmasdi. Zavodda o'n to'rtta ombor va uch yuzdan
+ortiq nom bor, shuning uchun varaq ustida qidiruv turadi va
+«hammasini belgilash» faqat KO'RINIB turgan qatorlarga tegadi.
+
+**Standartlar BOSHQA, va bu ataylab**: minusda javob allaqachon
+ma'lum (javonda manfiy dona turmaydi, ya'ni nol) — qator belgilangan
+holda ochiladi; qolganida esa HOZIRGISI turadi va qator
+belgilanmaydi. Teskarisi qilinsa uch yuz qatorli varaqda bitta
+tasodifiy «hammasini belgilash» butun javonni nolga tushirardi. Bo'sh
+qoldirilgani ham «nol sanadim» emas, «tegmadim» degani: qator o'z
+standartiga qaytadi.
+
+**Son yozilgani qatorni O'ZI belgilaydi**: sanagan odam katakka
+raqam yozib, yonidagi katakchani bosishni unutardi va saqlashda
+o'sha qator jimgina tushib qolardi. Qatorni belgidan chiqarish ham
 mumkin: sababi aniq bo'lgan minus kirim bilan tuzatiladi va oyna uni
 majburlamaydi.
 

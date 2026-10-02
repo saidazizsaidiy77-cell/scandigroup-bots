@@ -334,7 +334,7 @@ async function boot() {
   $('stockTools').innerHTML = boshqara()
     ? `<button onclick="boshlangich(${kirdi ? kirdi.id : 'null'})">
          ✎ Boshlang'ich qoldiq</button>
-       <button onclick="togriOch()">⚖ Qoldiqni to'g'rilash</button>` : '';
+       <button onclick="togriOch()">⚖ Sanoq — qoldiqni to'g'rilash</button>` : '';
   //  Boshlang'ich qoldiq va TALABNOMA oynalaridagi ro'yxat uchun:
   //  qo'lda yozish yo'q. Tsex boshlig'ida `materials.manage` yo'q,
   //  lekin talabnomani AYNAN u yozadi — ro'yxatsiz oyna bo'sh
@@ -1767,6 +1767,15 @@ async function boshSaqla() {
 
 // ────────────────────────────────────────────── QOLDIQNI TO'G'RILASH
 //
+//  ★ SANOQ IKKI TOMONGA ISHLAYDI (zavod qarori, 2026-10): javonda
+//  sanalgan dona hisobdagidan KAM ham, KO'P ham chiqadi va ikkalasi
+//  bitta varaqdan to'g'rilanadi. Ilgari oyna FAQAT minusga tushgan
+//  qatorlarni yig'ardi — server esa ikkala yo'nalishni ham bilardi
+//  (`writeoff → ombor` va `ombor → writeoff`), ya'ni ortiqcha chiqqan
+//  dona uchun ekranda joy yo'q edi va mudir uni hech qayerda yoza
+//  olmasdi. Ikkita mexanizm yozilmadi: hujjat boshidanoq ikki
+//  tomonli.
+//
 //  ★ MINUSNI BIR OYNADA NOLGA KELTIRISH (zavod qarori, 2026-10).
 //  Zavodda o'n to'rtta ombor va uch yuzdan ortiq nom bor; minusga
 //  tushganlari o'ttizga yaqin va ularni birma-bir ochib tuzatish
@@ -1785,46 +1794,64 @@ async function boshSaqla() {
 //  Qatorni belgidan chiqarish ham mumkin: sababi aniq bo'lgan minus
 //  (kirim hujjati yozilmagan) bu yerda EMAS, kirim bilan tuzatiladi
 //  va oyna uni majburlamaydi.
-let szQator = [];
+let szQator = [], szTopilsin = '';
 
 function togriOch() {
   //  Ekranda turgan qatorlardan minusga tushganlari. Ro'yxat
   //  sahifadagi filtr bo'yicha: ombor tanlangan bo'lsa faqat
   //  o'shaniki — oyna ekranda ko'rinmagan qatorni jimgina
   //  tuzatmaydi.
-  szQator = rows.filter((r) => Number(r.qty) < 0).map((r) => ({
-    material_id: r.material_id, warehouse_id: r.warehouse_id,
-    material: r.material, warehouse: r.warehouse,
-    uom: r.uom_name || r.uom, bor: Number(r.qty), to_qty: 0, tanlangan: true,
-  }));
+  //  ★ EKRANDAGI HAMMA QATOR, faqat minuslar emas: sanoqda farq
+    //  ikki tomonga chiqadi. Lekin standartlar BOSHQA va bu ataylab —
+    //  minusda javob allaqachon ma'lum (javonda manfiy dona turmaydi,
+    //  ya'ni nol), qolganida esa HOZIRGISI turadi va qator
+    //  belgilanmagan bo'ladi: uch yuz qatorli varaqda nol standart
+    //  bo'lsa bitta tasodifiy «hammasini belgilash» butun javonni
+    //  nolga tushirardi.
+  szQator = rows.map((r) => {
+    const bor = Number(r.qty);
+    return {
+      material_id: r.material_id, warehouse_id: r.warehouse_id,
+      material: r.material, warehouse: r.warehouse,
+      uom: r.uom_name || r.uom, bor,
+      to_qty: bor < 0 ? 0 : bor, tanlangan: bor < 0,
+    };
+  });
+  szTopilsin = '';
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:720px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
-          <h1>Qoldiqni to'g'rilash</h1>
+          <h1>Sanoq — qoldiqni to'g'rilash</h1>
           <button onclick="yop()">Yopish</button></div>
-        ${!szQator.length ? `<p class="muted">Minusga tushgan qator yo'q.
-          Agar ombor tanlangan bo'lsa, ro'yxat faqat o'shaniki \u2014
-          barchasini ko'rish uchun «Barcha ombor» ni tanlang.</p>`
+        ${!szQator.length ? `<p class="muted">Ekranda qator yo'q \u2014
+          avval ombor yoki qidiruvni tanlang.</p>`
         : `
         <div class="row" style="gap:12px;align-items:flex-end;margin-bottom:12px">
           <div><label>Sana</label>
             <input id="szOn" type="date"
               value="${new Date().toISOString().slice(0, 10)}"></div>
-          <div style="flex:1;min-width:220px"><label>Sabab</label>
+          <div style="flex:1;min-width:200px"><label>Sabab</label>
             <input id="szNote"
               placeholder="masalan: sanoq, hujjati topilmadi"></div>
+          <div style="flex:1;min-width:160px"><label>Qidiruv</label>
+            <input id="szFind" placeholder="material, ombor"
+              oninput="togriTop(this.value)"></div>
         </div>
         <!--  ★ SABAB MAJBURIY: tuzatish ombor qiymatiga tegadi va
               «nega nolga tushdi» degan savol keyin beriladi.
               Sababsiz hujjat o'sha savolni javobsiz qoldirardi. -->
-        <p class="muted" style="margin-bottom:12px">Minus \u2014 material
-          omborga kirmasdan sarflangani, ya'ni <b>kirim hujjati
-          yozilmagan</b>. Sababi ma'lum bo'lsa uni kirim yoki
-          boshlang'ich qoldiq bilan tuzating: qarz ham, ombor qiymati
-          ham o'shanda to'g'ri chiqadi. Bu oyna sababi TOPILMAGAN
-          qatorlar uchun \u2014 raqam jimgina o'zgarmaydi, tarixda
-          sanoq qatori bo'lib qoladi va kerak bo'lsa bekor qilinadi.</p>
+        <p class="muted" style="margin-bottom:12px">Javondagi donani sanab
+          «Sanoqda» katagiga yozing \u2014 farqi borlari saqlanadi.
+          <b>Kam chiqsa</b> hisobdan chiqariladi, <b>ko'p chiqsa</b>
+          hisobga olinadi: ikkalasi ham bitta yo'ldan o'tadi.
+          Minusga tushgan qatorlar oldindan belgilangan \u2014 javonda
+          manfiy dona turmaydi. Sababi ma'lum minus (kirim hujjati
+          yozilmagan) bu yerda EMAS, kirim yoki boshlang'ich qoldiq
+          bilan tuzatiladi: qarz ham, ombor qiymati ham o'shanda
+          to'g'ri chiqadi. Raqam jimgina o'zgarmaydi \u2014 tarixda
+          sanoq qatori bo'lib qoladi va kerak bo'lsa bekor
+          qilinadi.</p>
         <div id="szRows" style="max-height:320px;overflow:auto"></div>
         <button class="primary" id="szSave" style="margin-top:14px"
           onclick="togriSaqla()">To'g'rilash</button>
@@ -1833,45 +1860,84 @@ function togriOch() {
   if (szQator.length) togriChiz();
 }
 
+//  Ro'yxat uch yuz qatorga yetadi \u2014 qidiruv katagi shu sababdan.
+//  Belgi va sanoq soni QATORNING o'zida saqlanadi (`szQator`), ya'ni
+//  qidiruv tozalangach yozilgani joyida qoladi: filtr ko'rinish, ish
+//  emas.
+const szKor = () => {
+  const q = szTopilsin.toLowerCase();
+  return szQator.filter((r) => !q
+    || [r.material, r.warehouse].some((v) =>
+         String(v || '').toLowerCase().includes(q)));
+};
+function togriTop(v) { szTopilsin = String(v || '').trim(); togriChiz(); }
+
 function togriChiz() {
-  const n = szQator.filter((r) => r.tanlangan).length;
+  const kor = szKor();
+  const n = kor.filter((r) => r.tanlangan).length;
+  const minus = szQator.filter((r) => r.bor < 0).length;
   $('szRows').innerHTML = `
     <div class="row" style="justify-content:space-between;margin-bottom:8px">
-      <span class="muted" style="font-size:12px">${szQator.length} ta minusga
-        tushgan qator \u00b7 belgilangani <b>${n}</b></span>
-      <button onclick="togriHam(${n < szQator.length})">${
-        n < szQator.length ? 'Hammasini belgilash' : 'Belgini olish'}</button>
+      <span class="muted" style="font-size:12px">${kor.length} ta qator${
+        szQator.length !== kor.length ? ` (jami ${szQator.length})` : ''
+      }${minus ? ` \u00b7 minusda <b>${minus}</b>` : ''
+      } \u00b7 belgilangani <b>${n}</b></span>
+      <button onclick="togriHam(${n < kor.length})">${
+        n < kor.length ? 'Hammasini belgilash' : 'Belgini olish'}</button>
     </div>
     <table><thead><tr><th></th><th>Material</th><th>Ombor</th>
       <th class="num">Hozir</th><th class="num">Sanoqda</th>
       <th class="num">Farq</th></tr></thead>
-    <tbody>${szQator.map((r, i) => {
+    <tbody>${kor.map((r) => {
+      const i = szQator.indexOf(r);
       const farq = Number(r.to_qty || 0) - r.bor;
-      return `<tr${r.tanlangan ? '' : ' style="opacity:.45"'}>
+      return `<tr data-i="${i}"${r.tanlangan ? '' : ' style="opacity:.45"'}>
         <td><input type="checkbox" style="width:auto"${r.tanlangan ? ' checked' : ''}
           onchange="togriBelgi(${i}, this.checked)"></td>
         <td><b>${esc(r.material)}</b> <span class="muted">${esc(r.uom)}</span></td>
         <td class="muted" style="font-size:12px">${esc(r.warehouse)}</td>
-        <td class="num"><b class="late">${son(r.bor)}</b></td>
+        <td class="num"><b${r.bor < 0 ? ' class="late"' : ''}>${son(r.bor)}</b></td>
         <td class="num"><input type="number" min="0" step="0.001"
           value="${r.to_qty}" style="max-width:90px;text-align:right"
           oninput="togriSon(${i}, this.value)"></td>
-        <td class="num">${farq > 0 ? '+' : ''}${son(farq)}</td>
+        <td class="num${farq ? ' late' : ''}">${
+          farq ? (farq > 0 ? '+' : '') + son(farq) : '\u2014'}</td>
       </tr>`;
     }).join('')}</tbody></table>`;
 }
 
 function togriBelgi(i, v) { szQator[i].tanlangan = !!v; togriChiz(); }
-function togriHam(v) { szQator.forEach((r) => { r.tanlangan = v; }); togriChiz(); }
+//  Belgi faqat KO'RINIB turgan qatorlarga qo'yiladi: qidiruv bilan
+//  qisqartirilgan ro'yxatda «hammasini belgilash» ekranda
+//  ko'rinmaydigan uch yuz qatorni ham olib ketardi.
+function togriHam(v) { szKor().forEach((r) => { r.tanlangan = v; }); togriChiz(); }
 //  Chizish qayta chaqirilmaydi: katakdagi kursor yo'qolib ketardi.
 //  Faqat «Farq» ustuni yangilanadi \u2014 saqlashda baribir SERVER
 //  qayta hisoblaydi (izoh: modules/materials.js).
+//
+//  \u2605 SON YOZILGANI QATORNI O'ZI BELGILAYDI: varaqda uch yuz qator
+//  turadi va sanagan odam katakka raqam yozib, yonidagi katakchani
+//  bosishni unutardi \u2014 saqlashda o'sha qator jimgina tushib
+//  qolardi.
 function togriSon(i, v) {
-  szQator[i].to_qty = v === '' ? 0 : Number(v);
-  const td = $('szRows').querySelectorAll('tbody tr')[i]?.lastElementChild;
+  //  Bo'sh qoldirilgani «nol sanadim» EMAS, «tegmadim» degani: qator
+  //  o'z standartiga qaytadi — minusda nol, qolganida hozirgisi.
+  //  Aks holda yozilgan raqamni o'chirib qo'ygan odam qatorni
+  //  bilmasdan nolga tushirardi.
+  const def = szQator[i].bor < 0 ? 0 : szQator[i].bor;
+  szQator[i].to_qty = v === '' ? def : Number(v);
+  const farq = Number(szQator[i].to_qty || 0) - szQator[i].bor;
+  if (farq && !szQator[i].tanlangan) {
+    szQator[i].tanlangan = true;
+    const box = $('szRows').querySelector(`tbody tr[data-i="${i}"] input[type=checkbox]`);
+    const tr  = $('szRows').querySelector(`tbody tr[data-i="${i}"]`);
+    if (box) box.checked = true;
+    if (tr)  tr.removeAttribute('style');
+  }
+  const td = $('szRows').querySelector(`tbody tr[data-i="${i}"]`)?.lastElementChild;
   if (td) {
-    const farq = Number(szQator[i].to_qty || 0) - szQator[i].bor;
-    td.textContent = (farq > 0 ? '+' : '') + son(farq);
+    td.textContent = farq ? (farq > 0 ? '+' : '') + son(farq) : '\u2014';
+    td.className = 'num' + (farq ? ' late' : '');
   }
 }
 

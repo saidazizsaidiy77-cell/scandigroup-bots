@@ -1364,6 +1364,63 @@ test('mahsulot T/M ombordan vitrinaga ko\'chiriladi, bir qismi ham', async () =>
     { unit_id: vitr.id, to_code: 'TM' })).status, 403);
 });
 
+//  ★ SANOQ — javondagi dona hisobdagidan kam ham, ko'p ham chiqadi va
+//  ikkalasini JAVONNI SANAGAN odam to'g'rilaydi (zavod qarori, 2026-10).
+test('sanoq: ombor mudiri konverning sonini to\'g\'rilaydi — kam ham, ko\'p ham', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const RANG = 'Inventar sinov rangi';
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: RANG, is_opening: true, fg_on: '2026-09-05' },
+  ] })).body.created[0];
+  const qoldiq = async () => (await mudir('GET',
+    `/api/warehouse/fg/summary?w=TM&q=${encodeURIComponent(RANG)}`)).body;
+  assert.equal((await qoldiq()).total.qty, 4);
+
+  //  Sabab MAJBURIY: raqam jimgina o'zgarmasin
+  const sabsiz = await mudir('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 2 });
+  assert.equal(sabsiz.status, 400);
+  assert.match(sabsiz.body.error, /Sabab/);
+
+  //  KAM chiqdi: 4 → 2
+  assert.equal((await mudir('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 2, note: 'sanoq' })).status, 200);
+  assert.equal((await qoldiq()).total.qty, 2, 'qoldiq darrov kamaydi');
+
+  //  KO'P chiqdi: 2 → 5, to'dalab yuborilgan ro'yxat bilan
+  const kop = await mudir('POST', '/api/warehouse/fg/count',
+    { items: [{ unit_id: u.id, to_qty: 5 }], note: 'sanoq — ortiqcha' });
+  assert.equal(kop.status, 200, kop.text);
+  assert.equal(kop.body.saved, 1);
+  assert.equal((await qoldiq()).total.qty, 5, 'ortiqcha chiqqani hisobga olindi');
+
+  //  Farqi yo'q qator — to'g'rilanadigan narsa qolmadi
+  assert.equal((await mudir('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 5, note: 'sanoq' })).status, 400);
+
+  //  NOL bu yerda bekor qilish EMAS: javonda umuman yo'q konver sanoq
+  //  xatosi emas, zarar — va uning hujjati tizimda hali yo'q.
+  const nol = await mudir('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 0, note: 'javonda yo\'q' });
+  assert.equal(nol.status, 400);
+  assert.match(nol.body.error, /noldan katta/);
+
+  //  Savdo omborni O'QIYDI, lekin sanoq yozmaydi
+  const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
+  assert.equal((await savdo('POST', '/api/warehouse/fg/count',
+    { unit_id: u.id, to_qty: 3, note: 'sanoq' })).status, 403);
+
+  //  ★ SANOQ VARAG'I: `product_id` siz ham so'raladi — mudir javon
+  //  oldiga bitta ro'yxat bilan boradi, har qatorda konver raqami va
+  //  soni turadi.
+  const varaq = (await mudir('GET',
+    `/api/warehouse/fg/units?w=TM&q=${encodeURIComponent(RANG)}`)).body.rows;
+  assert.equal(varaq.length, 1, 'varaq mahsulot tanlanmasa ham keladi');
+  assert.equal(varaq[0].qty, 5);
+  assert.equal(varaq[0].conveyor_no, u.conveyor_no);
+  assert.ok(varaq[0].product, 'varaqda mahsulot nomi ham turadi');
+});
+
 test('boshlang\'ich qoldiq to\'g\'ridan-to\'g\'ri vitrinaga kiritiladi', async () => {
   const r = await admin('POST', '/api/units/', { items: [
     { product_id: PENAL, qty: 2, color: 'Shokolad', is_opening: true,
