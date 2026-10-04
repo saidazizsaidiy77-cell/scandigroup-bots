@@ -1612,8 +1612,17 @@ async function openPick(itemId){
             <th>Rang</th><th>Mato</th>
             <th class="num">Bo'sh</th><th class="num" style="width:90px">Olinadi</th>
             <th></th></tr></thead>
+          <!--  ★ NOMUVOFIQ KONVER QIZIL BO'LIB TURADI. Ro'yxat qatorning
+                MAHSULOTI bo'yicha yig'iladi, ya'ni deyarli hamma qatorda
+                mahsulot bir xil va uni yozib o'tirish ortiqcha. Eski
+                nomuvofiq bronda esa u BOSHQA bo'ladi — va aynan o'shanda
+                menejer nimani qaytarayotganini bilishi kerak. -->
           <tbody>${pick.rows.length ? pick.rows.map(u => `<tr>
-            <td><strong>${esc(u.conveyor_no)}</strong></td>
+            <td><strong>${esc(u.conveyor_no)}</strong>${
+              Number(u.unit_product_id) !== Number(pick.item.product_id)
+              ? `<div class="tag bad" style="font-size:11px;white-space:normal;
+                   margin-top:4px">${esc(u.unit_product || '')} \u2014
+                   mahsulot boshqa</div>` : ''}</td>
             <td>${where(u)}</td>
             <!--  ★ KECH KELADIGAN KONVER QIZIL BO'LIB TURADI. Server
                   bunday bronni qabul qilmaydi (modules/sales.js,
@@ -1646,7 +1655,10 @@ async function openPick(itemId){
               : `<button class="primary" onclick="assign(${u.id})">Olish</button>`}</td>
           </tr>`).join('')
             : `<tr><td class="muted" colspan="8">Bo'sh konver yo'q —
-                 T/M omborda ham, zahirada ham, ishlab chiqarishda ham</td></tr>`}</tbody>
+                 T/M omborda ham, zahirada ham, ishlab chiqarishda ham.
+                 ${pick.item.can_request
+                   ? "Pastdagi «So'rov yuborish» bilan ishlab chiqarishdan so'raladi."
+                   : ''}</td></tr>`}</tbody>
         </table></div>
         <!--  ★ ISHLAB CHIQARISHGA SO'ROV (zavod qarori, 2026-09).
               Mijoz so'ragan stol yoki stul zavodda umuman bo'lmasligi

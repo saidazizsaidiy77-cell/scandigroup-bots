@@ -10816,6 +10816,23 @@ test('nomuvofiq buyurtmalarni dastur o\'zi topadi', async () => {
   assert.equal(kop[0].bron, 4);
   assert.equal(kop[0].item_qty, 1);
 
+  //  ★ NOMUVOFIQ KONVERNI QAYTARIB BO'LADI (zavod qarori, 2026-10).
+  //  Nomzodlar ro'yxati qatorning MAHSULOTI bo'yicha filtrlanadi va
+  //  aynan shu yerda boshi berk ko'cha bor edi: nomuvofiq konverning
+  //  mahsuloti qatornikidan boshqa, ya'ni u ro'yxatga TUSHMASDI —
+  //  qatorni o'zgartirmoqchi bo'lganga «avval konverni qaytaring»
+  //  deyilardi, qaytaradigan joyda esa «bo'sh konver yo'q» turardi.
+  const nomz = await admin('GET',
+    `/api/sales/orders/${z.id}/candidates?item_id=${q.id}`);
+  assert.equal(nomz.status, 200, nomz.text);
+  const meniki = nomz.body.rows.filter((r) => r.mine > 0);
+  assert.equal(meniki.length, 1, 'biriktirilgan konver ro\'yxatda turadi');
+  assert.equal(meniki[0].conveyor_no, u.conveyor_no);
+  //  Mahsuloti qatornikidan BOSHQA ekani ham keladi: ekran uni qizil
+  //  qilib ko'rsatadi va menejer nimani qaytarayotganini biladi.
+  assert.notEqual(Number(meniki[0].unit_product_id), STOL);
+  assert.ok(meniki[0].unit_product, 'konvernng mahsuloti yoziladi');
+
   //  ★ BO'SH RANG — FARQ EMAS. Ishlab chiqarishdagi konver RANGSIZ
   //  tug'iladi va buyurtma qatorida ham rang bo'sh qoldirilishi
   //  mumkin. Bo'sh katakni «boshqa rang» deb o'qisak ro'yxat yolg'on
@@ -10837,6 +10854,18 @@ test('nomuvofiq buyurtmalarni dastur o\'zi topadi', async () => {
   //  zavodning buyurtmasi, mijozi va menejeri turadi — u menejerning
   //  ishi emas, tuzatish ham uning qo'lida emas.
   assert.equal((await savdo('GET', '/api/sales/mismatch')).status, 403);
+
+  //  ★ …VA QAYTARIB BO'LADI — tuzatishning oxirgi qadami. `/assign`
+  //  teskarisini qabul qilmaydi (qator stol, konver penal) va to'g'ri
+  //  qiladi: nomuvofiqlikni QAYTARIB tuzatiladi, qaytadan biriktirib
+  //  emas.
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unassign`,
+    { item_id: q.id, unit_id: u.id })).status, 200);
+  const qolgan = await admin('GET', '/api/sales/mismatch');
+  assert.equal(qolgan.body.rows.filter((r) => r.id === z.id).length, 0,
+    "qaytargach nomuvofiqlik yo'q");
+  assert.equal(qolgan.body.kop.filter((r) => r.id === z.id).length, 0,
+    'ortiqcha bron ham yo\'q');
 
   //  Tozalab qo'yiladi: keyingi testlar bu buyurtmani ko'rmasligi
   //  kerak (`yakun` jamlanma hisobini o'qiydi).

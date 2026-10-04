@@ -1161,6 +1161,11 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT u.id, u.conveyor_no, u.part, u.qty, u.color, u.fabric, u.status,
             u.is_stock, u.fg_on, s.name AS section, sh.name AS shop,
+            --  ★ KONVERNING O'Z MAHSULOTI: ro'yxatda deyarli hamma
+            --  qatorda u qatornikiga teng, lekin ESKI nomuvofiq bron
+            --  bo'lsa boshqa bo'ladi va menejer nimani qaytarayotganini
+            --  ko'rishi kerak.
+            u.product_id AS unit_product_id, pu.name AS unit_product,
             CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse,
             COALESCE(b.qty, 0)::int AS reserved_qty,
             (u.qty - COALESCE(b.qty, 0))::int AS free_qty,
@@ -1184,6 +1189,7 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
             (u.status = 'production' AND r.fg_on IS NOT NULL
              AND $5::date IS NOT NULL AND r.fg_on > $5::date) AS late
        FROM production_units u
+       JOIN products pu     ON pu.id = u.product_id
        LEFT JOIN sections s ON s.id = u.current_section_id
        LEFT JOIN shops sh   ON sh.id = s.shop_id
        LEFT JOIN warehouses tmw ON tmw.code = 'TM'
@@ -1194,7 +1200,24 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        LEFT JOIN LATERAL (SELECT SUM(r3.qty) AS qty FROM unit_reservations r3
                            WHERE r3.unit_id = u.id
                              AND r3.order_item_id = $4) mine ON true
-      WHERE u.product_id = $1 AND ${CANDIDATE_WHERE}
+      --  ★ BIRIKTIRILGAN KONVER HAR DOIM RO'YXATDA (zavod qarori,
+      --  2026-10). Ro'yxat qatorning MAHSULOTI bo'yicha filtrlanadi
+      --  va aynan shu yerda tuzoq bor edi: eski nomuvofiq bronda
+      --  konverning mahsuloti qatornikidan BOSHQA bo'ladi, ya'ni u
+      --  filtrdan o'tmay, ro'yxatga umuman tushmasdi.
+      --
+      --  Natijasi boshi berk ko'cha edi: qatorni o'zgartirmoqchi
+      --  bo'lgan menejerga «avval konverni qaytaring» deyilardi,
+      --  qaytaradigan joyda esa «bo'sh konver yo'q» turardi. Z26-0758
+      --  shunday qotib qolgandi va yagona chora bazaga qo'lda kirish
+      --  bo'lardi.
+      --
+      --  Shuning uchun «meniki» shoxi BUTUN shartni chetlab o'tadi,
+      --  faqat mahsulotni emas: nomuvofiq konver omborda ham, vitrinada
+      --  ham, tsexda ham turgan bo'lishi mumkin. Biriktirilgan konver
+      --  NOMZOD emas — u FAKT, va faktni yashirib bo'lmaydi.
+      WHERE COALESCE(mine.qty, 0) > 0
+         OR (u.product_id = $1 AND ${CANDIDATE_WHERE})
       --  Avval omborda turgani, keyin OMBORGA ENG YAQINI: mijoz tezroq
       --  oladigan konver tepada tursin. Sanasi yo'q (zahira — buyurtma
       --  kutmoqda) oxirida: unga muddat bashorat qilinmaydi.
