@@ -8072,6 +8072,171 @@ test('savdo KPI: og\'irlik bilan hisoblanadi va bonus shkalasi ishlaydi', async 
     items: [{ indicator: 'TUSHUM', plan: 1, weight: 1 }] })).status, 403);
 });
 
+test('konver biriktirilgan qator o\'zgarmaydi', async () => {
+  //  ★ ZAVOD QARORI (2026-10). Qatorni O'CHIRISH allaqachon
+  //  taqiqlangan edi, lekin uni O'ZGARTIRISH ochiq qolgandi — va
+  //  teshik aynan shu yerda edi: bronlar QATORGA ilingan, mahsulotga
+  //  emas. Menejer to'rtta STOL konverini biriktirib, keyin qatorni
+  //  STULGA almashtira olardi va bronlar o'sha joyda qolardi.
+  //
+  //  Natijasi qog'oz bilan haqiqatni ajratardi: yuk xati BUYURTMADAN
+  //  yoziladi («stul»), zavoddan esa biriktirilgan konver chiqardi
+  //  («stol»). Xato mashina ochilganda bilinardi.
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Qator sinov mijozi', region: 'Toshkent' })).body;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mij.id, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 4, color: 'Oq', unit_price: 100 }] })).body;
+  const q = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+
+  //  Bron qo'yilmaganda qator ERKIN o'zgaradi — qoida faqat konver
+  //  biriktirilgandan keyin boshlanadi.
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id, {
+    items: [{ id: q.id, product_id: PENAL, qty: 6, color: 'Sut',
+              unit_price: 100 }] })).status, 200, 'bronsiz qator ochiq');
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id, {
+    items: [{ id: q.id, product_id: PENAL, qty: 4, color: 'Oq',
+              unit_price: 100 }] })).status, 200);
+
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u.id, qty: 4 })).status, 200);
+
+  //  ── Endi uchala maydon ham QOTIB qoladi
+  const oz = (it) => admin('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 4, color: 'Oq',
+                unit_price: 100, ...it }] });
+
+  const STU = (await H.id(`SELECT id FROM products WHERE sku = 'STU-LAURA'`)).id;
+  const boshqa = await oz({ product_id: STU });
+  assert.equal(boshqa.status, 400, boshqa.text);
+  assert.match(boshqa.body.error, /mahsuloti/);
+  assert.match(boshqa.body.error, /4 ta konver/);
+
+  const rang = await oz({ color: 'Sut' });
+  assert.equal(rang.status, 400, rang.text);
+  assert.match(rang.body.error, /rangi/);
+
+  //  Soni ham bronda turganidan PAST tushmaydi: qolgan ikkita bron
+  //  qatorsiz osilib qolardi.
+  const kam = await oz({ qty: 2 });
+  assert.equal(kam.status, 400, kam.text);
+  assert.match(kam.body.error, /kam bo'lmaydi/);
+
+  //  ★ YO'L YOPIQ EMAS: soni OSHSA mumkin (mijoz ko'proq so'radi),
+  //  narx va izoh ham ochiq qolaveradi — ular konverga tegmaydi.
+  const kop = await oz({ qty: 6 });
+  assert.equal(kop.status, 200, kop.text);
+  const narx = await oz({ qty: 6, unit_price: 90 });
+  assert.equal(narx.status, 200, narx.text);
+
+  //  Konver qaytarilgach qator yana ochiladi.
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unassign`,
+    { item_id: q.id, unit_id: u.id })).status, 200);
+  const endi = await oz({ product_id: STU, qty: 1, color: 'Sut' });
+  assert.equal(endi.status, 200, endi.text);
+});
+
+test('buyurtma konver biriktirilgach yopiladi', async () => {
+  //  ★ ZAVOD QARORI (2026-10). Menejer buyurtmani shakllantiradi,
+  //  konverlarni biriktiradi — shundan keyin u YOPILADI va
+  //  o'zgartirish faqat administrator orqali.
+  //
+  //  Sabab: o'zgarish BUTUN ZAVODGA tegadi. Konver biriktirilgan
+  //  zahoti tsex mahsulotni rejaga oladi, unga xom ashyo sarflanadi
+  //  va muddat hisoblanadi. Menejer o'sha paytda qatorni
+  //  o'zgartirsa, zavod qilgan ishi bilan qolardi.
+  const savdo = await xodim('Sinov qulf menejeri', 'sotuvchi');
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Qulf sinov mijozi', region: 'Toshkent' })).body;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  const z = (await savdo('POST', '/api/sales/orders', {
+    customer_id: mij.id, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 4, color: 'Oq', unit_price: 100 }] })).body;
+  const q = (await savdo('GET', '/api/sales/orders/' + z.id)).body.items[0];
+
+  //  ★ QULF BIRINCHI SAQLASHDA TUSHMAYDI: bo'sh buyurtmani ham yopib
+  //  qo'ysak menejer uni UMUMAN tuzib bo'lmasdi — qator qo'shish ham
+  //  o'zgartirish.
+  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { note: 'hali ochiq' })).status, 200, 'konversiz buyurtma ochiq');
+  assert.equal((await savdo('GET', '/api/sales/orders/' + z.id))
+    .body.order.locked_at, null);
+
+  //  ── Konver biriktirildi → yopiladi
+  assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u.id, qty: 4 })).status, 200);
+  const yop = (await savdo('GET', '/api/sales/orders/' + z.id)).body.order;
+  assert.ok(yop.locked_at, 'buyurtma yopildi');
+  assert.equal(yop.locked_by_name, 'Sinov qulf menejeri', 'kim yopgani yoziladi');
+
+  //  ★ QULF MIJOZ NIMA OLISHINI QOTIRADI, yetkazib berishni emas:
+  //  «Qayerga» jo'natishda MAJBURIY va ko'pincha keyinroq ma'lum
+  //  bo'ladi — uni ham yopsak buyurtma boshi berk ko'chaga kirardi.
+  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { note: 'yangi', ship_to: 'ZAVOD', receiver_phone: '901234567' })).status,
+    200, 'yetkazib berish maydonlari ochiq');
+
+  //  Qatorlar esa QOTIB qoladi.
+  const t = await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 4, color: 'Oq',
+                unit_price: 90 }] });
+  assert.equal(t.status, 400, t.text);
+  assert.match(t.body.error, /yopilgan/);
+  assert.match(t.body.error, /administrator/i);
+  //  Mijozni almashtirish ham yopiq: qarz boshqa odamga ketardi.
+  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { customer_id: mij.id })).status, 400);
+
+  //  ★ BIRIKTIRISH OCHIQ QOLADI, QAYTARISH esa YO'Q. Biriktirish —
+  //  ish (qolgan donaga konver topiladi), qaytarish esa buyurtmaning
+  //  va'dasini o'zgartiradi.
+  const u2 = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 6, color: 'Oq',
+                unit_price: 100 }] })).status, 400, 'soni ham yopiq');
+  const qayt = await savdo('POST', `/api/sales/orders/${z.id}/unassign`,
+    { item_id: q.id, unit_id: u.id });
+  assert.equal(qayt.status, 400, qayt.text);
+  assert.match(qayt.body.error, /yopilgan/);
+
+  //  ── Administrator ochadi, lekin SABAB bilan
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unlock`,
+    {})).status, 400, 'sababsiz ochilmaydi');
+  const och = await admin('POST', `/api/sales/orders/${z.id}/unlock`,
+    { note: 'mijoz rangini almashtirdi' });
+  assert.equal(och.status, 200, och.text);
+  assert.equal((await savdo('GET', '/api/sales/orders/' + z.id))
+    .body.order.locked_at, null);
+
+  //  Menejer endi tuzatadi…
+  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 6, color: 'Oq',
+                unit_price: 100 }] })).status, 200);
+  //  …va qayta biriktirilsa qulf O'ZI qaytadan tushadi: ochiq qolgan
+  //  buyurtma unutilardi.
+  assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u2.id, qty: 2 })).status, 200);
+  assert.ok((await savdo('GET', '/api/sales/orders/' + z.id)).body.order.locked_at,
+    'qayta yopildi');
+
+  //  ★ ADMINISTRATOR QULFNI OCHMASDAN HAM TUZATADI (`sales.fix`):
+  //  yopilgan hujjatga tegish huquqi allaqachon unda.
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
+    { items: [{ id: q.id, product_id: PENAL, qty: 6, color: 'Oq',
+                unit_price: 80 }] })).status, 200);
+  //  Ikkinchi marta ochib bo'lmaydi — u allaqachon yopilmagan emas.
+  await admin('POST', `/api/sales/orders/${z.id}/unlock`, { note: 'yana' });
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unlock`,
+    { note: 'yana' })).status, 400);
+});
+
 test("ta'minotchiga qaytarish: ombor kamayadi, qarz kamayadi", async () => {
   //  ★ QAYTARISH — KIRIMNING TESKARISI (zavod qarori, 2026-10).
   //  Hujjat IKKITA ishni birga qiladi: omborni KAMAYTIRADI va

@@ -626,6 +626,55 @@ async function saveItems(client, req, orderId, items) {
     `DELETE FROM order_items WHERE order_id = $1 AND NOT (id = ANY($2::int[]))`,
     [orderId, keep]);
 
+  //  ★ KONVER BIRIKTIRILGAN QATOR O'ZGARMAYDI (zavod qarori, 2026-10).
+  //
+  //  Qatorni O'CHIRISH allaqachon taqiqlangan edi (yuqorida), lekin
+  //  uni O'ZGARTIRISH ochiq qolgandi — va teshik aynan shu yerda edi.
+  //  Menejer to'rtta STOL konverini biriktirib, keyin qatorni STULGA
+  //  almashtira olardi: bronlar o'sha joyda qolardi, chunki ular
+  //  QATORGA ilingan, mahsulotga emas.
+  //
+  //  Natijasi qog'oz bilan haqiqatni ajratardi: yuk xatining qatorlari
+  //  BUYURTMADAN olinadi («stul»), zavoddan esa biriktirilgan konver
+  //  chiqardi («stol»). Mijoz imzolagan hujjat olgan mahsulotiga mos
+  //  kelmasdi va xato mashina ochilganda bilinardi, ya'ni tuzatishga
+  //  kech edi. Ishlab chiqarish ham shu orada o'sha konverga xom ashyo
+  //  sarflab bo'lgan bo'lardi.
+  //
+  //  Shuning uchun uchta maydon QOTIB qoladi — mahsulot, rang va mato
+  //  — va soni bronda turganidan PAST tushmaydi. Yo'l yopiq emas:
+  //  avval konver qaytariladi, keyin qator o'zgaradi. Xabar shuni
+  //  aytadi (savdodagi boshqa rad javoblar bilan bir xil idiom:
+  //  «N tasi buyurtmada — avval konverni qaytaring»).
+  const bronli = (await client.query(
+    `SELECT i.id, i.product_id, i.color, i.fabric, p.name,
+            COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                        JOIN production_units u ON u.id = r.unit_id
+                       WHERE r.order_item_id = i.id
+                         AND u.status <> 'cancelled'), 0)::int AS bron
+       FROM order_items i JOIN products p ON p.id = i.product_id
+      WHERE i.order_id = $1`, [orderId])).rows;
+
+  const teng = (a, b) => String(a || '').trim().toLowerCase()
+                      === String(b || '').trim().toLowerCase();
+  for (const it of items) {
+    if (!it.id) continue;
+    const eskiQator = bronli.find((x) => x.id === Number(it.id));
+    if (!eskiQator || !eskiQator.bron) continue;
+    const nega = [];
+    if (Number(it.product_id) !== eskiQator.product_id) nega.push('mahsuloti');
+    if (!teng(it.color,  eskiQator.color))  nega.push('rangi');
+    if (!teng(it.fabric, eskiQator.fabric)) nega.push('matosi');
+    if (nega.length)
+      throw new Error(`«${eskiQator.name}» — qatorga ${eskiQator.bron} ta konver `
+        + `biriktirilgan, ${nega.join(', ')} o'zgarmaydi. `
+        + `Avval «Konver» oynasidan qaytaring.`);
+    if ((Number(it.qty) || 0) < eskiQator.bron)
+      throw new Error(`«${eskiQator.name}» — ${eskiQator.bron} ta konver `
+        + `biriktirilgan, soni undan kam bo'lmaydi. `
+        + `Avval «Konver» oynasidan qaytaring.`);
+  }
+
   const narx = await floorMap(client, req, items.map((i) => i.product_id).filter(Boolean));
 
   //  Xabar uchun: chegaradan past tushgan qatorlar nomi va raqami
@@ -839,6 +888,42 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
     const tuzatadi = cur.status === 'shipped';
     if (tuzatadi && !req.user.permissions.includes('sales.fix'))
       throw new Error("Buyurtma jo'natilgan");
+
+    //  ★ QULFLANGAN BUYURTMANI FAQAT ADMINISTRATOR O'ZGARTIRADI
+    //  (zavod qarori, 2026-10; izoh: sql/sales.sql). Konver
+    //  biriktirilgan zahoti tsex mahsulotni rejaga oladi, unga xom
+    //  ashyo sarflanadi va muddat hisoblanadi — o'zgarish BUTUN
+    //  ZAVODGA tegadi.
+    //
+    //  Chegara `sales.fix` da: u allaqachon «yopilgan hujjatga
+    //  tegish» huquqi va faqat administratorda (chiqib ketgan
+    //  buyurtmani tuzatish bilan bir xil idiom va bir xil sabab).
+    //  ★ QULF MIJOZ NIMA OLISHINI QOTIRADI, yetkazib berishni emas.
+    //  Chegara ZARARDAN chiqadi, qulaylikdan emas:
+    //
+    //    QOTADI      qatorlar (mahsulot · rang · mato · soni · narx),
+    //                mijoz, menejer, buyurtma sanasi
+    //    OCHIQ       qayerga · manzil · kutib oluvchi · izoh ·
+    //                chiqish sanasi · pul kirim sanasi
+    //
+    //  Sabab: zavodga TEGADIGANI birinchi ro'yxat. Mashina qayerga
+    //  borishi tsexning ishiga ta'sir qilmaydi va u ko'pincha
+    //  KEYINROQ ma'lum bo'ladi — «Qayerga» esa jo'natishda MAJBURIY
+    //  (`sendOne`). Uni ham yopib qo'ysak buyurtma qulflangan
+    //  zahoti boshi berk ko'chaga kirardi: menejer uni yubora
+    //  olmasdi va har safar administratorni chaqirardi.
+    //
+    //  Chiqish sanasi ham ochiq: u mijozga aytilgan va'da va
+    //  haqiqatan o'zgaradi — lekin o'zining tekshiruvi bor
+    //  (`assertMuddat`: biriktirilgan konver o'sha kundan keyin
+    //  kelsa rad etiladi).
+    const qotgan = items !== undefined || customer_id !== undefined
+      || manager_id !== undefined || ordered_on !== undefined;
+    if (cur.locked_at && qotgan
+        && !req.user.permissions.includes('sales.fix'))
+      throw new Error('Buyurtma yopilgan — konverlar biriktirilgan va '
+        + 'zavod ularni rejaga olgan. Qatorlarni, mijozni va narxni '
+        + 'o\'zgartirish administrator orqali.');
     //  Holat QAYTARILMAYDI: chiqib ketganni «tayyor» ga surish
     //  mahsulotni omborga qaytarmaydi — u mijozda — faqat qoldiqni
     //  yolg'on qilardi. Qaytib kelgani alohida ish (hali yozilmagan).
@@ -1103,6 +1188,16 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   res.json({ item: it, rows });
 }));
 
+//  ★ QULFNI SHU YERDA QO'YAMIZ VA SHU YERDAN O'QIYMIZ — bitta joyda.
+//  Buyurtma konver biriktirilgan zahoti yopiladi: shundan boshlab
+//  mahsulot menejerning qog'ozida emas, tsexning rejasida turadi.
+//
+//  Qaytarish (`unassign`) qulfni OLIB TASHLAMAYDI: bron qaytarilgani
+//  bilan tsex allaqachon ishlab bo'lgan bo'lishi mumkin. Qulfni faqat
+//  administrator ochadi (`/unlock`).
+const QULF = `UPDATE orders SET locked_at = NOW(), locked_by = $2
+               WHERE id = $1 AND locked_at IS NULL`;
+
 router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
   const { item_id, unit_id, qty } = req.body;
   const client = await db.connect();
@@ -1211,6 +1306,10 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
                 + `\n\nKim yozdi: ${req.user.name}`,
         }, client);
     }
+
+    //  ★ KONVER BIRIKTIRILDI — BUYURTMA YOPILADI (izoh: `QULF`).
+    //  Shu daqiqadan boshlab tsex mahsulotni rejaga oladi.
+    await client.query(QULF, [o.id, req.user.id]);
 
     await audit(req, { module: 'sales', action: 'bron', entity: 'order',
                        entity_id: o.id,
@@ -1329,6 +1428,37 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
   } finally { client.release(); }
 }));
 
+//  ★ QULFNI ADMINISTRATOR OCHADI (zavod qarori, 2026-10). Yo'l
+//  BERKITILMAYDI: xato bo'lganda buyurtmani tuzatish kerak bo'ladi va
+//  yagona chora bazaga qo'lda kirish bo'lib qolardi. Lekin u
+//  ATAYLAB ikki bosqich — administrator ochadi, menejer tuzatadi:
+//  o'zgarish zavodga tegadi va uni bitta odam bilib turishi kerak.
+//
+//  Sabab MAJBURIY: «nega ochildi» degan savol oy oxirida beriladi va
+//  javobi hujjatda turishi kerak (konver so'rovi bilan bir xil
+//  idiom). Audit jurnalida ham yozuv qoladi.
+//
+//  Qayta biriktirilsa qulf O'ZI qaytadan tushadi (`QULF`): ochiq
+//  qolgan buyurtma unutilardi.
+router.post('/orders/:id/unlock', need('sales.fix'), wrap(async (req, res) => {
+  const sabab = String(req.body.note || '').trim();
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const { rows } = await db.query(
+    `UPDATE orders SET locked_at = NULL, locked_by = NULL
+      WHERE id = $1 AND locked_at IS NOT NULL
+      RETURNING order_no`, [req.params.id]);
+  if (!rows[0]) return res.status(400).json({ error: 'Buyurtma yopilmagan' });
+  await audit(req, { module: 'sales', action: 'unlock', entity: 'order',
+                     entity_id: Number(req.params.id),
+                     payload: { order_no: rows[0].order_no, note: sabab } });
+  res.json({ ok: true });
+}));
+
+//  ★ QAYTARISH QULFLANGAN BUYURTMADA YO'Q. Biriktirish — ish
+//  (qolgan donaga konver topiladi), qaytarish esa buyurtmaning
+//  va'dasini O'ZGARTIRADI: tsex allaqachon rejaga olgan mahsulot
+//  bo'shab qolardi va buni hech narsa aytmasdi. Administrator
+//  qulfni ochib qaytaradi.
 router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
   const client = await db.connect();
   try {
@@ -1341,6 +1471,9 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
     if (chans && !chans.includes(o.channel))
       throw new Error("Bu buyurtma sizning yo'nalishingizda emas");
     assertOwn(req, o);
+    if (o.locked_at && !req.user.permissions.includes('sales.fix'))
+      throw new Error('Buyurtma yopilgan — konverni qaytarish '
+        + 'administrator orqali.');
 
     const r = (await client.query(
       `SELECT r.id, r.unit_id, r.qty, u.conveyor_no

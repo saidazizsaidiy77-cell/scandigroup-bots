@@ -292,6 +292,12 @@ CREATE INDEX IF NOT EXISTS orders_plan_on_idx ON orders(plan_on)
 --  deploy kuni hech kimga to'da xabar ketmaydi.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS ready_notified_at TIMESTAMPTZ;
 
+--  ★ QULF USTUNLARI VIEW'DAN OLDIN (1-qoida): view ularni o'qiydi
+--  va keyin qo'yilsa toza bazada «column does not exist» bilan
+--  yiqilardi — ya'ni sayt umuman ko'tarilmasdi.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS locked_by INT REFERENCES workers(id);
+
 CREATE OR REPLACE VIEW v_sales_orders AS
 SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        o.customer_id, c.name AS customer_name, c.region, c.phone,
@@ -350,7 +356,12 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
        --  ★ KUNLIK JO'NATMA REJASI: mudir buyurtmani qaysi kunga
        --  olgani va kim olgani. Ustun OXIRIDA — CREATE OR REPLACE VIEW
        --  faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
-       o.plan_on, pw.name AS plan_by_name
+       o.plan_on, pw.name AS plan_by_name,
+       --  ★ QULF: buyurtma shakllantirilib, konver biriktirilgach
+       --  yopiladi va faqat administrator o'zgartiradi (izoh: shu
+       --  faylning oxiri). Ustun OXIRIDA — CREATE OR REPLACE VIEW
+       --  faqat oxiriga qo'sha oladi (CLAUDE.md, 2-qoida).
+       o.locked_at, lw.name AS locked_by_name
   FROM orders o
   JOIN customers c      ON c.id = o.customer_id
   LEFT JOIN workers w   ON w.id = o.manager_id
@@ -359,6 +370,7 @@ SELECT o.id, o.order_no, o.ordered_on, o.due_on, o.status, o.note,
   LEFT JOIN workers shw ON shw.id = o.shipped_by
   LEFT JOIN workers dw  ON dw.id  = o.discount_by
   LEFT JOIN workers pw  ON pw.id  = o.plan_by
+  LEFT JOIN workers lw  ON lw.id  = o.locked_by
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::int AS lines,
            COALESCE(SUM(oi.qty), 0)::int AS qty,
@@ -634,3 +646,24 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('chiqarish-qayta-tasdiq');
   END IF;
 END $$;
+
+-- ═══════════════════════════════════════════ BUYURTMA QULFLANADI
+--
+--  ★ ZAVOD QARORI (2026-10). Menejer buyurtmani shakllantiradi,
+--  konverlarni biriktiradi va saqlaydi — shundan keyin u YOPILADI.
+--  O'zgartirish faqat administrator orqali.
+--
+--  Sabab: o'zgarish BUTUN ZAVODGA tegadi. Konver biriktirilgan
+--  zahoti tsex o'sha mahsulotni rejaga oladi, unga xom ashyo
+--  sarflanadi, muddat hisoblanadi va ombor javonda joy ajratadi.
+--  Menejer o'sha paytda qatorni o'zgartirsa — mahsulotni, rangini
+--  yoki sonini — zavod allaqachon qilgan ishi bilan qolardi, qog'oz
+--  esa boshqa narsani aytardi. Xato mashina ochilganda bilinardi,
+--  ya'ni tuzatishga kech edi.
+--
+--  ★ QULF KONVER BIRIKTIRILGANDA TUSHADI, birinchi saqlashda emas:
+--  bo'sh buyurtmani ham yopib qo'ysak menejer uni UMUMAN tuzib
+--  bo'lmasdi — qator qo'shish ham o'zgartirish. Zavodga ta'sir
+--  qiladigan daqiqa esa aynan bron qo'yilgan payt: shundan boshlab
+--  mahsulot menejerning qog'ozida emas, tsexning rejasida turadi.
+

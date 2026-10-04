@@ -747,12 +747,26 @@ function draw(){
   //  hamma uchun u hujjat bo'lib ochiladi va shunday qolishi kerak:
   //  summasi mijozning qarzi.
   const tuzat = o.status === 'shipped' && canWrite && canFix;
+  //  ★ QULF: konver biriktirilgach buyurtma yopiladi va qatorlar
+  //  QOTIB qoladi (zavod qarori, 2026-10). Yetkazib berish maydonlari
+  //  ochiq qolaveradi — «Qayerga» jo'natishda majburiy va ko'pincha
+  //  keyinroq ma'lum bo'ladi. Tekshiruv SERVERDA ham: katakni
+  //  qotirish himoya emas.
+  const qulf = !!o.locked_at && !canFix;
   const ro = !canWrite || o.status === 'cancelled' || o.status === 'to_ship'
           || (o.status === 'shipped' && !tuzat);
   const dis = ro ? 'disabled' : '';
+  //  ★ QULFDA QOTADIGAN MAYDONLAR — serverdagi ro'yxat bilan AYNAN
+  //  bir xil (`modules/sales.js`): mijoz, menejer, buyurtma sanasi va
+  //  qatorlar. Yetkazib berish maydonlari ochiq qolaveradi. Ikki
+  //  joyda boshqacha yozilsa ekranda ochiq turgan katak saqlashda
+  //  jimgina rad etilardi.
+  const disQ = (ro || qulf) ? 'disabled' : '';
   //  `drawItems` alohida funksiya va shu belgini o'qiydi — ikkinchi
   //  marta hisoblansa bir kun ikkalasi ajralib ketardi.
   cur.tuzat = tuzat;
+  //  Qatorlar `drawItems` da chiziladi va u shu belgini o'qiydi.
+  cur.qulf = qulf;
   $('modalRoot').innerHTML = `
     <div class="order-view"><div class="order-in">
       <div class="order-top">
@@ -762,15 +776,35 @@ function draw(){
             chegirmaKutmoqda(o)
               ? ` <span class="tag warn">Chegirma kutmoqda</span>` : ''}${
             yuborilgan(o)
-              ? ` <span class="tag">Chiqarishga berilgan</span>` : ''}` : ''}
+              ? ` <span class="tag">Chiqarishga berilgan</span>` : ''}${
+            o.locked_at
+              ? ` <span class="tag">Yopilgan</span>` : ''}` : ''}
         </div>
         <div class="row" style="gap:8px">
+          <!--  ★ QULFNI ADMINISTRATOR OCHADI va SABAB bilan: «nega
+                ochildi» degan savol oy oxirida beriladi. Tugma faqat
+                unda chiziladi, tekshiruv esa serverda. -->
+          ${!isNew && o.locked_at && canFix
+            ? `<button onclick="unlock()">Qulfni ochish</button>` : ''}
           ${ro ? `<button onclick="window.print()">Chop etish</button>`
                : `<button class="primary" onclick="save()">Saqlash</button>`}
           <button onclick="close_()">Yopish</button>
         </div>
       </div>
 
+      <!--  ★ SABABI EKRANDA YOZILIB TURADI: qotib qolgan katakni
+            ko'rgan menejer «nega ishlamayapti» deb o'ylardi va
+            administratorga qo'ng'iroq qilardi. Qulf sababini aytsa
+            savol ham qolmaydi. -->
+      ${qulf ? `<div class="card no-print" style="margin-bottom:12px">
+        <b>Buyurtma yopilgan</b>
+        <p class="muted" style="margin:6px 0 0">Konverlar biriktirilgan va
+          zavod ularni rejaga olgan: mahsulot, rangi, matosi, soni va narxi
+          endi o'zgarmaydi. Yetkazib berish ma'lumotlari — qayerga, manzil,
+          kutib oluvchi va chiqish sanasi — ochiq qolaveradi.
+          O'zgartirish kerak bo'lsa administrator qulfni ochadi.${
+          o.locked_by_name ? ` Yopgan: ${esc(o.locked_by_name)}.` : ''}</p>
+      </div>` : ''}
       ${chegirmaCard(o)}
       ${tuzat ? trackCard(o) : ''}
       ${ro ? docHtml(o) + trackCard(o) : `
@@ -783,7 +817,7 @@ function draw(){
                  placeholder="${isNew ? 'avtomatik' : ''}">
           <div class="hint">${isNew ? 'bo\'sh qoldirsangiz tizim beradi' : ''}</div></div>
         <div><label>Mijoz</label>
-          <select id="oCust" ${dis} onchange="drawBalance()">
+          <select id="oCust" ${disQ} onchange="drawBalance()">
             <option value="">— tanlang —</option>
             ${customers.map(c => `<option value="${c.id}"
               ${o.customer_id === c.id ? 'selected' : ''}>${esc(c.name)}${
@@ -795,13 +829,13 @@ function draw(){
               buyurtmada turgan odam ham qoladi va yonida «·» bilan
               belgilanadi — mijoz kartochkasidagi bilan bir xil. -->
         <div><label>Menejer</label>
-          <select id="oMgr" ${dis}><option value="">— o'zim —</option>
+          <select id="oMgr" ${disQ}><option value="">— o'zim —</option>
             ${managers.map(m => `<option value="${m.id}"
               ${o.manager_id === m.id ? 'selected' : ''}>${esc(m.name)}${
                 m.is_sales ? '' : ' ·'}</option>`).join('')}
           </select><div class="hint"></div></div>
         <div><label>Buyurtma sanasi</label>
-          <input id="oOn" type="date" ${dis}
+          <input id="oOn" type="date" ${disQ}
                  value="${(o.ordered_on || '').slice(0, 10)}">
           <div class="hint"></div></div>
       </div>
@@ -858,7 +892,7 @@ function draw(){
         <tbody id="tI"></tbody>
         <tfoot id="tIf"></tfoot>
       </table></div>
-      ${tuzat ? '' : `<button style="margin-top:12px"
+      ${(tuzat || qulf) ? '' : `<button style="margin-top:12px"
         onclick="addItem()">+ Qator qo'shish</button>`}
       </div>`}
 
@@ -1132,7 +1166,10 @@ function drawItems(){
   //  rangi, matosi va soni QOTIB turadi: qog'ozdagi dona haqiqatda
   //  ketgani va yangi qator ortida chiqib ketgan mahsulot yo'q.
   //  Tekshiruv baribir serverda — katakni yopish himoya emas.
-  const dis = cur.tuzat ? 'disabled' : '';
+  //  ★ QULF: konver biriktirilgach qatorlar butunlay qotadi — narx
+  //  ham. Tuzatish ko'rinishida esa faqat narx ochiq qoladi: ular
+  //  boshqa ikki hol va shuning uchun ikki belgi.
+  const dis = (cur.tuzat || cur.qulf) ? 'disabled' : '';
   $('tI').innerHTML = cur.items.length ? cur.items.map((it, i) => {
     const p = products.find(x => x.id === Number(it.product_id));
     const z = rangTanlanadi(it);
@@ -1162,7 +1199,8 @@ function drawItems(){
       <!--  Tugmalar ikki qatorga tushishi mumkin: tor ekranda ham
             jadvaldan chiqib ketmasin. -->
       <td class="num"><div class="row" style="gap:6px;justify-content:flex-end;
-           flex-wrap:wrap">${cur.tuzat ? '' : `${it.id
+           flex-wrap:wrap">${(cur.tuzat || cur.qulf) ? (it.id
+          ? `<button onclick="openPick(${it.id})">Konver</button>` : '') : `${it.id
           ? `<button onclick="openPick(${it.id})">Konver</button>` : ''}
         <button onclick="delItem(${i})">✕</button>`}</div></td>
     </tr>`;
@@ -1278,6 +1316,21 @@ function delItem(i){
 }
 
 const close_ = () => { stopTick(); $('modalRoot').innerHTML = ''; cur = null; };
+
+//  ★ QULFNI OCHISH — SABAB BILAN (zavod qarori, 2026-10). Yo'l
+//  berkitilmaydi: xato bo'lganda buyurtmani tuzatish kerak va yagona
+//  chora bazaga qo'lda kirish bo'lib qolardi. Lekin u ataylab ikki
+//  bosqich — administrator ochadi, menejer tuzatadi.
+async function unlock(){
+  const sabab = prompt('Nega ochilmoqda?');
+  if (!sabab) return;
+  try {
+    await App.api(`/api/sales/orders/${cur.order.id}/unlock`,
+      { method: 'POST', body: JSON.stringify({ note: sabab }) });
+    toast('Qulf ochildi');
+    await openOrder(cur.order.id);
+  } catch (e) { toast(e.message, true); }
+}
 
 async function save(){
   const body = {
