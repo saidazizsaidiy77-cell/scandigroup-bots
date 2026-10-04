@@ -50,7 +50,7 @@
 //  qator turadi, tafsilot esa kerak bo'lganda ochiladi.
 //
 //  Tannarx yo'q (xom ashyo hisobi hali yozilmagan) — shuning uchun bu
-//  «yalpi foyda» emas, tushumdan zavodning pul harajatlari ayirilgani.
+//  «yalpi foyda» emas, savdodan zavodning pul harajatlari ayirilgani.
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
   c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
@@ -173,7 +173,7 @@ function draw() {
             ularning ostida qolardi: ko'z o'nta qatorni o'qib chiqib,
             javobni eng oxirida topardi — guruh ochilganda esa u yanada
             pastga surilardi. Endi jami qatorning O'ZIDA, tafsiloti esa
-            uning ostida: tushum · harajat · foyda uchtasi ham bir xil
+            uning ostida: savdo · harajat · foyda uchtasi ham bir xil
             o'qiladi. -->
       ${qator('<b>Jami harajat</b>', exp)}
       ${guruh.map((g, i) => {

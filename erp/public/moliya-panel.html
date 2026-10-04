@@ -34,7 +34,7 @@
         kerak. Ekran buni o'zi aytib turadi, aks holda ikki kartochka
         bir-biriga to'g'ri kelmagani XATO bo'lib o'qilardi. -->
   <p class="muted" style="font-size:12px;margin-top:10px">
-    <b>Foyda-zarar</b> — «qancha ishladik»: tushum chiqib ketgan mahsulotdan,
+    <b>Foyda-zarar</b> — «qancha ishladik»: savdo chiqib ketgan mahsulotdan,
     harajat esa hisobot oyi bo'yicha. <b>Qoldiq</b> — «qo'limizda nima»,
     bugungi holat. Ikkalasi bir xil raqam bermaydi: «foyda bor, pul yo'q»
     degan holat aynan shunda ko'rinadi.</p>
@@ -51,7 +51,7 @@
 <div class="grid g3" id="kpis2"></div>
 
 <div class="card" style="margin-top:16px">
-  <h2>Tushum va harajat — oylar bo'yicha</h2>
+  <h2>Savdo va harajat — oylar bo'yicha</h2>
   <div id="oylar"></div>
 </div>
 
@@ -89,7 +89,12 @@ async function load() {
   const kassa = d.kassa.reduce((a, r) => a + (Number(r.total_usd) || 0), 0);
 
   Panel.kpi($('kpis'), [
-    { name: 'Tushum', value: Panel.pul(tushum),
+    //  ★ «TUSHUM» EMAS, «SAVDO» (zavod qarori, 2026-10): raqam
+    //  chiqib ketgan MAHSULOTdan hisoblanadi, kassaga kirgan puldan
+    //  emas. «Tushum» zavodda PULni anglatadi va savdo KPI sida u
+    //  aynan shu ma'noda — bitta so'z ikki raqamni atasa direktor
+    //  ikki ekranda ikki javob olardi.
+    { name: 'Savdo', value: Panel.pul(tushum),
       hint: 'chiqib ketgan mahsulotdan' },
     { name: 'Harajat', value: Panel.pul(harajat), hint: 'hisobot oyi bo\'yicha' },
     { name: 'Foyda', value: Panel.pul(foyda),
@@ -113,7 +118,9 @@ async function load() {
   ]);
 
   Panel.bars2($('oylar'), { rows: d.oylar,
-    a: { key: 'tushum', name: 'Tushum' },
+    //  Kalit `tushum` bo'lib qolaveradi — u SERVER maydonining
+    //  nomi, ekrandagi yozuv emas.
+    a: { key: 'tushum', name: 'Savdo' },
     b: { key: 'harajat', name: 'Harajat' } });
 
   //  Harajat guruhi — mahsulot emas, tur chizilmaydi.
@@ -139,7 +146,7 @@ async function load() {
   //  ★ JADVAL GRAFIKNING YONIDA TURADI (ko'rish imkoniyati cheklangan
   //  odam uchun ham, raqamni AYNAN o'qish kerak bo'lganda ham).
   $('jadval').innerHTML = `<table><thead><tr><th>Oy</th>
-      <th class="num">Tushum</th><th class="num">Harajat</th>
+      <th class="num">Savdo</th><th class="num">Harajat</th>
       <th class="num">Foyda</th></tr></thead><tbody>
     ${d.oylar.map((r) => {
       const f = Number(r.foyda) || 0;

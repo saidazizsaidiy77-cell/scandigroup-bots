@@ -54,7 +54,16 @@ const KPI = {
   cash: {
     nom: 'Moliya', perm: ['cash.view', 'cash.manage'],
     metrics: [
-      { code: 'tushum',  nom: 'Tushum',  birlik: 'usd', yaxshi: 'kop' },
+      //  ★ EKRANDA «SAVDO», kodi esa `tushum` bo'lib qolaveradi
+      //  (zavod qarori, 2026-10): raqam `v_pl_month` ning income
+      //  shoxidan — chiqib ketgan MAHSULOTdan — chiqadi, kassaga
+      //  kirgan puldan emas. «Tushum» savdo KPI sida AYNAN pulni
+      //  anglatadi va bitta so'z ikki raqamni atasa direktor ikki
+      //  ekranda ikki javob olardi.
+      //
+      //  Kod o'zgarmaydi: u `kpi_targets.metric` da SAQLANGAN va
+      //  almashtirilsa qo'yilgan rejalar yetim qolardi.
+      { code: 'tushum',  nom: 'Savdo',   birlik: 'usd', yaxshi: 'kop' },
       { code: 'harajat', nom: 'Harajat', birlik: 'usd', yaxshi: 'kam' },
       { code: 'foyda',   nom: 'Foyda',   birlik: 'usd', yaxshi: 'kop' },
     ],
