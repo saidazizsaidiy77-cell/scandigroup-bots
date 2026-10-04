@@ -780,6 +780,19 @@ function draw(){
   cur.tuzat = tuzat;
   //  Qatorlar `drawItems` da chiziladi va u shu belgini o'qiydi.
   cur.qulf = qulf;
+  //  ★ «SAQLASH» KONVER BIRIKTIRILGACH CHIQADI (zavod qarori,
+  //  2026-10). Tugma hujjatni YOPADI, ya'ni u faqat buyurtma
+  //  shakllanib bo'lganda ma'noga ega: konveri ham, so'rovi ham yo'q
+  //  buyurtmada zavod hali hech narsa qilmagan va yopadigan narsa
+  //  ham yo'q.
+  //
+  //  Buyurtmaning O'ZI shu bilan saqlanmay qolmaydi: birinchi
+  //  «Konver» bosilganda u jimgina saqlanadi (`konverOch`).
+  //
+  //  Shart SERVERDA ham bor (`/orders/:id/lock`) va ikkalasi BIR XIL
+  //  faktni o'qiydi — biriktirilgan konver yoki kutayotgan so'rov.
+  const konverBor = (cur.units || []).length > 0
+                 || Number(cur.req_pending || 0) > 0;
   $('modalRoot').innerHTML = `
     <div class="order-view"><div class="order-in">
       <div class="order-top">
@@ -800,7 +813,8 @@ function draw(){
           ${!isNew && o.locked_at && canFix
             ? `<button onclick="unlock()">Qulfni ochish</button>` : ''}
           ${ro ? `<button onclick="window.print()">Chop etish</button>`
-               : `<button class="primary" onclick="save()">Saqlash</button>`}
+               : (konverBor || o.locked_at
+                 ? `<button class="primary" onclick="save()">Saqlash</button>` : '')}
           <button onclick="close_()">Yopish</button>
         </div>
       </div>
@@ -910,7 +924,15 @@ function draw(){
       </div>`}
 
       ${ro ? '' : `<div class="row" style="gap:10px;margin-top:26px">
-        <button class="primary" onclick="save()">Saqlash</button>
+        <!--  ★ TUGMA O'RNIDA SABABI TURADI: tugmani topolmagan menejer
+              uni qidirib yurardi va «dastur ishlamayapti» derdi. -->
+        ${konverBor || o.locked_at
+          ? `<button class="primary" onclick="save()">Saqlash</button>`
+          : `<span class="muted" style="font-size:12px;max-width:420px">
+               Har qatorga <b>Konver</b> tugmasidan konver biriktiring
+               (yo'q bo'lsa \u2014 ishlab chiqarishga so'rov yuboring).
+               Buyurtma shundan keyin saqlanadi va yopiladi; yozilgani
+               esa hoziroq, «Konver» bosilgan zahoti saqlanadi.</span>`}
         ${isNew || tuzat ? '' : `
           <!--  ★ RUXSATNI BITTA ODAM BERADI (izoh: sql/sales.sql):
                 buyurtmani har menejer yozadi, lekin chiqish kunini
@@ -952,8 +974,7 @@ function draw(){
           (o.shipped_on || '').slice(0, 10)}${o.shipped_by_name
             ? ' · ' + esc(o.shipped_by_name) : ''}${o.payment_on
             ? ` · pul kirimi: <b>${(o.payment_on).slice(0, 10)}</b>` : ''}</p>` : ''}
-      ${isNew && canWrite ? `<p class="muted" style="margin-top:12px;font-size:13px">
-        Konver biriktirish buyurtma saqlangandan keyin ochiladi.</p>` : ''}
+
     </div></div>`;
   drawItems();
   drawBalance();
@@ -1160,17 +1181,26 @@ const joyOf = (u) => u.status === 'fg'
 //  bilan unga «stol» konveri biriktirilganini hech narsa aytmasdi va
 //  farq faqat mashina ortilayotganda ko'rinardi.
 //
-//  Mato ikkala tomonda ham to'ldirilgan bo'lsagina solishtiriladi:
-//  konver tsexdan ko'pincha matosiz keladi va aks holda ro'yxat
-//  yolg'on ogohlantirish bilan to'lardi.
+//  ★ RANG VA MATO FAQAT IKKALA TOMONDA HAM YOZILGANDA solishtiriladi
+//  (zavod qarori, 2026-10). Ishlab chiqarishdagi konver RANGSIZ
+//  tug'iladi — rang mijoz aytganda ma'lum bo'ladi va o'shanda
+//  bo'yaladi; buyurtma qatorida esa rang bo'sh qoldirilishi mumkin.
+//  Bo'sh katakni «boshqa rang» deb o'qisak har qatorda qizil belgi
+//  turardi va HAQIQIY farq o'sha to'da orasida ko'rinmay ketardi.
+//
+//  Mahsulotda bunday yumshatish YO'Q: u hech qachon bo'sh bo'lmaydi.
+//
+//  Shart SERVERDAGI `/mismatch` bilan AYNAN bir xil — ikki joyda
+//  boshqacha yozilsa hisobotda turgan buyurtma o'z ichida toza
+//  ko'rinardi.
 const bir = (a, b) => String(a || '').trim().toLowerCase()
                    === String(b || '').trim().toLowerCase();
+const ikki = (a, b) => String(a || '').trim() && String(b || '').trim();
 function nomuvofiq(it, u) {
   const f = [];
   if (Number(u.unit_product_id) !== Number(it.product_id)) f.push('mahsulot');
-  if (!bir(u.color, it.color)) f.push('rang');
-  if (String(u.fabric || '').trim() && String(it.fabric || '').trim()
-      && !bir(u.fabric, it.fabric)) f.push('mato');
+  if (ikki(u.color,  it.color)  && !bir(u.color,  it.color))  f.push('rang');
+  if (ikki(u.fabric, it.fabric) && !bir(u.fabric, it.fabric)) f.push('mato');
   return f;
 }
 
@@ -1242,9 +1272,9 @@ function drawItems(){
       <!--  Tugmalar ikki qatorga tushishi mumkin: tor ekranda ham
             jadvaldan chiqib ketmasin. -->
       <td class="num"><div class="row" style="gap:6px;justify-content:flex-end;
-           flex-wrap:wrap">${(cur.tuzat || cur.qulf) ? (it.id
-          ? `<button onclick="openPick(${it.id})">Konver</button>` : '') : `${it.id
-          ? `<button onclick="openPick(${it.id})">Konver</button>` : ''}
+           flex-wrap:wrap">${(cur.tuzat || cur.qulf)
+          ? (it.id ? `<button onclick="openPick(${it.id})">Konver</button>` : '')
+          : `<button onclick="konverOch(${i})">Konver</button>
         <button onclick="delItem(${i})">✕</button>`}</div></td>
     </tr>`;
   }).join('') : `<tr><td class="muted" colspan="8">Qator qo\'shilmagan</td></tr>`;
@@ -1427,7 +1457,45 @@ async function texshir(){
 }
 const yop = () => { $('modalRoot').innerHTML = ''; };
 
-async function save(){
+//  ★ KONVER SAQLASHDAN OLDIN HAM BIRIKTIRILADI (zavod qarori,
+//  2026-10). Bron QATORGA ilinadi, qatorning id si esa faqat
+//  saqlangandan keyin paydo bo'ladi — shuning uchun ilgari menejer
+//  avval «Saqlash» ni bosishi, keyin konver biriktirishi kerak edi.
+//  Zavodda tartib boshqa: butun buyurtma shakllantiriladi, har
+//  qatorga konver topiladi va BITTA marta saqlanadi.
+//
+//  Shuning uchun buyurtmaning O'ZI shu yerda jimgina saqlanadi.
+//  Menejerdan ikkinchi tugmani bosishni so'rash bitta ishni ikki
+//  marta qildirardi — «Saqlash» esa endi BOSHQA ishni qiladi: u
+//  hujjatni YOPADI.
+//
+//  Qator INDEKS bo'yicha topiladi: saqlashda qatorlar o'chirilib
+//  qayta yoziladi, ya'ni id lar yangi bo'ladi. Tartib `sort` bilan
+//  saqlanadi (serverda `ORDER BY i.sort, i.id`), lekin ehtiyot uchun
+//  mahsuloti ham solishtiriladi — mos kelmasa oyna ochilmaydi va
+//  menejer begona qatorga konver biriktirib qo'ymaydi.
+async function konverOch(i) {
+  const it = cur.items[i];
+  if (!it) return;
+  if (it.id) return openPick(it.id);
+  if (!it.product_id) return alert('Avval qatorda mahsulotni tanlang');
+  const kutgan = Number(it.product_id);
+  if (!await saqla({ qulfla: false })) return;
+  const yangi = cur.items[i];
+  if (!yangi || !yangi.id || Number(yangi.product_id) !== kutgan)
+    return alert('Qator saqlandi — «Konver» ni qaytadan bosing');
+  openPick(yangi.id);
+}
+
+//  ★ «SAQLASH» HUJJATNI YOPADI (zavod qarori, 2026-10). Menejer
+//  buyurtmani shakllantiradi, konverlarni biriktiradi va shundan
+//  keyin bir marta saqlaydi — o'sha bosish qulfni tushiradi.
+//
+//  `qulfla` bilan ikki yo'l ham BITTA funksiyadan o'tadi: jimgina
+//  saqlash (konver oynasini ochish uchun) va yakuniy saqlash. Ikki
+//  nusxada yozilsa biri ertaga ikkinchisidan ajralib ketardi —
+//  masalan «Qayerga» tekshiruvi bittasida qolib ketardi.
+async function saqla({ qulfla }) {
   const body = {
     order_no: $('oNo').value.trim() || null,
     customer_id: Number($('oCust').value) || null,
@@ -1443,20 +1511,40 @@ async function save(){
       unit_price: it.unit_price === '' || it.unit_price == null ? null : Number(it.unit_price),
       note: it.note || null })),
   };
-  if (!body.customer_id) return alert('Mijoz tanlanmagan');
-  if (body.items.some(i => !i.product_id)) return alert('Qatorda mahsulot tanlanmagan');
+  if (!body.customer_id) { alert('Mijoz tanlanmagan'); return false; }
+  if (!body.items.length) { alert('Qator qo\'shilmagan'); return false; }
+  if (body.items.some(i => !i.product_id)) {
+    alert('Qatorda mahsulot tanlanmagan'); return false; }
   try{
-    if (cur.order.id) {
-      await App.api('/api/sales/orders/' + cur.order.id,
+    let id = cur.order.id;
+    if (id) {
+      await App.api('/api/sales/orders/' + id,
         { method: 'PATCH', body: JSON.stringify(body) });
-      await openOrder(cur.order.id);
     } else {
-      const o = await App.api('/api/sales/orders',
-        { method: 'POST', body: JSON.stringify(body) });
-      await openOrder(o.id);
+      id = (await App.api('/api/sales/orders',
+        { method: 'POST', body: JSON.stringify(body) })).id;
     }
+    //  Qulf SAQLANGANDAN KEYIN tushadi: qatorlar yozilmagan bo'lsa
+    //  server uni baribir rad etardi va buyurtma yarim saqlangan
+    //  holda qolardi.
+    if (qulfla) await App.api(`/api/sales/orders/${id}/lock`, { method: 'POST' });
+    await openOrder(id);
     load();
-  }catch(e){ alert(e.message); }
+    return true;
+  }catch(e){ alert(e.message); return false; }
+}
+
+//  Yakuniy saqlash. Ogohlantirish MAJBURIY: menejer tugmani
+//  «o'zgarishlarim yozilsin» deb bosardi va hujjat yopilib qolgani
+//  uni hayron qoldirardi.
+async function save(){
+  if (!cur.order.id || !cur.order.locked_at) {
+    if (!confirm('Buyurtma saqlanadi va YOPILADI.\n\n'
+      + 'Shundan keyin mahsulot, rangi, matosi, soni va narxi '
+      + 'o\'zgarmaydi \u2014 qulfni faqat administrator ochadi.\n\n'
+      + 'Yetkazib berish ma\'lumotlari ochiq qolaveradi.')) return;
+  }
+  await saqla({ qulfla: true });
 }
 
 //  Buyurtmani ombor mudiriga topshirish. Shundan keyin mahsulotni

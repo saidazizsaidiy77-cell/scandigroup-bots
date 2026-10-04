@@ -8139,7 +8139,7 @@ test('konver biriktirilgan qator o\'zgarmaydi', async () => {
   assert.equal(endi.status, 200, endi.text);
 });
 
-test('buyurtma konver biriktirilgach yopiladi', async () => {
+test('buyurtma SAQLASHDA yopiladi, biriktirishda emas', async () => {
   //  ★ ZAVOD QARORI (2026-10). Menejer buyurtmani shakllantiradi,
   //  konverlarni biriktiradi — shundan keyin u YOPILADI va
   //  o'zgartirish faqat administrator orqali.
@@ -8159,17 +8159,30 @@ test('buyurtma konver biriktirilgach yopiladi', async () => {
     items: [{ product_id: PENAL, qty: 4, color: 'Oq', unit_price: 100 }] })).body;
   const q = (await savdo('GET', '/api/sales/orders/' + z.id)).body.items[0];
 
-  //  ★ QULF BIRINCHI SAQLASHDA TUSHMAYDI: bo'sh buyurtmani ham yopib
-  //  qo'ysak menejer uni UMUMAN tuzib bo'lmasdi — qator qo'shish ham
-  //  o'zgartirish.
-  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
-    { note: 'hali ochiq' })).status, 200, 'konversiz buyurtma ochiq');
+  //  ★ KONVERSIZ YOPILMAYDI: qulfning sababi «tsex mahsulotni rejaga
+  //  oldi» degani, zavod esa hali hech narsa qilmagan.
+  const erta = await savdo('POST', `/api/sales/orders/${z.id}/lock`, {});
+  assert.equal(erta.status, 400, erta.text);
+  assert.match(erta.body.error, /konver biriktirilmagan/);
   assert.equal((await savdo('GET', '/api/sales/orders/' + z.id))
     .body.order.locked_at, null);
 
-  //  ── Konver biriktirildi → yopiladi
+  //  ★ BIRIKTIRISH QULFLAMAYDI (zavod qarori, 2026-10): menejer
+  //  buyurtmani shakllantirib bo'lmaguncha u o'ziniki. Ilgari qulf
+  //  shu yerda tushardi va menejer qolgan qatorlarni, sanasini va
+  //  manzilini yozolmay qolardi.
   assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/assign`,
     { item_id: q.id, unit_id: u.id, qty: 4 })).status, 200);
+  assert.equal((await savdo('GET', '/api/sales/orders/' + z.id))
+    .body.order.locked_at, null, 'biriktirish qulflamaydi');
+
+  //  …va shu paytda buyurtma hali ERKIN tahrirlanadi: narxi, sanasi,
+  //  izohi — hammasi menejerning qo'lida.
+  assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
+    { note: 'hali ochiq', due_on: '2026-11-01' })).status, 200);
+
+  //  ── «Saqlash» — hujjat shu bosishda yopiladi
+  assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/lock`, {})).status, 200);
   const yop = (await savdo('GET', '/api/sales/orders/' + z.id)).body.order;
   assert.ok(yop.locked_at, 'buyurtma yopildi');
   assert.equal(yop.locked_by_name, 'Sinov qulf menejeri', 'kim yopgani yoziladi');
@@ -8219,10 +8232,13 @@ test('buyurtma konver biriktirilgach yopiladi', async () => {
   assert.equal((await savdo('PATCH', '/api/sales/orders/' + z.id,
     { items: [{ id: q.id, product_id: PENAL, qty: 6, color: 'Oq',
                 unit_price: 100 }] })).status, 200);
-  //  …va qayta biriktirilsa qulf O'ZI qaytadan tushadi: ochiq qolgan
-  //  buyurtma unutilardi.
+  //  …qayta biriktiradi — qulf hali tushmaydi…
   assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/assign`,
     { item_id: q.id, unit_id: u2.id, qty: 2 })).status, 200);
+  assert.equal((await savdo('GET', '/api/sales/orders/' + z.id))
+    .body.order.locked_at, null);
+  //  …va yana «Saqlash» bilan yopadi.
+  assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/lock`, {})).status, 200);
   assert.ok((await savdo('GET', '/api/sales/orders/' + z.id)).body.order.locked_at,
     'qayta yopildi');
 
@@ -10799,6 +10815,23 @@ test('nomuvofiq buyurtmalarni dastur o\'zi topadi', async () => {
   assert.equal(kop.length, 1, 'ortiqcha bron topildi');
   assert.equal(kop[0].bron, 4);
   assert.equal(kop[0].item_qty, 1);
+
+  //  ★ BO'SH RANG — FARQ EMAS. Ishlab chiqarishdagi konver RANGSIZ
+  //  tug'iladi va buyurtma qatorida ham rang bo'sh qoldirilishi
+  //  mumkin. Bo'sh katakni «boshqa rang» deb o'qisak ro'yxat yolg'on
+  //  ogohlantirish bilan to'lardi.
+  await H.id(`UPDATE order_items SET product_id = $2, color = NULL,
+                                     qty = 4 WHERE id = $1`, [q.id, PENAL]);
+  const toza2 = await admin('GET', '/api/sales/mismatch');
+  assert.equal(toza2.body.rows.filter((r) => r.id === z.id).length, 0,
+    "rangsiz qator yolg'on ogohlantirish bermaydi");
+
+  //  Ikkalasi ham yozilgan va boshqa bo'lsa — FARQ.
+  await H.id(`UPDATE order_items SET color = 'Venge' WHERE id = $1`, [q.id]);
+  const rang = (await admin('GET', '/api/sales/mismatch')).body.rows
+    .filter((r) => r.id === z.id);
+  assert.equal(rang.length, 1, 'rang farqi topildi');
+  assert.equal(rang[0].farq, 'rang');
 
   //  ★ FAQAT ADMINISTRATOR KO'RADI (`sales.fix`): ro'yxatda butun
   //  zavodning buyurtmasi, mijozi va menejeri turadi — u menejerning

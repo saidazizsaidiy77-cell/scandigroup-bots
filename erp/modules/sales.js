@@ -512,8 +512,21 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
       WHERE u.order_no = $1 AND u.status = 'shipped'
       ORDER BY u.conveyor_no`, [o.order_no])).rows : [];
 
+  //  ★ KUTAYOTGAN SO'ROV SONI (zavod qarori, 2026-10). «Saqlash»
+  //  tugmasi konver biriktirilgandan keyin chiqadi, so'rov esa
+  //  konversiz turadi: stol va stulda zavod ishga kirishgan bo'lsa
+  //  ham ro'yxatda hali hech narsa yo'q. Shart serverda ham bor
+  //  (`/orders/:id/lock`) va ikkalasi BIR XIL fakt ustida turishi
+  //  kerak — aks holda tugma chiqmaydigan buyurtmani server
+  //  yopishga tayyor bo'lib turardi.
+  const req_pending = Number((await db.query(
+    `SELECT COUNT(*)::int AS n FROM unit_requests q
+       JOIN order_items i ON i.id = q.order_item_id
+      WHERE i.order_id = $1 AND q.status = 'pending'`,
+    [req.params.id])).rows[0].n);
+
   res.json({ order: o, items, units: units.length ? units : shipped,
-             keeper: await keeperOf() });
+             req_pending, keeper: await keeperOf() });
 }));
 
 // ─────────────────────────────────────────────────────── YARATISH / TAHRIR
@@ -1196,13 +1209,26 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
   res.json({ item: it, rows });
 }));
 
-//  ★ QULFNI SHU YERDA QO'YAMIZ VA SHU YERDAN O'QIYMIZ — bitta joyda.
-//  Buyurtma konver biriktirilgan zahoti yopiladi: shundan boshlab
-//  mahsulot menejerning qog'ozida emas, tsexning rejasida turadi.
+//  ★ QULFNI BIRIKTIRISH EMAS, SAQLASH TUSHIRADI (zavod qarori,
+//  2026-10). Birinchi urinishda u `/assign` da edi va ikki ishni
+//  birdan buzardi:
 //
-//  Qaytarish (`unassign`) qulfni OLIB TASHLAMAYDI: bron qaytarilgani
-//  bilan tsex allaqachon ishlab bo'lgan bo'lishi mumkin. Qulfni faqat
-//  administrator ochadi (`/unlock`).
+//    1. menejer konverni biriktirgan zahoti buyurtma yopilardi —
+//       ya'ni u hali qolgan qatorlarni to'ldirmagan, sanasini
+//       yozmagan, manzilini bilmagan holda hujjat QOTIB qolardi;
+//    2. biriktirish esa SAQLASHDAN KEYIN bo'lardi (qator id siz
+//       bron qo'yib bo'lmaydi), ya'ni tartib teskari edi: avval
+//       saqla, keyin biriktir, keyin boshqa hech narsa qilolmaysan.
+//
+//  Zavodda tartib boshqa: menejer BUTUN buyurtmani shakllantiradi —
+//  mijoz, sanalar, qatorlar va har qatorga konver — va shundan keyin
+//  «Saqlash» ni bosadi. Qulf o'sha bosishda tushadi.
+//
+//  Shuning uchun biriktirish ekranda ham, API da ham QULFSIZ:
+//  menejer uni tugatmaguncha buyurtma uniki. Buyurtmaning O'ZI esa
+//  birinchi «Konver» bosilganda jimgina saqlanadi — qator id siz
+//  bron qo'yib bo'lmaydi va menejerdan ikkinchi tugmani bosishni
+//  so'rash bitta ishni ikki marta qildirardi.
 const QULF = `UPDATE orders SET locked_at = NOW(), locked_by = $2
                WHERE id = $1 AND locked_at IS NULL`;
 
@@ -1315,9 +1341,6 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
         }, client);
     }
 
-    //  ★ KONVER BIRIKTIRILDI — BUYURTMA YOPILADI (izoh: `QULF`).
-    //  Shu daqiqadan boshlab tsex mahsulotni rejaga oladi.
-    await client.query(QULF, [o.id, req.user.id]);
 
     await audit(req, { module: 'sales', action: 'bron', entity: 'order',
                        entity_id: o.id,
@@ -1468,8 +1491,8 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
             u.conveyor_no, pu.name AS unit_product,
             u.color AS unit_color, u.fabric AS unit_fabric, r.qty AS bron,
             CASE WHEN u.product_id <> i.product_id THEN 'mahsulot'
-                 WHEN LOWER(COALESCE(u.color, '')) IS DISTINCT FROM
-                      LOWER(COALESCE(i.color, '')) THEN 'rang'
+                 WHEN COALESCE(u.color, '') <> '' AND COALESCE(i.color, '') <> ''
+                      AND LOWER(u.color) <> LOWER(i.color) THEN 'rang'
                  ELSE 'mato' END AS farq
        FROM unit_reservations r
        JOIN order_items i        ON i.id = r.order_item_id
@@ -1478,13 +1501,20 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
        JOIN production_units u   ON u.id = r.unit_id
        JOIN products pu          ON pu.id = u.product_id
       WHERE u.status <> 'cancelled'
+        --  ★ RANG VA MATO FAQAT IKKALA TOMONDA HAM YOZILGANDA
+        --  solishtiriladi (zavod qarori, 2026-10). Ishlab
+        --  chiqarishdagi konver RANGSIZ tug'iladi — rang mijoz
+        --  aytganda ma'lum bo'ladi va o'shanda bo'yaladi; buyurtma
+        --  qatorida esa rang bo'sh qoldirilishi mumkin. Bo'sh
+        --  katakni «boshqa rang» deb o'qisak ro'yxat yolg'on
+        --  ogohlantirish bilan to'lardi va HAQIQIY farq o'sha to'da
+        --  orasida ko'rinmay ketardi.
+        --
+        --  Mahsulotda bunday yumshatish YO'Q: u hech qachon bo'sh
+        --  bo'lmaydi va aynan u Z26-0758 ni buzgan.
         AND (u.product_id <> i.product_id
-             OR LOWER(COALESCE(u.color, '')) IS DISTINCT FROM
-                LOWER(COALESCE(i.color, ''))
-             --  Mato KO'PINCHA konverda yozilmaydi (tsexdan rangsiz
-             --  keladi), shuning uchun faqat IKKALASI ham to'ldirilgan
-             --  va boshqa bo'lganda farq hisoblanadi — aks holda
-             --  ro'yxat yolg'on ogohlantirish bilan to'lardi.
+             OR (COALESCE(u.color, '') <> '' AND COALESCE(i.color, '') <> ''
+                 AND LOWER(u.color) <> LOWER(i.color))
              OR (COALESCE(u.fabric, '') <> '' AND COALESCE(i.fabric, '') <> ''
                  AND LOWER(u.fabric) <> LOWER(i.fabric)))
       ORDER BY o.id DESC, u.conveyor_no`);
@@ -1523,6 +1553,54 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
 //
 //  Qayta biriktirilsa qulf O'ZI qaytadan tushadi (`QULF`): ochiq
 //  qolgan buyurtma unutilardi.
+//  ★ «SAQLASH» — BUYURTMANI YOPADIGAN BOSISH (zavod qarori, 2026-10).
+//  Menejer qatorlarni to'ldiradi, har biriga konver biriktiradi va
+//  shundan keyin bitta marta saqlaydi: o'sha bosish hujjatni yopadi.
+//
+//  ★ KONVERSIZ YOPILMAYDI, va bu to'siq emas — MA'NO. Qulfning
+//  sababi: «tsex mahsulotni rejaga oldi, endi o'zgartirish butun
+//  zavodga tegadi». Konveri ham, so'rovi ham yo'q buyurtmada zavod
+//  hali hech narsa qilmagan, ya'ni yopadigan narsa ham yo'q — u
+//  menejerning qog'ozida turaveradi va erkin tahrirlanadi.
+//
+//  So'rov ham SANALADI (`unit_requests.order_item_id`): konver hali
+//  ochilmagan bo'lsa ham rahbariyat tasdiqlagach u o'sha qatorga
+//  O'ZI biriktiriladi, ya'ni zavod allaqachon ishga kirishgan.
+//  Faqat bronni sanasak stol va stul buyurtmalari — savdo so'rov
+//  yozadigan yagona ikkitasi — hech qachon yopilmasdi.
+router.post('/orders/:id/lock', need(...WRITE), wrap(async (req, res) => {
+  const o = (await db.query(
+    `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+      WHERE o.id = $1`, [req.params.id])).rows[0];
+  if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+  const chans = channelsOf(req);
+  if (chans && !chans.includes(o.channel))
+    return res.status(403).json({ error: "Bu buyurtma sizning yo'nalishingizda emas" });
+  assertOwn(req, o);
+  if (o.status === 'cancelled')
+    return res.status(400).json({ error: 'Buyurtma bekor qilingan' });
+  if (o.locked_at) return res.json({ ok: true, locked_at: o.locked_at });
+
+  const bor = (await db.query(
+    `SELECT EXISTS (SELECT 1 FROM unit_reservations r
+                      JOIN order_items i      ON i.id = r.order_item_id
+                      JOIN production_units u ON u.id = r.unit_id
+                     WHERE i.order_id = $1 AND u.status <> 'cancelled')
+           OR EXISTS (SELECT 1 FROM unit_requests q
+                        JOIN order_items i ON i.id = q.order_item_id
+                       WHERE i.order_id = $1 AND q.status = 'pending') AS bor`,
+    [req.params.id])).rows[0].bor;
+  if (!bor) return res.status(400).json(
+    { error: "Buyurtma yopilmadi — qatorlarga konver biriktirilmagan. "
+           + "«Konver» tugmasidan biriktiring yoki ishlab chiqarishga "
+           + "so'rov yuboring." });
+
+  const { rows } = await db.query(QULF + ' RETURNING order_no', [o.id, req.user.id]);
+  await audit(req, { module: 'sales', action: 'lock', entity: 'order',
+                     entity_id: o.id, payload: { order_no: rows[0]?.order_no } });
+  res.json({ ok: true });
+}));
+
 router.post('/orders/:id/unlock', need('sales.fix'), wrap(async (req, res) => {
   const sabab = String(req.body.note || '').trim();
   if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
