@@ -125,43 +125,93 @@ ON CONFLICT (from_pct) DO NOTHING;
 --
 --  Turkum GURUHDAN o'qiladi (`sales_category`): penal va kamod
 --  ikkita guruh, bitta turkum (izoh: sql/catalog-groups.sql).
+-- ────────────────────────────────────────── KIM KIMNING QO'L OSTIDA
+--
+--  ★ BOSHLIQNING KPI SI — QO'L OSTIDAGILARNING YIG'INDISI (zavod
+--  qarori, 2026-10). Savdo bo'lim boshlig'i o'z qo'li bilan mijoz
+--  yuritmaydi: direktor UNGA reja qo'yadi, u esa o'z menejerlariga
+--  qo'yadi va ularning natijasi orqali o'z rejasini bajaradi.
+--
+--  Ilgari fakt QAT'IY `customers.manager_id` dan yurardi, ya'ni
+--  boshliqning varag'ida hamma raqam NOL bo'lib turardi — unga reja
+--  qo'yish mumkin edi-yu, bajarilishi hech qachon ko'rinmasdi.
+--
+--  Bog'lanish BAZADA, rolda emas (4-qoida): zavodda ertaga ikkinchi
+--  bo'lim boshlig'i paydo bo'lsa yoki menejer boshqasiga o'tsa bitta
+--  katakcha ko'chadi. Rol buni ajrata olmaydi — `savdo_boshliq`
+--  rolining O'ZI kimning qo'l ostida kim turganini aytmaydi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS sales_head_id INT
+  REFERENCES workers(id);
+
+--  O'ZINI O'ZIGA biriktirib bo'lmaydi: halqa hosil bo'lardi va
+--  boshliqning savdosi o'ziga ikki marta qo'shilardi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'workers_sales_head_not_self') THEN
+    ALTER TABLE workers ADD CONSTRAINT workers_sales_head_not_self
+      CHECK (sales_head_id IS NULL OR sales_head_id <> id);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_workers_sales_head
+  ON workers(sales_head_id) WHERE sales_head_id IS NOT NULL;
+
 DROP VIEW IF EXISTS v_sales_kpi_fact CASCADE;
 CREATE VIEW v_sales_kpi_fact AS
+--  ★ BITTA MIJOZ IKKI ODAMGA SANALADI: o'z menejeriga va uning
+--  bo'lim boshlig'iga. Yig'indi SHU YERDA, har ko'rsatkichda emas —
+--  AKB `COUNT(DISTINCT)` bilan hisoblanadi va menejerlarning
+--  raqamini qo'shib bo'lmaydi: bitta mijoz ikkalasidan ham olgan
+--  bo'lsa boshliqda ikki marta sanalardi. Mijozni oldindan
+--  ko'paytirib, keyin guruhlash bu savolni o'zi hal qiladi.
+--
+--  Bir qavat yetarli: zavodda zanjir «direktor → bo'lim boshlig'i →
+--  menejer» va direktorning o'zi dasturda o'lchanmaydi. Rekursiya
+--  yozilsa bugun hech narsa bermay, ertaga halqani tekshirish
+--  kerak bo'lardi.
+WITH kim AS (
+  SELECT c.id AS customer_id, c.manager_id AS worker_id
+    FROM customers c
+   WHERE c.manager_id IS NOT NULL
+  UNION
+  SELECT c.id, w.sales_head_id
+    FROM customers c
+    JOIN workers w ON w.id = c.manager_id
+   WHERE w.sales_head_id IS NOT NULL
+)
 --  1. TUSHUM — mijozdan kelgan pul. Bekor qilingani va hali qabul
 --  qilinmagani (`pending`) sanalmaydi: pul hali kassada emas.
-SELECT c.manager_id                                  AS worker_id,
+SELECT k.worker_id                                   AS worker_id,
        date_trunc('month', o.op_date)::date          AS mon,
        'TUSHUM'::text                                AS indicator,
        NULL::text                                    AS category,
        SUM(o.amount_usd)::numeric(16,2)              AS fakt
   FROM cash_ops o
-  JOIN customers c ON c.id = o.from_id
+  JOIN kim k ON k.customer_id = o.from_id
  WHERE o.from_kind = 'customer' AND o.status = 'ok'
-   AND c.manager_id IS NOT NULL
  GROUP BY 1, 2
 UNION ALL
 --  2. AKB — oraliqda mahsulot OLGAN mijozlar soni (zavod qarori):
 --  buyurtma yozgani emas, to'lagani ham emas — mahsulotni olgani.
-SELECT c.manager_id, date_trunc('month', u.ship_on)::date, 'AKB', NULL,
+SELECT k.worker_id, date_trunc('month', u.ship_on)::date, 'AKB', NULL,
        COUNT(DISTINCT u.customer_id)::numeric(16,2)
   FROM production_units u
-  JOIN customers c ON c.id = u.customer_id
+  JOIN kim k ON k.customer_id = u.customer_id
  WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
-   AND c.manager_id IS NOT NULL
  GROUP BY 1, 2
 UNION ALL
 --  3. SEGMENT — chiqib ketgan mahsulot summasi, TURKUM bo'yicha.
 --  Turkumi yo'q guruh ham qatorda qoladi (`category` bo'sh): uning
 --  savdosi yig'indiga qo'shiladi, lekin qaysi turkumga tegishli
 --  ekani ko'rinmaydi — bo'sh katak savol, yo'q qator esa yolg'on.
-SELECT c.manager_id, date_trunc('month', u.ship_on)::date, 'SEGMENT',
+SELECT k.worker_id, date_trunc('month', u.ship_on)::date, 'SEGMENT',
        g.sales_category,
        SUM(u.total_amount)::numeric(16,2)
   FROM production_units u
-  JOIN customers c      ON c.id = u.customer_id
+  JOIN kim k            ON k.customer_id = u.customer_id
   JOIN products p       ON p.id = u.product_id
   JOIN product_groups g ON g.id = p.group_id
  WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
    AND u.total_amount IS NOT NULL
-   AND c.manager_id IS NOT NULL
  GROUP BY 1, 2, 4;

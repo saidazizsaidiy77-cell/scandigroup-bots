@@ -8070,6 +8070,76 @@ test('savdo KPI: og\'irlik bilan hisoblanadi va bonus shkalasi ishlaydi', async 
   //  Reja qo'yish esa umuman yopiq.
   assert.equal((await men('POST', '/api/sales/kpi', { mon: OY, worker_id: mgr,
     items: [{ indicator: 'TUSHUM', plan: 1, weight: 1 }] })).status, 403);
+
+  //  ── BOSHLIQNING KPI SI — QO'L OSTIDAGILARNING YIG'INDISI ────────
+  //
+  //  ★ ZAVOD QARORI (2026-10). Savdo bo'lim boshlig'i o'z qo'li
+  //  bilan mijoz yuritmaydi: direktor UNGA reja qo'yadi, u esa o'z
+  //  menejerlariga qo'yadi. Ilgari fakt qat'iy `customers.manager_id`
+  //  dan yurardi va boshliqning varag'ida hamma raqam NOL bo'lib
+  //  turardi — unga reja qo'yish mumkin edi-yu, bajarilishi hech
+  //  qachon ko'rinmasdi.
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov KPI boshliq'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers
+                                      WHERE name = 'Sinov KPI boshliq')`);
+  const boshId = (await H.id(
+    `SELECT id FROM workers WHERE name = 'Sinov KPI boshliq'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'savdo_boshliq') ON CONFLICT DO NOTHING`, [boshId]);
+
+  //  Boshliqning O'ZIDA mijoz yo'q — raqami faqat menejerdan keladi.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + mgr,
+    { sales_head_id: boshId })).status, 200);
+  assert.equal((await qoy([
+    { indicator: 'TUSHUM',  plan: 415000, weight: 0.70 },
+    { indicator: 'AKB',     plan: 35,     weight: 0.15 },
+    { indicator: 'SEGMENT', plan: 415000, weight: 0.15 },
+  ])).status, 200);
+  await admin('POST', '/api/sales/kpi', { mon: OY, worker_id: boshId, items: [
+    { indicator: 'TUSHUM',  plan: 415000, weight: 0.70 },
+    { indicator: 'AKB',     plan: 35,     weight: 0.15 },
+    { indicator: 'SEGMENT', plan: 415000, weight: 0.15 },
+  ] });
+
+  const k2 = (await admin('GET',
+    `/api/sales/kpi?mon=${OY}&worker_id=${boshId}`)).body;
+  const vb = k2.varaq.find((x) => x.worker_id === boshId);
+  assert.ok(vb, 'boshliqning varag\'i bor');
+  const qb = (kod) => vb.qator.find((x) => x.code === kod);
+  assert.equal(Number(qb('TUSHUM').fakt), 221031, 'menejernng tushumi kirdi');
+  assert.equal(Number(qb('SEGMENT').fakt), 223770);
+  //  ★ AKB QO'SHILMAYDI, QAYTA SANALADI: bitta mijoz ikki
+  //  menejerdan ham olgan bo'lsa boshliqda ikki marta sanalardi.
+  //  Shuning uchun yig'indi view ning ICHIDA, `COUNT(DISTINCT)` dan
+  //  oldin.
+  assert.equal(Number(qb('AKB').fakt), 15);
+  //  Ekran kimlar kirganini yozadi: boshliq o'z varag'ida «men hech
+  //  narsa sotmaganman-ku» degan savol bilan qolmasin.
+  assert.deepEqual(vb.ostida, ['Sinov KPI menejer']);
+
+  //  Menejerning O'Z varag'i o'zgarmaydi: raqam ikkalasida ham
+  //  turadi va bu to'g'ri — biri ishni qildi, ikkinchisi uni
+  //  boshqardi.
+  const vm = (await admin('GET', `/api/sales/kpi?mon=${OY}&worker_id=${mgr}`))
+    .body.varaq.find((x) => x.worker_id === mgr);
+  assert.equal(Number(vm.qator.find((x) => x.code === 'TUSHUM').fakt), 221031);
+
+  //  ★ HALQA BO'LMAYDI — ikkala tomondan ham.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + boshId,
+    { sales_head_id: boshId })).status, 400, 'o\'ziga biriktirilmaydi');
+  const halqa = await admin('PATCH', '/api/admin/workers/' + boshId,
+    { sales_head_id: mgr });
+  assert.equal(halqa.status, 400, halqa.text);
+  assert.match(halqa.body.error, /halqa/);
+
+  //  Bo'sh yuborilgani «tegma» emas, «yo'q» degani.
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + mgr,
+    { sales_head_id: 0 })).status, 200);
+  const k3 = (await admin('GET',
+    `/api/sales/kpi?mon=${OY}&worker_id=${boshId}`)).body;
+  const vb3 = k3.varaq.find((x) => x.worker_id === boshId);
+  assert.equal(Number(vb3.qator.find((x) => x.code === 'TUSHUM').fakt), 0,
+    'bog\'lanish uzilgach boshliqda raqam qolmaydi');
 });
 
 test('konver biriktirilgan qator o\'zgarmaydi', async () => {

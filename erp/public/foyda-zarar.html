@@ -105,6 +105,25 @@ function draw() {
   $('kOut').innerHTML = usd(jami(exp)) + '<small> $</small>';
   $('kPr').innerHTML  = usd(jami(inc) - jami(exp)) + '<small> $</small>';
 
+  //  ★ TUSHUM TURKUMLARGA BO'LINADI (zavod qarori, 2026-10):
+  //  mehmonxona to'plami · yotoqxona to'plami · stol · stul.
+  //  Direktorning savoli «qancha sotdik» emas, «NIMADAN qancha» —
+  //  bitta yig'indi raqam unga javob bermaydi.
+  //
+  //  Ilgari server qatorlarni ALLAQACHON bo'lib berardi
+  //  (`v_pl_month`, `sales_categories`), sahifa esa ularni
+  //  qo'shib yuborardi — ya'ni javob bor edi-yu, ekranga chiqmasdi.
+  //
+  //  Tartib SERVERNIKI (`item_sort`): mehmonxona → yotoqxona → stol
+  //  → stul, turkumsizi oxirida. Sahifada qayta saralanmaydi — ikki
+  //  joyda yozilgan tartib bir kun ajralib ketardi.
+  const tur = [];
+  d.rows.filter(r => r.kind === 'income').forEach(r => {
+    let i = tur.find(x => x.name === r.item_name);
+    if (!i) tur.push(i = { name: r.item_name, by: {} });
+    i.by[key(r)] = (i.by[key(r)] || 0) + Number(r.amount_usd);
+  });
+
   //  Guruhlar — harajat qatorlari; tartibi server bergan `group_sort` da
   const guruh = [];
   d.rows.filter(r => r.kind === 'expense').forEach(r => {
@@ -131,7 +150,16 @@ function draw() {
       ${ms.map(m => `<th class="num">${oyNom(m)}</th>`).join('')}
       <th class="num">Jami</th></tr></thead>
     <tbody>
-      ${qator('<b>Tushum</b> — mahsulot sotuvi', inc)}
+      <!--  Tushum qatori harajat guruhlari bilan BIR XIL ishlaydi:
+            bosilsa turkumlari ochiladi. Ikki xil bo'lsa odam
+            birinchisini bosib ko'rib, ikkinchisini ochilmaydi deb
+            o'ylardi. -->
+      ${qator(`<span class="muted" style="margin-right:6px">${
+          ochiq.has('SOTUV') ? '&minus;' : '+'}</span><b>Tushum</b> — mahsulot sotuvi`,
+        inc, '', ` onclick="toggle('SOTUV')" style="cursor:pointer"`)}
+      ${ochiq.has('SOTUV') ? tur.map(t =>
+        qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
+              t.by)).join('') : ''}
       <!--  ★ AVVAL JAMI, KEYIN TAFSILOTI — pul oqimi bilan bir xil.
             Direktorning savoli «qancha harajat bo'ldi», keyin esa
             «nimaga». Ilgari guruhlar yuqorida turib, «Jami harajat»
@@ -173,7 +201,14 @@ function exportCsv() {
   const push = (nom, by) => qat.push([nom, ...ms.map(m => (by[m] || 0).toFixed(2)),
     ms.reduce((a, m) => a + (by[m] || 0), 0).toFixed(2)]);
   push('Tushum', inc);
-  d.rows.filter(r => r.kind === 'expense').forEach(() => {});
+  //  Turkumlar Excelda ham qatorlar bo'lib chiqadi: ekranda
+  //  ko'rinadigan narsa faylda ham bo'lishi kerak.
+  const t = {};
+  d.rows.filter(r => r.kind === 'income').forEach(r => {
+    (t[r.item_name] = t[r.item_name] || {})[key(r)] =
+      (t[r.item_name][key(r)] || 0) + Number(r.amount_usd);
+  });
+  Object.entries(t).forEach(([k, by]) => push('  ' + k, by));
   const g = {};
   d.rows.filter(r => r.kind === 'expense').forEach(r => {
     const k = r.group_name + ' · ' + r.item_name;

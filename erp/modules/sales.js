@@ -2854,7 +2854,7 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     //  (menejer ro'yxati bilan bir xil qoida — huquqdan chiqadi,
     //  lavozimdan emas).
     db.query(
-      `SELECT DISTINCT w.id, w.name
+      `SELECT DISTINCT w.id, w.name, w.sales_head_id
          FROM workers w
          JOIN worker_roles wr      ON wr.worker_id = w.id
          JOIN role_permissions rp  ON rp.role_code = wr.role_code
@@ -2922,10 +2922,19 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     const tushum = son((qator.find((q) => q.code === 'TUSHUM') || {}).fakt);
     const foiz = umumiy * 100;
     const stavka = bonusStavka(bands.rows, foiz);
+    //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
+    //  Boshliqning raqami qo'l ostidagilarning yig'indisidan chiqadi
+    //  (izoh: `sql/sales-kpi.sql`) va buni ekran aytmasa, u o'z
+    //  varag'ida «men hech narsa sotmaganman-ku» degan savol bilan
+    //  qolardi. Ro'yxat ham ishga yaraydi: kimning hisobiga kirgani
+    //  ko'rinib turadi.
+    const ostida = xodim.rows.filter((w) => w.sales_head_id === wid)
+      .map((w) => w.name);
     return {
       worker_id: wid,
       worker_name: (xodim.rows.find((w) => w.id === wid) || {}).name
         || (pl[0] || {}).worker_name || '',
+      ostida,
       qator, umumiy: foiz, ogirlik_jami: ogirlikJami,
       bonus_stavka: stavka, bonus: tushum * stavka / 100,
     };

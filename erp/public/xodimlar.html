@@ -450,6 +450,32 @@ function openForm(id){
                   kiritadi va ro'yxatni fayldan yuklaydi; belgilanmagan
                   xodimda ikkala tugma ham chizilmaydi. Mijozni
                   TAHRIRLASH baribir ochiq qolaveradi</span></span>
+            </div>
+
+            <!--  ★ KIMNING QO'L OSTIDA (izoh: sql/sales-kpi.sql).
+                  Savdo bo'lim boshlig'i o'z qo'li bilan mijoz
+                  yuritmaydi: direktor UNGA reja qo'yadi, u esa o'z
+                  menejerlariga qo'yadi va ularning natijasi orqali
+                  o'z rejasini bajaradi. Shuning uchun boshliqning
+                  KPI fakti qo'l ostidagilarning yig'indisidan
+                  chiqadi.
+
+                  Rol buni ayta olmaydi: «savdo_boshliq» rolining
+                  O'ZI kimning qo'l ostida kim turganini bilmaydi.
+                  Standarti BO'SH: hech kim o'zidan-o'zi kimningdir
+                  qo'l ostiga tushmasin. -->
+            <div style="margin-top:10px">
+              <label>Savdo bo'lim boshlig'i</label>
+              <select id="wSalesHead">
+                <option value="">— yo'q —</option>
+                ${workers.filter((x) => x.active && (!w || x.id !== w.id))
+                  .map((x) => `<option value="${x.id}"${
+                    w && w.sales_head_id === x.id ? ' selected' : ''
+                  }>${esc(x.name)}</option>`).join('')}
+              </select>
+              <div class="muted" style="font-size:12px;margin-top:4px">
+                Shu menejerning savdosi boshliqning KPI siga ham
+                qo'shiladi. Boshliqning o'zida bo'sh qoladi.</div>
             </div></div>
 
           <!--  ★ KONVER SO'ROVINI KIM YOZADI (izoh: sql/units.sql).
@@ -663,6 +689,9 @@ async function save(id){
     sees_warehouse: $('wWh').checked,
     can_release: $('wRel').checked,
     can_add_customer: $('wCust').checked,
+    //  Bo'sh tanlangani «yo'q» degani: menejerni boshliqdan
+    //  chiqarish uchun boshqa yo'l qolmasdi.
+    sales_head_id: Number($('wSalesHead').value) || 0,
     can_request_unit: $('wReq').checked,
     supply_reports: $('wSup').checked,
     daily_digest: $('wDig').checked,

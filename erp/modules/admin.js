@@ -51,6 +51,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  faqat «qo'yilganmi yoki yo'q» ko'rinadi. Unutilgan PIN topilmaydi,
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
+            w.sales_head_id,
             w.can_release, w.can_request_unit, w.can_add_customer,
             w.supply_reports, w.daily_digest,
             w.mat_scope,
@@ -216,7 +217,7 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
           can_request_unit, can_add_customer, supply_reports, daily_digest,
-          mat_scope, roles = [] } = req.body;
+          mat_scope, sales_head_id, roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   const kod = req.body.pin ? String(req.body.pin) : null;
@@ -233,8 +234,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
                             cash_all_customers, can_spend_cash, sees_warehouse,
                             can_release, can_request_unit, can_add_customer,
                             supply_reports, daily_digest, mat_scope,
-                            staff_group, shop_id, section_id, dept, position, hired_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+                            staff_group, shop_id, section_id, dept, position, hired_at,
+                            sales_head_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
@@ -266,7 +268,12 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
        //  sql/materials.sql).
        ['all', 'factory'].includes(mat_scope) ? mat_scope : null,
        st.staff_group, st.shop_id, st.section_id, st.dept, st.position,
-       st.hired_at])).rows[0];
+       st.hired_at,
+       //  ★ KIMNING QO'L OSTIDA (izoh: sql/sales-kpi.sql): savdo
+       //  bo'lim boshlig'ining KPI si qo'l ostidagilarning
+       //  yig'indisidan chiqadi. Standarti — BO'SH: hech kim
+       //  o'zidan-o'zi kimningdir qo'l ostiga tushmasin.
+       Number(sales_head_id) || null])).rows[0];
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
@@ -296,11 +303,27 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, active, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
           can_request_unit, can_add_customer, supply_reports, daily_digest,
-          mat_scope, roles } = req.body;
+          mat_scope, sales_head_id, roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
   const tg = tgId(tg_id);
+
+  //  ★ HALQA BO'LMAYDI. Bazadagi CHECK o'zini o'ziga biriktirishni
+  //  tutadi, lekin IKKI odamlik halqani (A→B, B→A) tutmaydi: unda
+  //  ikkalasining savdosi bir-biriga qo'shilib, ikkalasining ham
+  //  raqami ikki barobar chiqardi. Bir qavat yetarli degan qoida
+  //  (izoh: sql/sales-kpi.sql) aynan shuni talab qiladi.
+  const bosh = Number(sales_head_id) || 0;
+  if (bosh && bosh === id)
+    return res.status(400).json({ error: "Xodim o'ziga biriktirilmaydi" });
+  if (bosh) {
+    const b = (await db.query(
+      `SELECT sales_head_id FROM workers WHERE id = $1`, [bosh])).rows[0];
+    if (b && b.sales_head_id === id)
+      return res.status(400).json({
+        error: "Bu xodim allaqachon shu odamning qo'l ostida — halqa bo'lib qoladi" });
+  }
 
   const client = await db.connect();
   try {
@@ -353,7 +376,13 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          --  Ombor doirasi (izoh: sql/materials.sql). Bo'sh matn —
          --  «tsexi bo'yicha», ya'ni tozalash; yuborilmasa tegilmaydi.
          mat_scope = CASE WHEN $23::text IS NULL THEN mat_scope
-                          WHEN $23 = '' THEN NULL ELSE $23 END
+                          WHEN $23 = '' THEN NULL ELSE $23 END,
+         --  ★ KIMNING QO'L OSTIDA (izoh: sql/sales-kpi.sql).
+         --  Yuborilmasa tegilmaydi; BO'SH yuborilgani «tegma» emas,
+         --  «yo'q» degani — menejer boshliqdan chiqarilishi kerak
+         --  bo'lsa boshqa yo'l qolmasdi.
+         sales_head_id = CASE WHEN $26::int IS NULL THEN sales_head_id
+                              WHEN $26 = 0 THEN NULL ELSE $26 END
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -372,7 +401,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        mat_scope === undefined ? null
          : (['all', 'factory'].includes(mat_scope) ? mat_scope : ''),
        typeof can_add_customer === 'boolean' ? can_add_customer : null,
-       typeof daily_digest === 'boolean' ? daily_digest : null]);
+       typeof daily_digest === 'boolean' ? daily_digest : null,
+       //  Bo'sh matn ham, nol ham «yo'q» degani; maydon umuman
+       //  yuborilmasa NULL bo'ladi va tegilmaydi.
+       sales_head_id === undefined ? null : (Number(sales_head_id) || 0)]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
