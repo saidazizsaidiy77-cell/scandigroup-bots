@@ -27,12 +27,12 @@
 </div>
 
 <div class="grid g3" style="margin-top:16px">
-  <div class="card"><h2>Tushum</h2><div class="kpi" id="kIn">—<small> $</small></div>
+  <div class="card"><h2>Savdo</h2><div class="kpi" id="kIn">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Chiqib ketgan mahsulot</p></div>
   <div class="card"><h2>Harajat</h2><div class="kpi" id="kOut">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Hisobot oyi bo'yicha</p></div>
   <div class="card"><h2>Foyda</h2><div class="kpi" id="kPr">—<small> $</small></div>
-    <p class="muted" style="margin-top:6px;font-size:12px">Tushum &minus; harajat</p></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Savdo &minus; harajat</p></div>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -105,7 +105,7 @@ function draw() {
   $('kOut').innerHTML = usd(jami(exp)) + '<small> $</small>';
   $('kPr').innerHTML  = usd(jami(inc) - jami(exp)) + '<small> $</small>';
 
-  //  ★ TUSHUM TURKUMLARGA BO'LINADI (zavod qarori, 2026-10):
+  //  ★ SAVDO TURKUMLARGA BO'LINADI (zavod qarori, 2026-10):
   //  mehmonxona to'plami · yotoqxona to'plami · stol · stul.
   //  Direktorning savoli «qancha sotdik» emas, «NIMADAN qancha» —
   //  bitta yig'indi raqam unga javob bermaydi.
@@ -150,12 +150,19 @@ function draw() {
       ${ms.map(m => `<th class="num">${oyNom(m)}</th>`).join('')}
       <th class="num">Jami</th></tr></thead>
     <tbody>
-      <!--  Tushum qatori harajat guruhlari bilan BIR XIL ishlaydi:
+      <!--  ★ «TUSHUM» EMAS, «SAVDO» (zavod qarori, 2026-10): qator
+            chiqib ketgan MAHSULOTdan hisoblanadi, kassaga kirgan
+            puldan emas — «tushum» esa zavodda pulni anglatadi va
+            pul oqimi hisoboti bilan chalkashtirardi. Savdo KPI
+            sidagi «Tushum» ko'rsatkichiga tegilmaydi: u AYNAN pul
+            va shuning uchun boshqa nom bilan qolishi kerak.
+
+            Qator harajat guruhlari bilan BIR XIL ishlaydi:
             bosilsa turkumlari ochiladi. Ikki xil bo'lsa odam
             birinchisini bosib ko'rib, ikkinchisini ochilmaydi deb
             o'ylardi. -->
       ${qator(`<span class="muted" style="margin-right:6px">${
-          ochiq.has('SOTUV') ? '&minus;' : '+'}</span><b>Tushum</b> — mahsulot sotuvi`,
+          ochiq.has('SOTUV') ? '&minus;' : '+'}</span><b>Savdo</b> — chiqib ketgan mahsulot`,
         inc, '', ` onclick="toggle('SOTUV')" style="cursor:pointer"`)}
       ${ochiq.has('SOTUV') ? tur.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
@@ -184,7 +191,7 @@ function draw() {
       ${qator('<b>FOYDA</b>', foyda)}
     </tbody></table></div>
     <p class="muted" style="font-size:12px;margin-top:12px">
-      Tushum chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
+      Savdo chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
       Tannarx hisobga olinmagan — xom ashyo hisobi hali yuritilmaydi.</p>`;
 }
 
@@ -200,7 +207,7 @@ function exportCsv() {
   const qat = [["Ko'rsatkich", ...ms, 'Jami']];
   const push = (nom, by) => qat.push([nom, ...ms.map(m => (by[m] || 0).toFixed(2)),
     ms.reduce((a, m) => a + (by[m] || 0), 0).toFixed(2)]);
-  push('Tushum', inc);
+  push('Savdo', inc);
   //  Turkumlar Excelda ham qatorlar bo'lib chiqadi: ekranda
   //  ko'rinadigan narsa faylda ham bo'lishi kerak.
   const t = {};
