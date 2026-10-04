@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Savdo KPI · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Savdo KPI</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<!--  ★ QOG'OZ O'ZI AYTIB TURADI — qarzdorlik hisoboti bilan bir xil
+      idiom: oy, xodim va chop etgan odam sarlavhada yoziladi. KPI
+      varag'i stolga qo'yiladi va «qaysi oyniki» degan savol bir hafta
+      o'tib beriladi. -->
+<div id="printHead" class="print-only print-head"></div>
+
+<div class="card no-print">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div><label>Oy</label>
+      <input id="fMon" type="month" onchange="load()"></div>
+    <div id="wrapWorker" style="display:none;min-width:220px">
+      <label>Xodim</label>
+      <select id="fWorker" onchange="load()"></select></div>
+    <span id="btnPlan"></span>
+    <button onclick="window.print()">Chop etish</button>
+  </div>
+  <!--  ★ «SHU BUGUNGACHA» NING MA'NOSI EKRANDA YOZILIB TURADI.
+        Rasmdagi jadvalda uchta ustun bor va ularning farqi nomidan
+        ko'rinmaydi: biri oyning OXIRIGI reja, ikkinchisi BUGUNGACHA
+        bo'lishi kerak bo'lgani, uchinchisi shu sur'atda oy oxirida
+        NIMA bo'lishi. Tushuntirilmagan ustun savol beradi. -->
+  <p class="muted" id="izoh" style="margin:12px 0 0;font-size:12px"></p>
+</div>
+
+<div id="royxat"></div>
+<div id="modalRoot"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const n0 = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const n2 = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = (v) => (Number(v || 0) * 100).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+
+let d = null;
+const canPlan = () => App.can('sales.kpi');
+
+//  Ko'rsatkichning o'lchov birligi: pul dollarda, qolgani dona.
+//  Birlik BAZADA (`sales_kpi_indicators.unit`) — yangi ko'rsatkich
+//  qo'shilsa kodga tegilmaydi (4-qoida).
+const son = (v, unit) => unit === '$' ? n2(v) : n0(v);
+
+//  ★ RANG «BAJARILISH» DA EMAS, «INDEKS» DA (zavod qarori, 2026-10).
+//  Birinchi urinishda rang bajarilishda edi va oy boshida HAMMA qator
+//  qizil bo'lib turardi: oyning 3-kunida oylik rejaning 10% i
+//  bajarilgani — bu orqada qolish emas, aksincha OLDINDA yurish
+//  (indeks 111%). Har kuni qizil turadigan ro'yxatga ko'z o'rganib
+//  qoladi va HAQIQIY orqada qolgan qator o'sha to'da orasida
+//  ko'rinmay ketardi (bron belgisi bilan bir xil sabab).
+//
+//  Bajarilish — oddiy FAKT: oylik rejaning qancha qismi bajarilgan.
+//  Indeks esa BAHO: shu kunga bo'lishi kerak bo'lgan bilan
+//  solishtirgandagi holat — ya'ni «orqadamanmi» degan savolning
+//  javobi aynan u. Oy tugaganda ikkalasi tenglashadi.
+//
+//  Chegaralar bonus shkalasiniki: 80% dan yuqorisi — to'liq stavka,
+//  50% dan pasti — bonussiz (`sales_kpi_bands`).
+const bajCls = (v) => {
+  const p = Number(v || 0) * 100;
+  return p >= 80 ? 'ok' : p >= 50 ? 'warn' : 'bad';
+};
+
+function load() {
+  const q = new URLSearchParams({ mon: $('fMon').value || '' });
+  if ($('fWorker').value) q.set('worker_id', $('fWorker').value);
+  App.api('/api/sales/kpi?' + q).then((r) => { d = r; draw(); })
+    .catch((e) => { $('royxat').innerHTML =
+      `<div class="card"><p class="muted">${esc(e.message)}</p></div>`; });
+}
+
+function draw() {
+  //  Xodim ro'yxati FAQAT reja qo'yadigan odamda: qolganiga u yerda
+  //  baribir bitta ism turardi (buyurtmalardagi menejer filtri bilan
+  //  bir xil qoida va bir xil sabab).
+  if (d.hammasi) {
+    $('wrapWorker').style.display = '';
+    const eski = $('fWorker').value;
+    $('fWorker').innerHTML = '<option value="">— barchasi —</option>'
+      + d.xodimlar.map((w) => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
+    $('fWorker').value = eski || '';
+    $('btnPlan').innerHTML = `<button class="primary" onclick="planOch()">Reja qo'yish</button>`;
+  }
+
+  $('izoh').innerHTML = `Oyda <b>${d.jami_kun}</b> kun, shundan
+    <b>${d.otgan_kun}</b> tasi o'tgan (bugun sanalmaydi).
+    <b>Bugungacha reja</b> — oylik rejaning shu kunga to'g'ri keladigan
+    qismi; <b>indeks</b> — fakt shu rejaning necha foizi;
+    <b>prognoz</b> — shu sur'atda oy oxirida qancha bo'lishi.
+    Rang <b>indeksda</b>: 100% — sur'at joyida, undan past — orqada.`;
+
+  $('printHead').innerHTML = `<h2>Savdo KPI</h2>
+    <div>${d.yil}-yil ${String(d.oy).padStart(2, '0')}-oy
+      ${$('fWorker').value && d.xodimlar.find((w) => w.id == $('fWorker').value)
+        ? '· ' + esc(d.xodimlar.find((w) => w.id == $('fWorker').value).name) : ''}
+      · ${d.otgan_kun}/${d.jami_kun} kun</div>
+    <div>${new Date().toLocaleString('ru-RU')} · ${esc(App.me()?.name || '')}</div>`;
+
+  if (!d.varaq.length) {
+    $('royxat').innerHTML = `<div class="card"><p class="muted">
+      Bu oyga reja qo'yilmagan.${canPlan()
+        ? ' «Reja qo\'yish» tugmasidan qo\'ying.' : ''}</p></div>`;
+    return;
+  }
+  $('royxat').innerHTML = d.varaq.map(varaq).join('');
+}
+
+//  ★ BITTA XODIM — BITTA VARAQ, rasmdagi jadval bilan bir xil shakl.
+//  Tepada javob (KPI foizi va bonus), ostida uning qayerdan chiqqani.
+function varaq(v) {
+  const st = v.bonus_stavka;
+  return `<div class="card" style="margin-top:16px">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;
+         gap:16px;align-items:flex-end;margin-bottom:14px">
+      <div>
+        <h2 style="margin:0">${esc(v.worker_name)}</h2>
+        <div class="muted" style="font-size:12px;margin-top:4px">
+          og'irliklar yig'indisi: ${n2(v.ogirlik_jami)}</div>
+      </div>
+      <div class="row" style="gap:24px;flex-wrap:wrap">
+        <div>
+          <div class="muted" style="font-size:12px">UMUMIY KPI</div>
+          <!--  Katta raqam RANGSIZ: u oylik bajarilish va oy boshida
+                tabiiy past bo'ladi — qizil qilib qo'ysak har oyning
+                birinchi haftasi «yomon» bo'lib ko'rinardi. -->
+          <div style="font-size:28px;font-weight:700">${n2(v.umumiy)}%</div>
+        </div>
+        <div>
+          <div class="muted" style="font-size:12px">BONUS (${n2(st)}%)</div>
+          <div style="font-size:28px;font-weight:700">${n2(v.bonus)} $</div>
+          <!--  Bonus BAZASI — tushgan pul, reja emas: KPI eshikni
+                ochadi, pul esa hajmini beradi (zavod qarori). -->
+          <div class="muted" style="font-size:11px">tushgan puldan</div>
+        </div>
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr>
+        <th>Ko'rsatkich</th><th class="num">Og'irlik</th>
+        <th class="num">Reja</th><th class="num">Fakt</th>
+        <th class="num">Bajarilish</th><th class="num">Ta'sir</th>
+        <th class="num">Bugungacha reja</th><th class="num">Indeks</th>
+        <th class="num">Prognoz</th>
+      </tr></thead>
+      <tbody>${v.qator.map((q) => qatorHtml(v, q)).join('')}
+      <tr><td colspan="5"><b>Jami</b></td>
+        <td class="num"><b>${n2(v.umumiy)}%</b></td>
+        <td colspan="3"></td></tr></tbody>
+    </table></div></div>`;
+}
+
+function qatorHtml(v, q) {
+  const bosh = `<tr${q.by_category ? ` style="cursor:pointer"
+      onclick="ochYop('${v.worker_id}-${q.code}')"` : ''}>
+    <td><b>${esc(q.name)}</b>${q.by_category
+      ? ' <span class="muted" style="font-size:11px">▾ turkumlar</span>' : ''}</td>
+    <td class="num">${n2(q.ogirlik)}</td>
+    <td class="num">${son(q.reja, q.unit)}</td>
+    <td class="num">${son(q.fakt, q.unit)}</td>
+    <td class="num">${pct(q.bajarilish)}</td>
+    <td class="num">${pct(q.tasir)}</td>
+    <td class="num">${son(q.plan_bugun, q.unit)}</td>
+    <td class="num"><span class="tag ${bajCls(q.indeks)}">${pct(q.indeks)}</span></td>
+    <td class="num">${son(q.prognoz, q.unit)}</td>
+  </tr>`;
+  if (!q.by_category) return bosh;
+  //  Turkumi yo'q savdo YO'QOLMAYDI: u ota qatordagi faktga
+  //  qo'shilgan, lekin turkumlar ichida ko'rinmaydi — shuning uchun
+  //  alohida qator bo'lib yoziladi (bo'sh katak savol, yo'q qator
+  //  esa yolg'on).
+  const ich = q.ichi.map((c) => `<tr class="ich-${v.worker_id}-${q.code}"
+      style="display:none">
+    <td style="padding-left:28px" class="muted">${esc(c.name)}</td>
+    <td class="num"></td>
+    <td class="num">${son(c.reja, q.unit)}</td>
+    <td class="num">${son(c.fakt, q.unit)}</td>
+    <td class="num">${pct(c.bajarilish)}</td>
+    <td class="num"></td>
+    <td class="num">${son(c.plan_bugun, q.unit)}</td>
+    <td class="num"><span class="tag ${bajCls(c.indeks)}">${pct(c.indeks)}</span></td>
+    <td class="num">${son(c.prognoz, q.unit)}</td>
+  </tr>`).join('') + (q.turkumsiz ? `<tr class="ich-${v.worker_id}-${q.code}"
+      style="display:none">
+    <td style="padding-left:28px" class="muted">Turkumi qo'yilmagan</td>
+    <td class="num"></td><td class="num">—</td>
+    <td class="num">${son(q.turkumsiz, q.unit)}</td>
+    <td colspan="5"></td></tr>` : '');
+  return bosh + ich;
+}
+
+function ochYop(key) {
+  document.querySelectorAll('.ich-' + key).forEach((tr) => {
+    tr.style.display = tr.style.display === 'none' ? '' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════ REJA QO'YISH
+//
+//  ★ REJA BIR MARTA, BITTA SO'ROVDA saqlanadi (server ham shunday
+//  qabul qiladi): uchta ko'rsatkich va to'rtta turkum — yettita
+//  qator. Ularni bitta-bitta yuborish og'irliklar yig'indisini YARIM
+//  holatda qoldirardi.
+//
+//  ★ OG'IRLIKLAR YIG'INDISI EKRANDA YURIB TURADI: 1,00 bo'lmasa
+//  server rad etadi va odam nimasi kamligini bilmay qolardi.
+function planOch() {
+  const wid = $('fWorker').value;
+  const eski = wid ? d.varaq.find((v) => String(v.worker_id) === String(wid)) : null;
+  const q = (code, cat) => {
+    const v = eski && eski.qator.find((x) => x.code === code);
+    if (!v) return 0;
+    if (!cat) return v.reja;
+    return (v.ichi.find((c) => c.code === cat) || {}).reja || 0;
+  };
+  const og = (code) => {
+    const v = eski && eski.qator.find((x) => x.code === code);
+    return v ? v.ogirlik
+      : Number((d.indicators.find((i) => i.code === code) || {}).default_weight || 0);
+  };
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:720px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1 style="margin:0">KPI rejasi</h1>
+          <button onclick="yop()">Yopish</button></div>
+        <div class="fields" style="margin-bottom:16px">
+          <div><label>Xodim</label>
+            <select id="pWorker">${d.xodimlar.map((w) =>
+              `<option value="${w.id}"${String(w.id) === String(wid)
+                ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>
+          <div><label>Oy</label>
+            <input id="pMon" type="month" value="${d.yil}-${
+              String(d.oy).padStart(2, '0')}"></div>
+        </div>
+        <table><thead><tr><th>Ko'rsatkich</th>
+          <th class="num" style="width:120px">Og'irlik</th>
+          <th class="num" style="width:160px">Oylik reja</th></tr></thead>
+        <tbody>${d.indicators.map((i) => `
+          <tr><td><b>${esc(i.name)}</b>
+            <div class="muted" style="font-size:11px">${esc(i.unit || '')}</div></td>
+            <td class="num"><input id="w_${i.code}" type="number" step="0.01"
+              min="0" max="1" value="${og(i.code)}" oninput="ogJami()"
+              style="max-width:100px;text-align:right"></td>
+            <td class="num">${i.by_category
+              ? `<span class="muted" style="font-size:12px">turkumlardan
+                   yig'iladi</span><input id="p_${i.code}" type="hidden" value="">`
+              : `<input id="p_${i.code}" type="number" step="0.01" min="0"
+                   value="${q(i.code)}" style="max-width:140px;text-align:right">`}</td>
+          </tr>
+          ${!i.by_category ? '' : d.categories.map((c) => `
+          <tr><td style="padding-left:28px" class="muted">${esc(c.name)}</td>
+            <td></td>
+            <td class="num"><input id="p_${i.code}_${c.code}" type="number"
+              step="0.01" min="0" value="${q(i.code, c.code)}"
+              oninput="segJami()" style="max-width:140px;text-align:right"></td>
+          </tr>`).join('')}`).join('')}
+        </tbody></table>
+        <p class="muted" id="ogIzoh" style="margin:14px 0 0;font-size:12px"></p>
+        <div class="row" style="gap:10px;margin-top:16px">
+          <button class="primary" onclick="planSaqla()">Saqlash</button>
+          <button onclick="yop()">Bekor</button></div>
+      </div></div>`;
+  ogJami();
+  segJami();
+}
+const yop = () => { $('modalRoot').innerHTML = ''; };
+
+function ogJami() {
+  const s = d.indicators.reduce((a, i) =>
+    a + (Number(($('w_' + i.code) || {}).value) || 0), 0);
+  const ok = Math.abs(s - 1) <= 0.005;
+  $('ogIzoh').innerHTML = `Og'irliklar yig'indisi:
+    <b class="${ok ? 'ok' : 'bad'}">${n2(s)}</b>
+    — <b>1,00</b> bo'lishi shart.${ok ? ''
+      : " Aks holda hech kim 100% ga yetolmaydi yoki hammasini bajargan odam 100% dan oshib ketadi."}`;
+}
+
+//  Segment rejasi turkumlardan YIG'ILADI va yig'indi shu yerda
+//  ko'rinadi: odam to'rtta raqamni yozib, umumiysini o'zi qo'shib
+//  o'tirmasin.
+function segJami() {
+  d.indicators.filter((i) => i.by_category).forEach((i) => {
+    const s = d.categories.reduce((a, c) =>
+      a + (Number(($(`p_${i.code}_${c.code}`) || {}).value) || 0), 0);
+    const el = $('p_' + i.code);
+    if (el) el.value = s;
+  });
+}
+
+async function planSaqla() {
+  //  Qiymatlar oyna YOPILMASDAN OLDIN o'qiladi: `yop()` modalni
+  //  bo'shatadi va undan keyin kataklar YO'Q bo'ladi.
+  const wid = Number($('pWorker').value);
+  const mon = $('pMon').value;
+  const items = [];
+  for (const i of d.indicators) {
+    items.push({ indicator: i.code, category: null,
+      plan: Number($('p_' + i.code).value) || 0,
+      weight: Number($('w_' + i.code).value) || 0 });
+    if (!i.by_category) continue;
+    for (const c of d.categories)
+      items.push({ indicator: i.code, category: c.code,
+        plan: Number($(`p_${i.code}_${c.code}`).value) || 0 });
+  }
+  try {
+    await App.api('/api/sales/kpi', { method: 'POST',
+      body: JSON.stringify({ worker_id: wid, mon, items }) });
+    yop();
+    //  Saqlangan xodim va oyga O'TILADI: odam rejani qo'yib, uning
+    //  natijasini darrov ko'rishi kerak — qaytib filtrni sozlab
+    //  o'tirmasin.
+    $('fWorker').value = String(wid);
+    $('fMon').value = mon;
+    load();
+  } catch (e) { alert(e.message); }
+}
+
+async function boot() {
+  const t = new Date();
+  $('fMon').value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+  await load();
+}
+
+App.start(boot, 'sales.view', 'sales.manage');
+</script>
+</body></html>

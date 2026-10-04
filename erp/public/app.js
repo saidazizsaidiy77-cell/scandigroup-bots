@@ -392,6 +392,20 @@ const App = (() => {
       title: 'Kassa', lead: 'Kirim, chiqim, qoldiq',
       text: "Bitta kassaning ichi \u00b7 kirim orderi \u00b7 chiqim va harajat \u00b7 boshlang'ich qoldiq",
       perm: ['cash.view', 'cash.entry', 'cash.manage'] },
+    //  ★ KPI SAVDO BO'LIMIDA, hisobotlarda emas (zavod qarori,
+    //  2026-10). «Hisobotlar» da allaqachon bo'limlar bo'yicha oylik
+    //  reja turadi (`/kpi.html`) va ikkalasi bitta nom bilan yonma-yon
+    //  tursa qaysi biri kimniki ekani noaniq qolardi. Bu esa
+    //  MENEJERNING o'lchovi: u kun bo'yi savdo bo'limida turadi va
+    //  javob o'sha yerda, ish qilayotgan joyida bo'lishi kerak.
+    //
+    //  Huquqi `sales.view`/`sales.manage`: har savdo xodimi O'Z
+    //  foizini ko'radi, reja qo'yish esa `sales.kpi` da (direktor,
+    //  savdo bo'lim boshlig'i, administrator) — chegara SERVERDA.
+    { href: '/savdo-kpi.html', mod: 'sales', nav: 'KPI',
+      title: 'Savdo KPI', lead: 'Reja, fakt va bonus',
+      text: "Tushum, AKB va segment bo'yicha oylik reja \u00b7 og'irlik bilan umumiy foiz \u00b7 shu bugungacha indeks va prognoz \u00b7 bonus stavkasi",
+      perm: ['sales.view', 'sales.manage'] },
     { href: '/qarzdorlik.html', mod: 'sales', nav: 'Qarzdorlik',
       title: 'Qarzdorlik', lead: 'Oraliq bo\'yicha',
       text: "Davr boshiga \u00b7 qarzdor/haqdor aylanmasi \u00b7 davr oxiriga \u00b7 mijoz kesimida harakatlari bilan",
