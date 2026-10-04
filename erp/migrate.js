@@ -35,6 +35,10 @@ const FILES = [
   //  o'zi hech kimga bog'liq emas, lekin ikkalasi bitta faylda
   //  turgani ma'qul: modul bitta joydan o'qiladi.
   'materials.sql',       // xom ashyo: spravochnik va tsex omborlari
+  //  ★ KPI ENG OXIRIDA: `v_kpi_fact` kassani ham (`cash_ops`), savdo
+  //  turkumini ham (`sales_categories`) o'qiydi — ikkalasi ham
+  //  undan oldin yaratiladi.
+  'sales-kpi.sql',             // savdo KPI: ko'rsatkichlar, reja va bonus shkalasi
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

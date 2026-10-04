@@ -85,6 +85,11 @@ INSERT INTO permissions (code, module, name) VALUES
   --  jimgina o'zgarib turardi. Ro'yxatda hech kimga berilmaydi —
   --  administrator uni «hamma huquq» qatori bilan oladi (pastda).
   ('sales.fix',         'sales',      'Chiqib ketgan buyurtmani tuzatish'),
+  --  ★ KPI REJASINI QO'YISH. Ko'rish huquqi ALOHIDA emas: har savdo
+  --  xodimi O'Z raqamini ko'radi (doira bilan), reja qo'yadigan odam
+  --  esa qo'l ostidagilarnikini ham. Direktor va administrator savdo
+  --  bo'lim boshlig'iga, boshliq esa o'z menejerlariga qo'yadi.
+  ('sales.kpi',         'sales',      'Savdo KPI rejasini qo''yish'),
   -- Kassa (rejada)
   ('cash.view',         'cash',       'Kassa hisobotlarini ko''rish'),
   ('cash.entry',        'cash',       'Kirim / chiqim kiritish'),
@@ -168,6 +173,8 @@ UNION ALL SELECT 'direktor', 'production.reports'
 UNION ALL SELECT 'direktor', 'production.approve'
 --  Chegirmani ham DIREKTOR tasdiqlaydi: narx siyosati uning ishi.
 UNION ALL SELECT 'direktor', 'sales.discount'
+--  KPI rejasini direktor savdo bo'lim boshlig'iga qo'yadi.
+UNION ALL SELECT 'direktor', 'sales.kpi'
 UNION ALL SELECT 'direktor', 'admin.audit'
 ON CONFLICT DO NOTHING;
 
@@ -361,4 +368,12 @@ UPDATE roles SET name = 'Ombor mudiri', surface = 'web'
 INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'savdo_boshliq', permission_code
   FROM role_permissions WHERE role_code = 'sotuvchi'
+ON CONFLICT DO NOTHING;
+
+--  ★ KPI REJASI — BOSHLIQNIKI, menejerniki emas. Ko'chirishdan KEYIN
+--  turadi: `sotuvchi` da bu huquq yo'q va bo'lmasligi ham kerak —
+--  menejer o'ziga reja qo'yib olardi. Boshliq esa qo'l ostidagilarga
+--  qo'yadi, o'zinikini direktor qo'yadi.
+INSERT INTO role_permissions (role_code, permission_code) VALUES
+  ('savdo_boshliq', 'sales.kpi')
 ON CONFLICT DO NOTHING;
