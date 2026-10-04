@@ -630,6 +630,24 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
 --
 --  Tannarx yo'q: xom ashyo hisobi hali yozilmagan. Shuning uchun bu
 --  «yalpi foyda» emas — tushumdan zavodning pul harajatlari ayirilgani.
+--  ★ TUSHUM TURKUM BO'YICHA BO'LINADI (zavod qarori, 2026-10).
+--  Ilgari u BITTA «Sotuv» qatori edi va direktorning savoli javobsiz
+--  qolardi: «mehmonxonadan qancha, stuldan qancha». Javob ma'lumotda
+--  bor edi — har konver o'z guruhini biladi — lekin hisobot uni
+--  yig'ib tashlardi.
+--
+--  Turkum GURUHDAN o'qiladi (`sales_category`), mahsulotdan emas:
+--  penal va kamod bitta turkumda, lekin ikkita guruh va ikkita
+--  marshrut (izoh: sql/catalog-groups.sql).
+--
+--  Qatorlar harajat bilan BIR XIL shaklda: guruh — «Mahsulot
+--  sotuvi», modda esa turkumning nomi. Shu sababdan sahifa
+--  o'zgarmaydi: u guruhni ochib, ichidagi moddalarni ko'rsatadi
+--  va tushum endi o'zi to'rtga bo'linib chiqadi.
+--
+--  Turkumi YO'Q guruh «Turkumsiz» bo'lib turadi va yo'qolmaydi: yangi
+--  guruh qo'shilib, katagi to'ldirilmagani ko'rinib tursin — aks
+--  holda uning sotuvi hisobotdan jimgina tushib qolardi.
 DROP VIEW IF EXISTS v_pl_month CASCADE;
 CREATE VIEW v_pl_month AS
 SELECT date_trunc('month', u.ship_on)::date AS pl_month,
@@ -638,16 +656,23 @@ SELECT date_trunc('month', u.ship_on)::date AS pl_month,
        'Mahsulot sotuvi'::text AS group_name,
        0 AS group_sort,
        NULL::int AS item_id,
-       'Sotuv'::text AS item_name,
+       COALESCE(sc.name, 'Turkumsiz')::text AS item_name,
        SUM(u.total_amount)::numeric(16,2) AS amount_usd,
-       COUNT(*)::int AS ops
+       COUNT(*)::int AS ops,
+       --  Tartib ZAVODNIKI, alifbo emas: mehmonxona → yotoqxona →
+       --  stol → stul. Turkumsizi oxirida (99) — u javob emas,
+       --  to'ldirilmagan katakning belgisi.
+       COALESCE(sc.sort, 99)::int AS item_sort
   FROM production_units u
+  JOIN products p            ON p.id = u.product_id
+  JOIN product_groups g      ON g.id = p.group_id
+  LEFT JOIN sales_categories sc ON sc.code = g.sales_category
  WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
    AND u.total_amount IS NOT NULL
- GROUP BY 1
+ GROUP BY 1, COALESCE(sc.name, 'Turkumsiz'), COALESCE(sc.sort, 99)
 UNION ALL
 SELECT e.pl_month, 'expense', e.group_code, e.group_name, e.group_sort,
-       e.item_id, e.item_name, e.amount_usd, e.ops
+       e.item_id, e.item_name, e.amount_usd, e.ops, 0
   FROM v_expenses e;
 
 -- ══════════════════════════════════════════════════════════ PUL OQIMI

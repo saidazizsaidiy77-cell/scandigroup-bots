@@ -7829,6 +7829,87 @@ test("T/M ombor mudiri: chiqarishni ko'radi, ikki yo'nalishda ko'chiradi", async
     [u.conveyor_no, vitr.id, tm])).n, 1, 'vitrinada chiqim, T/M da kirim');
 });
 
+test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
+  //  ★ GURUH ISHLAB CHIQARISHNIKI, TURKUM SAVDONIKI (zavod qarori,
+  //  2026-10). Zavodda penal va kamod — ikkita GURUH (boshqa
+  //  marshrut, boshqa raqam), lekin bitta TURKUM: mehmonxona
+  //  to'plami. Direktorning savoli turkum bo'yicha — «mehmonxonadan
+  //  qancha, stuldan qancha» — va ilgari foyda-zarar uni BITTA
+  //  «Sotuv» qatoriga yig'ib tashlardi.
+  const kat = (await admin('GET', '/api/catalog')).body;
+  const turkum = (kod) => kat.groups.filter((g) => g.sales_category === kod);
+  assert.ok(turkum('MEHMON').length >= 2,
+    'penal va kamod bitta turkumda');
+  assert.equal(turkum('YOTOQ').map((g) => g.code).join(), 'SP');
+
+  //  ★ MATRAS TURKUMSIZ, va bu yo'qolib ketmaydi: u zavodda
+  //  yasalmaydi va zavod uni hali turkumga qo'ymagan. Bo'sh katak
+  //  SAVOL bo'lib ko'rinadi — hisobotda «Turkumsiz» qatori bo'lib
+  //  turadi, chizilmay qolmaydi.
+  const mat = kat.groups.find((g) => g.code === 'MATRAS');
+  if (mat) assert.equal(mat.sales_category, null);
+
+  //  ── Ikki turkumdan mahsulot chiqarib yuboramiz
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Turkum sinov mijozi', region: 'Toshkent' })).body;
+  const sot = async (pid, narx) => {
+    const u = (await admin('POST', '/api/units/', { items: [
+      { product_id: pid, qty: 2, color: 'Oq', unit_price: narx,
+        is_opening: true, fg_on: '2026-09-01' }] })).body.created[0];
+    const z = (await admin('POST', '/api/sales/orders', {
+      customer_id: mij.id, ship_to: 'ZAVOD',
+      items: [{ product_id: pid, qty: 2, color: 'Oq', unit_price: narx }] })).body;
+    const q = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+    assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+      { item_id: q.id, unit_id: u.id, qty: 2 })).status, 200);
+    assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+    const sh = await admin('POST', `/api/sales/orders/${z.id}/ship`,
+      { ship_on: '2026-11-20' });
+    assert.equal(sh.status, 200, sh.text);
+  };
+  const penal = kat.products.find((p) => p.group_code === 'PENAL');
+  const stul  = kat.products.find((p) => p.group_code === 'STU');
+  assert.ok(penal && stul, 'ikkala guruhda ham mahsulot bor');
+  await sot(penal.id, 300);
+  await sot(stul.id, 50);
+
+  const pl = (await admin('GET', '/api/cash/pl?from=2026-11&to=2026-11')).body;
+  const tushum = pl.rows.filter((r) => r.kind === 'income');
+  const summa = (nom) => Number((tushum.find((r) => r.item_name === nom) || {})
+    .amount_usd || 0);
+  assert.equal(summa("Mehmonxona to'plami"), 600, '2 × 300');
+  assert.equal(summa('Stul'), 100, '2 × 50');
+
+  //  ★ TARTIB ZAVODNIKI, ALIFBO EMAS: mehmonxona → yotoqxona → stol
+  //  → stul. Alifbo bo'yicha «Stol» va «Stul» mehmonxonadan oldin
+  //  chiqib ketardi va direktor ro'yxatni har safar ko'z bilan qayta
+  //  tartiblab o'qirdi.
+  const nomlar = tushum.map((r) => r.item_name);
+  assert.ok(nomlar.indexOf("Mehmonxona to'plami") < nomlar.indexOf('Stul'),
+    'mehmonxona stuldan oldin: ' + nomlar.join(' · '));
+
+  //  ★ TURKUM GURUHDAN O'QILADI va u SAYTDAN o'zgaradi (4-qoida):
+  //  zavod ertaga «kamod endi alohida turkum» desa bitta katakcha
+  //  tahrirlanadi. Bo'sh yuborilgani «tegma» emas, «yo'q» degani.
+  const kamod = kat.groups.find((g) => g.code === 'KAMOD');
+  assert.equal((await admin('PATCH', '/api/catalog/groups/' + kamod.id,
+    { sales_category: 'STOL' })).status, 200);
+  assert.equal((await admin('GET', '/api/catalog')).body.groups
+    .find((g) => g.code === 'KAMOD').sales_category, 'STOL');
+  assert.equal((await admin('PATCH', '/api/catalog/groups/' + kamod.id,
+    { sales_category: null })).status, 200);
+  assert.equal((await admin('GET', '/api/catalog')).body.groups
+    .find((g) => g.code === 'KAMOD').sales_category, null, 'tozalanadi');
+  //  Maydon UMUMAN yuborilmasa tegilmaydi — nomni o'zgartirgan odam
+  //  turkumni ham jimgina yo'qotib qo'ymasin.
+  assert.equal((await admin('PATCH', '/api/catalog/groups/' + kamod.id,
+    { sales_category: 'MEHMON' })).status, 200);
+  assert.equal((await admin('PATCH', '/api/catalog/groups/' + kamod.id,
+    { sort: 2 })).status, 200);
+  assert.equal((await admin('GET', '/api/catalog')).body.groups
+    .find((g) => g.code === 'KAMOD').sales_category, 'MEHMON', 'tegilmaydi');
+});
+
 test("ta'minotchiga qaytarish: ombor kamayadi, qarz kamayadi", async () => {
   //  ★ QAYTARISH — KIRIMNING TESKARISI (zavod qarori, 2026-10).
   //  Hujjat IKKITA ishni birga qiladi: omborni KAMAYTIRADI va

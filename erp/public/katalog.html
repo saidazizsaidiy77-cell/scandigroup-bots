@@ -57,7 +57,8 @@
     <button onclick="groupForm()">+ Guruh</button>
   </div>
   <div class="scroll"><table><thead><tr>
-    <th>Nomi</th><th>Yo'nalish</th><th>Turi</th><th>Marshrut</th>
+    <th>Nomi</th><th>Savdo turkumi</th><th>Yo'nalish</th><th>Turi</th>
+    <th>Marshrut</th>
     <th class="num">Mahsulot</th><th style="width:150px"></th>
   </tr></thead><tbody id="tG"></tbody></table></div>
 </div>
@@ -100,11 +101,27 @@ async function load(){
 
 const canManage = () => App.can('production.manage');
 
+//  ★ GURUH ISHLAB CHIQARISHNIKI, TURKUM SAVDONIKI (izoh:
+//  sql/catalog-groups.sql). Guruh marshrutni, raqamning harfini va
+//  o'lchov birligini hal qiladi; turkum esa foyda-zarar va savdo
+//  kesimida «mehmonxonadan qancha» degan savolga javob beradi.
+//  Penal va kamod — ikki GURUH, bitta TURKUM.
+const turkumNomi = (kod) => (cat.sales_categories || [])
+  .find((c) => c.code === kod)?.name || kod;
+
 // ─────────────────────────────────────────────────────────────── GURUHLAR
 function drawGroups(){
   $('tG').innerHTML = cat.groups.map(g => `
     <tr class="${g.active ? '' : 'off'}">
       <td><strong>${esc(g.name)}</strong></td>
+      <!--  ★ TURKUM NOMIDAN KEYIN TURADI, va bo'shi SAVOL bo'lib
+            ko'rinadi: turkumi yo'q guruhning sotuvi foyda-zararda
+            «Turkumsiz» qatoriga tushadi va o'sha yerda yo'qolib
+            ketmaydi — lekin buni GURUHLAR ro'yxatida ko'rish kerak,
+            hisobotni ochib emas. -->
+      <td>${g.sales_category
+        ? esc(turkumNomi(g.sales_category))
+        : '<span class="tag warn">tanlanmagan</span>'}</td>
       <td class="muted">${esc(g.line_name)}</td>
       <td>${g.is_set ? '<span class="tag">to\'plam</span>'
                      : '<span class="tag">yakka mahsulot</span>'}</td>
@@ -114,7 +131,7 @@ function drawGroups(){
         <button class="del" onclick="groupForm(${g.id})">O'zgartirish</button>
         <button class="del" onclick="toggleGroup(${g.id},${!g.active})">
           ${g.active ? 'Yashirish' : 'Qaytarish'}</button>` : ''}</td>
-    </tr>`).join('') || '<tr><td colspan="6" class="muted">Guruh yo\'q</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7" class="muted">Guruh yo\'q</td></tr>';
 }
 
 function groupForm(id){
@@ -139,6 +156,16 @@ function groupForm(id){
           <option value="0" ${g && !g.is_set ? 'selected' : ''}>Yakka mahsulot</option>
           <option value="1" ${g?.is_set ? 'selected' : ''}>To'plam</option>
         </select></div>
+      <div><label>Savdo turkumi</label>
+        <select id="gCat">
+          <option value="">— tanlanmagan —</option>
+          ${(cat.sales_categories || []).map((c) => `<option value="${esc(c.code)}"
+            ${g?.sales_category === c.code ? 'selected' : ''}>${esc(c.name)}</option>`)
+            .join('')}
+        </select>
+        <p class="muted" style="font-size:12px;margin-top:6px">Foyda-zarar va savdo
+          kesimi shu bo'yicha bo'linadi. Guruhning o'ziga tegmaydi: marshrut,
+          raqam harfi va o'lchov birligi o'z joyida qoladi.</p></div>
       <div><label>Odatdagi marshrut</label>
         <select id="gRoute">${routeOpts(g?.line_id)}</select>
         <p class="muted" style="font-size:12px;margin-top:6px">Bu guruhda yaratilgan
@@ -162,6 +189,9 @@ async function saveGroup(id){
     line_id: +$('gLine').value,
     is_set: $('gSet').value === '1',
     route_template_id: +$('gRoute').value || null,
+    //  Bo'sh yuborilgani «tegma» emas, «yo'q» degani — server uni
+    //  shunday o'qiydi (izoh: PATCH /groups/:id).
+    sales_category: $('gCat').value || null,
   };
   try{
     if (id) await App.api('/api/catalog/groups/' + id, { method:'PATCH', body: JSON.stringify(body) });

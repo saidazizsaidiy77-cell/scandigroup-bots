@@ -1094,7 +1094,8 @@ router.get('/pl', need(...READ), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT * FROM v_pl_month
       WHERE pl_month >= $1 AND pl_month <= $2
-      ORDER BY kind DESC, group_sort, group_name, item_name`, [from, to]);
+      ORDER BY kind DESC, group_sort, group_name, item_sort, item_name`,
+    [from, to]);
   res.json({ from: from.slice(0, 7), to: to.slice(0, 7), rows });
 }));
 

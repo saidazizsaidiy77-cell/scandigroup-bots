@@ -57,7 +57,7 @@ async function freeCode(client, table, base) {
 
 // ─────────────────────────────────────────────────────────────── KATALOGNI OLISH
 router.get('/', need('production.view', 'production.manage'), wrap(async (req, res) => {
-  const [groups, fasons, products, lines, routes] = await Promise.all([
+  const [groups, fasons, products, lines, routes, turkum] = await Promise.all([
     db.query(`SELECT g.*, l.code AS line_code, l.name AS line_name,
                      (SELECT COUNT(*) FROM products p WHERE p.group_id = g.id) AS products
                 FROM product_groups g JOIN lines l ON l.id = g.line_id
@@ -69,6 +69,11 @@ router.get('/', need('production.view', 'production.manage'), wrap(async (req, r
                   ORDER BY group_name, name, size_label NULLS FIRST`),
     db.query(`SELECT * FROM lines ORDER BY sort`),
     db.query(`SELECT id, code, name, line_id FROM route_templates ORDER BY code`),
+    //  Savdo turkumlari — guruh ustidagi qavat (izoh:
+    //  sql/catalog-groups.sql). Ro'yxat BAZADAN: ertaga zavod yangi
+    //  turkum qo'shsa sahifaga tegilmaydi (4-qoida).
+    db.query(`SELECT code, name FROM sales_categories
+               WHERE active ORDER BY sort, name`),
   ]);
   //  ★ NARX JAVOBDAN OLIB TASHLANADI (zavod qarori, 2026-09): u
   //  `v_catalog` da bor, lekin katalogni ko'radigan har odamga
@@ -79,7 +84,8 @@ router.get('/', need('production.view', 'production.manage'), wrap(async (req, r
   const mahsulot = narxli ? products.rows : products.rows.map(
     ({ price_opt, price_retail, ...p }) => p);
   res.json({ groups: groups.rows, fasons: fasons.rows, products: mahsulot,
-             lines: lines.rows, routes: routes.rows });
+             lines: lines.rows, routes: routes.rows,
+             sales_categories: turkum.rows });
 }));
 
 // ───────────────────────────────────────────────────────────────────── GURUHLAR
@@ -122,6 +128,12 @@ router.post('/groups', need('production.manage'), wrap(async (req, res) => {
 
 router.patch('/groups/:id', need('production.manage'), wrap(async (req, res) => {
   const { name, line_id, is_set, sort, route_template_id, active } = req.body;
+  //  ★ TURKUM BO'SH YUBORILSA «TEGMA» EMAS, «YO'Q» DEGANI — boshqa
+  //  sana va belgi maydonlari bilan bir xil idiom: adashib
+  //  biriktirilgan guruh tozalanishi kerak. Shuning uchun u
+  //  `COALESCE` dan o'tmaydi: maydon KELGAN bo'lsa yoziladi.
+  const turkum = 'sales_category' in req.body
+    ? (String(req.body.sales_category || '').trim() || null) : undefined;
   const { rows } = await db.query(
     `UPDATE product_groups SET
        name              = COALESCE($2, name),
@@ -129,12 +141,14 @@ router.patch('/groups/:id', need('production.manage'), wrap(async (req, res) => 
        is_set            = COALESCE($4, is_set),
        sort              = COALESCE($5, sort),
        route_template_id = COALESCE($6, route_template_id),
-       active            = COALESCE($7, active)
+       active            = COALESCE($7, active),
+       sales_category    = CASE WHEN $9::bool THEN $8::text ELSE sales_category END
      WHERE id = $1 RETURNING id`,
     [req.params.id, name ? requireName(name, 'Guruh') : null, line_id || null,
      typeof is_set === 'boolean' ? is_set : null,
      sort == null ? null : Number(sort), route_template_id || null,
-     typeof active === 'boolean' ? active : null]);
+     typeof active === 'boolean' ? active : null,
+     turkum === undefined ? null : turkum, turkum !== undefined]);
   if (!rows[0]) return res.status(404).json({ error: 'Guruh topilmadi' });
   await audit(req, { module: 'production', action: 'update', entity: 'product_group',
                      entity_id: req.params.id, payload: req.body });
