@@ -457,6 +457,13 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   const units = (await db.query(
     `SELECT u.id, r.order_item_id, u.conveyor_no, r.qty, u.qty AS unit_qty,
             u.color, u.fabric, u.status, u.is_stock,
+            --  ★ KONVERNING O'Z MAHSULOTI (zavod qarori, 2026-10).
+            --  Ilgari javobda faqat JOYI kelardi va ekran «Arra ·
+            --  Korpus tsexi» deb yozardi — qatorda «stul» turgani
+            --  bilan unga «stol» konveri biriktirilganini hech narsa
+            --  aytmasdi. Farq faqat mashina ortilayotganda ko'rinardi.
+            u.product_id AS unit_product_id,
+            pu.name AS unit_product,
             s.name AS section, sh.name AS shop,
             CASE WHEN u.status = 'fg' THEN wh.name END AS warehouse,
             CASE WHEN u.status = 'fg' THEN wh.code END AS warehouse_code,
@@ -466,6 +473,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
        FROM unit_reservations r
        JOIN order_items i      ON i.id = r.order_item_id
        JOIN production_units u ON u.id = r.unit_id
+       JOIN products pu        ON pu.id = u.product_id
        LEFT JOIN sections s    ON s.id = u.current_section_id
        LEFT JOIN shops sh      ON sh.id = s.shop_id
        LEFT JOIN warehouses wh ON wh.id = COALESCE(u.warehouse_id,
@@ -1426,6 +1434,81 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
   } finally { client.release(); }
+}));
+
+// ═══════════════════════════════ NOMUVOFIQ BUYURTMALARNI TOPISH
+//
+//  ★ ESKI XATONI TIZIM O'ZI TOPADI (zavod qarori, 2026-10). Qulf
+//  bundan KEYINGISINI to'xtatadi, lekin o'tmishda yozilgani joyida
+//  qoladi: menejer qatorni o'zgartirgan, bronlar esa eski
+//  mahsulotda qolgan. Buzilgan buyurtmani ekrandan topib bo'lmasdi —
+//  «Qayerda» ustuni faqat JOYNI ko'rsatardi — va zavodda yuzlab
+//  buyurtma bor, ya'ni qo'lda ko'zdan kechirish ish emas.
+//
+//  Ro'yxat UCH xil farqni topadi va har birini ALOHIDA aytadi:
+//  qatorda bir mahsulot, konverda boshqasi; rangi yoki matosi
+//  boshqa; biriktirilgani so'ralgandan KO'P (soni keyin
+//  kamaytirilgan).
+//
+//  Chiqib ketganlar ham ro'yxatda: ular tuzatilmaydi (mahsulot
+//  mijozda), lekin «nega shunday bo'ldi» degan savolning javobi
+//  o'sha yerda — va shikoyat kelganda kerak bo'ladi.
+//
+//  Huquqi `sales.fix` — tuzatadigan odamning o'zi, ya'ni
+//  administrator.
+router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
+  //  Ro'yxat `v_sales_orders` dan o'qiladi, `orders` dan emas: holat
+  //  nomi o'sha yerdagi `HOLAT` dan chiqadi va ekrandagi tab bilan
+  //  AYNAN bir xil bo'ladi (bitta joyda hisoblanadi degan qoida).
+  const { rows } = await db.query(
+    `SELECT o.id, o.order_no, ${HOLAT} AS holat, o.ordered_on,
+            o.customer_name AS customer, o.manager_name AS manager,
+            i.id AS item_id, p.name AS item_product,
+            i.color AS item_color, i.fabric AS item_fabric, i.qty AS item_qty,
+            u.conveyor_no, pu.name AS unit_product,
+            u.color AS unit_color, u.fabric AS unit_fabric, r.qty AS bron,
+            CASE WHEN u.product_id <> i.product_id THEN 'mahsulot'
+                 WHEN LOWER(COALESCE(u.color, '')) IS DISTINCT FROM
+                      LOWER(COALESCE(i.color, '')) THEN 'rang'
+                 ELSE 'mato' END AS farq
+       FROM unit_reservations r
+       JOIN order_items i        ON i.id = r.order_item_id
+       JOIN v_sales_orders o     ON o.id = i.order_id
+       JOIN products p           ON p.id = i.product_id
+       JOIN production_units u   ON u.id = r.unit_id
+       JOIN products pu          ON pu.id = u.product_id
+      WHERE u.status <> 'cancelled'
+        AND (u.product_id <> i.product_id
+             OR LOWER(COALESCE(u.color, '')) IS DISTINCT FROM
+                LOWER(COALESCE(i.color, ''))
+             --  Mato KO'PINCHA konverda yozilmaydi (tsexdan rangsiz
+             --  keladi), shuning uchun faqat IKKALASI ham to'ldirilgan
+             --  va boshqa bo'lganda farq hisoblanadi — aks holda
+             --  ro'yxat yolg'on ogohlantirish bilan to'lardi.
+             OR (COALESCE(u.fabric, '') <> '' AND COALESCE(i.fabric, '') <> ''
+                 AND LOWER(u.fabric) <> LOWER(i.fabric)))
+      ORDER BY o.id DESC, u.conveyor_no`);
+
+  //  Soni bo'yicha farq ALOHIDA so'rovda: u qator bo'yicha
+  //  YIG'INDIDAN chiqadi, yuqoridagi esa har konverni alohida
+  //  qaraydi — ikkalasini bitta so'rovga tiqish javobni ikki marta
+  //  takrorlardi.
+  const kop = (await db.query(
+    `SELECT o.id, o.order_no, ${HOLAT} AS holat, o.customer_name AS customer,
+            p.name AS item_product, i.qty AS item_qty,
+            SUM(r.qty)::int AS bron
+       FROM unit_reservations r
+       JOIN order_items i        ON i.id = r.order_item_id
+       JOIN v_sales_orders o     ON o.id = i.order_id
+       JOIN products p           ON p.id = i.product_id
+       JOIN production_units u   ON u.id = r.unit_id
+      WHERE u.status <> 'cancelled'
+      GROUP BY o.id, o.order_no, o.status, o.not_started_qty, o.assigned_qty,
+               o.qty, o.in_warehouse_qty, o.customer_name, p.name, i.qty, i.id
+     HAVING SUM(r.qty) > i.qty
+      ORDER BY o.id DESC`)).rows;
+
+  res.json({ rows, kop });
 }));
 
 //  ★ QULFNI ADMINISTRATOR OCHADI (zavod qarori, 2026-10). Yo'l

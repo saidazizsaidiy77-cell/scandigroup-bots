@@ -10738,6 +10738,78 @@ test('oraliq oxiridagi qoldiq: ombor ham, xom ashyo ham', async () => {
              - Number(s9.total.chiqdi), Number(s9.total.oxir));
 });
 
+test('nomuvofiq buyurtmalarni dastur o\'zi topadi', async () => {
+  //  ★ ESKI ZARARNI DASTUR O'ZI TOPADI (zavod qarori, 2026-10).
+  //  Qulf va qator qoidasi BUGUNDAN keyingi buzilishni to'xtatadi,
+  //  lekin ULARDAN OLDIN buzilgan buyurtmalar bazada turaveradi:
+  //  bron QATORGA ilinadi, qator esa o'zgartirilgan — ya'ni mijozga
+  //  stol va'da qilinib, unga stul konveri biriktirilib qolgan.
+  //
+  //  Ekranda u KO'RINMAYDI: «Qayerda» ustuni konverning turgan
+  //  JOYINI yozadi, mahsulotini emas — ya'ni yuzlab buyurtmani qo'lda
+  //  ochib solishtirishdan boshqa yo'l yo'q edi. Shuning uchun
+  //  tekshiruv DASTURDA.
+  const savdo = await xodim('Sinov nomuvofiq menejeri', 'sotuvchi');
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Nomuvofiq sinov mijozi', region: 'Toshkent' })).body;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  const z = (await savdo('POST', '/api/sales/orders', {
+    customer_id: mij.id, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 4, color: 'Oq', unit_price: 100 }] })).body;
+  const q = (await savdo('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await savdo('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u.id, qty: 4 })).status, 200);
+
+  //  Hozir hammasi joyida.
+  const toza = await admin('GET', '/api/sales/mismatch');
+  assert.equal(toza.status, 200, toza.text);
+  assert.equal(toza.body.rows.filter((r) => r.id === z.id).length, 0,
+    'to\'g\'ri buyurtma ro\'yxatda turmaydi');
+
+  //  ★ ZARAR BAZADAN SIMULYATSIYA QILINADI: API orqali bunday
+  //  qilishning yo'li endi YO'Q (qator qoidasi hammaga, hatto
+  //  administratorga ham tegishli) — lekin eski ma'lumotda u bor va
+  //  tekshiruv aynan shuni topishi kerak.
+  const STOL = (await H.id(`SELECT id FROM products WHERE sku LIKE 'STL-%' LIMIT 1`)).id;
+  await H.id(`UPDATE order_items SET product_id = $2, color = 'Venge'
+               WHERE id = $1`, [q.id, STOL]);
+
+  const top = await admin('GET', '/api/sales/mismatch');
+  assert.equal(top.status, 200, top.text);
+  const bu = top.body.rows.filter((r) => r.id === z.id);
+  assert.equal(bu.length, 1, 'nomuvofiqlik topildi');
+  assert.equal(bu[0].conveyor_no, u.conveyor_no, 'qaysi konver ekani yoziladi');
+  assert.equal(bu[0].farq, 'mahsulot', 'nimasi farq qilgani yoziladi');
+  assert.equal(bu[0].order_no, z.order_no);
+  assert.equal(bu[0].customer, 'Nomuvofiq sinov mijozi');
+  //  Buyurtmadagi va konverdagi mahsulot IKKALASI ham yoziladi:
+  //  «qaysi biri to'g'ri» degan savolga menejer javob beradi.
+  assert.ok(bu[0].item_product && bu[0].unit_product
+    && bu[0].item_product !== bu[0].unit_product, 'ikkala nom ham turadi');
+
+  //  ★ SONI BO'YICHA FARQ ALOHIDA: qatorga bronidan KAM dona
+  //  yozilgan bo'lsa mijozga va'da qilingani bilan biriktirilgani
+  //  ajralib ketadi — chiqarishda «to'liq emas» bo'lib tutiladi,
+  //  lekin buni OLDIN bilish kerak.
+  await H.id(`UPDATE order_items SET qty = 1 WHERE id = $1`, [q.id]);
+  const kop = (await admin('GET', '/api/sales/mismatch')).body.kop
+    .filter((r) => r.id === z.id);
+  assert.equal(kop.length, 1, 'ortiqcha bron topildi');
+  assert.equal(kop[0].bron, 4);
+  assert.equal(kop[0].item_qty, 1);
+
+  //  ★ FAQAT ADMINISTRATOR KO'RADI (`sales.fix`): ro'yxatda butun
+  //  zavodning buyurtmasi, mijozi va menejeri turadi — u menejerning
+  //  ishi emas, tuzatish ham uning qo'lida emas.
+  assert.equal((await savdo('GET', '/api/sales/mismatch')).status, 403);
+
+  //  Tozalab qo'yiladi: keyingi testlar bu buyurtmani ko'rmasligi
+  //  kerak (`yakun` jamlanma hisobini o'qiydi).
+  await H.id(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [z.id]);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

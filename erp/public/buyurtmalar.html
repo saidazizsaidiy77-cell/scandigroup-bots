@@ -80,6 +80,13 @@
             berish» savol qoldirardi. Joyi — belgilash qilinadigan
             jadvalning ustida, ya'ni javob ko'z tushadigan yerda. -->
       <span id="relBar" class="row" style="gap:8px"></span>
+      <!--  ★ ESKI XATONI TIZIM O'ZI TOPADI (zavod qarori, 2026-10).
+            Qulf bundan KEYINGISINI to'xtatadi, o'tmishda yozilgani
+            esa joyida qoladi: qator o'zgargan, bronlar eski
+            mahsulotda qolgan. Zavodda yuzlab buyurtma bor va qo'lda
+            ko'zdan kechirish ish emas.
+            Tugma faqat TUZATADIGAN odamda (`sales.fix`). -->
+      <span id="texBar"></span>
     </div>
   </div>
   <!--  Jadval O'Z qutisida aylanadi (`max-height`): sticky faqat SCROLL
@@ -256,6 +263,12 @@ async function boot(){
   //  ya'ni qolganlar uchun yopilgan buyurtma hujjat bo'lib qolaveradi.
   //  Bu KO'RINISH: tekshiruv baribir serverda.
   canFix = App.can('sales.fix');
+  //  Tekshiruv TUZATADIGAN odamda: ro'yxat butun zavodning
+  //  buyurtmasini ochadi va u administratorniki (`sales.fix`).
+  $('texBar').innerHTML = canFix
+    ? `<button onclick="texshir()" style="white-space:nowrap"
+         title="Qator bilan unga biriktirilgan konver mos kelmaydigan
+         buyurtmalarni topadi">\u26a0 Nomuvofiqlar</button>` : '';
   $('btnNew').innerHTML = canWrite
     ? `<button class="primary" onclick="openOrder(null)">Yangi buyurtma</button>` : '';
   const [c, p, d, sg, st] = await Promise.all([
@@ -1142,16 +1155,46 @@ const joyOf = (u) => u.status === 'fg'
   ? (u.warehouse_code === 'TM' || !u.warehouse ? 'T/M ombor' : u.warehouse)
   : `${u.section || 'boshlanmagan'}${u.shop ? ` \u00b7 ${u.shop}` : ''}`;
 
+//  ★ QATOR BILAN KONVER MOS KELADIMI (zavod qarori, 2026-10).
+//  Ilgari ustun faqat JOYNI ko'rsatardi — qatorda «stul» turgani
+//  bilan unga «stol» konveri biriktirilganini hech narsa aytmasdi va
+//  farq faqat mashina ortilayotganda ko'rinardi.
+//
+//  Mato ikkala tomonda ham to'ldirilgan bo'lsagina solishtiriladi:
+//  konver tsexdan ko'pincha matosiz keladi va aks holda ro'yxat
+//  yolg'on ogohlantirish bilan to'lardi.
+const bir = (a, b) => String(a || '').trim().toLowerCase()
+                   === String(b || '').trim().toLowerCase();
+function nomuvofiq(it, u) {
+  const f = [];
+  if (Number(u.unit_product_id) !== Number(it.product_id)) f.push('mahsulot');
+  if (!bir(u.color, it.color)) f.push('rang');
+  if (String(u.fabric || '').trim() && String(it.fabric || '').trim()
+      && !bir(u.fabric, it.fabric)) f.push('mato');
+  return f;
+}
+
 function qayerda(itemId) {
   if (!itemId) return '';
   const list = (cur.units || []).filter(u => u.order_item_id === itemId);
   if (!list.length) return '<span class="muted">konver biriktirilmagan</span>';
+  //  ★ FARQ BO'LSA JOYNING O'RNIGA EMAS, USTIGA yoziladi: mudirga
+  //  konver qayerdaligi baribir kerak, lekin xato birinchi
+  //  o'qilishi kerak.
+  const it = (cur.items || []).find((x) => x.id === itemId);
+  const xato = it ? list.map((u) => ({ u, f: nomuvofiq(it, u) }))
+    .filter((x) => x.f.length) : [];
+  const ogoh = xato.length ? xato.map(({ u, f }) =>
+    `<div class="tag bad" style="font-size:11px;white-space:normal">
+       ${esc(u.conveyor_no)} — ${esc(u.unit_product || '')}${
+       u.color ? ' · ' + esc(u.color) : ''}: ${f.join(', ')} boshqa</div>`)
+    .join('') : '';
   const jam = new Map();
   for (const u of list) {
     const k = joyOf(u);
     jam.set(k, (jam.get(k) || 0) + Number(u.qty || 0));
   }
-  return [...jam].map(([joy, n]) => {
+  return ogoh + [...jam].map(([joy, n]) => {
     const omborda = joy.toLowerCase().includes('ombor');
     return `<div><span class="tag${omborda ? ' ok' : ''}"
       style="font-size:11px">${esc(joy)}</span> <span class="muted">${n} ta</span></div>`;
@@ -1331,6 +1374,58 @@ async function unlock(){
     await openOrder(cur.order.id);
   } catch (e) { toast(e.message, true); }
 }
+
+//  ★ NOMUVOFIQ BUYURTMALAR RO'YXATI. Uchta farqni topadi: qatorda
+//  bir mahsulot, konverda boshqasi; rangi yoki matosi boshqa;
+//  biriktirilgani so'ralgandan ko'p (soni keyin kamaytirilgan).
+//  Hisob SERVERDA — ro'yxat 500 qator bilan cheklangan va klientda
+//  tekshirish buzilganlarning yarmini ko'rsatmasdi.
+async function texshir(){
+  let d;
+  try { d = await App.api('/api/sales/mismatch'); }
+  catch (e) { return toast(e.message, true); }
+  const jami = d.rows.length + d.kop.length;
+  const qator = (x) => `<tr style="cursor:pointer"
+      onclick="openOrder(${x.id})">
+      <td><b>${esc(x.order_no)}</b><div class="muted" style="font-size:12px"
+        >${esc(statusOf(x))}</div></td>
+      <td>${esc(x.customer || '')}<div class="muted" style="font-size:12px"
+        >${esc(x.manager || '')}</div></td>
+      <td>${esc(x.item_product)}${x.item_color
+        ? ' · ' + esc(x.item_color) : ''}${x.item_fabric
+        ? ' · ' + esc(x.item_fabric) : ''}</td>
+      <td>${x.conveyor_no ? `<b>${esc(x.conveyor_no)}</b> ` : ''}${
+        esc(x.unit_product || '')}${x.unit_color
+        ? ' · ' + esc(x.unit_color) : ''}${x.unit_fabric
+        ? ' · ' + esc(x.unit_fabric) : ''}</td>
+      <td><span class="tag bad">${esc(x.farq || '')}</span></td></tr>`;
+  const kopQator = (x) => `<tr style="cursor:pointer"
+      onclick="openOrder(${x.id})">
+      <td><b>${esc(x.order_no)}</b><div class="muted" style="font-size:12px"
+        >${esc(statusOf(x))}</div></td>
+      <td>${esc(x.customer || '')}</td>
+      <td>${esc(x.item_product)}</td>
+      <td>so'raldi <b>${x.item_qty}</b>, biriktirilgan <b>${x.bron}</b></td>
+      <td><span class="tag bad">soni</span></td></tr>`;
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)yop()">
+      <div class="modal" style="max-width:1000px">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px">
+          <h1>Nomuvofiq buyurtmalar</h1>
+          <button onclick="yop()">Yopish</button></div>
+        ${jami ? `<p class="muted" style="margin-bottom:12px">
+          Qator bilan unga biriktirilgan konver mos kelmaydi. Bu eski
+          yozuvlar: endi bunday o'zgartirish umuman qabul qilinmaydi.
+          Qatorni bossangiz buyurtma ochiladi.</p>
+        <div style="overflow-x:auto;max-height:60vh"><table>
+          <thead><tr><th>Buyurtma</th><th>Mijoz</th>
+            <th>Qatorda</th><th>Konverda</th><th>Farq</th></tr></thead>
+          <tbody>${d.rows.map(qator).join('')}${d.kop.map(kopQator).join('')}</tbody>
+        </table></div>`
+        : `<p class="muted">Nomuvofiq buyurtma topilmadi — hammasi joyida.</p>`}
+      </div></div>`;
+}
+const yop = () => { $('modalRoot').innerHTML = ''; };
 
 async function save(){
   const body = {
