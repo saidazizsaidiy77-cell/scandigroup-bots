@@ -1863,7 +1863,26 @@ const nextReqNo = (client, kind) =>
 
 //  Ro'yxat. Doira CHEGARA: tsex boshlig'i o'z tsexining hujjatini
 //  ko'radi, xom ashyo xodimi (doirasiz) hammasini.
+//  ★ HAR TAB YONIDA O'Z SONI (zavod qarori, 2026-10; savdo
+//  buyurtmalaridagi `jami` bilan AYNAN bir xil idiom va bir xil
+//  sabab). Tayyorlaydigan odamning savoli «nechtasi kutmoqda» —
+//  o'ttizta qatorni ko'z bilan sanab bo'lmaydi.
+//
+//  Raqam SERVERDA hisoblanadi, sahifada emas, va shu sababdan ikki
+//  narsa to'g'ri bo'ladi. Birinchisi: ro'yxat 500 qator bilan
+//  cheklangan, ya'ni klientdagi sanoq 501-hujjatdan keyin jimgina
+//  kamayib borardi. Ikkinchisi: raqam HAR holat uchun keladi,
+//  tanlangani uchun emas — aks holda «nechtasi rad etilgan» degan
+//  javobni olish uchun tabni bosib ko'rish kerak bo'lardi (ombor
+//  tarixidagi kirim/chiqim filtri bilan bir xil qoida).
+//
+//  Shart ro'yxatnikiga AYNAN teng, faqat HOLAT filtri olib tashlangan
+//  — u yerda holat guruh bo'lib turadi. TURI esa sanoqqa ta'sir
+//  qiladi: «faqat qaytarish» tanlangan bo'lsa savol ham o'sha
+//  hujjatlar haqida bo'ladi.
 router.get('/requests', need(...VIEW), wrap(async (req, res) => {
+  const doira = talabDoira(req);
+  const kind  = trim(req.query.kind);
   const { rows } = await db.query(
     `SELECT * FROM v_mat_requests r
       WHERE ($1::int[] IS NULL
@@ -1871,8 +1890,15 @@ router.get('/requests', need(...VIEW), wrap(async (req, res) => {
         AND ($2::text IS NULL OR r.status = $2)
         AND ($3::text IS NULL OR r.kind = $3)
       ORDER BY r.id DESC LIMIT 500`,
-    [talabDoira(req), trim(req.query.status), trim(req.query.kind)]);
-  res.json({ rows });
+    [doira, trim(req.query.status), kind]);
+  const jami = (await db.query(
+    `SELECT r.status, COUNT(*)::int AS n
+       FROM v_mat_requests r
+      WHERE ($1::int[] IS NULL
+             OR r.to_shop = ANY($1) OR r.from_shop = ANY($1))
+        AND ($2::text IS NULL OR r.kind = $2)
+      GROUP BY r.status`, [doira, kind])).rows;
+  res.json({ rows, jami });
 }));
 
 //  ═════════════════════════════════════════ MANBANI TIZIM TOPADI

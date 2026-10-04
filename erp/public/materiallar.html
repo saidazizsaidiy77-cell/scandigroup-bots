@@ -115,16 +115,18 @@
       Filtr holat bo'yicha: tayyorlaydigan odamning savoli «nima
       kutmoqda», yozgan odamniki esa «meniki qayerda». -->
 <div class="card" id="cardTalab" hidden>
+  <!--  ★ HOLAT — OCHILMA EMAS, TAB (zavod qarori, 2026-10; savdo
+        buyurtmalari bilan AYNAN bir xil shakl va bir xil sabab).
+        Ochilmada javob YASHIRIN turardi: «nechtasi kutmoqda» degan
+        savol uchun uni ochib, holatni tanlab, ro'yxat qayta
+        yuklanishini kutish kerak edi — va o'shanda ham faqat BITTA
+        holatning soni ko'rinardi. Tab esa beshala javobni bir
+        qarashda beradi.
+        Telefonda chiplar bir qatorga sig'maydi va surilib ketadi —
+        buyurtmalar sahifasidagi bilan bir xil. -->
+  <div class="row" id="tChips" style="gap:6px;overflow-x:auto;
+       max-width:100%;margin-bottom:12px"></div>
   <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
-    <div style="min-width:170px"><label>Holat</label>
-      <select id="tStatus" onchange="load()">
-        <option value="">Hammasi</option>
-        <option value="new">Yozilgan</option>
-        <option value="ready">Tayyorlangan</option>
-        <option value="done">Chiqarilgan</option>
-        <option value="rejected">Rad etilgan</option>
-        <option value="cancelled">Bekor qilingan</option>
-      </select></div>
     <div style="min-width:170px"><label>Turi</label>
       <select id="tKind" onchange="load()">
         <option value="">Hammasi</option>
@@ -467,9 +469,10 @@ async function load() {
     if ($('kTo').value)       q.set('to', $('kTo').value);
     rows = (await App.api('/api/materials/returns?' + q)).rows;
   } else if (tab === 'talab') {
-    if ($('tStatus').value) q.set('status', $('tStatus').value);
+    if (tStatus)            q.set('status', tStatus);
     if ($('tKind').value)   q.set('kind', $('tKind').value);
-    rows = (await App.api('/api/materials/requests?' + q)).rows;
+    const t = await App.api('/api/materials/requests?' + q);
+    rows = t.rows; tJami = t.jami || [];
   } else if (tab === 'zay') {
     if ($('zStatus').value) q.set('status', $('zStatus').value);
     rows = (await App.api('/api/materials/orders?' + q)).rows;
@@ -823,6 +826,23 @@ async function qoldiqQaytar(id, kind, from) {
 //  ★ NARX BU YERDA MAJBURIY — boshlang'ich qoldiqdan aynan shu yeri
 //  farq qiladi: kirimda narx QARZNING O'ZI. Tekshiruv serverda.
 const kun = (d) => String(d).slice(0, 10).split('-').reverse().join('.');
+//  ★ VAQT BILAN KELGAN USTUN ALOHIDA O'QILADI. `kun()` matnni kesadi
+//  va bu DATE ustunida to'g'ri (`need_on`, `doc_on` — ularda soat
+//  yo'q), lekin `created_at` UTC vaqt bilan keladi: kesilsa zavod
+//  ertalab yozgan talabnoma kechagi kunda turib qolishi mumkin edi.
+//  Shuning uchun u mahalliy vaqtga aylantiriladi.
+const ikkiRaqam = (n) => String(n).padStart(2, '0');
+const kunLok = (d) => {
+  const t = new Date(d);
+  if (isNaN(t)) return '';
+  return `${ikkiRaqam(t.getDate())}.${ikkiRaqam(t.getMonth() + 1)}.`
+    + t.getFullYear();
+};
+const soat = (d) => {
+  const t = new Date(d);
+  if (isNaN(t)) return '';
+  return `${ikkiRaqam(t.getHours())}:${ikkiRaqam(t.getMinutes())}`;
+};
 
 //  Kirim va qaytarish RO'YXATI bir xil shaklda: ikkalasi ham hujjat,
 //  ikkalasida ham ta'minotchi, ombor, qatorlar va summa. Farqi faqat
@@ -896,7 +916,44 @@ const TALAB_HOLAT = {
 const yozadi = () => App.can('materials.request', 'materials.manage',
                              'production.manage');
 
+//  ★ TABLAR — HOLAT nomi va yonida SONI. Tartib ISHNING
+//  ketma-ketligi bo'yicha: yozilgan → tayyorlangan → chiqarilgan,
+//  oxirida esa tugagani (savdo tablari bilan bir xil qoida).
+//
+//  «Bekor qilingan» ham turadi, garchi zavod uni sanab bermagan
+//  bo'lsa: hujjat BAZADA bor va unga boradigan yo'l qolishi kerak —
+//  aks holda o'z talabnomasini bekor qilgan boshliq uni faqat
+//  «Hammasi» ichidan, o'ttizta qator orasidan topardi. Rad etilgani
+//  BOSHQANIKI (ombor xodimi rad etdi), bekor qilgani esa O'ZINIKI —
+//  ikki javob va shuning uchun ikki tab (konver so'rovi bilan bir
+//  xil idiom).
+const TALAB_TAB = [
+  ['',          'Hammasi'],
+  ['new',       'Yozilgan'],
+  ['ready',     'Tayyorlangan'],
+  ['done',      'Chiqarilgan'],
+  ['rejected',  'Rad etilgan'],
+  ['cancelled', 'Bekor qilingan'],
+];
+let tStatus = '', tJami = [];
+
+//  Nol ham yoziladi: bo'sh raqam «hisoblanmadi» degan savol
+//  qoldirardi, nol esa javob — bu tabda hujjat yo'q.
+const tabSoni = (k) => k
+  ? Number((tJami.find((j) => j.status === k) || {}).n || 0)
+  : tJami.reduce((a, j) => a + Number(j.n || 0), 0);
+
+function drawTalabChips() {
+  $('tChips').innerHTML = TALAB_TAB.map(([k, nom]) =>
+    `<button class="${k === tStatus ? 'primary' : ''}"
+       onclick="talabTab('${k}')" style="text-align:left;line-height:1.25"
+       ><div>${esc(nom)}</div><div style="font-size:11px;opacity:.7"
+         >${son(tabSoni(k))} ta</div></button>`).join('');
+}
+function talabTab(k) { tStatus = k; drawTalabChips(); load(); }
+
 function drawTalab() {
+  drawTalabChips();
   $('talabTools').innerHTML = yozadi()
     ? `<button class="primary" onclick="talabOch('issue')">+ Talabnoma</button>
        <button onclick="talabOch('return')">Qaytarish</button>
@@ -906,8 +963,18 @@ function drawTalab() {
       + (yozadi() ? " «+ Talabnoma» bilan yozing." : '') + '</p>';
     return;
   }
+  //  ★ KELIB TUSHGAN SANA ENG CHAPDA (zavod qarori, 2026-10).
+  //  Tayyorlaydigan odam ro'yxatni KUNLAR bo'yicha o'qiydi — qog'oz
+  //  daftardagidek, avval sana, keyin nima so'ralgani: ertalab
+  //  kelganini birinchi bajaradi. Ilgari ro'yxat faqat raqam
+  //  bo'yicha turardi va hujjat qachon tushganini bilish uchun uni
+  //  ochib ko'rishdan boshqa yo'l yo'q edi.
+  //
+  //  Ostida SOATI: bitta kunda o'nta talabnoma tushadi va qaysi biri
+  //  oldin kelgani «Kerak» sanasidan ko'rinmaydi.
   $('body').innerHTML = '<div style="overflow-x:auto"><table>'
-    + "<thead><tr><th>Hujjat</th><th>Qayerdan</th><th>Qayerga</th>"
+    + "<thead><tr><th>Kelib tushgan</th><th>Hujjat</th>"
+    + '<th>Qayerdan</th><th>Qayerga</th>'
     + '<th>Nima so\'ralgan</th><th>Kerak</th><th>Holat</th></tr></thead><tbody>'
     + rows.map((r) => {
         const [nom, rang] = TALAB_HOLAT[r.status] || [r.status, ''];
@@ -924,6 +991,11 @@ function drawTalab() {
           + (it.length > 2
              ? '<br><span class="muted">+' + (it.length - 2) + ' ta</span>' : '');
         return '<tr style="cursor:pointer" onclick="talabKor(' + r.id + ')">'
+          + '<td>' + (r.created_at ? kunLok(r.created_at) : '—')
+          + (r.created_at
+             ? '<div class="muted" style="font-size:12px">'
+               + soat(r.created_at) + '</div>' : '')
+          + '</td>'
           + '<td><b>' + esc(r.doc_no || '—') + '</b>'
           //  Turi raqam ostida yoziladi: hujjatlar bitta ro'yxatda
           //  turadi va qaysi biri ekanini ochib ko'rmasdan bilish
@@ -1344,6 +1416,38 @@ async function talabSaqla() {
 
 //  Hujjatni ochish: qatorlari bilan. Tayyorlash va chiqarish shu
 //  yerda — ro'yxatdan turib bosilsa qaysi biri ekani ko'rinmasdi.
+//  Korxona nomi yuqorida bir marta yozilgan (`FIRMA`) — chop etish
+//  sarlavhasi uni shundan oladi.
+//
+//  Hujjat turining nomi BITTA joyda: u ekranda, qog'ozda va
+//  sarlavhada bir xil yozilishi kerak — uch nusxada bo'lsa biri
+//  ertaga ikkinchisidan ajralib ketardi.
+const TUR = (r) => r.kind === 'move' ? "Ko'chirish"
+  : r.kind === 'return' ? 'Qaytarish' : 'Talabnoma';
+
+//  ★ CHOP ETISH OYNANING O'ZIDAN (zavod qarori, 2026-10). Alohida
+//  sahifa yozilmadi: hujjatni FAQAT shu oyna ochadi va ikkinchi
+//  nusxa matn bir kun birinchisidan orqada qolardi (yuk xati
+//  ikkita sahifadan chizilgani uchun o'z faylida turadi — bu yerda
+//  esa bitta).
+//
+//  Belgi BODY ga qo'yiladi, chunki qog'ozga faqat OYNA tushishi
+//  kerak: ortida butun ro'yxat turadi va u ikkinchi varaq bo'lib
+//  chiqib ketardi.
+function talabChop() {
+  document.body.classList.add('bosma');
+  //  Belgi chop etish oynasi YOPILGANDAN keyin olinadi: darhol
+  //  olinsa brauzer uni varaqni tayyorlashdan oldin ko'rib qolardi.
+  const tozala = () => {
+    document.body.classList.remove('bosma');
+    window.removeEventListener('afterprint', tozala);
+  };
+  window.addEventListener('afterprint', tozala);
+  window.print();
+  //  Safari `afterprint` ni bermaydi — zaxira yo'l.
+  setTimeout(tozala, 1500);
+}
+
 async function talabKor(id) {
   const r = rows.find((x) => x.id === id);
   if (!r) return;
@@ -1360,12 +1464,40 @@ async function talabKor(id) {
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:640px">
-        <div class="row" style="justify-content:space-between;margin-bottom:14px">
-          <h1>${r.kind === 'move' ? "Ko'chirish"
-            : r.kind === 'return' ? 'Qaytarish' : 'Talabnoma'} ${esc(r.doc_no || '')}</h1>
-          <button onclick="yop()">Yopish</button></div>
-        <p class="muted" style="margin-bottom:12px">
+        <div class="row no-print" style="justify-content:space-between;
+             margin-bottom:14px">
+          <h1>${TUR(r)} ${esc(r.doc_no || '')}</h1>
+          <div class="row" style="gap:8px">
+            <button onclick="talabChop()">Chop etish</button>
+            <button onclick="yop()">Yopish</button></div></div>
+        <!--  ★ QOG'OZ O'ZI AYTIB TURADI (zavod qarori, 2026-10;
+              qarzdorlik hisoboti bilan bir xil idiom: print-head va
+              print-only klasslari — izohda TESKARI QO'SHTIRNOQ
+              yozilmaydi, u shablon satrini uzib yuboradi). Varaq
+              ombor xodimining qo'liga beriladi
+              va javon oldiga olib boriladi — u yerda ekran yo'q,
+              ya'ni hujjat qaysi raqam, qaysi ombordan qaysi omborga
+              va qaysi kunga kerakligini O'ZI yozishi kerak. Ekrandagi
+              sarlavha esa tugmalar bilan bir qatorda turadi va
+              qog'ozga yaramaydi. -->
+        <div class="print-only print-head">
+          <div style="font-size:11px;letter-spacing:.08em">${esc(FIRMA)}</div>
+          <h1>${TUR(r)} № ${esc(r.doc_no || '')}</h1>
+          <div class="meta">
+            ${esc(r.from_warehouse)} → ${esc(r.to_warehouse)}
+            ${r.created_at ? ' · yozilgan: ' + kunLok(r.created_at)
+              + ' ' + soat(r.created_at) : ''}
+            ${r.need_on ? ' · kerak: ' + kun(r.need_on) : ''}
+            ${r.created_by_name ? ' · yozdi: ' + esc(r.created_by_name) : ''}
+          </div>
+          <div class="meta">Holat: ${nom}${r.done_on
+            ? ' · chiqarilgan: ' + kun(r.done_on) : ''}${r.done_by_name
+            ? ' · ' + esc(r.done_by_name) : ''}</div>
+        </div>
+        <p class="muted no-print" style="margin-bottom:12px">
           ${esc(r.from_warehouse)} → ${esc(r.to_warehouse)}
+          ${r.created_at ? ' · kelib tushgan: ' + kunLok(r.created_at)
+            + ' ' + soat(r.created_at) : ''}
           ${r.need_on ? ' · kerak: ' + kun(r.need_on) : ''}
           · <span class="tag ${rang}">${nom}</span></p>
         <table><thead><tr><th>Material</th><th class="num">So'raldi</th>
@@ -1388,7 +1520,24 @@ async function talabKor(id) {
         </tbody></table>
         ${r.decide_note ? `<p class="muted" style="margin-top:10px">
           Sabab: ${esc(r.decide_note)}</p>` : ''}
-        <div class="row" style="gap:8px;margin-top:16px;flex-wrap:wrap">
+        ${r.note ? `<p class="muted" style="margin-top:10px">
+          Izoh: ${esc(r.note)}</p>` : ''}
+        <!--  Imzo joylari FAQAT qog'ozda: ekranda ular bo'sh chiziq
+              bo'lib turardi va hech narsa aytmasdi. Uchta tomon —
+              so'ragan, bergan va olgan odam (yuk xatidagi imzo
+              joylari bilan bir xil shakl).
+              Ichkarida flex ishlatilmaydi: umumiy chop etish qoidasi
+              print-only ga display:block ni !important bilan beradi
+              va satr baribir ustunga aylanardi. -->
+        <div class="print-only" style="margin-top:26px;font-size:10px">
+          <table style="width:100%;border:0"><tr>
+          ${["So'radi", qaytar ? 'Qaytardi' : 'Berdi', 'Oldi'].map((t) => `
+            <td style="border:0;width:33%;padding:0 14px 0 0;vertical-align:top">
+              <div style="border-bottom:1px solid #000;height:24px"></div>
+              <div style="padding-top:3px">${t}</div></td>`).join('')}
+          </tr></table>
+        </div>
+        <div class="row no-print" style="gap:8px;margin-top:16px;flex-wrap:wrap">
           ${boshqara() && r.status === 'new' && r.kind === 'issue'
             ? `<button onclick="talabReady(${r.id})">Tayyorladim</button>` : ''}
           <!--  ★ KO'CHIRISHNI MANBA OMBORNING EGASI BAJARADI (izoh:

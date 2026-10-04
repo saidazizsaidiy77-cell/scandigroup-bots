@@ -503,6 +503,26 @@ tr.click:hover td{background:var(--surface-2)}
 .print-head h1{font-size:15px;margin-bottom:3px}
 .print-head .meta{font-size:9px;color:#333}
 
+/* ★ OYNANI CHOP ETISH (zavod qarori, 2026-10). Hujjat oynadan
+   bosiladi (talabnoma), ortida esa butun ro'yxat turadi — u ikkinchi
+   varaq bo'lib chiqib ketardi va qog'ozning birinchi betida nima
+   turgani ham noaniq bo'lardi. Belgi BODY ga qo'yiladi: oyna
+   `#modalRoot` ichida, qolgan hammasi — uning akalari.
+
+   Oyna ekranda ustida suzib turadi (`position:fixed`), qog'ozda esa
+   oddiy oqimga tushishi va sahifalarga O'ZI bo'linishi kerak —
+   aks holda faqat birinchi ekranga sig'gani bosilardi. */
+@media print{
+  body.bosma>*:not(#modalRoot){display:none!important}
+  body.bosma .overlay{position:static;inset:auto;background:#fff;
+    padding:0;display:block;overflow:visible}
+  /*  Kenglik !important bilan: oynalar o'z kengligini INLINE style
+      bilan qo'yadi (talabnomada 640px) va u oddiy qoidadan ustun
+      turardi — hujjat varaqning yarmida qolardi. */
+  body.bosma .modal{max-width:none!important;width:100%!important;
+    border:0;padding:0;background:#fff;border-radius:0}
+}
+
 /* Shu qatorda to'ldirilishi kutilayotgan katak. Qizil emas — xato emas,
    hali yozilmagan: qizil rang xatoga atalgan, uni boshqa narsaga
    ishlatilsa haqiqiy xato ko'zga tashlanmay qoladi. */
