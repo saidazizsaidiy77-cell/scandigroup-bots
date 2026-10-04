@@ -3605,7 +3605,17 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
 //  solishtiradi (menyudagi navbat belgisi bilan bir xil qoida).
 test('mudir buyurtmani bugunga oladi va kun hisobi ro\'yxat bilan bir xil', async () => {
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
-  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  //  ★ O'Z MIJOZI — va buning sababi KALENDAR. Bu test mahsulotni
+  //  AYNAN bugungi kun bilan chiqaradi (boshqa sana bilan ishlay
+  //  olmaydi ham: «bugun nechtasi ketdi» degan savolning o'zi
+  //  shunday). Qarzdorlik testi esa o'sha mijozning lentasidan ikki
+  //  QOTIB qo'yilgan kunni sanaydi — va bugun o'sha kunlardan biriga
+  //  to'g'ri kelsa (4-oktabr) bu chiqim o'sha yig'indiga qo'shilib,
+  //  kod o'zgarmagan holda test qizil bo'lardi. Ikki test bitta
+  //  mijozning lentasini bo'lishib ishlatmasligi kerak.
+  const mijoz = (await H.id(
+    `INSERT INTO customers (name, region) VALUES ('Sinov kun mijozi', 'Toshkent')
+     ON CONFLICT (lower(name)) DO UPDATE SET region = 'Toshkent' RETURNING id`)).id;
   const bugun = new Date().toISOString().slice(0, 10);
 
   const u = (await admin('POST', '/api/units/', { items: [
@@ -3710,16 +3720,26 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
     'jadval va tafsilot bitta raqamni aytadi');
 
   //  ★ Tekshirilayotgan narsa esa ANIQ: sotilgan narx chiqarishda
-  //  konverga KO'CHADI (modules/sales.js). Konverning o'zida narx yo'q
-  //  edi (tsexdan kelgan ikkitasi), lekin mijoz yuk xatidagi summani
-  //  to'laydi — 6 × 250 = 1500. Shuning uchun raqam o'sha ikki KUN
-  //  bo'yicha sanaladi: sanalari testlarda qo'lda yozilgan, ya'ni
-  //  kalendar almashsa ham joyida qoladi.
-  const KUN = ['2026-10-04', '2026-10-06'];
-  const kochgan = okt_t.rows
-    .filter((x) => KUN.includes(String(x.on_date).slice(0, 10)))
-    .reduce((a, x) => a + Number(x.debit), 0);
-  assert.equal(kochgan, 1500, String(kochgan));
+  //  konverga KO'CHADI (modules/sales.js) — tsexdan kelgan konverning
+  //  O'ZIDA narx bo'lmasa ham, mijoz yuk xatidagi summani to'laydi.
+  //
+  //  ★ RAQAM QOTIB QO'YILMAYDI, va bu ikki marta o'rganilgan dars.
+  //  Avval ikki QOTIB qo'yilgan kunning yig'indisi 1500 deb yozilgan
+  //  edi. U ikki tomondan buzildi: bugun o'sha kunlardan biriga
+  //  to'g'ri kelsa kunlik reja testining chiqimi ham qo'shilardi, va
+  //  har YANGI test o'sha mijozga o'sha kunlarda mahsulot chiqarsa
+  //  raqam yana o'sardi — ya'ni kod o'zgarmagan holda test qizil
+  //  bo'lardi va aybdor begona testda turardi.
+  //
+  //  Shuning uchun tekshiruv QOIDANING o'ziga ko'chdi: chiqib ketgan
+  //  har qator noldan KATTA bo'lishi kerak. Narx ko'chmay qolsa
+  //  aynan shu yerda nol bo'lib chiqadi — 1500 ham o'shani
+  //  qo'riqlardi, faqat begona testlarga bog'lanib.
+  const chiqim = okt_t.rows.filter((x) => x.kind === 'ship');
+  assert.ok(chiqim.length, 'oraliqda chiqim bor');
+  for (const x of chiqim)
+    assert.ok(Number(x.debit) > 0,
+      `${x.doc_no || x.note}: chiqib ketgan mahsulot narxsiz tushgan`);
   assert.equal(Number(r.credit), 0, 'kassa yo\'q — haqdor bo\'sh');
   //  Saldo o'z TOMONIDA beriladi: qarzdor — mijozning korxonaga qarzi,
   //  haqdor — korxonaning mijozga qarzi. Bitta ishorali raqam bo'lsa
@@ -7658,6 +7678,155 @@ test("kirim hujjati: ombor to'ladi, ta'minotchining qarzi oshadi", async () => {
   assert.equal((await usta('POST', '/api/materials/receipts', {
     supplier_id: tam, warehouse_id: wh,
     items: [{ material_id: m.id, qty: 5, price: 20 }] })).status, 403);
+});
+
+test("T/M ombor mudiri: chiqarishni ko'radi, ikki yo'nalishda ko'chiradi", async () => {
+  //  ★ UCHALA ISH BITTA ODAMNIKI (zavod qarori, 2026-10). T/M ombor
+  //  mudiriga uchta narsa kerak va uchalasi ham `omborchi` ROLIDA
+  //  turishi shart — administratorda emas:
+  //
+  //    1. savdo «Mijozga chiqarilsin» deganini KO'RADI;
+  //    2. T/M dan vitrinaga mahsulot jo'natadi;
+  //    3. vitrinadan T/M ga qaytarib oladi.
+  //
+  //  Ilgari uchalasi ham FAQAT `admin` bilan sinalgandi va unda hamma
+  //  huquq bor: `omborchi` dan bitta huquq tushib qolsa testlar
+  //  baribir yashil turardi va buni mudir ertalab, o'z ekranida
+  //  bilardi. Shuning uchun bu yerda ataylab oddiy rol turadi.
+  const { db } = require('../db');
+  const mudir = await xodim('Sinov TM mudir', 'omborchi');
+  const tm = (await H.id(`SELECT id FROM warehouses WHERE code='TM'`)).id;
+  const vitr = await H.id(
+    `SELECT id, code, name FROM warehouses WHERE kind='fg' AND code <> 'TM'
+      AND is_active ORDER BY sort LIMIT 1`);
+
+  //  ★ DOIRASI BO'SH — va bu uning ishining SHARTI, qulaylik emas:
+  //  vitrina biriktirilsa `/fg/moves` T/M ni «sizga biriktirilmagan»
+  //  deb rad etardi va mudir o'z javonidan mahsulot jo'nata olmasdi.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM worker_roles wr
+       JOIN workers w ON w.id = wr.worker_id
+      WHERE w.name = 'Sinov TM mudir' AND wr.scope_warehouse_id IS NOT NULL`)).n,
+    0, "T/M mudirida vitrina doirasi bo'lmaydi");
+
+  // ── 1. «MIJOZGA CHIQARILSIN» MUDIRNING EKRANIDA ──────────────────
+  //
+  //  Ro'yxat DOIRA bilan ham, menejer bilan ham qisqarmaydi: mudir
+  //  butun zavodning chiqadigan buyurtmasini ko'radi — kunni o'sha
+  //  ro'yxatdan tuzadi.
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Sinov TM mudir mijozi', region: 'Toshkent' })).body;
+  const uBron = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 3, color: 'Oq', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mij.id, ship_to: 'ZAVOD', due_on: '2026-10-05',
+    items: [{ product_id: PENAL, qty: 3, color: 'Oq', price: 100 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  const bron = await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: uBron.id, qty: 3 });
+  assert.equal(bron.status, 200, bron.text);
+
+  //  Hali «Tayyor» — mudirga UMUMAN chiqmaydi: mijoz bilan kun
+  //  kelishilmagan va u hali savdoning qo'lida.
+  assert.ok(!(await mudir('GET', '/api/sales/shipping')).body.rows
+    .some((r) => r.id === z.id), "«Tayyor» buyurtma mudirga chiqmaydi");
+
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  const sh = await mudir('GET', '/api/sales/shipping');
+  assert.equal(sh.status, 200, sh.text);
+  const bor = sh.body.rows.find((r) => r.id === z.id);
+  assert.ok(bor, '«Mijozga chiqarilsin» mudirning ro\'yxatida');
+  assert.equal(bor.units.length, 1, 'konver qayerda turgani ham keladi');
+
+  //  Kunlik rejaga olish ham uning ishi.
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/plan-day`,
+    { on: '2026-10-02' })).status, 200);
+
+  // ── 2. T/M → VITRINA ────────────────────────────────────────────
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 6, color: 'Venge', is_opening: true,
+      fg_on: '2026-09-01' }] })).body.created[0];
+
+  //  Vitrinaga mas'ul xodim — uchinchi bosqichni u bajaradi.
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov vitrina 3'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name='Sinov vitrina 3')`);
+  const v = (await H.id(`SELECT id FROM workers WHERE name='Sinov vitrina 3'`)).id;
+  await db.query(
+    `INSERT INTO worker_roles (worker_id, role_code, scope_warehouse_id)
+     VALUES ($1,'sotuvchi',$2)
+     ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_warehouse_id = $2`,
+    [v, vitr.id]);
+  const sotuv = H.api(base, await H.sessionFor('Sinov vitrina 3'));
+
+  const d1 = await mudir('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: vitr.id, items: [{ unit_id: u.id, qty: 4 }] });
+  assert.equal(d1.status, 200, d1.text);
+  assert.match(d1.body.doc_no, /^H\d{2}-\d{4}$/);
+
+  //  T/M dan chiqayotganini MUDIR o'zi jo'natadi: javonni o'zi
+  //  sanaydi va mashinaga o'zi ortadi — ikki odam qoidasi u yerda
+  //  ishni to'xtatardi, hech narsani himoya qilmay.
+  assert.equal((await mudir('POST',
+    `/api/warehouse/fg/returns/${d1.body.id}/confirm`)).status, 200);
+  assert.equal((await sotuv('POST',
+    `/api/warehouse/fg/returns/${d1.body.id}/accept`)).status, 200);
+  assert.equal((await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no=$1 AND warehouse_id=$2 AND status='fg'`,
+    [u.conveyor_no, vitr.id])).n, 4, 'vitrinada 4 ta');
+
+  // ── 3. VITRINA → T/M, O'SHA HUJJAT BILAN ────────────────────────
+  //
+  //  Ikkinchi mexanizm yozilmadi: hujjat IKKI TOMONLI
+  //  (`wh_returns.to_warehouse_id`) va mudir teskari yo'nalishni ham
+  //  o'sha oynadan yozadi.
+  const vUnit = (await H.id(
+    `SELECT id FROM production_units
+      WHERE conveyor_no=$1 AND warehouse_id=$2 AND status='fg'`,
+    [u.conveyor_no, vitr.id])).id;
+  const d2 = await mudir('POST', '/api/warehouse/fg/moves',
+    { to_warehouse_id: tm, items: [{ unit_id: vUnit, qty: 3 }] });
+  assert.equal(d2.status, 200, d2.text);
+
+  //  ★ LEKIN IKKI ODAM QOIDASI BU YO'NALISHDA ISHLAYDI: javondan
+  //  mahsulot chiqayotganini DO'KONDAGI odam tasdiqlaydi. Mudir
+  //  hujjatni yozadi, lekin o'zi jo'natgan deb belgilay olmaydi —
+  //  aks holda vitrinadagi sotuvchi qo'l ko'tarmasdan turib
+  //  qoldig'idan mahsulot chiqib ketardi.
+  const ozi = await mudir('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/confirm`);
+  assert.equal(ozi.status, 400, ozi.text);
+  assert.match(ozi.body.error, /o'zingiz tasdiqlay olmaysiz/i);
+
+  assert.equal((await sotuv('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/confirm`)).status, 200);
+
+  //  Yo'lda: vitrinada HALI bor, T/M da HALI yo'q — ikkala qoldiq ham
+  //  to'g'ri.
+  assert.equal((await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no=$1 AND warehouse_id=$2 AND status='fg'`,
+    [u.conveyor_no, vitr.id])).n, 4, "yo'ldagi mahsulot vitrinada turadi");
+
+  //  Qabul qilish — MANZIL omborni ko'radigan odam, ya'ni mudir.
+  const q = await mudir('POST',
+    `/api/warehouse/fg/returns/${d2.body.id}/accept`);
+  assert.equal(q.status, 200, q.text);
+  assert.equal((await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no=$1 AND warehouse_id=$2 AND status='fg'`,
+    [u.conveyor_no, vitr.id])).n, 1, 'vitrinada 1 ta qoldi');
+  assert.equal((await H.id(
+    `SELECT SUM(qty)::int AS n FROM production_units
+      WHERE conveyor_no=$1 AND COALESCE(warehouse_id,$2)=$2 AND status='fg'`,
+    [u.conveyor_no, tm])).n, 5, 'T/M da 2 + 3 = 5 ta');
+
+  //  Ombor tarixida ikki yo'nalish ham o'z qatori bilan turadi.
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM warehouse_moves
+      WHERE conveyor_no=$1 AND from_warehouse_id=$2 AND to_warehouse_id=$3`,
+    [u.conveyor_no, vitr.id, tm])).n, 1, 'vitrinada chiqim, T/M da kirim');
 });
 
 test("ta'minotchiga qaytarish: ombor kamayadi, qarz kamayadi", async () => {
