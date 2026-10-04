@@ -655,6 +655,25 @@ UPDATE product_groups SET uom = 'dona'
 UPDATE product_groups SET no_prefix = 'MT' WHERE code = 'MATRAS' AND no_prefix IS NULL;
 UPDATE product_groups SET no_width  = 4    WHERE code = 'MATRAS' AND no_width  IS NULL;
 
+--  ★ MATRAS SAVDODA MEHMONXONA TO'PLAMIDA (zavod qarori, 2026-10).
+--  Foyda-zararda tushum turkumlarga bo'linadi va turkumi yo'q guruh
+--  «Turkumsiz» bo'lib ALOHIDA qatorda turardi — matras esa
+--  mehmonxona to'plami bilan birga sotiladi.
+--
+--  ★ SHU YERDA, `catalog-groups.sql` DAGI BAYROQDA EMAS, va bu
+--  muhim: guruhning O'ZI shu faylda tug'iladi, ya'ni o'sha paytda
+--  `catalog-groups` allaqachon o'tib bo'lgan va TOZA bazada qator
+--  hali yo'q edi — bayroq esa qo'yilib bo'lardi va keyin hech
+--  qachon ishlamasdi. Yangi muhit matrasni turkumsiz holda olardi
+--  va buni faqat foyda-zarar ochilganda bilinardi.
+--
+--  Doimiy qoida, bir martalik ko'chirish emas: bayroq O'TMISHDAGI
+--  ma'lumotni tuzatadi, bu esa guruh qachon yaratilsa ham
+--  tegishli (oylik doirasi bilan bir xil idiom). Faqat BO'SH katak
+--  to'ldiriladi — saytdan o'zgartirilgani qaytarib qo'yilmaydi.
+UPDATE product_groups SET sales_category = 'MEHMON'
+ WHERE code = 'MATRAS' AND sales_category IS NULL;
+
 --  Zavodda matrasning bitta turi sotiladi (zavod qarori): o'lcham
 --  bo'yicha ajratish kerak bo'lsa har o'lcham ALOHIDA mahsulot bo'ladi
 --  — xom ashyodagi «har rang alohida material» bilan bir xil qoida.

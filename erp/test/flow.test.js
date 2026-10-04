@@ -7852,12 +7852,14 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
     'penal va kamod bitta turkumda');
   assert.equal(turkum('YOTOQ').map((g) => g.code).join(), 'SP');
 
-  //  ★ MATRAS TURKUMSIZ, va bu yo'qolib ketmaydi: u zavodda
-  //  yasalmaydi va zavod uni hali turkumga qo'ymagan. Bo'sh katak
-  //  SAVOL bo'lib ko'rinadi — hisobotda «Turkumsiz» qatori bo'lib
-  //  turadi, chizilmay qolmaydi.
+  //  ★ MATRAS HAM MEHMONXONA TO'PLAMIDA (zavod qarori, 2026-10).
+  //  Ilgari u turkumsiz edi — zavod javobini bermagandi — va
+  //  foyda-zararda «Turkumsiz» bo'lib alohida qatorda turardi.
+  //  Matras zavodda YASALMAYDI (ta'minotchidan tayyor keladi),
+  //  lekin SOTILADI mehmonxona to'plami bilan birga: turkum
+  //  savdoniki, marshrutniki emas.
   const mat = kat.groups.find((g) => g.code === 'MATRAS');
-  if (mat) assert.equal(mat.sales_category, null);
+  if (mat) assert.equal(mat.sales_category, 'MEHMON');
 
   //  ── Ikki turkumdan mahsulot chiqarib yuboramiz
   const mij = (await admin('POST', '/api/units/customers',
@@ -7897,6 +7899,20 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
   const nomlar = tushum.map((r) => r.item_name);
   assert.ok(nomlar.indexOf("Mehmonxona to'plami") < nomlar.indexOf('Stul'),
     'mehmonxona stuldan oldin: ' + nomlar.join(' · '));
+
+  //  ★ HAR GURUHNING TURKUMI BOR, MATRASNIKI HAM (zavod qarori,
+  //  2026-10). Turkumsiz guruh foyda-zararda «Turkumsiz» bo'lib
+  //  ALOHIDA qatorda turadi va savdo bo'linishi yarim qolardi.
+  //
+  //  Matras ALOHIDA tekshiriladi, va sabab mexanizmda: uning guruhi
+  //  `warehouse.sql` da tug'iladi, ya'ni `catalog-groups.sql` dagi
+  //  bir martalik ko'chirish paytida qator hali YO'Q edi — bayroq
+  //  esa qo'yilib bo'lardi va toza bazada matras turkumsiz qolardi.
+  //  Shuning uchun qoida guruh yaratilgan joyning O'ZIDA va DOIMIY.
+  const turkumsiz = (await H.id(
+    `SELECT COALESCE(string_agg(code, ', ' ORDER BY code), '') AS yoq
+       FROM product_groups WHERE sales_category IS NULL`)).yoq;
+  assert.equal(turkumsiz, '', 'har guruhning savdo turkumi bor');
 
   //  ★ TURKUM GURUHDAN O'QILADI va u SAYTDAN o'zgaradi (4-qoida):
   //  zavod ertaga «kamod endi alohida turkum» desa bitta katakcha

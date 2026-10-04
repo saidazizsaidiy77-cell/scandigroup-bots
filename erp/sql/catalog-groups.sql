@@ -165,3 +165,4 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('savdo-turkumi');
   END IF;
 END $$;
+
