@@ -613,7 +613,18 @@ const App = (() => {
   //  ochadi, faqat boshqa ko'rinish bilan. Uch nusxa sahifa yozilsa
   //  qidiruv, chop etish va doira mantiqi uch joyda turardi va biri
   //  ertaga ikkinchisidan ajralib ketardi.
-  const yoli = (p) => p.href.split('?')[0];
+  //
+  //  ★ «REJADA» QATORIDA HAVOLA YO'Q, va bu yerda u YIQITARDI. Menyuda
+  //  hali yozilmagan bo'limlar kulrang yozuv bo'lib turadi
+  //  (`{ mod, nav, perm }` — `href` siz). `PAGES.find(shuSahifa)` esa
+  //  butun ro'yxatni kechib o'tadi, FILTRLANMAGAN holida: birinchi
+  //  href'siz qatorga yetganda `p.href.split` yiqilar, `drawNav`
+  //  to'xtar va `App.start` sahifaning O'Z yuklash funksiyasiga
+  //  umuman yetib bormasdi — ekran bo'sh qolardi. `Array.find`
+  //  birinchi topilganda to'xtaydi, shuning uchun ro'yxatda o'sha
+  //  qatordan OLDIN turgan sahifalar ishlar, keyingilari esa
+  //  jimgina bo'sh ochilardi (ombor paneli shunday edi).
+  const yoli = (p) => (p.href || '').split('?')[0];
   const hrefFor = (p, code) => {
     if (!Array.isArray(p.mod)) return p.href;
     return p.href + (p.href.includes('?') ? '&' : '?') + 'm=' + code;
@@ -622,6 +633,8 @@ const App = (() => {
   //  joriy manzilda ham shunday bo'lsa. `?m=` tekshirilmaydi — u
   //  qaysi BO'LIMDAN kirilganini aytadi, sahifani emas.
   const shuSahifa = (p) => {
+    //  Havolasi yo'q qator hech qachon «joriy sahifa» bo'lmaydi.
+    if (!p.href) return false;
     const bu = location.pathname === '/index.html' ? '/' : location.pathname;
     if (yoli(p) !== bu) return false;
     const kerak = new URLSearchParams(p.href.split('?')[1] || '');
