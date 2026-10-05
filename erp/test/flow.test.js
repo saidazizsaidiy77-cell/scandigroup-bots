@@ -11021,6 +11021,75 @@ test('ta\'sischi hamma narsani ko\'radi, hech narsaga tegmaydi', async () => {
   assert.equal((await eg('POST', '/api/units/requests/1/approve', {})).status, 403);
 });
 
+test('xodim belgisi: kassa bo\'limi va ta\'minotchi qo\'shish', async () => {
+  //  ★ BITTA ROLDA IKKI XIL ODAM (zavod qarori, 2026-10). Kassaga
+  //  yozish huquqi ombor mudiri, ta'minotchi va tsex boshlig'ida ham
+  //  bor — qo'lidagi podotchyot sarfini o'zi yozsin degan qoida
+  //  bilan. Lekin qo'liga pul berilmaydigan ta'minotchida bo'lim
+  //  bo'sh turadi va faqat chalg'itadi.
+  //
+  //  Rol buni ajrata olmaydi (huquqlar KODDA), shu sababdan belgi
+  //  XODIMDA — `sees_warehouse` bilan aynan bir xil idiom.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov ta''minot xodimi'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers
+                                      WHERE name = 'Sinov ta''minot xodimi')`);
+  const id = (await H.id(
+    `SELECT id FROM workers WHERE name = 'Sinov ta''minot xodimi'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'taminotchi') ON CONFLICT DO NOTHING`, [id]);
+
+  //  ── Standart: IKKALASI HAM OCHIQ. Hech kimning ekrani
+  //  o'zidan-o'zi o'zgarmaydi.
+  let x = H.api(base, await H.sessionFor("Sinov ta'minot xodimi"));
+  let me = (await x('GET', '/api/auth/me')).body;
+  assert.ok((me.permissions || []).includes('cash.entry'), 'kassa ochiq');
+  assert.notEqual(me.can_add_supplier, false);
+  const qosh = () => x('POST', '/api/purchasing/suppliers',
+    { name: 'Sinov belgi ta\'minotchisi ' + Date.now() });
+  assert.equal((await qosh()).status, 200);
+
+  //  ── «Bank va kassa» belgisi olib tashlanadi
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + id,
+    { sees_cash: false })).status, 200);
+  x = H.api(base, await H.sessionFor("Sinov ta'minot xodimi"));
+  me = (await x('GET', '/api/auth/me')).body;
+  assert.ok(!(me.permissions || []).some((p) => p.startsWith('cash.')),
+    'kassa huquqlari UMUMAN o\'qilmaydi: ' + (me.permissions || []).join(', '));
+  //  Menyu, sahifa va API BIR VAQTDA yopiladi — har sahifaga alohida
+  //  tekshiruv yozilsa ertaga qo'shilgani unutilardi.
+  assert.equal((await x('GET', '/api/cash/list')).status, 403);
+  assert.equal((await x('POST', '/api/cash/ops', { op_date: '2026-09-01',
+    from_kind: 'worker', to_kind: 'expense', amount: 10,
+    currency: 'USD' })).status, 403);
+
+  //  Qolgan huquqlariga TEGILMAYDI: u baribir ta'minotchi.
+  assert.ok((me.permissions || []).includes('purchasing.view'));
+  assert.equal((await x('GET', '/api/purchasing/suppliers')).status, 200);
+
+  //  ── «Ta'minotchi qo'shadi» belgisi olib tashlanadi
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + id,
+    { can_add_supplier: false })).status, 200);
+  x = H.api(base, await H.sessionFor("Sinov ta'minot xodimi"));
+  const rad = await qosh();
+  assert.equal(rad.status, 403, rad.text);
+  assert.match(rad.body.error, /Xodimlar sahifasida/);
+  //  Fayldan yuklash ham QO'SHISH yo'li: ikkinchi eshik ochiq qolsa
+  //  qoida birinchi kundanoq chetlab o'tilardi.
+  assert.equal((await x('POST', '/api/import/suppliers', {})).status, 403);
+  //  Ko'rish va TAHRIRLASH esa ochiq qolaveradi — telefonni
+  //  to'g'rilash ro'yxatni ikkiga bo'lmaydi.
+  assert.equal((await x('GET', '/api/purchasing/suppliers')).status, 200);
+
+  //  ── Qaytarib yoqiladi: belgi ikki tomonga ham ishlaydi
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + id,
+    { sees_cash: true, can_add_supplier: true })).status, 200);
+  x = H.api(base, await H.sessionFor("Sinov ta'minot xodimi"));
+  assert.ok(((await x('GET', '/api/auth/me')).body.permissions || [])
+    .includes('cash.entry'));
+  assert.equal((await qosh()).status, 200);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

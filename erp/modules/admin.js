@@ -51,7 +51,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  faqat «qo'yilganmi yoki yo'q» ko'rinadi. Unutilgan PIN topilmaydi,
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
-            w.sales_head_id,
+            w.sales_head_id, w.sees_cash, w.can_add_supplier,
             w.can_release, w.can_request_unit, w.can_add_customer,
             w.supply_reports, w.daily_digest,
             w.mat_scope,
@@ -217,7 +217,8 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
           can_request_unit, can_add_customer, supply_reports, daily_digest,
-          mat_scope, sales_head_id, roles = [] } = req.body;
+          mat_scope, sales_head_id, sees_cash, can_add_supplier,
+          roles = [] } = req.body;
   if (!name || !String(name).trim())
     return res.status(400).json({ error: 'Ism majburiy' });
   const kod = req.body.pin ? String(req.body.pin) : null;
@@ -235,8 +236,9 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
                             can_release, can_request_unit, can_add_customer,
                             supply_reports, daily_digest, mat_scope,
                             staff_group, shop_id, section_id, dept, position, hired_at,
-                            sales_head_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+                            sales_head_id, sees_cash, can_add_supplier)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+               $22,$23,$24)
        RETURNING id`,
       [name.trim(), phone || null, ...pinCols(kod), tg,
        can_hold_cash === true, cash_all_customers === true,
@@ -273,7 +275,12 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
        //  bo'lim boshlig'ining KPI si qo'l ostidagilarning
        //  yig'indisidan chiqadi. Standarti — BO'SH: hech kim
        //  o'zidan-o'zi kimningdir qo'l ostiga tushmasin.
-       Number(sales_head_id) || null])).rows[0];
+       Number(sales_head_id) || null,
+       //  Standarti — KO'RADI va QO'SHADI: hech kimning ekrani
+       //  o'zidan-o'zi o'zgarmaydi (izoh: sql/cash.sql,
+       //  sql/purchasing.sql).
+       sees_cash !== false,
+       can_add_supplier !== false])).rows[0];
     for (const r of roles) {
       await client.query(
         `INSERT INTO worker_roles (worker_id, role_code, scope_shop_id, scope_channel,
@@ -303,7 +310,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
   const { name, phone, tg_id, active, can_hold_cash, cash_all_customers,
           can_spend_cash, sees_warehouse, can_release,
           can_request_unit, can_add_customer, supply_reports, daily_digest,
-          mat_scope, sales_head_id, roles } = req.body;
+          mat_scope, sales_head_id, sees_cash, can_add_supplier,
+          roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -382,7 +390,12 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          --  «yo'q» degani — menejer boshliqdan chiqarilishi kerak
          --  bo'lsa boshqa yo'l qolmasdi.
          sales_head_id = CASE WHEN $26::int IS NULL THEN sales_head_id
-                              WHEN $26 = 0 THEN NULL ELSE $26 END
+                              WHEN $26 = 0 THEN NULL ELSE $26 END,
+         --  «Bank va kassa» bo'limini ko'radimi (izoh: sql/cash.sql)
+         --  va ta'minotchi qo'shadimi (izoh: sql/purchasing.sql) —
+         --  yuborilmasa tegilmaydi.
+         sees_cash = COALESCE($27, sees_cash),
+         can_add_supplier = COALESCE($28, can_add_supplier)
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -404,7 +417,9 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        typeof daily_digest === 'boolean' ? daily_digest : null,
        //  Bo'sh matn ham, nol ham «yo'q» degani; maydon umuman
        //  yuborilmasa NULL bo'ladi va tegilmaydi.
-       sales_head_id === undefined ? null : (Number(sales_head_id) || 0)]);
+       sales_head_id === undefined ? null : (Number(sales_head_id) || 0),
+       typeof sees_cash === 'boolean' ? sees_cash : null,
+       typeof can_add_supplier === 'boolean' ? can_add_supplier : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {

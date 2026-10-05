@@ -18,6 +18,7 @@ async function createSession(workerId, surface) {
 async function loadWorker(workerId) {
   const w = (await db.query(
     `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
+            sees_cash, can_add_supplier,
             can_release, can_request_unit, can_add_customer, mat_scope
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
@@ -48,6 +49,12 @@ async function loadWorker(workerId) {
     //  qolaveradi va belgi ularga tegmaydi.
     permissions: perms.rows.map((r) => r.permission_code)
       .filter((p) => w.sees_warehouse !== false || !p.startsWith('warehouse.'))
+      //  ★ «BANK VA KASSA» BO'LIMI (izoh: sql/cash.sql). `cash.entry`
+      //  ta'minotchida ham, ombor mudirida ham bor — qo'lidagi
+      //  podotchyot sarfini o'zi yozsin degan qoida bilan. Belgi
+      //  olib tashlansa HAMMASI birdan yopiladi: menyu, sahifa va
+      //  API (`sees_warehouse` bilan aynan bir xil idiom).
+      .filter((p) => w.sees_cash !== false || !p.startsWith('cash.'))
       .filter((p) => w.can_request_unit !== false || p !== 'production.request'),
     roles: roles.rows,
     // Usta faqat o'z tsexini ko'rishi uchun: rollardagi eng tor doira

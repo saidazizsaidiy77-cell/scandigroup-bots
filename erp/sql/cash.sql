@@ -535,6 +535,29 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS cash_all_customers
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_spend_cash
   BOOLEAN NOT NULL DEFAULT true;
 
+--  ★ «BANK VA KASSA» BO'LIMI HAMMAGA KERAK EMAS (zavod qarori,
+--  2026-10). `cash.entry` ombor mudiri, ta'minotchi va tsex
+--  boshlig'ida ham bor — qo'lidagi podotchyot sarfini o'zi yozsin
+--  degan qoida bilan. Lekin bu HAMMA o'sha roldagi odamga kerak
+--  emas: qo'liga pul berilmaydigan ta'minotchida bo'lim bo'sh
+--  turadi va faqat chalg'itadi.
+--
+--  Rol buni ajrata olmaydi: ikkalasi ham `taminotchi` va rol
+--  huquqlari KODDA turadi (`sql/core-seed.sql`), ya'ni bitta odam
+--  uchun o'zgartirib bo'lmaydi. Shuning uchun belgi XODIMDA —
+--  `sees_warehouse` bilan AYNAN bir xil idiom, bir xil sabab va bir
+--  xil joyda (Xodimlar sahifasi). Kodga na ism, na lavozim
+--  yoziladi (4-qoida).
+--
+--  Standarti `true`: hech kimning ekrani o'zidan-o'zi o'zgarmaydi.
+--
+--  Belgi olib tashlansa xodimning `cash.*` huquqlari UMUMAN
+--  o'qilmaydi (`erp/auth.js`, `loadWorker`) — menyudagi bo'lim ham,
+--  sahifalar ham, API ham BIR VAQTDA yopiladi. Har sahifaga alohida
+--  tekshiruv yozilsa ertaga qo'shilgani unutilardi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS sees_cash
+  BOOLEAN NOT NULL DEFAULT true;
+
 --  ★ QO'LIDAGI PULNI NIMAGA SARFLASHI MUMKIN.
 --
 --  Pul «hisob berish sharti bilan» beriladi: xodim sarflab, nimaga

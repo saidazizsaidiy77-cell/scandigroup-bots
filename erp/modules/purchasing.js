@@ -36,6 +36,18 @@ router.get('/suppliers', need('purchasing.view', 'purchasing.manage'), wrap(asyn
 
 // Bitta ta'minotchi yoki ro'yxatni birdan qabul qiladi (import uchun)
 router.post('/suppliers', need('purchasing.manage'), wrap(async (req, res) => {
+  //  ★ TA'MINOTCHINI HAR XODIM QO'SHMAYDI (izoh: sql/purchasing.sql).
+  //  Ro'yxat ta'minotning O'QI: kirim hujjati, qarzdorlik va
+  //  solishtirma dalolatnoma shu qatorga bog'lanadi — bitta
+  //  ta'minotchi ikki-uch nom bilan kirsa qarzi ham shuncha qismga
+  //  bo'linib qolardi. Belgi XODIMDA, rolda emas: zavodda bir nechta
+  //  ta'minotchi bor va ro'yxatni ulardan BIRI yuritadi.
+  //  Tekshiruv SERVERDA: tugmani yashirish himoya emas.
+  if (!req.user.can_add_supplier) {
+    const e = new Error("Ta'minotchi qo'shish huquqi yo'q \u2014 Xodimlar "
+      + "sahifasida \u00abTa'minotchi qo'shadi\u00bb katagini belgilang");
+    e.status = 403; throw e;
+  }
   const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
   const client = await db.connect();
   try {

@@ -398,6 +398,26 @@ function openForm(id){
               <span style="flex:1">Qo'lidagi pulni harajatga yozadi
                 <span class="muted" style="font-size:12px">· belgilanmasa pul
                   faqat kassaga topshiriladi — inkassator shunday</span></span>
+            </div>
+
+            <!--  ★ «BANK VA KASSA» BO'LIMI HAMMAGA KERAK EMAS (izoh:
+                  sql/cash.sql). Kassaga yozish huquqi ombor mudiri,
+                  ta'minotchi va tsex boshlig'ida ham bor — qo'lidagi
+                  podotchyot sarfini o'zi yozsin degan qoida bilan.
+                  Lekin qo'liga pul berilmaydigan odamda bo'lim bo'sh
+                  turadi va faqat chalg'itadi. Rol buni ajrata
+                  olmaydi: ikkalasi ham bitta rol.
+
+                  (Izohda teskari qo'shtirnoq YO'Q: kartochka JS
+                  template literal ichida chiziladi va u yerdagi
+                  belgi matnni uzib qo'yadi.) -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="wCashSee" style="width:auto"
+                     ${w && w.sees_cash === false ? '' : 'checked'}>
+              <span style="flex:1">Bank va kassa bo'limini ko'radi
+                <span class="muted" style="font-size:12px">· belgilanmasa
+                  menyuda «Bank va kassa» umuman chizilmaydi — «Mening
+                  pulim» ham, kassa ham</span></span>
             </div></div>
 
           <!--  ★ OMBOR BITTA ROLDA IKKI XIL ODAMGA KERAK BO'LADI.
@@ -450,6 +470,24 @@ function openForm(id){
                   kiritadi va ro'yxatni fayldan yuklaydi; belgilanmagan
                   xodimda ikkala tugma ham chizilmaydi. Mijozni
                   TAHRIRLASH baribir ochiq qolaveradi</span></span>
+            </div>
+
+            <!--  ★ TA'MINOTCHINI HAR XODIM QO'SHMAYDI (izoh:
+                  sql/purchasing.sql). Ro'yxat ta'minotning O'QI:
+                  kirim hujjati, qarzdorlik va solishtirma
+                  dalolatnoma shu qatorga bog'lanadi — bitta
+                  ta'minotchi ikki-uch nom bilan kirsa qarzi ham
+                  shuncha qismga bo'linib qolardi. Mijozdagi «Mijoz
+                  qo'shadi» ning ko'zgu aksi. -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="wSupAdd" style="width:auto"
+                     ${w && w.can_add_supplier === false ? '' : 'checked'}>
+              <span style="flex:1">Ta'minotchi qo'shadi
+                <span class="muted" style="font-size:12px">· yangi
+                  ta'minotchi kiritadi va ro'yxatni fayldan yuklaydi;
+                  belgilanmagan xodimda ikkala tugma ham chizilmaydi.
+                  Ta'minotchini TAHRIRLASH baribir ochiq
+                  qolaveradi</span></span>
             </div>
 
             <!--  ★ KIMNING QO'L OSTIDA (izoh: sql/sales-kpi.sql).
@@ -692,6 +730,8 @@ async function save(id){
     //  Bo'sh tanlangani «yo'q» degani: menejerni boshliqdan
     //  chiqarish uchun boshqa yo'l qolmasdi.
     sales_head_id: Number($('wSalesHead').value) || 0,
+    sees_cash: $('wCashSee').checked,
+    can_add_supplier: $('wSupAdd').checked,
     can_request_unit: $('wReq').checked,
     supply_reports: $('wSup').checked,
     daily_digest: $('wDig').checked,

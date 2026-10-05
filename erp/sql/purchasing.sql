@@ -103,3 +103,27 @@ SELECT s.id, s.name, s.phone, s.country, s.region, s.inn, s.note, s.active,
 FROM suppliers s
 LEFT JOIN supplier_categories sc ON sc.code = s.category
 LEFT JOIN workers w              ON w.id    = s.manager_id;
+
+-- ─────────────────────────────────── TA'MINOTCHINI KIM QO'SHADI
+--
+--  ★ TA'MINOTCHINI HAR XODIM QO'SHMAYDI (zavod qarori, 2026-10).
+--  Ro'yxat ta'minotning O'QI: kirim hujjati, qarzdorlik va
+--  solishtirma dalolatnoma shu qatorga bog'lanadi — bitta
+--  ta'minotchi ikki-uch nom bilan kirsa qarzi ham shuncha qismga
+--  bo'linib qolardi va uni keyin birlashtirib bo'lmasdi.
+--
+--  Mijozdagi `can_add_customer` ning KO'ZGU AKSI: bir xil savol,
+--  bir xil idiom, bir xil standart. Rol buni ajrata olmaydi —
+--  zavodda bir nechta ta'minotchi bor va ro'yxatni ulardan BIRI
+--  yuritadi.
+--
+--  Standarti `true`: hech kimning ekrani o'zidan-o'zi o'zgarmaydi.
+--  Belgisi yo'q xodimda «Ta'minotchi qo'shish» va «Ro'yxatni
+--  import qilish» tugmalari UMUMAN chizilmaydi; TAHRIRLASH esa
+--  ochiq qolaveradi — telefon yoki manzilni to'g'rilash ro'yxatni
+--  ikkiga bo'lmaydi (mijozdagi bilan bir xil qoida).
+--
+--  Tekshiruv SERVERDA (`POST /api/purchasing/suppliers` va
+--  `POST /api/import/suppliers`): tugmani yashirish himoya emas.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_add_supplier
+  BOOLEAN NOT NULL DEFAULT true;

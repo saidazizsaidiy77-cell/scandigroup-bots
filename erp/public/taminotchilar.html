@@ -20,8 +20,7 @@
 
 <div class="top">
   <div class="brand"><span class="dot"></span><h1>Ta'minotchilar</h1></div>
-  <div class="row"><button class="primary" onclick="openForm()">Ta'minotchi qo'shish</button>
-    <button onclick="openImport()">Ro'yxatni import qilish</button>
+  <div class="row"><span id="btnAdd"></span>
     <!--  ★ RO'YXATNI YUKLAB OLISH. Ta'minotchi NOMI boshqa fayllarda
           KALIT bo'lib ishlatiladi — xom ashyo spravochnigida har
           materialning yonida u yoziladi va import nomi bo'yicha
@@ -390,7 +389,23 @@ async function save(id){
   }catch(e){ alert(e.message); }
 }
 
-App.start(load, 'purchasing.view', 'purchasing.manage');
+//  ★ TUGMALAR BELGIGA QARAB CHIZILADI (izoh: sql/purchasing.sql).
+//  Ta'minotchi ro'yxatini zavodda ulardan BIRI yuritadi: bitta
+//  ta'minotchi ikki-uch nom bilan kirsa qarzi ham shuncha qismga
+//  bo'linib qolardi. Bu KO'RINISH — tekshiruv serverda
+//  (POST /api/purchasing/suppliers va POST /api/import/suppliers).
+//
+//  Tahrirlash tugmasiga tegilmaydi: telefon yoki manzilni
+//  to'g'rilash ro'yxatni ikkiga bo'lmaydi (mijozdagi bilan bir xil
+//  qoida).
+function tugmalar() {
+  $('btnAdd').innerHTML = App.me()?.can_add_supplier === false ? ''
+    : `<button class="primary" onclick="openForm()">Ta'minotchi qo'shish</button>
+       <button onclick="openImport()">Ro'yxatni import qilish</button>`;
+}
+
+App.start(async () => { tugmalar(); await load(); },
+  'purchasing.view', 'purchasing.manage');
 </script>
 </body>
 </html>
