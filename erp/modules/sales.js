@@ -2828,7 +2828,24 @@ const bonusStavka = (bands, kpiFoiz) => {
 //  o'zinikini — doira bilan emas, `worker_id` ning O'ZI bilan:
 //  «mening foizim» degan savolga boshqa odamning raqami
 //  aralashmasligi kerak.
-const kpiHammasi = (req) => req.user.permissions.includes('sales.kpi');
+//
+//  ★ KO'RISH REJA QO'YISHDAN KENGROQ (zavod qarori, 2026-10).
+//  Ilgari ikkalasi BITTA huquqda edi va faqat ko'radigan odam —
+//  ta'sischi — o'z varag'ini (bo'sh) ko'rib, butun bo'limning
+//  natijasini ko'ra olmasdi: KPI unga ochilgandek turardi-yu,
+//  ichida hech narsa yo'q edi.
+//
+//  `production.reports` — «butun zavod hisoboti» huquqi. Uni savdo
+//  ko'radigan odamlardan faqat rahbariyat oladi (ta'sischi,
+//  direktor, administrator), ya'ni shart hech kimga qo'shimcha
+//  narsa ochmaydi — faqat ko'rishni YOZISHDAN ajratadi. Reja
+//  qo'yish `sales.kpi` da QOLAVERADI va `POST /kpi` o'sha huquqni
+//  talab qiladi: ko'rish huquqi yozish huquqi emas.
+const kpiHammasi = (req) => req.user.permissions.includes('sales.kpi')
+  || req.user.permissions.includes('production.reports');
+
+//  Reja QO'YADIGAN odam — ekrandagi tugma shu belgidan chiziladi.
+const kpiYozadi = (req) => req.user.permissions.includes('sales.kpi');
 
 router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const K = KPI_OY(req.query.mon);
@@ -2940,7 +2957,8 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     };
   }).sort((a, b) => b.umumiy - a.umumiy);
 
-  res.json({ ...K, nisbat, hammasi, bands: bands.rows,
+  res.json({ ...K, nisbat, hammasi, yozadi: kpiYozadi(req),
+             bands: bands.rows,
              xodimlar: xodim.rows, categories: cat.rows,
              indicators: ind.rows, varaq });
 }));

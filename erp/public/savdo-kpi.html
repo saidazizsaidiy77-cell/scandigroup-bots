@@ -60,7 +60,10 @@ const pct = (v) => (Number(v || 0) * 100).toLocaleString('ru-RU',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
 
 let d = null;
-const canPlan = () => App.can('sales.kpi');
+//  Reja qo'yish tugmasi — SERVER aytgan belgidan (`yozadi`): faqat
+//  ko'radigan odam (ta'sischi) hamma varaqni ko'radi, lekin reja
+//  qo'ymaydi. Ikki joyda yozilgan shart bir kun ajralib ketardi.
+const canPlan = () => !!d?.yozadi;
 
 //  Ko'rsatkichning o'lchov birligi: pul dollarda, qolgani dona.
 //  Birlik BAZADA (`sales_kpi_indicators.unit`) — yangi ko'rsatkich
@@ -105,7 +108,8 @@ function draw() {
     $('fWorker').innerHTML = '<option value="">— barchasi —</option>'
       + d.xodimlar.map((w) => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
     $('fWorker').value = eski || '';
-    $('btnPlan').innerHTML = `<button class="primary" onclick="planOch()">Reja qo'yish</button>`;
+    $('btnPlan').innerHTML = canPlan()
+      ? `<button class="primary" onclick="planOch()">Reja qo'yish</button>` : '';
   }
 
   $('izoh').innerHTML = `Oyda <b>${d.jami_kun}</b> kun, shundan

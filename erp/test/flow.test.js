@@ -10958,6 +10958,69 @@ test('nomuvofiq buyurtmalarni dastur o\'zi topadi', async () => {
   await H.id(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [z.id]);
 });
 
+test('ta\'sischi hamma narsani ko\'radi, hech narsaga tegmaydi', async () => {
+  //  ★ ZAVOD QARORI (2026-10). Korxona egasi kun bo'yi dasturda
+  //  ishlamaydi: u raqamni o'qiydi. Direktor roli unga to'g'ri
+  //  kelmaydi — unda `cash.manage` bor va ta'sischi bexosdan kassa
+  //  operatsiyasini bekor qilib qo'yishi mumkin edi; buni faqat oy
+  //  oxirida, qoldiq solishtirilganda bilinardi.
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov ta''sischi'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers
+                                      WHERE name = 'Sinov ta''sischi')`);
+  const id = (await H.id(
+    `SELECT id FROM workers WHERE name = 'Sinov ta''sischi'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'tasischi') ON CONFLICT DO NOTHING`, [id]);
+  const eg = H.api(base, await H.sessionFor("Sinov ta'sischi"));
+
+  //  ★ YOZADIGAN HUQUQ BITTASI HAM YO'Q — ro'yxat `%.view` dan O'ZI
+  //  yig'iladi, shuning uchun ertaga yangi modul qo'shilsa uning
+  //  KO'RISH huquqi o'zi tushadi, yozadigani esa hech qachon.
+  const huq = (await eg('GET', '/api/auth/me')).body.permissions || [];
+  const yozadigan = huq.filter((p) => !/\.(view|reports|audit)$/.test(p));
+  assert.deepEqual(yozadigan, [], 'faqat ko\'rish huquqlari: ' + huq.join(', '));
+
+  //  ── KO'RADI: moliya, savdo, ishlab chiqarish, ombor, ta'minot
+  for (const yol of ['/api/cash/pl', '/api/cash/flow',
+                     '/api/cash/working-capital', '/api/sales/orders',
+                     '/api/units/customers/stats', '/api/units/',
+                     '/api/warehouse/fg/summary', '/api/materials/stock',
+                     '/api/admin/audit'])
+    assert.equal((await eg('GET', yol)).status, 200, yol + ' ochilmadi');
+
+  //  ★ KPI — HAMMA MENEJERNIKI, LEKIN REJA QO'YMAYDI. Ilgari
+  //  ikkalasi bitta huquqda edi va ta'sischi o'z varag'ini (bo'sh)
+  //  ko'rib, butun bo'limning natijasini ko'ra olmasdi.
+  const kpi = await eg('GET', '/api/sales/kpi?mon=2026-09');
+  assert.equal(kpi.status, 200, kpi.text);
+  assert.equal(kpi.body.hammasi, true, 'hamma xodimning varag\'ini ko\'radi');
+  assert.equal(kpi.body.yozadi, false, 'reja qo\'ymaydi');
+  assert.equal((await eg('POST', '/api/sales/kpi', { mon: '2026-09',
+    worker_id: id, items: [{ indicator: 'TUSHUM', plan: 1, weight: 1 }] }))
+    .status, 403);
+
+  //  ── TEGMAYDI
+  const yoq = [
+    ['POST',  '/api/cash/ops', { op_date: '2026-09-01', from_kind: 'account',
+      to_kind: 'expense', amount: 10, currency: 'USD' }],
+    ['POST',  '/api/sales/orders', { customer_id: 1, items: [] }],
+    ['POST',  '/api/units/', { items: [] }],
+    ['POST',  '/api/units/move', {}],
+    ['PATCH', '/api/admin/workers/' + id, { name: 'Boshqa' }],
+  ];
+  for (const [m, yol, body] of yoq) {
+    const r = await eg(m, yol, body);
+    assert.equal(r.status, 403, `${m} ${yol} \u2192 ${r.status}`);
+  }
+
+  //  ★ KONVER SO'ROVINI HAM TASDIQLAMAYDI: konverning ochilishi
+  //  pulga tegadi (xom ashyo sarflanadi, ishbay oylik shu raqamga
+  //  yoziladi) va bu ishlab chiqarishning qarori — egasi uni
+  //  ko'radi, lekin bosmaydi.
+  assert.equal((await eg('POST', '/api/units/requests/1/approve', {})).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

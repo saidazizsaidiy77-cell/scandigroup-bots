@@ -117,13 +117,24 @@ ON CONFLICT (code) DO NOTHING;
 --   bot     — faqat bot xabarlari, interfeys yo'q
 INSERT INTO roles (code, name, surface, sort) VALUES
   ('admin',        'Administrator',           'web',     1),
-  ('direktor',     'Direktor',                'web',     2),
-  ('ishlab_boshl', 'Ishlab chiqarish boshlig''i','web',  3),
-  ('kirituvchi',   'Ma''lumot kirituvchi',    'web',     4),
-  ('tsex_usta',    'Tsex ustasi',             'miniapp', 5),
-  ('operator',     'Bo''lim operatori',       'miniapp', 6),
-  ('omborchi',     'Ombor mudiri',            'web',     7),
-  ('taminotchi',   'Ta''minotchi',            'web',     8),
+  --  ★ TA'SISCHI — FAQAT KO'RADI (zavod qarori, 2026-10). Korxona
+  --  egasi kun bo'yi dasturda ishlamaydi: u raqamni o'qiydi —
+  --  foyda-zarar, pul oqimi, aylanma kapital, qarzdorlik, savdo,
+  --  ishlab chiqarish va ombor.
+  --
+  --  Direktor roli unga to'g'ri kelmaydi: unda `cash.manage` bor,
+  --  ya'ni ta'sischi bexosdan kassa operatsiyasini bekor qilib
+  --  qo'yishi mumkin edi — va buni faqat oy oxirida, qoldiq
+  --  solishtirilganda bilinardi. Ko'rish roli hech narsani
+  --  buzolmaydi, ya'ni unga BUTUN zavodni ochish xavfsiz.
+  ('tasischi',     'Ta''sischi',              'web',     2),
+  ('direktor',     'Direktor',                'web',     3),
+  ('ishlab_boshl', 'Ishlab chiqarish boshlig''i','web',  4),
+  ('kirituvchi',   'Ma''lumot kirituvchi',    'web',     5),
+  ('tsex_usta',    'Tsex ustasi',             'miniapp', 6),
+  ('operator',     'Bo''lim operatori',       'miniapp', 7),
+  ('omborchi',     'Ombor mudiri',            'web',     8),
+  ('taminotchi',   'Ta''minotchi',            'web',     9),
   --  ★ SAVDO BO'LIM BOSHLIG'I — ALOHIDA LAVOZIM (zavod qarori, 2026-09).
   --
   --  Ilgari u ham «Sotuv menejeri» deb yozilardi va farqi faqat
@@ -161,6 +172,26 @@ UPDATE roles SET sort = 13 WHERE code = 'hr'        AND sort <> 13;
 -- Admin — hamma huquq
 INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'admin', code FROM permissions ON CONFLICT DO NOTHING;
+
+
+-- ★ TA'SISCHI — HAMMA NARSANI KO'RADI, HECH NARSAGA TEGMAYDI
+--
+--  Ro'yxat `%.view` dan O'ZI yig'iladi, bitta-bitta sanalmaydi:
+--  ertaga yangi modul qo'shilsa uning ko'rish huquqi ta'sischiga
+--  O'ZI tushadi va «nega yangi hisobot menga ochilmayapti» degan
+--  savol chiqmaydi (direktornikida ham AYNAN shu idiom).
+--
+--  Ustiga uchtasi: ishlab chiqarish hisobotlari (zavod ko'rinishi va
+--  panel — `production.view` ularni ochmaydi), audit jurnali («kim
+--  nima qildi» — egasining savoli) va xom ashyo ko'rinishi.
+--
+--  Yozadigan huquq BITTASI HAM yo'q: na kassa, na tasdiqlash, na
+--  chegirma. Shuning uchun unga butun zavodni ochish xavfsiz.
+INSERT INTO role_permissions (role_code, permission_code)
+SELECT 'tasischi', code FROM permissions WHERE code LIKE '%.view'
+UNION ALL SELECT 'tasischi', 'production.reports'
+UNION ALL SELECT 'tasischi', 'admin.audit'
+ON CONFLICT DO NOTHING;
 
 
 -- Direktor — hamma narsani ko'radi, kassani tasdiqlaydi
