@@ -966,7 +966,9 @@ async function requestOne(client, req, it, scope = null, orderItemId = null) {
        it.started_on || null, it.section_id || null, it.note || null,
        shopId, req.user.id, no, it.is_stock === true, due,
        orderItemId])).rows[0];
-  return { id: q.id, no, qty };
+  //  Izoh xabarga ham chiqadi: tasdiqlovchi telefonda o'qiydi va
+  //  sahifani ochmasdan qaror qiladi (izoh: pastda, `notify.queue`).
+  return { id: q.id, no, qty, note: it.note ? String(it.note).trim() : null };
 }
 
 router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
@@ -1000,7 +1002,13 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       permission_code: 'production.approve',
       module: 'production', kind: 'unit_request',
       title: `${created.length} ta konver tasdiq kutmoqda`,
-      body: created.map((c) => `${c.no} · ${c.qty} ta`).join('\n')
+      //  ★ IZOH XABARGA HAM CHIQADI (zavod qarori, 2026-10). Xodim
+      //  «mato mijozникиdan», «shoshilinch» deb yozadi va aynan shu
+      //  gap qarorga ta'sir qiladi — tasdiqlovchi esa telefonda
+      //  faqat raqam va donani ko'rardi, ya'ni izohni o'qish uchun
+      //  kompyuterga borishi kerak edi.
+      body: created.map((c) => `${c.no} · ${c.qty} ta`
+            + (c.note ? `\n   ${c.note}` : '')).join('\n')
             + `\n\nKim so'radi: ${req.user.name}`,
     }, client);
 
@@ -3427,6 +3435,14 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
   const rows = (await db.query(
     `SELECT r.id, r.conveyor_no, r.order_no, r.product, r.product_type, r.sku, r.qty,
             r.color, r.fabric, r.customer_name, r.shop, r.shop_id,
+            --  ★ IZOH USTAGA YETIB BORSIN (zavod qarori, 2026-10).
+            --  Xodim konver so'ralayotganda izoh yozadi («mato
+            --  mijozникиdan», «shoshilinch», «eski chizmadan») va u
+            --  tasdiqlanganda konverga ko'chadi — lekin tsex
+            --  ekranida ko'rinmasdi. Ya'ni yozuv bor edi, ish
+            --  qilayotgan odamga esa yetib bormasdi va u telefon
+            --  qilib so'rardi.
+            r.note,
             --  BUYURTMADA — konverning nechta donasi mijozga va'da
             --  qilingani. Tsex boshlig'ining savoli «bu partiyani kim
             --  kutmoqda»: ilgari javob faqat savdo ekranida edi, u esa

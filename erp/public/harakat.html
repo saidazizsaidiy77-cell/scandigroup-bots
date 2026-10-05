@@ -256,8 +256,16 @@ function row(u, mine, isExit) {
       style="cursor:pointer"` : ''}>
     <td class="c-sel">${sel}</td>
     <td class="c-no"><b>${esc(u.conveyor_no)}</b></td>
+    <!--  ★ IZOH USTAGA YETIB BORSIN (izoh: modules/units.js, /board).
+          Xodim konver so'ralayotganda izoh yozadi va u tasdiqlanganda
+          konverga ko'chadi — lekin tsex ekranida ko'rinmasdi, ya'ni
+          ish qilayotgan odamga yetib bormasdi va u telefon qilib
+          so'rardi. Mahsulotning OSTIDA, chunki u o'sha mahsulot
+          haqida. Rang va matodan FARQLI rangda: bu oddiy tafsilot
+          emas, odam odamga yozgan gap. -->
     <td class="c-name">${esc(u.product)}<div class="muted"
-      style="font-size:11.5px">${rangMato(u)}</div></td>
+      style="font-size:11.5px">${rangMato(u)}</div>${u.note
+      ? `<div class="izoh">${esc(u.note)}</div>` : ''}</td>
     <td class="c-type muted">${esc(u.product_type || '')}</td>
     <!--  Soni — JISMONAN nechta; ostida nechtasi mijozga va'da
           qilingani. Alohida ustun qilinmadi: telefonda qator panjaraga

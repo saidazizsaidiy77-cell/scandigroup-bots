@@ -407,7 +407,15 @@ function render(){
         : '<span class="pad"></span>'}<strong>${esc(r.conveyor_no)}</strong></td>
       <td class="muted">${d8(r.started_on)}</td>
       <td>${r.order_no ? esc(r.order_no) : '<span class="muted">—</span>'}</td>
-      <td class="sep">${esc(r.product)}</td>
+      <!--  ★ KONVERNING IZOHI KO'RINADI (zavod qarori, 2026-10).
+            Izoh so'rovda yoziladi va tasdiqlanganda konverga
+            KO'CHADI, lekin jurnalda u faqat TAHRIR oynasida
+            ko'rinardi — ya'ni uni o'qish uchun har qatorni ochib
+            chiqish kerak edi va hech kim ochmasdi.
+            Mahsulotning OSTIDA, chunki u o'sha mahsulot haqida. -->
+      <td class="sep">${esc(r.product)}${r.note
+        ? `<div class="muted" style="font-size:12px;white-space:normal;
+             max-width:240px">${esc(r.note)}</div>` : ''}</td>
       <td class="muted">${esc(r.product_type)}</td>
       <td>${r.color ? esc(r.color)
             : (r.is_stock ? '<span class="tag">zahira</span>'

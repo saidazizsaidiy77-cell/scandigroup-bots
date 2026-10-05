@@ -295,8 +295,16 @@ function draw() {
       <td><b>${esc(r.conveyor_no || '—')}</b>${r.order_no
         ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}</div>` : ''}${
         r.is_stock ? '<div><span class="tag">zahira</span></div>' : ''}</td>
+      <!--  ★ SO'ROVCHINING IZOHI KO'RINADI (zavod qarori, 2026-10).
+            Izoh BAZAGA yozilardi-yu, hech qayerda chizilmasdi: xodim
+            «mato mijozникиdan», «shoshilinch», «eski chizmadan» deb
+            yozardi va tasdiqlovchi uni UMUMAN ko'rmasdi — ya'ni
+            yozuv bor edi, lekin hech kimga yetib bormasdi.
+            Mahsulotning OSTIDA, chunki u o'sha mahsulot haqida. -->
       <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
-        <div class="muted" style="font-size:12px">${esc(r.product_type)}</div></td>
+        <div class="muted" style="font-size:12px">${esc(r.product_type)}</div>
+        ${r.note ? `<div class="tag" style="font-size:12px;white-space:normal;
+          margin-top:4px">${esc(r.note)}</div>` : ''}</td>
       <td class="num">${r.qty}${r.uom ? ' <span class="muted">' + esc(r.uom) + '</span>' : ''}</td>
       <td class="muted">${[r.color, r.fabric].filter(Boolean).map(esc).join(' · ') || '—'}</td>
       <td>${d8(r.started_on) || '<span class="muted">—</span>'}</td>

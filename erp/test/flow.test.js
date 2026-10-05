@@ -11090,6 +11090,50 @@ test('xodim belgisi: kassa bo\'limi va ta\'minotchi qo\'shish', async () => {
   assert.equal((await qosh()).status, 200);
 });
 
+test('izoh so\'rovdan tsex ekraniga yetib boradi', async () => {
+  //  ★ ZAVOD QARORI (2026-10). Xodimlar bir-biriga konver so'rovida
+  //  izoh yozishardi — «mato mijozникиdan», «shoshilinch», «eski
+  //  chizmadan» — va u BAZAGA tushardi, lekin hech qayerda
+  //  chizilmasdi: na tasdiqlovchida, na jurnalda, na tsex ekranida.
+  //  Ya'ni yozuv bor edi, ish qilayotgan odamga esa yetib bormasdi
+  //  va u telefon qilib so'rardi.
+  const IZOH = 'Mato mijozникиdan keladi \u2014 shoshilinch';
+  const r = await admin('POST', '/api/units/requests',
+    { product_id: PENAL, qty: 3, color: 'Oq', note: IZOH });
+  assert.equal(r.status, 200, r.text);
+  const qid = r.body.created[0];
+
+  //  ── Tasdiqlovchining ro'yxatida
+  const sorov = (await admin('GET', '/api/units/requests'))
+    .body.rows.find((x) => x.id === qid);
+  assert.ok(sorov, 'so\'rov ro\'yxatda');
+  assert.equal(sorov.note, IZOH, 'so\'rovchining izohi ro\'yxatda keladi');
+
+  //  ── Tasdiqlangach KONVERGA ko'chadi
+  const ok = await admin('POST', `/api/units/requests/${qid}/approve`, {});
+  assert.equal(ok.status, 200, ok.text);
+  const uid = (await admin('GET', '/api/units/requests'))
+    .body.rows.find((x) => x.id === qid).unit_id;
+  assert.ok(uid, 'konver ochildi');
+
+  //  ── Jurnalda (`v_unit_register.note` \u2192 registerQuery `r.*`)
+  const jur = (await admin('GET', '/api/units/'))
+    .body.find((x) => x.id === uid);
+  assert.ok(jur, 'konver jurnalda');
+  assert.equal(jur.note, IZOH, 'izoh jurnalga yetdi');
+
+  //  ── TSEX EKRANIDA — eng muhimi: ish aynan shu yerda qilinadi.
+  //  Konver «boshlanmagan» bo'lib ochiladi, ya'ni tsexning
+  //  boshlanmaganlar ro'yxatida turadi.
+  const board = (await admin('GET', '/api/units/board')).body;
+  const hamma = [...(board.unstarted || []),
+                 ...(board.sections || []).flatMap((x) => x.units || []),
+                 ...(board.inbox || [])];
+  const bu = hamma.find((x) => x.id === uid);
+  assert.ok(bu, 'konver tsex ekranida: ' + hamma.length + ' ta qator');
+  assert.equal(bu.note, IZOH, 'izoh tsex ekraniga yetdi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
