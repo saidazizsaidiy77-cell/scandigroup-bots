@@ -690,6 +690,37 @@ qoldirish mumkin: zahiraga kiritilayotganda rang hali ma'lum emas.
 ishlanayotgani kiritayotgan odamga boshidan ma'lum — tasdiqlangandan
 keyin jurnaldan qidirib belgilash ortiqcha ish bo'lardi.
 
+**★ IZOH XODIMDAN XODIMGA YOZILADI, va u KO'RINADI** (zavod qarori,
+2026-10). So'rov oynasida «Izoh» katagi bor va unga tsex boshlig'i
+mahsulotning tafsilotini yozadi («o'ng tomoni oyna», «mijoz
+o'lchamini o'zgartirdi»). Katak ishlardi, lekin yozilgani HECH QAYERDA
+ko'rinmasdi: tasdiqlovchi so'rovni ko'rar, izohini ko'rmasdi; konver
+ochilgach jurnalda ham, usta ekranida ham u yo'q edi. Ya'ni odam
+yozardi va javob olmasdi — keyin yozishni to'xtatardi.
+
+Endi izoh UCHALA ekranda mahsulot nomining OSTIDA, mayda yozuvda
+(`.izoh`, `style.css`): so'rovlar ro'yxatida, jurnalda va bo'limlar
+ekranida. Alohida ustun qilinmadi — telefonda qator panjaraga
+aylanadi va yettinchi ustunga joy yo'q (bron soni bilan bir xil
+sabab). **Telegram xabariga ham qo'shiladi** (`requestOne` izohni
+qaytaradi): tasdiqlovchi ko'pincha javobni o'sha yerda beradi va
+sahifani umuman ochmaydi.
+
+`/board` ning select ro'yxati ATAYLAB to'liq sanalgan
+(`v_unit_register` dan `r.*` emas), shuning uchun yangi ustun u yerga
+QO'LDA qo'shiladi — jurnalga esa o'zi tushadi. Buni bilib qo'yish
+kerak: ustun view'ga qo'shilgani bilan usta ekranida paydo
+bo'lmaydi.
+
+**★ TIZIM IZOHGA O'Z MATNINI YOZMAYDI.** Savdo so'rov yuborganda
+izohga `Buyurtma Z26-0758` deb yozib qo'yilardi va natijasi ikki
+tomondan noto'g'ri edi: zakaz raqami jurnalda ALLAQACHON o'z ustunida
+turadi, ya'ni ekranda bir xil raqam ikki marta ko'rinardi — ustiga u
+odamning katagini EGALLAB olardi: boshliq o'z izohini yozsa, uning
+ustiga mashina yozgani tushardi. Izoh — ODAMNING gapi, tizimning
+yozuvi emas; eski qatorlar bir martalik tozalandi
+(`migration_flags`: `izoh-zakaz-takror`).
+
 Tasdiqlangach konver ODATDAGI `createOne()` bilan ochiladi: raqami ham,
 harakat yozuvi ham, jamlanma hisobot ham bir xil yo'ldan o'tadi.
 **So'ralgani AYNAN o'sha holida** ochiladi — soni ham, rangi ham
@@ -1756,6 +1787,87 @@ stul → Lak karkas). Zahiraga muddat bashorat qilinmaydi.
 
 ---
 
+## Buyurtma yopiladi — qulf
+
+**★ «SAQLASH» — BUYURTMANI YOPADIGAN BOSISH** (zavod qarori, 2026-10;
+`orders.locked_at`, `locked_by`, `POST /api/sales/orders/:id/lock`).
+Menejer qatorlarni to'ldiradi, har biriga konver biriktiradi va
+shundan keyin BITTA marta saqlaydi — o'sha bosish hujjatni yopadi.
+
+Sabab: bron konverni mahsulotga emas, buyurtmaning aniq QATORIGA
+biriktiriladi (`unit_reservations.order_item_id`). Qator keyin
+o'zgartirilsa — mahsuloti, rangi yoki soni — bron o'z joyida qolardi
+va buyurtma ichida ikki haqiqat paydo bo'lardi: qatorda bir mahsulot,
+unga biriktirilgan konverda boshqasi. Yuk xati qatorlardan, mijozning
+qarzi esa konverdan hisoblanadi, ya'ni ikkalasi ajralib ketardi va
+xato faqat mashina ortilganda bilinardi.
+
+**★ QULF BIRIKTIRISHDA EMAS, SAQLASHDA TUSHADI.** Ilgari u konver
+biriktirilgan zahoti tushardi va natijasi teskari bo'lib chiqdi:
+menejer qatorni yozib, konverni biriktirar — va o'sha zahoti
+buyurtmasi yopilib qolardi, ya'ni ikkinchi qatorni qo'sha olmasdi.
+Yechim ham o'sha ekrandan chiqdi: «Konver» tugmasi avval buyurtmani
+JIMGINA saqlaydi (qatorlar id siz bron qo'yilmaydi), lekin
+QULFLAMAYDI — qulf faqat «Saqlash» bosilganda.
+
+**★ KONVERSIZ YOPILMAYDI, va bu to'siq emas — MA'NO.** Qulfning
+sababi «tsex mahsulotni rejaga oldi» degan fakt; konveri ham, so'rovi
+ham yo'q buyurtmada zavod hali hech narsa qilmagan, ya'ni yopadigan
+narsa ham yo'q — u menejerning qog'ozida turaveradi. Shu sababdan
+«Saqlash» tugmasi konver biriktirilmaguncha UMUMAN chizilmaydi va
+sababi ekranda yozilib turadi.
+
+**So'rov ham SANALADI** (`unit_requests.order_item_id`, `pending`):
+konver hali ochilmagan bo'lsa ham rahbariyat tasdiqlagach u o'sha
+qatorga O'ZI biriktiriladi, ya'ni zavod allaqachon ishga kirishgan.
+Faqat bronni sanasak stol va stul buyurtmalari — savdo so'rov
+yozadigan yagona ikkitasi — hech qachon yopilmasdi.
+
+**★ QULFNI ADMINISTRATOR OCHADI** (`POST /orders/:id/unlock`,
+`sales.fix`), va ATAYLAB ikki bosqich: administrator ochadi, menejer
+tuzatadi. Yo'l berkitilmaydi — xato bo'lganda yagona chora bazaga
+qo'lda kirish bo'lib qolardi — lekin o'zgarish zavodga tegadi va uni
+bitta odam bilib turishi kerak. **Sabab MAJBURIY** (konver so'rovi
+bilan bir xil idiom): «nega ochildi» degan savol oy oxirida beriladi.
+Qayta biriktirilsa qulf O'ZI qaytadan tushadi — ochiq qolgan buyurtma
+unutilardi.
+
+**★ ESKI XATONI TIZIM O'ZI TOPADI** (`GET /api/sales/mismatch`,
+`sales.fix`). Qulf bundan KEYINGISINI to'xtatadi, o'tmishda yozilgani
+esa joyida qoladi va uni ekrandan topib bo'lmasdi — «Qayerda» ustuni
+faqat JOYNI ko'rsatardi, zavodda esa yuzlab buyurtma bor. Ro'yxat uch
+xil farqni topadi va har birini ALOHIDA aytadi: qatorda bir mahsulot,
+konverda boshqasi; rangi yoki matosi boshqa; biriktirilgani
+so'ralgandan KO'P (soni keyin kamaytirilgan).
+
+Rang va mato faqat IKKALA tomoni ham to'ldirilgan bo'lsa
+solishtiriladi: ishlab chiqarishdagi konver RANGSIZ tug'iladi va
+bo'sh katakni farq deb o'qish butun ro'yxatni yolg'on
+ogohlantirishga to'ldirardi. Holat `v_sales_orders` dan o'qiladi,
+`orders` dan emas — ekrandagi tab bilan AYNAN bir xil nom chiqadi
+(holat bitta joyda hisoblanadi degan qoida).
+
+Chiqib ketganlar ham ro'yxatda: ular tuzatilmaydi (mahsulot
+mijozda), lekin shikoyat kelganda «nega shunday bo'ldi» degan
+savolning javobi o'sha yerda.
+
+**★ BIRIKTIRILGAN KONVER RO'YXATDA HAR DOIM TURADI**, mahsuloti
+boshqa bo'lsa ham (`CANDIDATE_WHERE`, `modules/sales.js`). Nomzodlar
+ro'yxati MAHSULOT bo'yicha qisqaradi — to'g'ri — lekin o'sha shart
+allaqachon biriktirilgan konverga ham tegib ketardi: qatori keyin
+boshqa mahsulotga o'zgartirilgan buyurtmada oyna «bo'sh konver yo'q»
+deb turar, biriktirilganini esa KO'RSATMASDI. Ya'ni uni QAYTARIB
+olishning yo'li qolmasdi va buyurtma boshi berk ko'chaga kirardi:
+server «avval konverni qaytaring» deydi, ekranda esa qaytaradigan
+qator yo'q.
+
+Endi shart ikki shoxli: `mine.qty > 0` BO'LSA qator baribir turadi,
+qolganiga mahsulot filtri qo'llanadi. Yonida qizil belgi — **«mahsulot
+boshqa»** — va «Qaytarish» tugmasi: tizim o'zi hech narsani
+tanlamaydi, lekin javob ekranda bo'ladi.
+
+---
+
 ## Kassa
 
 **Ikkita pul joyi** (`cash_accounts`): **Asosiy kassa** (naqd) va **Bank
@@ -2617,6 +2729,135 @@ qolaveradi.
 
 ---
 
+## Savdo turkumi va KPI
+
+**★ TURKUM — GURUHNING USTIDAGI QAVAT** (`sales_categories`,
+`product_groups.sales_category`, `sql/catalog-groups.sql`; zavod
+qarori 2026-10). Ishlab chiqarish mahsulotni GURUH bilan yuritadi
+(penal, kamod, sp, stol, stul) — marshrut, raqamning harfi va o'lchov
+birligi o'sha yerda. Savdo esa boshqa kesimda gapiradi:
+
+    MEHMON   Mehmonxona to'plami    penal · kamod · matras
+    YOTOQ    Yotoqxona to'plami     sp
+    STOL     Stol                   stol
+    STUL     Stul                   stul
+
+Ikkisini bitta ustunga sig'dirib bo'lmaydi: penal va kamod ishlab
+chiqarishda IKKI guruh (marshruti va raqami boshqa), savdoda esa
+BITTA javob — mehmonxona to'plami. Shuning uchun turkum alohida
+qavat: ishlab chiqarish o'z guruhini yuritaveradi, savdo, KPI va
+foyda-zarar esa turkum bo'yicha o'qiydi. Yangi guruh qo'shilganda u
+bitta katakdan biriktiriladi, kodga tegilmaydi (4-qoida).
+
+**Alohida JADVAL, matn ustuni emas**: bo'sh katakka qo'lda yozilsa
+«Mehmonxona» va «mehmonxona » ikkita turkum bo'lib, hisobot jimgina
+ikkiga bo'linardi (rang va mato bilan bir xil qoida — faqat boridan).
+
+**★ MATRAS MEHMONXONA TO'PLAMIGA KIRADI**, va uning qatori
+`sql/warehouse.sql` da — guruhning O'ZI o'sha faylda yaratilgani
+uchun. Avval u `catalog-groups.sql` dagi bir martalik bayroqqa
+qo'shilgan edi va ishlayotgan baza ustida to'g'ri ishladi, TOZA
+bazada esa `MATRAS` o'sha paytda hali yo'q edi — turkumi bo'sh qolib
+ketdi va hisobotda «Turkumsiz» bo'lib turdi. Shuning uchun u DOIMIY
+qoida bo'lib yozildi (`WHERE sales_category IS NULL`): bayroq
+O'TMISHDAGI ma'lumotni tuzatadi, keyin yaratiladigan qatorga tegishli
+qoidani esa yo'q (oylik doirasi va PIN izi bilan bir xil idiom).
+Tutgan narsa — migratsiya marosimi: toza baza ustida uch marta.
+
+**Foyda-zararda savdo qatori turkumga bo'linadi** (`v_pl_month`,
+`/foyda-zarar.html`): qator bosilsa ostidan to'rtta turkum chiqadi,
+CSV ga ham shu tushadi. Turkum GURUHDAN o'qiladi, mahsulotdan emas —
+bitta nom ikki guruhda uchraydi va mahsulot bo'yicha yozilsa ro'yxat
+har safar yangi qator bilan o'sib borardi.
+
+**★ «TUSHUM» EMAS, «SAVDO»** (zavod qarori, 2026-10). Chiqib ketgan
+mahsulot summasi uchta ekranda «Tushum» deb turardi (foyda-zarar,
+moliya paneli, KPI) va bu nom NOTO'G'RI edi: tushum — kassaga KELGAN
+pul, bu esa mijozga BERILGAN mahsulot. Ikkalasi bir xil raqam emas va
+«foyda bor, pul yo'q» degan holat aynan shu farqdan chiqadi; bitta
+so'z ikkisini atagach pul oqimi hisoboti o'z ma'nosini yo'qotardi.
+
+Ekrandagi NOM o'zgardi, kod esa emas: KPI ko'rsatkichining kodi
+`tushum` bo'lib qolaveradi — u `kpi_targets.metric` da SAQLANGAN va
+o'zgartirilsa zavod qo'ygan rejalar o'z ko'rsatkichini topmay qolardi.
+
+---
+
+**★ SAVDO XODIMINING KPI SI UCHTA NARSADAN YIG'ILADI** (zavod qarori,
+2026-10; `sql/sales-kpi.sql`, `public/savdo-kpi.html`). Oylik natija
+bitta raqam emas: bir nechta ko'rsatkich, har biri o'z OG'IRLIGI
+bilan.
+
+    Bajarilish      =  Fakt / Reja
+    KPIga ta'siri   =  Bajarilish × Og'irlik
+    UMUMIY KPI      =  ta'sirlarning yig'indisi
+
+Og'irliklar yig'indisi 1,00 bo'lishi SHART va tekshiruv serverda:
+0,9 bo'lsa hech kim 100% ga yetolmaydi, 1,1 bo'lsa hammasini bajargan
+odam 110% oladi. Oyna og'irlik yig'indisini yozayotganda ko'rsatib
+turadi — xato saqlashda emas, terilayotganda bilinsin.
+
+**Ko'rsatkichlar ro'yxati BAZADA** (`sales_kpi_indicators`, 4-qoida):
+hozir uchtasi ishlatiladi — **Tushum** (0,70), **AKB** (0,15) va
+**Segment bo'yicha savdo** (0,15). «Muddati o'tgan qarz» va «Yangi
+mijoz» qatorlari hoziroq yozilgan, lekin O'CHIQ (`active = false`):
+ro'yxatda turgani bilan hisobga tushmaydi — zavod qo'shganda bitta
+katakcha yoqiladi.
+
+**★ SEGMENT ICHIDA TURKUMLAR BOR va ular ALOHIDA ko'rsatkich EMAS**
+(`by_category`): og'irlikni OTA qator ko'taradi, to'rtta turkum esa
+uning tafsiloti. Teskarisi qilinsa og'irliklar yig'indisi buzilardi
+va bitta savdo ikki marta sanalardi.
+
+**Nomlar `sales_kpi_*` bilan boshlanadi, va bu ataylab**: loyihada
+ALLAQACHON `kpi_targets` bor (`sql/cash.sql`, `modules/kpi.js`) va u
+BOSHQA narsa — zavodning BO'LIM rejasi. Ikkalasi bitta nomda bo'lsa
+migratsiya yiqilardi, ya'ni 1-qoida bo'yicha sayt umuman
+ko'tarilmasdi.
+
+**Fayl migratsiyada ENG OXIRIDA**: `v_sales_kpi_fact` kassani ham
+(`cash_ops`) va savdo turkumini ham (`sales_categories`) o'qiydi.
+
+**★ BOSHLIQNING KPI SI MENEJERLARIDAN YIG'ILADI**
+(`workers.sales_head_id`, zavod qarori 2026-10). Savdo bo'lim
+boshlig'ining O'ZIDA mijoz yo'q — mijoz menejerga biriktirilgan
+(`customers.manager_id`) — ya'ni uning fakti HAR DOIM nol bo'lib
+turardi va direktor unga reja qo'ya olmasdi. Holbuki zanjir aynan
+shunday ishlaydi: direktor boshliqqa qo'yadi, boshliq o'z
+menejerlariga.
+
+Belgi XODIMDA va Xodimlar sahifasida qo'yiladi: menejerning
+kartochkasida uning boshlig'i tanlanadi. Kodga na ism, na lavozim
+yoziladi (4-qoida) — ertaga menejer boshqa boshliqqa o'tsa bitta
+katakcha ko'chadi. **Rol buni ajrata olmaydi**: boshliq ham
+`savdo_boshliq`, menejer ham `sotuvchi` va rol huquqlari KODDA
+turadi.
+
+O'ZINI o'ziga boshliq qilib qo'yib bo'lmaydi (`CHECK`) va ikki
+odamni bir-biriga ham (`modules/admin.js`): halqa paydo bo'lsa
+yig'indi cheksiz aylanardi.
+
+Fakt BITTA joyda yig'iladi — `v_sales_kpi_fact` ning `kim` CTE si:
+mijoz O'Z menejeriga ham, menejerning boshlig'iga ham tegishli
+bo'ladi (`UNION`). Uchala shoxi ham shu CTE dan o'tadi, shuning uchun
+AKB ning `COUNT(DISTINCT)` i hech qachon ikki marta sanamaydi — ota
+qator bo'ysunuvchilarining mijozlarini QO'SHIB emas, BIRLASHTIRIB
+sanaydi.
+
+**Reja qo'yish huquqi `sales.kpi`** — direktor, administrator va
+savdo bo'lim boshlig'i. **Ko'rish huquqi ALOHIDA emas**: har savdo
+xodimi O'Z varaqasini ko'radi, reja qo'yadigan odam esa qo'l
+ostidagilarnikini ham. Tugma huquqi yo'q odamda umuman chizilmaydi,
+tekshiruv esa serverda.
+
+Ekranda har xodim o'z varaqasi bo'lib turadi: ko'rsatkich · reja ·
+fakt · bajarilish · og'irlik · KPIga ta'siri. Rang **Indeksda**,
+bajarilishda emas: bajarilish bitta ko'rsatkichning javobi, indeks
+esa butun oyning — boshliq varaqaga qarab birinchi navbatda shuni
+o'qiydi.
+
+---
+
 ## Navbat — menyudagi belgi
 
 **★ NAVBAT XODIMNI O'ZI TOPADI** (zavod qarori, 2026-09).
@@ -2687,6 +2928,93 @@ va u raqamni ro'yxatning UZUNLIGI bilan solishtiradi
 Modul `erp/server.js` da ham, `erp/test/helper.js` da ham ulanadi:
 test o'z ilovasini o'zi quradi.
 
+## Kunlik xabarlar — Telegram
+
+Menyudagi navbat belgisi sayt OCHIQ bo'lganda ko'rinadi, cho'ntakda esa
+telefon turadi. Shuning uchun har kuni belgilangan vaqtda xabar
+yuboriladi — va u navbat emas, HISOBOT: «bugun nima bo'ldi» degan
+savolga javob.
+
+**★ KUNLIK ISHLAR BITTA JADVALDA** (`KUNLIK`, `erp/server.js`; zavod
+qarori 2026-09). Ilgari bittasi bor edi; zavod yana uchtasini so'ragach
+har biriga o'z taymerini yozish kerak bo'lardi va VAQT OYNASI to'rt
+nusxada turardi — bir kun ularning biri ikkinchisidan boshqacha ishlab
+qolardi.
+
+| Vaqt | Ish | Kimga |
+|---|---|---|
+| 08:00 (`DIGEST_AT`) | rahbariyat xulosasi — sakkiz xabar | `daily_digest` |
+| 09:00 (`SUPPLY_AT`) | ta'minotchilar saldosi | `supply_reports` |
+| 09:00 (`SALES_DEBT_AT`) | menejerga O'Z mijozlarining qarzi | savdo doirasi |
+| 17:00 (`DUE_AT`) | ertaga topshiriladigan konverlar | tsex doirasi |
+
+Ro'yxat KODDA: bu jadval, ma'lumot emas. **Kimga borishi esa har
+ishning ichida va XODIM BELGISI bilan** hal qilinadi (4-qoida) —
+kodga na ism, na lavozim yozilmaydi.
+
+Vaqt SERVER vaqti bo'yicha (Railway'da UTC) va zaxira bilan bir xil
+idiom: konteyner qayta ishga tushsa taymer noldan boshlanadi, shuning
+uchun «bugun yuborildimi» degan xotira emas, VAQT OYNASI ishlatiladi —
+ish faqat belgilangan vaqtdan keyingi 15 daqiqa ichida bajariladi.
+
+Yuborish esa ALOHIDA: xabar `notifications` NAVBATIGA qo'yiladi,
+jo'natuvchi daqiqada bir marta yuradi (`xabarJadvali`,
+`notify.sendPending`). `ERP_TG_TOKEN` yo'q bo'lsa JIM turadi va hech
+narsani buzmaydi — xabarlar navbatda yig'ilaveradi.
+
+### Rahbariyat xulosasi — 08:00
+
+**★ SAKKIZ SAVOL, SAKKIZ XABAR** (`workers.daily_digest`,
+`notify.queueDigest`). Bitta uzun xabar qilinmadi: Telegramda u bir
+ekranga sig'masdi va direktor javobni o'rtasidan qidirib o'tirardi.
+
+    1  ta'minotchilar saldosi        kimga qancha qarzmiz
+    2  mijozlar saldosi              kim qancha qarzdor
+    3  kassa qoldig'i                pul qayerda
+    4  kecha chiqib ketgan buyurtma  jamlanma raqam
+    5  turkum bo'yicha savdo         mehmonxona · yotoqxona · stol · stul
+    6  mijozlar: savdo / tushum      HAMMA faol mijoz
+    7  yo'nalish: savdo / tushum     B2B · B2C · eksport
+    8  kecha chiqqan mahsulotlar     qatorma-qator ro'yxat
+
+Ta'minot saldosi bu yerda IKKINCHI marta yuboriladi va bu takror
+emas: ta'minotchi uni 09:00 da, direktor 08:00 da oladi. Matn BITTA
+joydan (`saldoXabari`) — ikki nusxada bo'lsa biri ertaga
+ikkinchisidan orqada qolardi.
+
+**★ «SHU OY» — XABAR YUBORILAYOTGAN OY** (zavod qarori, 2026-10;
+`date_trunc('month', CURRENT_DATE)`), o'tgan oy emas. Hisobot kun
+bo'yi o'sib boradi va oyning ICHIDA «hozir qanday ketmoqda» degan
+savolga javob beradi — oy yopilgandan keyingi hisob boshqa savol va
+uning joyi foyda-zararda.
+
+**★ NOL QATOR TASHLAB YUBORILMAYDI**, va bu ataylab: savdosi yo'q
+turkum ham, oyda hech narsa olmagan mijoz ham o'z qatorida turadi.
+Shu sababdan so'rovlar `sales_categories` va `customers` dan LEFT
+JOIN bilan boshlanadi — savdodan boshlansa javobi nol bo'lgan qator
+ro'yxatdan butunlay tushib qolardi va «bu mijozga shu oyda nima
+sotdik» degan savol javobsiz qolardi: bo'sh qator javob, yo'q qator
+esa savol (foyda-zarardagi bo'sh ustun bilan bir xil qoida).
+
+**«Turkumsiz» esa faqat noldan katta bo'lsa yoziladi**: u turkum
+emas, to'ldirilmagan katak — nol bo'lsa ekranda hech narsa
+aytmaydi.
+
+**★ UZUN XABAR BO'LAKLANADI** (`bolaklar`, 3500 belgi). Telegram 4096
+belgi bilan cheklangan, zavodda esa qirqdan ortiq mijoz bor:
+chegaradan oshgan xabar JIMGINA yuborilmasdi va buni hech narsa
+aytmasdi. Sarlavhada bo'lak raqami turadi (**«(1/2)»**) — aks holda
+ikkinchi bo'lak boshqa hisobot bo'lib o'qilardi. Shu sababdan
+xabar yasovchilar MASSIV qaytaradi va `server.js` ularni `.flat()`
+bilan o'tkazadi: bitta xabar ham, bo'laklangani ham bir xil yo'ldan.
+
+**«Kecha chiqqan mahsulotlar» 4-xabarning TAFSILOTI**: jamlanma raqam
+yuqorida turadi, bu esa «nima, kimga, qanchadan» degan ikkinchi
+savol. Har konver o'z qatorida — mahsulot, guruhi, soni, narxi,
+summasi, ostida mijoz va zakaz raqami.
+
+---
+
 ## Xodimlar — shtat va kirish
 
 **★ TEST HISOBLARI FAQAT BO'SH BAZADA** (zavod qarori, 2026-09;
@@ -2714,7 +3042,6 @@ ham turmaydi.
 shuning uchun avval o'zingizga haqiqiy `admin` hisobi oching, kirib
 ko'ring, keyin eskisini o'chiring. Teskarisi qilinsa saytga kiradigan
 odam qolmaydi.
-
 
 **★ ZAVODDA OLTMISH KISHI, TIZIMGA O'NTASI KIRADI** (zavod qarori,
 2026-09; `workers.staff_group`, `shop_id`, `section_id`, `dept`,
@@ -2799,7 +3126,25 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 | `xom_ombor` | `materials.view`, `materials.manage`, `purchasing.view` | xom ashyo spravochnigi, material omborlari va ularning boshlang'ich qoldig'i — narx bilan. T/M ombor unga ochilmaydi |
 | `sotuvchi` | `sales.*`, `warehouse.view`, `production.view` | mijozlar, buyurtmalar, T/M ombor + vitrinalar qoldig'i, jurnal — ombordan **faqat o'qish**. Vitrina biriktirilsa faqat o'sha nuqta + T/M ombor; «Faqat o'zinikini» belgilansa faqat o'z mijozi va o'z buyurtmasi |
 | `savdo_boshliq` | `sotuvchi` bilan AYNAN bir xil | savdo bo'lim boshlig'i: farqi faqat **doirasida** — yo'nalish ham, «Faqat o'zinikini» ham bo'sh qoladi, ya'ni butun savdoni ko'radi |
+| `tasischi` | hamma `%.view` + `production.reports`, `admin.audit` | korxona egasi: BUTUN zavodni ko'radi — foyda-zarar, pul oqimi, aylanma kapital, qarzdorlik, savdo, ishlab chiqarish, ombor va audit jurnali. **Yozadigan huquq BITTASI HAM yo'q** |
 | `admin` | barchasi | hammasi. **`sales.fix`, `cash.fix` va `production.undo` faqat unda**: chiqib ketgan buyurtmani, kassa operatsiyasining summasini tuzatish va oxirgi o'tkazishni orqaga qaytarish |
+
+**★ TA'SISCHI — FAQAT KO'RADI** (zavod qarori, 2026-10). Korxona egasi
+kun bo'yi dasturda ishlamaydi: u RAQAMNI o'qiydi. Direktor roli unga
+to'g'ri kelmaydi — unda `cash.manage` bor, ya'ni ta'sischi bexosdan
+kassa operatsiyasini bekor qilib qo'yishi mumkin edi va buni faqat oy
+oxirida, qoldiq solishtirilganda bilinardi.
+
+Huquqlar ro'yxati `%.view` dan O'ZI yig'iladi, bitta-bitta sanalmaydi
+(direktornikida ham AYNAN shu idiom): ertaga yangi modul qo'shilsa
+uning ko'rish huquqi ta'sischiga O'ZI tushadi va «nega yangi hisobot
+menga ochilmayapti» degan savol chiqmaydi. Ustiga uchtasi:
+`production.reports` (zavod ko'rinishi va panel — `production.view`
+ularni ochmaydi), `admin.audit` («kim nima qildi» — egasining savoli)
+va xom ashyo ko'rinishi.
+
+Hech narsani buzolmaydigan rolga BUTUN zavodni ochish xavfsiz — shu
+sababdan unda doira ham qo'yilmaydi.
 
 **`production.view` jurnalni ochadi, `production.reports` esa zavod
 ko'rinishi va panelni.** Ikkisi alohida: sotuvchi o'z buyurtmasi qaysi
@@ -2872,6 +3217,29 @@ sotuvchisida nuqtasi bor, ya'ni qoida unga tegmaydi; ombor mudiri va
 savdo boshlig'ida esa tsex doirasi yo'q. Vitrinadan qaytarish
 hujjatlari ham shu bilan yopiladi (`retVisible`) — vitrina ko'rinmasa
 uning hujjati ham uniki emas.
+
+**★ KASSA HAM XODIM BELGISIDA** (`workers.sees_cash`, zavod qarori
+2026-10). Ta'minot xodimi podotchyot oladi, ya'ni unga `cash.entry`
+kerak — lekin «Bank va kassa» BO'LIMI kerak emas: u yerda kassa
+qoldig'i, boshqa xodimlarning puli va butun zavodning pul harakati
+turadi. Rol buni ajrata olmaydi: ikkalasi ham `taminotchi` va rol
+huquqlari KODDA turadi, ya'ni bitta odam uchun o'zgartirib bo'lmaydi.
+
+Shuning uchun belgi XODIMDA — `sees_warehouse` bilan AYNAN bir xil
+idiom, bir xil sabab va bir xil joyda (Xodimlar sahifasi). Standarti
+`true`: hech kimning ekrani o'zidan-o'zi o'zgarmaydi. Olib tashlansa
+xodimning `cash.*` huquqlari UMUMAN o'qilmaydi (`erp/auth.js`,
+`loadWorker`) — menyudagi bo'lim ham, sahifalar ham, API ham BIR
+VAQTDA yopiladi.
+
+**★ TA'MINOTCHI QO'SHISH HAM** (`workers.can_add_supplier`) —
+mijozdagi `can_add_customer` ning KO'ZGU AKSI: bir xil savol, bir xil
+idiom, bir xil standart. Zavodda bir nechta ta'minotchi bor va
+ro'yxatni ulardan BIRI yuritadi; qolganida «Ta'minotchi qo'shish» va
+«Ro'yxatni import qilish» tugmalari umuman chizilmaydi. **TAHRIRLASH
+esa ochiq qolaveradi**: telefon yoki manzilni to'g'rilash ro'yxatni
+ikkiga bo'lmaydi. Tekshiruv SERVERDA — `POST /api/purchasing/suppliers`
+va `POST /api/import/suppliers`: tugmani yashirish himoya emas.
 
 **Vitrina doirasi** — `worker_roles.scope_warehouse_id`. Vitrinalar
 shaharning uch nuqtasida va har birida o'z sotuvchisi bor. Sotuvchiga
@@ -3501,15 +3869,18 @@ erp/
                        yukxati.js — yuk xati hujjati (ikki sahifa chizadi)
                        kassa-form.js — kirim/chiqim orderi oynasi
                        foyda-zarar.html, pul-oqimi.html — moliyaviy hisobot
+                       savdo-kpi.html — savdo xodimining KPI varaqasi
   test/                node:test, HTTP orqali
 ```
 
 `sql/` tartibi: core → core-seed → production → production-seed →
 catalog-groups → production-sku → units → register → catalog → purchasing →
-routes → sales → warehouse → cash → **materials**. Yangi fayl qo'shsangiz
-`migrate.js` ga ham yozing. Ombor savdodan keyin: uning view'i savdo
-qo'shadigan ustunni ham o'qiydi. Kassa undan keyin: MIJOZ balansi va
-qarzdorlik lentasi to'lovlarni ham o'qiydi.
+routes → sales → warehouse → cash → **materials** → **sales-kpi**. Yangi
+fayl qo'shsangiz `migrate.js` ga ham yozing. Ombor savdodan keyin: uning
+view'i savdo qo'shadigan ustunni ham o'qiydi. Kassa undan keyin: MIJOZ
+balansi va qarzdorlik lentasi to'lovlarni ham o'qiydi. **Savdo KPI eng
+oxirida**: `v_sales_kpi_fact` kassani ham (`cash_ops`), savdo turkumini
+ham (`sales_categories`) o'qiydi.
 
 **Xom ashyo ENG OXIRIDA**, va shu sababdan **TA'MINOTCHINING qarzi ham
 o'sha yerda**: `v_supplier_debt` va `v_supplier_ledger` endi kirim
