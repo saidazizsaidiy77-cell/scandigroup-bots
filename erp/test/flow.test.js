@@ -1131,6 +1131,63 @@ test('savdo xodimiga faqat O\'Z mijozi va O\'Z buyurtmasi ko\'rinadi', async () 
   assert.ok((await nomlar(m1)).includes('Menejer yozgan mijoz'));
   assert.equal((await H.id(
     `SELECT manager_id FROM customers WHERE name='Menejer yozgan mijoz'`)).manager_id, m1id);
+
+  //  ★ BUYURTMA HAM SHUNDAY: doirasi bor xodim yozgani O'ZINIKI
+  //  bo'ladi. Menejer katagi oynada turadi va boshqa odam tanlab
+  //  qo'yilsa buyurtma SAQLANGAN zahoti o'z ro'yxatidan yo'qolardi —
+  //  chegara `manager_id` bo'yicha qo'yiladi. Tekshiruv SERVERDA:
+  //  id qo'lda yuborilsa ham e'tiborga olinmaydi.
+  const oz = await m1('POST', '/api/sales/orders',
+    { customer_id: c1, manager_id: m2id, items: [] });
+  assert.equal(oz.status, 200, oz.text);
+  assert.equal((await H.id(
+    `SELECT manager_id FROM orders WHERE id = ${oz.body.id}`)).manager_id, m1id,
+    'yozgan odam o\'zi menejer bo\'lib qoladi');
+  assert.equal((await m1('GET', '/api/sales/orders/' + oz.body.id)).status, 200);
+
+  //  Tahrirlashda ham ko'chirib bo'lmaydi.
+  assert.equal((await m1('PATCH', '/api/sales/orders/' + oz.body.id,
+    { manager_id: m2id })).status, 200);
+  assert.equal((await H.id(
+    `SELECT manager_id FROM orders WHERE id = ${oz.body.id}`)).manager_id, m1id);
+
+  //  Doirasi YO'Q xodim esa menejerni erkin ko'chiradi — menejerni
+  //  boshqa odamga biriktirish aynan uning ishi.
+  assert.equal((await admin('PATCH', '/api/sales/orders/' + oz.body.id,
+    { manager_id: m2id })).status, 200);
+  assert.equal((await H.id(
+    `SELECT manager_id FROM orders WHERE id = ${oz.body.id}`)).manager_id, m2id);
+
+  //  ★ KUNNING HISOBI HAM DOIRA BO'YICHA (`GET /api/sales/day`): bosh
+  //  sahifadagi «Bugun chiqadi» menejerga butun zavodning kunini
+  //  ko'rsatardi — «mening buyurtmam ketdimi» degan savolga javob
+  //  bermasdi. Mudirda va administratorda doira yo'q, ya'ni ular
+  //  butun kunni ko'raveradi.
+  const kun1 = await m1('POST', '/api/sales/orders', { customer_id: c1, items: [] });
+  assert.equal(kun1.status, 200, kun1.text);
+  await db.query(
+    `UPDATE orders SET status = 'to_ship', plan_on = CURRENT_DATE
+      WHERE id = ANY($1::int[])`, [[kun1.body.id, oz.body.id]]);
+
+  const kun = (await m1('GET', '/api/sales/day')).body;
+  assert.ok(kun.rows.some((r) => r.id === kun1.body.id), 'o\'z buyurtmasi sanaladi');
+  assert.ok(!kun.rows.some((r) => r.id === oz.body.id),
+    'boshqa menejerning buyurtmasi kunga tushmaydi');
+  //  Yig'indi RO'YXATDAN sanaladi, ya'ni shart qo'shilgach ham
+  //  `olindi = chiqdi + qoldi` to'g'ri qolaveradi.
+  assert.equal(kun.olindi, kun.rows.length);
+  assert.equal(kun.olindi, Number(kun.chiqdi) + Number(kun.qoldi));
+
+  const hKun = (await admin('GET', '/api/sales/day')).body;
+  for (const id of [kun1.body.id, oz.body.id])
+    assert.ok(hKun.rows.some((r) => r.id === id), 'doirasi yo\'qqa hammasi');
+
+  //  Kunni tozalab ketamiz: qolgan testlar o'z raqamini sanaydi —
+  //  holat ham qaytariladi, aks holda bu ikkitasi mudirning
+  //  «Jo'natish» ro'yxatida osilib qolardi.
+  await db.query(
+    `UPDATE orders SET plan_on = NULL, status = 'new' WHERE id = ANY($1::int[])`,
+    [[kun1.body.id, oz.body.id]]);
 });
 
 test('mijozning boshlang\'ich qarzi kiritiladi va qayta yuklashda o\'chmaydi', async () => {

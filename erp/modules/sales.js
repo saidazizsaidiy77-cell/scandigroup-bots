@@ -39,6 +39,20 @@ function assertOwn(req, o) {
     throw new Error('Bu buyurtma boshqa menejerniki');
 }
 
+//  ★ DOIRASI BOR XODIM YOZGAN BUYURTMA O'ZINIKI BO'LADI (zavod qarori,
+//  2026-10) — mijoz kartochkasidagi bilan AYNAN bir xil idiom va bir
+//  xil sabab (izoh: `modules/units.js`, `POST /customers`).
+//
+//  Menejer katagi oynada turadi va u boshqa odamni tanlab qo'yishi
+//  mumkin: o'shanda buyurtma SAQLANGAN zahoti o'z ro'yxatidan
+//  yo'qolardi — chegara `manager_id` bo'yicha qo'yiladi — va menejer
+//  uni ikkinchi marta yozishga urinardi. Doirasi yo'q xodim (bosh
+//  ofis, savdo boshlig'i) esa menejerni erkin tanlaydi: menejerni
+//  boshqa odamga ko'chirish aynan uning ishi.
+//
+//  Tekshiruv SERVERDA: katakni yashirish himoya emas.
+const menejer = (req, kelgan) => (ownOf(req) ? req.user.id : (kelgan || null));
+
 //  Zakaz raqami qo'lda ham qo'yiladi: zavod o'z daftarida raqam yuritadi
 //  va nakladnoyda o'sha raqam turishi kerak. Bo'sh qoldirilsa tizim
 //  o'zi beradi (Z26-0001). Raqam butun bazada yagona — bir xil raqamli
@@ -550,7 +564,7 @@ router.post('/orders', need(...WRITE), wrap(async (req, res) => {
                            note, created_by, ship_to, address, receiver_phone)
        VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), $5,$6,$7,$8,$9,$10)
        RETURNING id, order_no`,
-      [no, customer_id, manager_id || req.user.id, ordered_on || null,
+      [no, customer_id, menejer(req, manager_id) || req.user.id, ordered_on || null,
        due_on || null, note || null, req.user.id,
        await assertDest(client, ship_to, address), address || null,
        receiver_phone || null])).rows[0];
@@ -988,7 +1002,7 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
               address    = COALESCE($9, address),
               receiver_phone = COALESCE($10, receiver_phone)
         WHERE id = $1`,
-      [req.params.id, customer_id || null, manager_id || null, ordered_on || null,
+      [req.params.id, customer_id || null, menejer(req, manager_id), ordered_on || null,
        due_on || null, note ?? null, status || null,
        await assertDest(client, ship_to, address ?? cur.address),
        address ?? null, receiver_phone ?? null]);
@@ -2193,8 +2207,23 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
   });
 }));
 
+//  ★ DOIRA BU YERDA HAM CHEGARA (zavod qarori, 2026-10). Kunning
+//  hisobi BITTA joyda qolaveradi — ombor sahifasi ham, BOSH SAHIFA ham
+//  shundan oladi — lekin JAVOB so'ragan odamga qarab qisqaradi:
+//  mudirda va direktorda doira yo'q, ya'ni ular butun kunni ko'radi;
+//  o'zinikini ko'radigan menejerga esa faqat O'Z buyurtmalari sanaladi.
+//
+//  Ilgari u ro'yxatni umuman qisqartirmasdi va menejer bosh sahifada
+//  butun zavodning kunini ko'rardi: «bugun 14 ta chiqadi» degan raqam
+//  uning ishiga tegishli emas edi va «mening buyurtmam ketdimi» degan
+//  savolga javob bermasdi.
+//
+//  Shart RO'YXATGA qo'yiladi, yig'indiga emas: `olindi = chiqdi +
+//  qoldi` shu bilan baribir to'g'ri qolaveradi (raqamlar o'sha
+//  ro'yxatdan sanaladi) va test ham shuni solishtiradi.
 router.get('/day', need(...KUN), wrap(async (req, res) => {
   const on = req.query.on || null;
+  const own = ownOf(req);
   const { rows } = await db.query(
     `SELECT o.id, o.order_no, o.customer_name, o.region, o.qty, o.lines,
             o.due_on, o.plan_on, o.plan_by_name, o.status, o.shipped_on,
@@ -2210,7 +2239,8 @@ router.get('/day', need(...KUN), wrap(async (req, res) => {
         AND (o.status = 'to_ship'
              OR (o.status = 'shipped'
                  AND o.shipped_on = COALESCE($1::date, CURRENT_DATE)))
-      ORDER BY (o.status = 'shipped'), o.plan_on, o.order_no`, [on]);
+        AND ($2::int IS NULL OR o.manager_id = $2)
+      ORDER BY (o.status = 'shipped'), o.plan_on, o.order_no`, [on, own]);
   res.json({
     on,
     rows,

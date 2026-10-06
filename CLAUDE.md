@@ -3276,7 +3276,49 @@ ekranda boshqa menejerning mijozi ko'rinib qolardi. Qamrovi:
   · buyurtma ro'yxati, ochilishi, tahriri, bron va jo'natish;
   · yuk xati (ombor mudirida doira yo'q — unga ochiq qolaveradi);
   · qarzdorlik, dalolatnoma va kirim orderi;
-  · kassadagi mijoz ro'yxati va to'lov yozish.
+  · kassadagi mijoz ro'yxati va to'lov yozish;
+  · **savdo paneli va BOSH SAHIFA** (`/api/sales/dashboard`,
+    `/api/sales/day`) — kartochkalardagi raqam ham o'z buyurtmalaridan
+    yig'iladi;
+  · KPI varaqasi — reja qo'yish huquqi yo'q xodim faqat O'ZINIKINI
+    ko'radi (`sales.kpi`, izoh: «Savdo turkumi va KPI»).
+
+**★ YOZGAN BUYURTMA O'ZINIKI BO'LADI** (zavod qarori, 2026-10;
+`menejer()`, `modules/sales.js`) — mijoz kartochkasidagi bilan AYNAN
+bir xil idiom va bir xil sabab. Menejer katagi oynada turadi va u
+boshqa odamni tanlab qo'yishi mumkin edi: o'shanda buyurtma SAQLANGAN
+zahoti o'z ro'yxatidan yo'qolardi — chegara `manager_id` bo'yicha
+qo'yiladi — va menejer uni ikkinchi marta yozishga urinardi. Doirasi
+yo'q xodim (bosh ofis, savdo boshlig'i) esa menejerni erkin tanlaydi:
+menejerni boshqa odamga ko'chirish aynan uning ishi. Yozishda ham,
+tahrirlashda ham bitta joydan o'tadi; tekshiruv SERVERDA.
+
+**★ KUNNING HISOBI HAM DOIRA BO'YICHA** (`GET /api/sales/day`). Raqam
+BITTA joyda qolaveradi — ombor sahifasi ham, bosh sahifa ham shundan
+oladi — lekin JAVOB so'ragan odamga qarab qisqaradi: mudirda va
+direktorda doira yo'q, ya'ni ular butun kunni ko'radi; o'zinikini
+ko'radigan menejerga esa faqat O'Z buyurtmalari sanaladi. Ilgari u
+bosh sahifada butun zavodning kunini ko'rardi va «bugun 14 ta
+chiqadi» degan raqam «mening buyurtmam ketdimi» degan savolga javob
+bermasdi. Shart RO'YXATGA qo'yiladi, yig'indiga emas — shuning uchun
+`olindi = chiqdi + qoldi` baribir to'g'ri qolaveradi.
+
+**★ DOIRA YO'NALISHNING O'RNINI BOSMAYDI**, va buni bilib qo'yish
+kerak. Yo'nalish (`scope_channel`) bitta menejerni ajratib bermaydi:
+zavodda B2C ning ichida uchta vitrina ham, SMM ham turadi va o'sha
+kanalda bir nechta menejer ishlaydi — ya'ni «B2C» qo'yilgan xodim
+o'sha kanalning HAMMA mijozini, qarzini va buyurtmasini ko'raveradi.
+Ajratadigan belgi faqat **«Faqat o'zinikini»**. Ikkalasi birga
+ishlaydi va biri ikkinchisini almashtirmaydi.
+
+Belgi bir martalik qo'yilgan edi (`migration_flags`:
+`savdo-oz-mijozi`, faqat `sotuvchi` roli uchun) va bayroqdan KEYIN
+qo'shilgan xodimda u Xodimlar sahifasidagi standartdan keladi —
+yangi xodimda BELGILANGAN bo'lib ochiladi, lekin saqlashda olib
+tashlangani qaytarilmaydi. Shuning uchun «hammasi ko'rinib
+ketdi» degan savolning birinchi javobi o'sha katakcha: xodim
+qatorida rol yonida **«· o'zinikini»** yozuvi turadi.
+
 
 **★ MENEJER RO'YXATIDA FAQAT SAVDO XODIMI** (zavod qarori, 2026-09;
 `modules/units.js`, `GET /api/units/customers` dagi `managers`).
