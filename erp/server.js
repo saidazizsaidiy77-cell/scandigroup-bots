@@ -258,14 +258,33 @@ const KUNLIK = [
   { nom: 'xulosa', env: 'DIGEST_AT', vaqt: '08:00',
     ish: async () => {
       const notify = require('./notify');
+      const sales = require('./modules/sales');
       const xabarlar = await Promise.all([
         require('./modules/materials').saldoXabari(),
-        require('./modules/sales').mijozSaldoXabari(),
+        sales.mijozSaldoXabari(),
         require('./modules/cash').kassaXabari(),
-        require('./modules/sales').chiqishXabari(),
+        sales.chiqishXabari(),
+        //  ★ OYLIK KESIMLAR (zavod qarori, 2026-10): turkum, mijoz
+        //  va yo'nalish bo'yicha SAVDO va TUSHUM — xabar
+        //  yuborilayotgan oyning birinchi kunidan bugungacha.
+        //  Ustiga kecha chiqqan mahsulotlarning QATORMA-QATOR
+        //  ro'yxati: jamlanma raqam yuqorida (`chiqishXabari`), bu
+        //  esa «nima, kimga, qanchadan» degan ikkinchi savol.
+        //
+        //  Alohida xabarlar, chunki savollar ham alohida: bitta
+        //  uzun xabarda direktor javobni o'rtasidan qidirib
+        //  o'tirardi (yuqoridagi to'rttasi bilan bir xil sabab).
+        sales.oylikTurkumXabari(),
+        sales.oylikKanalXabari(),
+        sales.oylikMijozXabari(),
+        sales.chiqqanRoyxatXabari(),
       ]);
       let n = 0;
-      for (const x of xabarlar) {
+      //  Ba'zi hisobot BO'LAKLARGA bo'linadi (mijozlar ro'yxati
+      //  Telegram chegarasidan oshadi), shuning uchun har javob
+      //  massiv bo'lishi ham mumkin — ikkala shakl ham shu yerdan
+      //  o'tadi.
+      for (const x of xabarlar.flat()) {
         if (!x) continue;
         n += await notify.queueDigest(
           { module: 'sales', kind: 'digest', title: x.title, body: x.body });

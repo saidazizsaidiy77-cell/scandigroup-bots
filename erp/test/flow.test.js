@@ -11149,6 +11149,103 @@ test('izoh so\'rovdan tsex ekraniga yetib boradi', async () => {
   assert.equal(bu.note, IZOH, 'izoh tsex ekraniga yetdi');
 });
 
+test('oylik hisobotlar: turkum, mijoz, yo\'nalish va chiqqan ro\'yxat', async () => {
+  //  ★ ZAVOD QARORI (2026-10). Rahbariyat har kuni shu OY bo'yicha
+  //  kesimlarni oladi: turkum, mijoz va yo'nalish bo'yicha SAVDO va
+  //  TUSHUM, ustiga kecha chiqqan mahsulotlarning qatorma-qator
+  //  ro'yxati.
+  //
+  //  ★ OY — XABAR YUBORILAYOTGAN OY, ya'ni oyning birinchi kunidan
+  //  bugungacha. «Kecha» emas: savol «bu oyda qancha bo'ldi» degani.
+  const { db } = require('../db');
+  const S = require('../modules/sales');
+  const BU_OY = new Date().toISOString().slice(0, 7) + '-01';
+
+  //  Oldingi testlar ham shu oyda savdo qilgan, shuning uchun
+  //  yig'indi raqamlar FARQ bo'yicha tekshiriladi: aniq son yozilsa
+  //  test keyingi qo'shilgan testdan yiqilardi.
+  const son = (matn, nom) => {
+    const m = new RegExp(nom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      + ': ([\\d  ]+,\\d\\d)').exec(matn);
+    return m ? Number(m[1].replace(/[  ]/g, '').replace(',', '.')) : null;
+  };
+  const oldin = await S.oylikTurkumXabari();
+  const oldinK = await S.oylikKanalXabari();
+
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Oylik sinov mijozi', region: 'Toshkent', channel: 'B2B' })).body;
+  //  ★ NOL TURGAN MIJOZ HAM RO'YXATDA: savol «kim oldi» emas, «KIM
+  //  OLMADI» ham — oy o'rtasida hech narsa olmagan mijoz
+  //  direktorning birinchi savoli.
+  const nol = (await admin('POST', '/api/units/customers',
+    { name: 'Oylik nol mijozi', region: 'Toshkent', channel: 'B2C' })).body;
+
+  //  Mehmonxona turkumidan mahsulot chiqarib yuboramiz (PENAL →
+  //  MEHMON) — KECHA, ya'ni ro'yxat xabariga ham tushsin.
+  await db.query(
+    `INSERT INTO production_units (conveyor_no, product_id, qty, status,
+                                   ship_on, unit_price, customer_id)
+     VALUES ('OYLIK-1', $1, 2, 'shipped', CURRENT_DATE - 1, 150, $2)`,
+    [PENAL, mij.id]);
+  //  Shu oyning boshida chiqqani ham oylik yig'indiga kiradi, lekin
+  //  KECHAGI ro'yxatga tushmaydi — ikki savol, ikki javob.
+  await db.query(
+    `INSERT INTO production_units (conveyor_no, product_id, qty, status,
+                                   ship_on, unit_price, customer_id)
+     VALUES ('OYLIK-2', $1, 1, 'shipped', $3::date, 100, $2)`,
+    [PENAL, mij.id, BU_OY]);
+  //  Tushum — kassadan, savdodan ALOHIDA: ikkalasi teng emas va bu
+  //  xato emas (biri yuk xati, ikkinchisi pul).
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  await db.query(
+    `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind, to_id,
+                           currency, amount, status, created_by)
+     VALUES ('P26-8801', CURRENT_DATE, 'customer', $1, 'account', $2,
+             'USD', 220, 'ok', 1)`, [mij.id, kassa]);
+
+  // ── 1. TURKUM
+  const t = await S.oylikTurkumXabari();
+  assert.match(t.title, /Turkum bo'yicha savdo/);
+  //  2×150 + 1×100 = 400 — ikkalasi ham SHU oyda chiqqan.
+  assert.equal(son(t.body, "Mehmonxona to'plami")
+             - son(oldin.body, "Mehmonxona to'plami"), 400, t.body);
+  //  Nol turkum ham chiziladi: bo'sh qator savol, yo'q qator yolg'on.
+  assert.ok(/Stul: [\d  ]+,\d\d \$/.test(t.body), 'nol turkum ham turadi');
+
+  // ── 2. MIJOZLAR — nol turganlari bilan
+  const m = await S.oylikMijozXabari();
+  const matn = m.map((x) => x.body).join('\n');
+  assert.match(matn, /Oylik sinov mijozi — 400,00 \/ 220,00/, matn.slice(0, 400));
+  assert.match(matn, /Oylik nol mijozi — 0,00 \/ 0,00/, 'nol mijoz ham yoziladi');
+  //  Sarlavhada ikkalasining jami turadi.
+  assert.match(m[0].body, /Savdo .* \$ · tushum .* \$/);
+
+  // ── 3. YO'NALISH
+  const k = await S.oylikKanalXabari();
+  assert.match(k.title, /Yo'nalish/);
+  const B2B = "B2B — diler / do'kon";
+  assert.equal(son(k.body, B2B) - son(oldinK.body, B2B), 400, k.body);
+  //  Yo'nalish qatori mijozsiz ham turadi: bo'sh katak savol.
+  assert.ok(/B2C — chakana: [\d  ]+,\d\d \$/.test(k.body),
+    'B2C qatori turadi');
+
+  // ── 4. KECHA CHIQQAN RO'YXAT — qatorma-qator
+  const r = await S.chiqqanRoyxatXabari();
+  const rmatn = r.map((x) => x.body).join('\n');
+  assert.match(rmatn, /2 ta × 150,00 = 300,00 \$/, rmatn.slice(0, 400));
+  assert.match(rmatn, /Oylik sinov mijozi · OYLIK-1/);
+  //  Oy boshida chiqqani bu ro'yxatda YO'Q: u kechagi kun emas.
+  assert.ok(!rmatn.includes('OYLIK-2'), 'faqat kechagi kun');
+
+  //  Tozalab qo'yamiz: keyingi testlar bu qatorlarni ko'rmasin.
+  await db.query(`UPDATE production_units SET status = 'cancelled'
+                   WHERE conveyor_no LIKE 'OYLIK-%'`);
+  await db.query(`UPDATE cash_ops SET status = 'cancelled'
+                   WHERE doc_no = 'P26-8801'`);
+  await db.query(`UPDATE customers SET active = false WHERE id IN ($1, $2)`,
+    [mij.id, nol.id]);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

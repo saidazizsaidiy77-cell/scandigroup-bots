@@ -2774,6 +2774,204 @@ async function chiqishXabari(client) {
            body: matn.join('\n') };
 }
 
+
+// ═════════════════════════════════ OYLIK HISOBOTLAR — RAHBARIYATGA
+//
+//  ★ OY — XABAR YUBORILAYOTGAN OY (zavod qarori, 2026-10), ya'ni
+//  oyning birinchi kunidan BUGUNGACHA. Kecha bo'yicha emas: savol
+//  «bu oyda qancha bo'ldi» degani va javob har kuni to'lib boradi.
+//
+//  Chiqqan MAHSULOT ro'yxati esa KECHAGI kun bo'yicha — xulosa
+//  ertalab keladi va bugun hali hech narsa chiqmagan (`chiqishXabari`
+//  bilan bir xil qoida va bir xil sabab).
+//
+//  ★ SAVDO YUK XATIDAN, TUSHUM KASSADAN. Ikkalasi teng emas va bu
+//  XATO emas: mahsulot chiqdi-yu puli kelmadi, yoki teskarisi.
+//  Shuning uchun ular har qatorda YONMA-YON turadi — direktor
+//  farqni ko'rib, savolni o'sha mijozga beradi.
+const OY = `date_trunc('month', CURRENT_DATE)::date`;
+const OY2 = `(date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date`;
+
+//  ★ UZUN RO'YXAT BO'LAKLARGA BO'LINADI. Telegram xabari 4096
+//  belgidan oshmaydi va zavodda yuzlab mijoz bor — bitta xabarga
+//  solsak u JIMGINA kesilardi va oxirgi mijozlar yo'qolib ketardi.
+//  Sarlavhada bo'lak raqami turadi, aks holda telefonda ikkita bir
+//  xil xabar ketma-ket tushib, qaysi biri davomi ekani noaniq
+//  qolardi.
+const CHEK = 3500;
+function bolaklar(title, satrlar, bosh = []) {
+  const chiqdi = [];
+  let joriy = [...bosh];
+  const uzunlik = (a) => a.join('\n').length;
+  for (const q of satrlar) {
+    if (joriy.length > bosh.length && uzunlik([...joriy, q]) > CHEK) {
+      chiqdi.push(joriy); joriy = [...bosh];
+    }
+    joriy.push(q);
+  }
+  if (joriy.length > bosh.length || !chiqdi.length) chiqdi.push(joriy);
+  return chiqdi.map((qatorlar, i) => ({
+    title: chiqdi.length > 1 ? `${title} (${i + 1}/${chiqdi.length})` : title,
+    body: qatorlar.join('\n'),
+  }));
+}
+
+//  Oy nomi sarlavhada: xabar ertasiga o'qilsa ham qaysi oyniki ekani
+//  noaniq qolmasin.
+const oyNomi = () => {
+  const d = new Date();
+  return `${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+};
+
+//  ── 1. TURKUM BO'YICHA SAVDO ────────────────────────────────────
+//
+//  Turkumi yo'q guruh ham qatorda qoladi va NOL turkumlar ham
+//  chizilaveradi: bo'sh qator savol, yo'q qator esa yolg'on
+//  (foyda-zarardagi bilan bir xil qoida).
+async function oylikTurkumXabari(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT sc.name AS nom, sc.sort,
+            COALESCE(SUM(u.total_amount), 0) AS summa,
+            COALESCE(SUM(u.qty), 0)::int     AS dona
+       FROM sales_categories sc
+       LEFT JOIN product_groups g  ON g.sales_category = sc.code
+       LEFT JOIN products p        ON p.group_id = g.id
+       LEFT JOIN production_units u ON u.product_id = p.id
+            AND u.status = 'shipped' AND u.total_amount IS NOT NULL
+            AND u.ship_on >= ${OY} AND u.ship_on < ${OY2}
+      WHERE sc.active
+      GROUP BY sc.name, sc.sort
+      ORDER BY sc.sort, sc.name`);
+  //  Turkumsizi alohida: u javob emas, to'ldirilmagan katakning
+  //  belgisi — shuning uchun faqat BOR bo'lganda yoziladi.
+  const { rows: [yoq] } = await c.query(
+    `SELECT COALESCE(SUM(u.total_amount), 0) AS summa,
+            COALESCE(SUM(u.qty), 0)::int     AS dona
+       FROM production_units u
+       JOIN products p       ON p.id = u.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE u.status = 'shipped' AND u.total_amount IS NOT NULL
+        AND g.sales_category IS NULL
+        AND u.ship_on >= ${OY} AND u.ship_on < ${OY2}`);
+
+  const satrlar = rows.map((r) =>
+    `${r.nom}: ${notify.pul(r.summa)} $ · ${r.dona} ta`);
+  if (Number(yoq.summa) || yoq.dona)
+    satrlar.push(`Turkumsiz: ${notify.pul(yoq.summa)} $ · ${yoq.dona} ta`);
+  const jami = rows.reduce((a, r) => a + Number(r.summa), 0) + Number(yoq.summa);
+  satrlar.push('', `Jami: ${notify.pul(jami)} $`);
+  return { title: `Turkum bo'yicha savdo · ${oyNomi()}`,
+           body: satrlar.join('\n') };
+}
+
+//  ── 2. MIJOZLAR KESIMI ──────────────────────────────────────────
+//
+//  ★ NOL TURGAN MIJOZ HAM YOZILADI (zavod qarori, 2026-10): savol
+//  «kim oldi» emas, «KIM OLMADI» ham — oy o'rtasida hech narsa
+//  olmagan mijoz direktorning birinchi savoli. Yo'q qator bu yerda
+//  javobni yashirardi.
+async function oylikMijozXabari(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT c.name,
+            COALESCE(s.summa, 0) AS savdo,
+            COALESCE(t.summa, 0) AS tushum
+       FROM customers c
+       LEFT JOIN LATERAL (
+         SELECT SUM(u.total_amount) AS summa FROM production_units u
+          WHERE u.customer_id = c.id AND u.status = 'shipped'
+            AND u.ship_on >= ${OY} AND u.ship_on < ${OY2}) s ON true
+       LEFT JOIN LATERAL (
+         SELECT SUM(o.amount_usd) AS summa FROM cash_ops o
+          WHERE o.from_kind = 'customer' AND o.from_id = c.id
+            AND o.status = 'ok'
+            AND o.op_date >= ${OY} AND o.op_date < ${OY2}) t ON true
+      WHERE c.active
+      ORDER BY COALESCE(s.summa, 0) DESC, COALESCE(t.summa, 0) DESC, c.name`);
+  if (!rows.length) return null;
+
+  const savdo  = rows.reduce((a, r) => a + Number(r.savdo), 0);
+  const tushum = rows.reduce((a, r) => a + Number(r.tushum), 0);
+  const bosh = [`Savdo ${notify.pul(savdo)} $ · tushum ${notify.pul(tushum)} $`,
+                `Mijoz: ${rows.length} ta`, ''];
+  //  Savdo va tushum YONMA-YON: ikkalasi teng emas va farq
+  //  direktorning savoli.
+  const satrlar = rows.map((r) =>
+    `${r.name} — ${notify.pul(r.savdo)} / ${notify.pul(r.tushum)}`);
+  return bolaklar(`Mijozlar: savdo / tushum · ${oyNomi()}`, satrlar, bosh);
+}
+
+//  ── 3. YO'NALISH BO'YICHA ───────────────────────────────────────
+//
+//  Ro'yxat BAZADAN (`customer_channels`), kodda sanalmaydi: zavod
+//  yangi yo'nalish qo'shsa u o'zi paydo bo'ladi (4-qoida).
+//  Yo'nalishi qo'yilmagan mijoz ham qatorda qoladi — bo'sh katak
+//  savol bo'lib ko'rinsin.
+async function oylikKanalXabari(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT COALESCE(ch.name, 'Yo''nalishsiz') AS nom,
+            COALESCE(ch.sort, 999)            AS sort,
+            COUNT(DISTINCT c.id)::int         AS mijoz,
+            COALESCE(SUM(s.summa), 0)         AS savdo,
+            COALESCE(SUM(t.summa), 0)         AS tushum
+       FROM customers c
+       LEFT JOIN customer_channels ch ON ch.code = c.channel
+       LEFT JOIN LATERAL (
+         SELECT SUM(u.total_amount) AS summa FROM production_units u
+          WHERE u.customer_id = c.id AND u.status = 'shipped'
+            AND u.ship_on >= ${OY} AND u.ship_on < ${OY2}) s ON true
+       LEFT JOIN LATERAL (
+         SELECT SUM(o.amount_usd) AS summa FROM cash_ops o
+          WHERE o.from_kind = 'customer' AND o.from_id = c.id
+            AND o.status = 'ok'
+            AND o.op_date >= ${OY} AND o.op_date < ${OY2}) t ON true
+      WHERE c.active
+      GROUP BY 1, 2
+      ORDER BY 2, 1`);
+  if (!rows.length) return null;
+  const satrlar = rows.map((r) =>
+    `${r.nom}: ${notify.pul(r.savdo)} $ / ${notify.pul(r.tushum)} $`
+    + `  · ${r.mijoz} mijoz`);
+  return { title: `Yo'nalish: savdo / tushum · ${oyNomi()}`,
+           body: satrlar.join('\n') };
+}
+
+//  ── 4. KECHA CHIQQAN MAHSULOTLAR ────────────────────────────────
+//
+//  Jamlanma raqam `chiqishXabari` da allaqachon bor — bu yerda
+//  QATORMA-QATOR: nima, qaysi guruhdan, nechta, kimga, qanchadan.
+//  Direktorning ikkinchi savoli aynan shu va unga jamlanma javob
+//  bermaydi.
+async function chiqqanRoyxatXabari(client) {
+  const c = client || db;
+  const { rows } = await c.query(
+    `SELECT u.conveyor_no, p.name AS mahsulot, g.name AS guruh,
+            u.qty, u.unit_price, u.total_amount,
+            COALESCE(cu.name, '—') AS mijoz
+       FROM production_units u
+       JOIN products p       ON p.id = u.product_id
+       JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN customers cu ON cu.id = u.customer_id
+      WHERE u.status = 'shipped' AND u.ship_on = CURRENT_DATE - 1
+      ORDER BY cu.name, p.name, u.conveyor_no`);
+  //  Nol yozilmaydi: «kecha hech narsa chiqmagan» degan qator har
+  //  dam olish kunidan keyin turib, ko'z unga o'rganib qolardi
+  //  (kechikish belgisi bilan bir xil sabab).
+  if (!rows.length) return null;
+
+  const jami = rows.reduce((a, r) => a + Number(r.total_amount || 0), 0);
+  const bosh = [`${rows.length} qator · ${notify.pul(jami)} $`, ''];
+  const satrlar = rows.map((r) =>
+    `${r.mahsulot} · ${r.guruh} — ${r.qty} ta`
+    + (r.unit_price == null ? '' : ` × ${notify.pul(r.unit_price)}`)
+    + ` = ${notify.pul(r.total_amount)} $`
+    + `\n   ${r.mijoz} · ${r.conveyor_no}`);
+  return bolaklar(`Kecha chiqqan mahsulotlar · ${notify.kun(new Date())}`,
+                  satrlar, bosh);
+}
+
 module.exports = router;
 //  ★ HOLAT NAVBATGA HAM BERILADI (zavod qarori, 2026-09).
 //
@@ -3037,3 +3235,7 @@ module.exports.tayyorXabar = tayyorXabar;
 module.exports.qarzYubor = qarzYubor;
 module.exports.mijozSaldoXabari = mijozSaldoXabari;
 module.exports.chiqishXabari = chiqishXabari;
+module.exports.oylikTurkumXabari = oylikTurkumXabari;
+module.exports.oylikMijozXabari = oylikMijozXabari;
+module.exports.oylikKanalXabari = oylikKanalXabari;
+module.exports.chiqqanRoyxatXabari = chiqqanRoyxatXabari;
