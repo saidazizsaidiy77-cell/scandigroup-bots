@@ -11122,6 +11122,21 @@ test('izoh so\'rovdan tsex ekraniga yetib boradi', async () => {
   assert.ok(jur, 'konver jurnalda');
   assert.equal(jur.note, IZOH, 'izoh jurnalga yetdi');
 
+  //  ★ MASHINA YOZGAN IZOH YO'Q (zavod qarori, 2026-10). Savdo
+  //  buyurtmadan so'rov yuborganda dastur izohga «Buyurtma Z26-0830»
+  //  deb yozib qo'yardi — bog'lanish esa STRUKTURADA turadi va
+  //  ekranda o'z USTUNI bor. Mahsulot nomining ostida zakaz raqami
+  //  ikkinchi marta turardi va mashina yozgan takror ODAM yozgan
+  //  izohni arzonlashtirardi.
+  const { db: db2 } = require('../db');
+  const takror = (await db2.query(
+    `SELECT COUNT(*)::int AS n FROM unit_requests
+      WHERE note ~ '^Buyurtma [A-Z]{1,2}[0-9]{2}-[0-9]+$'`)).rows[0].n
+    + (await db2.query(
+    `SELECT COUNT(*)::int AS n FROM production_units
+      WHERE note ~ '^Buyurtma [A-Z]{1,2}[0-9]{2}-[0-9]+$'`)).rows[0].n;
+  assert.equal(takror, 0, 'zakaz raqami izohda takrorlanmaydi');
+
   //  ── TSEX EKRANIDA — eng muhimi: ish aynan shu yerda qilinadi.
   //  Konver «boshlanmagan» bo'lib ochiladi, ya'ni tsexning
   //  boshlanmaganlar ro'yxatida turadi.

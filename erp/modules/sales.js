@@ -1456,10 +1456,21 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     //  Rang va mato QATORDAN ko'chadi: mijoz aynan shuni so'ragan.
     //  So'rovni yozadigan yagona joy — requestOne (modules/units.js):
     //  raqam, rang tekshiruvi va muddat qoidasi u yerda turadi.
+    //
+    //  ★ IZOH YOZILMAYDI (zavod qarori, 2026-10). Ilgari bu yerda
+    //  «Buyurtma Z26-0830» deb yozilardi va u ikki joyda ortiqcha
+    //  edi: bog'lanish STRUKTURADA turadi (`order_item_id` → bron →
+    //  `order_no`) va ekranda ALLAQACHON o'z ustuni bor — jurnalda
+    //  Z№, so'rovlar ro'yxatida konver raqamining ostida.
+    //
+    //  Izoh ko'rinadigan bo'lgach bu ko'zga tashlandi: mahsulot
+    //  nomining ostida o'sha zakaz raqami ikkinchi marta turardi.
+    //  IZOH — ODAM ODAMGA YOZGAN GAP: mashina yozgan takror uni
+    //  arzonlashtiradi va ko'z haqiqiy izohni o'sha to'da orasida
+    //  ko'rmay qoladi (bron belgisi bilan bir xil sabab).
     const q = await requestOne(client, req, {
       product_id: it.product_id, qty, color: it.color, fabric: it.fabric,
       started_on: today(),
-      note: `Buyurtma ${o.order_no}`,
     }, null, it.id);
 
     await notify.queue({

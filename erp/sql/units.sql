@@ -655,3 +655,37 @@ LEFT JOIN production_units u ON u.id = q.unit_id;
 --  o'tadi.
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS
   can_request_unit BOOLEAN NOT NULL DEFAULT true;
+
+-- ───────────────────────────── MASHINA YOZGAN IZOHNI TOZALASH
+--
+--  ★ IZOH — ODAM ODAMGA YOZGAN GAP (zavod qarori, 2026-10). Savdo
+--  buyurtmadan so'rov yuborganda dastur izohga «Buyurtma Z26-0830»
+--  deb yozib qo'yardi, holbuki bog'lanish STRUKTURADA turadi
+--  (`unit_requests.order_item_id` → bron → `order_no`) va ekranda
+--  o'z USTUNI bor: jurnalda Z№, so'rovlar ro'yxatida konver
+--  raqamining ostida.
+--
+--  Izoh ko'rinadigan bo'lgach bu ko'zga tashlandi: mahsulot nomining
+--  ostida o'sha zakaz raqami ikkinchi marta turardi. Mashina yozgan
+--  takror izohni arzonlashtiradi — ko'z unga o'rganib qoladi va
+--  haqiqiy izohni o'sha to'da orasida ko'rmay qoladi (bron belgisi
+--  bilan bir xil sabab).
+--
+--  Shart NAMUNA bo'yicha, `order_no` bilan solishtirib emas: zakaz
+--  raqami keyin o'zgartirilgan bo'lishi mumkin va o'shanda eski
+--  matn qolib ketardi. Odam yozgan izohga TEGILMAYDI — namuna
+--  «Buyurtma» so'zi va raqamdan boshqa hech narsa bo'lmaganida
+--  mos keladi.
+--
+--  Bir martalik: saytdan yozilgan izoh keyingi deployda
+--  o'chirilmasin.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'izoh-zakaz-takror') THEN
+    UPDATE production_units SET note = NULL
+     WHERE note ~ '^Buyurtma [A-Z]{1,2}[0-9]{2}-[0-9]+$';
+    UPDATE unit_requests SET note = NULL
+     WHERE note ~ '^Buyurtma [A-Z]{1,2}[0-9]{2}-[0-9]+$';
+    INSERT INTO migration_flags (key) VALUES ('izoh-zakaz-takror');
+  END IF;
+END $$;
