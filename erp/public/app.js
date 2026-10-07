@@ -683,8 +683,22 @@ const App = (() => {
     // Xodim faqat o'ziga biriktirilgan bo'limlarni ko'radi. Huquqi yo'q
     // bo'lim umuman chizilmaydi — "rejada" deb ko'rsatish ham ortiqcha:
     // kassirga ishlab chiqarish bo'limi hech qachon kerak bo'lmaydi.
+    //  ★ BO'LIM O'Z SAHIFALARIDAN OCHILADI (zavod qarori, 2026-10).
+    //  Huquq IKKI joyda yozilgan edi — bo'limda va sahifada — va
+    //  ikkalasi ajralib ketdi: «Materiallar» spravochnigi
+    //  `materials.manage` ga ochiq, lekin u «Ma'lumotnomalar»
+    //  bo'limida turadi va BO'LIM faqat `production.manage` ni
+    //  so'rardi. Xom ashyo mudirida sahifa ochiq edi-yu, unga
+    //  boradigan menyu qatori UMUMAN chizilmasdi: «+ Material»
+    //  tugmasini topadigan joy qolmagandi.
+    //
+    //  Endi bo'lim o'ziga ochiq BITTA sahifa bo'lsa ko'rinadi —
+    //  shart sahifada, bitta joyda. `m.perm` o'z joyida qoladi va
+    //  faqat SAHIFASI YO'Q bo'limga kerak (`assets` — «rejada»):
+    //  u yerda tekshiradigan sahifa yo'q.
     const mods = MODULES
-      .filter((m) => !m.perm.length || can(...m.perm))
+      .filter((m) => open.some((p) => inMod(p, m.code))
+                  || !m.perm.length || can(...m.perm))
       .map((m) => {
         const on = m.code === active ? ' class="on"' : '';
         const first = open.find((p) => inMod(p, m.code) && p.href);

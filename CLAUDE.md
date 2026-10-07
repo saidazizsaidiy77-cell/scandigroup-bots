@@ -4093,6 +4093,22 @@ bitta fayl (2-qoida).
 **Menyuning yagona manbai** — `public/app.js` dagi `MODULES` va `PAGES`.
 Yangi sahifa faqat shu ro'yxatga qo'shiladi.
 
+**★ BO'LIM O'Z SAHIFALARIDAN OCHILADI** (zavod qarori, 2026-10).
+Huquq ikki joyda yozilgan edi — BO'LIMDA (`MODULES.perm`) va
+SAHIFADA (`PAGES.perm`) — va ikkalasi ajralib ketdi: «Materiallar»
+spravochnigi `materials.manage` ga ochiq, lekin u «Ma'lumotnomalar»
+bo'limida turadi va bo'lim faqat `production.manage` ni so'rardi. Xom
+ashyo mudirida sahifa ochiq edi-yu, unga boradigan menyu qatori UMUMAN
+chizilmasdi — «+ Material» tugmasini topadigan joy qolmagandi va
+tugma yo'q deb o'qilardi.
+
+Endi bo'lim o'ziga ochiq BITTA sahifa bo'lsa ko'rinadi, ya'ni shart
+SAHIFADA, bitta joyda. `MODULES.perm` o'z joyida qoladi va faqat
+SAHIFASI YO'Q bo'limga kerak («Asosiy vositalar» — «rejada»): u
+yerda tekshiradigan sahifa yo'q. Shu sababdan yangi sahifa
+qo'shilganda bo'lim huquqini ham tahrirlash esdan chiqmaydi — u
+umuman tahrirlanmaydi.
+
 **★ TA'MINOT VA XOM ASHYO — BITTA BO'LIM** (zavod qarori, 2026-10;
 `supply`). Ilgari ikkita edi («Ta'minot» va «Xom ashyo») va chegarasi
 hech qayerda ko'rinmasdi: ta'minotchi birinchisida, undan kelgan mol
