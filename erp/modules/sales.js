@@ -2326,11 +2326,30 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
          JOIN order_items i      ON i.id = r.order_item_id
          JOIN production_units u ON u.id = r.unit_id
          LEFT JOIN sections s    ON s.id = u.current_section_id
-        WHERE i.order_id = $1 AND u.status = 'production'
+        --  ★ «T/M OMBORDA EMAS» DEGANI «ISHLAB CHIQARISHDA» DAN
+        --  KENGROQ (zavod qarori, 2026-10). Shart ilgari faqat
+        --  production ni qarardi va o'rtada bitta holat ochiq
+        --  qolardi: allaqachon CHIQIB KETGAN konver. U buyurtmaga
+        --  bron bo'lib turgan bo'lsa ikkala tekshiruvdan ham
+        --  o'tib ketardi — birinchisi uni production emas deb
+        --  qo'yib yuborardi, ikkinchisi esa bronni SANARDI
+        --  (u.status <> 'cancelled'). Chiqarish esa faqat
+        --  fg ni oladi, ya'ni o'sha dona zavoddan CHIQMASDI.
+        --
+        --  Natijasi qog'oz bilan haqiqatni ajratardi: yuk xatida
+        --  40 dona, konverlar bo'yicha 29 ta — mijoz imzolagan
+        --  hujjat uning balansidan farq qilardi va buni faqat
+        --  shikoyat kelganda bilinardi.
+        --
+        --  Endi shart TESKARI yoziladi: javonda turmagan har
+        --  qanday konver chiqarishni to'xtatadi.
+        WHERE i.order_id = $1 AND u.status NOT IN ('fg', 'cancelled')
         ORDER BY u.conveyor_no`, [o.id])).rows;
     if (kutmoqda.length)
-      throw new Error('Hali omborga kelmagan: ' + kutmoqda
-        .map((u) => `${u.conveyor_no} (${u.section || 'boshlanmagan'})`).join(', '));
+      throw new Error('T/M omborda yo\'q: ' + kutmoqda
+        .map((u) => `${u.conveyor_no} (${u.status === 'shipped'
+          ? 'allaqachon chiqib ketgan'
+          : u.section || 'boshlanmagan'})`).join(', '));
 
     //  ★ MIJOZ SO'RAGAN DONAGA KONVER BIRIKTIRILGAN BO'LISHI SHART
     //  (zavod qarori, 2026-09). Yuqoridagi tekshiruv boshqa savolga

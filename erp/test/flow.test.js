@@ -3565,7 +3565,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   // Hammasi kelmagunча chiqarib bo'lmaydi
   const erta = await mudir('POST', `/api/sales/orders/${z.id}/ship`);
   assert.equal(erta.status, 400);
-  assert.match(erta.body.error, /Hali omborga kelmagan/);
+  assert.match(erta.body.error, /T\/M omborda yo'q/);
   assert.match(erta.body.error, new RegExp(yolda.conveyor_no));
 
   // Yo'ldagini omborga kiritamiz (jurnaldan tuzatish yo'li bilan)
@@ -11336,9 +11336,12 @@ test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () 
   });
   assert.ok(ketgan.includes(900101), 'yaxshi manzil xabarni oldi');
 
+  //  AYNAN «Tg yomon» ning qatori: `queueDigest` belgisi bor HAR
+  //  xodimga bitta qator yozadi va ularning tartibi kafolatlanmagan —
+  //  `ORDER BY id DESC` bir kun boshqa xodimning qatorini olardi.
   const q = (await db.query(
     `SELECT sent_at, error FROM notifications
-      WHERE title = 'Sinov xulosa' ORDER BY id DESC LIMIT 1`)).rows[0];
+      WHERE title = 'Sinov xulosa' AND worker_id = $1`, [yomon])).rows[0];
   assert.ok(q.sent_at, 'qator navbatda tiqilib qolmaydi');
   assert.match(q.error, /900102/, 'kimga bormagani yozilib qoladi');
   assert.match(q.error, /403/, 'sababi ham');
@@ -11351,7 +11354,7 @@ test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () 
   await n.sendPending(async () => { throw new Error('fetch failed'); });
   const t = (await db.query(
     `SELECT sent_at, error FROM notifications
-      WHERE title = 'Sinov tarmoq' ORDER BY id DESC LIMIT 1`)).rows[0];
+      WHERE title = 'Sinov tarmoq' AND worker_id = $1`, [yomon])).rows[0];
   assert.equal(t.sent_at, null, 'vaqtinchalik uzilishda qator qoladi');
   assert.match(t.error, /fetch failed/);
 
@@ -11364,7 +11367,7 @@ test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () 
   await n.sendPending(async () => { throw new Error('yuborilmasligi kerak'); });
   const m = (await db.query(
     `SELECT sent_at, error FROM notifications
-      WHERE title = 'Sinov manzilsiz' ORDER BY id DESC LIMIT 1`)).rows[0];
+      WHERE title = 'Sinov manzilsiz' AND worker_id = $1`, [yomon])).rows[0];
   assert.ok(m.sent_at, 'manzilsiz qator navbatni tiqmaydi');
   assert.match(m.error, /Telegram ID/, 'sababi yozilgan');
 
