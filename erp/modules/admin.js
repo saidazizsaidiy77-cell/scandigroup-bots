@@ -520,4 +520,50 @@ router.patch('/settings/:key', need('admin.users'), wrap(async (req, res) => {
   res.json({ ok: true, on });
 }));
 
+// ═══════════════════════════════ XABAR TASHXISI
+//
+//  ★ «NEGA XABAR BORMAYAPTI» DEGAN SAVOLGA EKRANDA JAVOB (zavod
+//  qarori, 2026-10). Zanjir uzun — token → `tg_id` → botga «Start» →
+//  navbat — va uzilgan joyini bilish uchun yagona yo'l bazaga qo'lda
+//  kirish bo'lardi: `notifications.error` ustuni hech qaysi sahifada
+//  ko'rinmasdi.
+//
+//  Javob XODIMLAR sahifasida, chunki savol aynan o'sha yerda
+//  beriladi: Telegram ID ham, xabar belgilari ham shu kartochkada
+//  qo'yiladi.
+//
+//  To'rtta savol, to'rtta raqam — va har biri zanjirning bitta
+//  bo'g'ini:
+//
+//    token      server sozlamasida `ERP_TG_TOKEN` bormi
+//    navbatda   yuborilmay turgan xabar (token yo'q bo'lsa o'sib boradi)
+//    xato       oxirgi rad javoblari — AYNAN nima deyilgani bilan
+//    idsiz      belgisi bor, lekin Telegram ID yozilmagan xodimlar
+//
+//  Ism BAZADAN keladi (4-qoida): kodga na ism, na raqam yozilmaydi.
+router.get('/notify-health', need('admin.users'), wrap(async (_req, res) => {
+  const [q, x, idsiz] = await Promise.all([
+    db.query(`SELECT COUNT(*)::int AS n FROM notifications WHERE sent_at IS NULL`),
+    //  Faqat xatosi borlari va faqat oxirgi beshtasi: ro'yxat emas,
+    //  TASHXIS — birinchi qator odatda qolganini ham tushuntiradi.
+    db.query(
+      `SELECT id, title, error, created_at, sent_at
+         FROM notifications WHERE error IS NOT NULL
+        ORDER BY id DESC LIMIT 5`),
+    //  Belgisi bor, ID si yo'q xodim — xabar unga hech qachon
+    //  bormaydi va buni hech narsa aytmasdi.
+    db.query(
+      `SELECT name FROM workers
+        WHERE active AND tg_id IS NULL
+          AND (daily_digest OR supply_reports)
+        ORDER BY name`),
+  ]);
+  res.json({
+    token: String(process.env.ERP_TG_TOKEN || '').trim() !== '',
+    navbatda: q.rows[0].n,
+    xato: x.rows,
+    idsiz: idsiz.rows.map((r) => r.name),
+  });
+}));
+
 module.exports = router;

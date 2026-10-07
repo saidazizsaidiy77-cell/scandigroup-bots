@@ -11303,6 +11303,87 @@ test('oylik hisobotlar: turkum, mijoz, yo\'nalish va chiqqan ro\'yxat', async ()
     [mij.id, nol.id]);
 });
 
+test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () => {
+  //  ★ Ilgari yuborish BITTA `try` ichida edi: Telegram birinchi
+  //  odamda rad etsa tsikl UZILARDI, qolganlar xabarni umuman
+  //  olmasdi va qator `sent_at` siz qolib har daqiqada qaytadan
+  //  urinardi. So'rov `ORDER BY id LIMIT 50` — ya'ni o'shanday
+  //  ellikta qator yig'ilgach navbatning BOSHI tiqilib, YANGI xabar
+  //  hech qachon yuborilmasdi.
+  const { db } = require('../db');
+  const n = require('../notify');
+
+  await db.query(`DELETE FROM notifications WHERE sent_at IS NULL`);
+  for (const [nom, tg] of [['Tg yaxshi', 900101], ['Tg yomon', 900102]]) {
+    await db.query(`INSERT INTO workers (name, tg_id, active) VALUES ($1,$2,true)
+                    ON CONFLICT DO NOTHING`, [nom, tg]);
+    await db.query(`UPDATE workers SET tg_id = $2, active = true WHERE name = $1`,
+      [nom, tg]);
+    await db.query(`UPDATE workers SET daily_digest = true WHERE name = $1`, [nom]);
+  }
+  const yomon = (await H.id(`SELECT id FROM workers WHERE name='Tg yomon'`)).id;
+
+  //  Ikkala xodimga ham boradigan xabar: belgisi bor hammaga.
+  assert.ok(await n.queueDigest({ module: 'sales', kind: 'digest',
+                                  title: 'Sinov xulosa', body: 'matn' }));
+
+  //  Telegram 403 — xodim botga «Start» bosmagan. Bu QAYTMAYDIGAN
+  //  xato: ertaga ham o'zgarmaydi.
+  const ketgan = [];
+  await n.sendPending(async (tg) => {
+    if (Number(tg) === 900102) throw new Error('Telegram 403: forbidden');
+    ketgan.push(Number(tg));
+  });
+  assert.ok(ketgan.includes(900101), 'yaxshi manzil xabarni oldi');
+
+  const q = (await db.query(
+    `SELECT sent_at, error FROM notifications
+      WHERE title = 'Sinov xulosa' ORDER BY id DESC LIMIT 1`)).rows[0];
+  assert.ok(q.sent_at, 'qator navbatda tiqilib qolmaydi');
+  assert.match(q.error, /900102/, 'kimga bormagani yozilib qoladi');
+  assert.match(q.error, /403/, 'sababi ham');
+
+  //  ★ TARMOQ UZILISHI esa QAYTADI: hech kimga ketmagan xabar
+  //  navbatda qoladi va keyingi o'tishda qaytadan uriniladi.
+  await db.query(`UPDATE workers SET daily_digest = false WHERE name = 'Tg yaxshi'`);
+  await n.queueDigest({ module: 'sales', kind: 'digest',
+                        title: 'Sinov tarmoq', body: 'matn' });
+  await n.sendPending(async () => { throw new Error('fetch failed'); });
+  const t = (await db.query(
+    `SELECT sent_at, error FROM notifications
+      WHERE title = 'Sinov tarmoq' ORDER BY id DESC LIMIT 1`)).rows[0];
+  assert.equal(t.sent_at, null, 'vaqtinchalik uzilishda qator qoladi');
+  assert.match(t.error, /fetch failed/);
+
+  //  ★ MANZIL YO'QLIGI HAM JAVOB: ilgari qator JIMGINA «yuborilgan»
+  //  bo'lib belgilanardi va navbat toza ko'rinardi — «nega xabar
+  //  bormayapti» degan savolga tizimda javob yo'q edi.
+  await db.query(`UPDATE workers SET tg_id = NULL WHERE name = 'Tg yomon'`);
+  await n.queueDigest({ module: 'sales', kind: 'digest',
+                        title: 'Sinov manzilsiz', body: 'matn' });
+  await n.sendPending(async () => { throw new Error('yuborilmasligi kerak'); });
+  const m = (await db.query(
+    `SELECT sent_at, error FROM notifications
+      WHERE title = 'Sinov manzilsiz' ORDER BY id DESC LIMIT 1`)).rows[0];
+  assert.ok(m.sent_at, 'manzilsiz qator navbatni tiqmaydi');
+  assert.match(m.error, /Telegram ID/, 'sababi yozilgan');
+
+  //  ★ TASHXIS EKRANDA: «nega bormayapti» degan savolga Xodimlar
+  //  sahifasi javob beradi — ilgari bazaga qo'lda kirishdan boshqa
+  //  yo'l yo'q edi.
+  const h = await admin('GET', '/api/admin/notify-health');
+  assert.equal(h.status, 200, h.text);
+  assert.equal(typeof h.body.token, 'boolean');
+  assert.ok(h.body.idsiz.includes('Tg yomon'), 'ID siz xodim ro\'yxatda');
+  assert.ok(h.body.xato.some((x) => /403/.test(x.error || '')), 'xato ko\'rinadi');
+
+  //  Tozalab ketamiz: qolgan testlar o'z xabarini sanaydi.
+  await db.query(
+    `UPDATE workers SET active = false, daily_digest = false, tg_id = NULL
+      WHERE name IN ('Tg yaxshi', 'Tg yomon')`);
+  await db.query(`DELETE FROM notifications WHERE title LIKE 'Sinov %'`);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

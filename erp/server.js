@@ -170,7 +170,17 @@ function zaxiraJadvali() {
 //  yoziladi (kodga ism ham, raqam ham yozilmaydi: 4-qoida).
 function xabarJadvali() {
   const token = String(process.env.ERP_TG_TOKEN || '').trim();
-  if (!token) return;
+  //  ★ TOKENSIZ JIM TURISH — JAVOB EMAS (zavod qarori, 2026-10).
+  //  Token qo'yilmagan bo'lsa tizim hech narsani buzmaydi va xabarlar
+  //  navbatda yig'ilaveradi — lekin ILGARI u bu haqda hech narsa
+  //  demasdi: «nega xodimlarga xabar bormayapti» degan savolning
+  //  javobi jurnalda ham, ekranda ham yo'q edi. Endi logda bitta
+  //  qator turadi va u birinchi qaraladigan joy.
+  if (!token) {
+    console.warn('Telegram xabarlari: O\'CHIQ — ERP_TG_TOKEN qo\'yilmagan. '
+      + 'Xabarlar navbatda yig\'ilaveradi, hech kimga yuborilmaydi.');
+    return;
+  }
   const notify = require('./notify');
   console.log('Telegram xabarlari: yoqilgan');
 

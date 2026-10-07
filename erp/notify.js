@@ -201,12 +201,64 @@ async function sendPending(send, limit = 50) {
 
   for (const n of rows) {
     const text = n.body ? `*${n.title}*\n${n.body}` : n.title;
-    try {
-      for (const tgId of [...new Set(n.targets)]) await send(tgId, text);
-      await db.query(`UPDATE notifications SET sent_at = NOW() WHERE id = $1`, [n.id]);
-    } catch (e) {
-      await db.query(`UPDATE notifications SET error = $2 WHERE id = $1`, [n.id, e.message]);
+    const manzil = [...new Set(n.targets)];
+
+    //  ★ MANZIL YO'QLIGI HAM JAVOB (zavod qarori, 2026-10). Xodimning
+    //  `tg_id` si yozilmagan bo'lsa yuboradigan joy yo'q — qaytadan
+    //  urinish ham ma'nosiz, chunki qator o'zidan-o'zi to'lmaydi.
+    //  Ilgari qator JIMGINA «yuborilgan» bo'lib belgilanardi va
+    //  navbat toza ko'rinardi: «nega xabar bormayapti» degan savolga
+    //  tizimda javob umuman yo'q edi. Endi SABABI yozilib qoladi.
+    if (!manzil.length) {
+      await db.query(
+        `UPDATE notifications
+            SET sent_at = NOW(), error = 'Manzil yo''q — Telegram ID yozilmagan'
+          WHERE id = $1`, [n.id]);
+      continue;
     }
+
+    //  ★ BITTA MANZIL YIQILSA QOLGANI KETAVERADI (zavod qarori,
+    //  2026-10). Ilgari yuborish BITTA `try` ichida, bitta tsikl
+    //  bo'lib turardi va natijasi eng yomoni edi: Telegram birinchi
+    //  odamda rad etsa (`403` — xodim botga «Start» bosmagan, yoki
+    //  ID xato) tsikl UZILARDI, qolganlar xabarni UMUMAN olmasdi va
+    //  qator `sent_at` siz qolib, har daqiqada qaytadan urinardi.
+    //
+    //  Ustiga so'rov `ORDER BY id LIMIT 50` — ya'ni o'shanday ellikta
+    //  qator yig'ilgach navbatning BOSHI tiqilib qolardi va YANGI
+    //  xabar hech qachon yuborilmasdi. Bitta xodimning bosilmagan
+    //  «Start» i butun zavodni xabarsiz qoldirardi.
+    let ketdi = 0;
+    const xato = [];
+    for (const tgId of manzil) {
+      try { await send(tgId, text); ketdi++; }
+      catch (e) { xato.push(`${tgId}: ${e.message}`); }
+    }
+
+    //  ★ TELEGRAMNING 4xx JAVOBI QAYTMAYDI, tarmoq uzilishi esa
+    //  qaytadi. «Bot bilan suhbat boshlanmagan» yoki «chat topilmadi»
+    //  degan javob ertaga ham o'zgarmaydi — qatorni navbatda tutib
+    //  turish faqat navbatning boshini tiqib qo'yadi. Tarmoq yoki `5xx` esa
+    //  vaqtinchalik: o'shanda qator QOLADI va keyingi o'tishda
+    //  qaytadan uriniladi.
+    //
+    //  Qaytarish faqat HECH KIMGA ketmaganda: bir qismi yetib
+    //  borgan xabarni qaytadan yuborish butun bo'limga ikkinchi
+    //  nusxani berardi — yo'qolgan bitta xabardan ko'ra yomonroq.
+    const vaqtincha = !ketdi && xato.length
+      && xato.every((m) => !/Telegram 4\d\d/.test(m));
+    const izoh = xato.length ? xato.join(' · ').slice(0, 500) : null;
+
+    if (vaqtincha) {
+      await db.query(`UPDATE notifications SET error = $2 WHERE id = $1`,
+        [n.id, izoh]);
+      continue;
+    }
+    //  Xato YOZILIB qoladi, qator esa yuborilgan bo'lib belgilanadi:
+    //  «kimga bormadi va nega» degan savol keyin beriladi.
+    await db.query(
+      `UPDATE notifications SET sent_at = NOW(), error = $2 WHERE id = $1`,
+      [n.id, izoh]);
   }
   return rows.length;
 }

@@ -2962,6 +2962,68 @@ jo'natuvchi daqiqada bir marta yuradi (`xabarJadvali`,
 `notify.sendPending`). `ERP_TG_TOKEN` yo'q bo'lsa JIM turadi va hech
 narsani buzmaydi — xabarlar navbatda yig'ilaveradi.
 
+### Nega xabar bormaydi — zanjir to'rt bo'g'inli
+
+Xabar to'rtta bo'g'indan o'tadi va bittasi uzilsa natija bir xil:
+hech kimga hech narsa bormaydi.
+
+    1  ERP_TG_TOKEN       server sozlamasida
+    2  workers.tg_id      xodimning Telegram ID si
+    3  botdagi «Start»    xodim suhbatni O'ZI boshlagan bo'lishi kerak
+    4  navbat             `notifications`, daqiqada bir marta
+
+**★ UCHINCHI BO'G'IN TIZIMNING QO'LIDA EMAS**: Telegram boti
+foydalanuvchiga BIRINCHI bo'lib yoza olmaydi — bu Telegramning
+qoidasi. Xodim botni ochib «Start» bosmaguncha har urinish `403`
+bilan qaytadi, `tg_id` to'g'ri yozilgan bo'lsa ham.
+
+**★ BITTA MANZIL YIQILSA QOLGANI KETAVERADI** (zavod qarori, 2026-10;
+`sendPending`, `erp/notify.js`). Ilgari yuborish BITTA `try` ichida,
+bitta tsikl bo'lib turardi va natijasi eng yomoni edi: Telegram
+birinchi odamda rad etsa tsikl UZILARDI, qolganlar xabarni UMUMAN
+olmasdi va qator `sent_at` siz qolib har daqiqada qaytadan urinardi.
+
+Ustiga so'rov `ORDER BY id LIMIT 50` — ya'ni o'shanday ellikta qator
+yig'ilgach navbatning BOSHI tiqilib qolardi va YANGI xabar hech qachon
+yuborilmasdi. **Bitta xodimning bosilmagan «Start» i butun zavodni
+xabarsiz qoldirardi** va buni hech narsa aytmasdi.
+
+Endi har manzil ALOHIDA yuboriladi va xato yig'ib boriladi. Qaytarish
+esa XATONING TURIGA qarab:
+
+    Telegram 4xx       QAYTMAYDI — «Start» bosilmagani ertaga ham
+                       o'zgarmaydi; qator yuborilgan bo'lib
+                       belgilanadi, SABABI esa `error` da qoladi
+    tarmoq yoki 5xx    QAYTADI — vaqtinchalik uzilish
+
+Qaytarish faqat HECH KIMGA ketmaganda: bir qismi yetib borgan xabarni
+qaytadan yuborish butun bo'limga ikkinchi nusxani berardi — yo'qolgan
+bitta xabardan ko'ra yomonroq.
+
+**★ MANZIL YO'QLIGI HAM JAVOB.** `tg_id` yozilmagan bo'lsa yuboradigan
+joy yo'q — qaytadan urinish ham ma'nosiz. Ilgari qator JIMGINA
+«yuborilgan» bo'lib belgilanardi va navbat TOZA ko'rinardi: «nega
+xabar bormayapti» degan savolga tizimda javob umuman yo'q edi. Endi
+sababi yozilib qoladi.
+
+**★ TOKENSIZ JIM TURISH — JAVOB EMAS.** `ERP_TG_TOKEN` qo'yilmagan
+bo'lsa tizim hech narsani buzmaydi, lekin ilgari bu haqda hech narsa
+ham demasdi. Endi serverning jurnalida bitta qator turadi va u
+birinchi qaraladigan joy.
+
+**★ TASHXIS XODIMLAR SAHIFASIDA** (`GET /api/admin/notify-health`,
+`admin.users`). Savol aynan o'sha yerda beriladi: Telegram ID ham,
+xabar belgilari ham shu kartochkada qo'yiladi. To'rtta savol, to'rtta
+raqam — har biri zanjirning bitta bo'g'ini: token bormi · navbatda
+nechta kutmoqda · oxirgi rad javoblari AYNAN nima deyilgani bilan ·
+belgisi bor, lekin ID si yo'q xodimlar ismi bilan.
+
+Kartochka **faqat muammo BO'LGANDA** chiziladi: har kuni turadigan
+yashil yozuvga ko'z o'rganib qoladi va haqiqiy uzilish o'sha orada
+ko'rinmay ketardi (bron belgisi bilan bir xil qoida). Navbat soni esa
+token BOR bo'lganda aytiladi — tokensiz navbatning to'lishi kutilgan
+hol va ikkinchi marta aytish chalg'itardi.
+
 ### Rahbariyat xulosasi — 08:00
 
 **★ SAKKIZ SAVOL, SAKKIZ XABAR** (`workers.daily_digest`,

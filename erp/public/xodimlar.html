@@ -71,6 +71,13 @@
     yangi huquq darhol kuchga kiradi.</p>
 </div>
 
+<!--  Xabar tashxisi: «nega xodimlarga xabar bormayapti» degan savol
+      aynan shu sahifada beriladi — Telegram ID ham, xabar belgilari
+      ham shu yerda qo'yiladi. Kartochka faqat muammo BO'LGANDA
+      chiziladi: har kuni turadigan yashil yozuvga ko'z o'rganib
+      qoladi va haqiqiy uzilish o'sha orada ko'rinmay ketardi. -->
+<div id="tgSog"></div>
+
 <div class="card" style="margin-top:16px">
   <h2>Rollar</h2>
   <div style="overflow-x:auto"><table>
@@ -120,6 +127,49 @@ async function load(){
     <tr><td>${esc(r.name)}<div class="muted" style="font-size:12px">${esc(r.code)}</div></td>
       <td class="muted">${SURFACE[r.surface] || r.surface}</td>
       <td class="num">${r.permission_count}</td></tr>`).join('');
+
+  tgSoglik();
+}
+
+//  ★ ZANJIRNING UZILGAN JOYI YOZILIB TURADI (zavod qarori, 2026-10).
+//  Xabar to'rtta bo'g'indan o'tadi — token, Telegram ID, botdagi
+//  «Start» va navbat — va bittasi uzilsa natija bir xil: hech kimga
+//  hech narsa bormaydi. Qaysi bo'g'in ekanini bilish uchun ilgari
+//  bazaga qo'lda kirishdan boshqa yo'l yo'q edi.
+//
+//  Kartochka FAQAT muammo bo'lganda chiziladi va xato bo'lsa ham
+//  sahifani yiqitmaydi: u tashxis, ishning o'zi emas.
+async function tgSoglik(){
+  let d;
+  try { d = await App.api('/api/admin/notify-health'); } catch { return; }
+  const bor = [];
+  if (!d.token) bor.push(`<b>Telegram tokeni qo'yilmagan</b> — hech qanday
+    xabar yuborilmaydi, navbatda yig'ilaveradi. Server sozlamasiga
+    <code>ERP_TG_TOKEN</code> yoziladi.`);
+  if (d.idsiz.length) bor.push(`<b>${d.idsiz.length} ta xodimda Telegram ID
+    yozilmagan</b>, lekin xabar belgisi qo'yilgan — ularga xabar bormaydi:
+    <span style="font-size:12px">${esc(d.idsiz.join(' · '))}</span>`);
+  if (d.xato.length) bor.push(`<b>Telegram rad etgan xabarlar</b> — odatda
+    xodim botga «Start» bosmagan yoki ID xato:<br>${d.xato.map(x =>
+      `<span style="font-size:12px">${esc(x.title)} — ${esc(x.error)}</span>`
+    ).join('<br>')}`);
+  //  Navbat token BOR bo'lganda ham to'lib turgan bo'lsa — bu boshqa
+  //  savol: jo'natuvchi ishlamayapti. Tokensiz navbat kutilgan hol,
+  //  shuning uchun ikkinchi marta aytilmaydi.
+  if (d.token && d.navbatda > 20) bor.push(`<b>Navbatda ${d.navbatda} ta xabar
+    kutmoqda</b> — jo'natuvchi daqiqada bir marta yuradi; raqam kamaymasa
+    serverning jurnalini ko'rish kerak.`);
+
+  $('tgSog').innerHTML = bor.length ? `
+    <div class="card" style="margin-top:16px">
+      <h2>Telegram xabarlari — nega bormayapti</h2>
+      ${bor.map(t => `<p class="tag warn" style="display:block;text-align:left;
+        white-space:normal;margin-top:10px">${t}</p>`).join('')}
+      <p class="muted" style="font-size:12px;margin-top:12px">
+        Xodim bot bilan suhbatni O'ZI boshlashi kerak: Telegram botni ochib
+        «Start» bosadi. Bot hech qachon birinchi bo'lib yoza olmaydi —
+        bu Telegramning qoidasi, tizimning emas.</p>
+    </div>` : '';
 }
 
 //  ★ USTUN BO'YICHA SARALASH — KLIENTDA (zavod qarori, 2026-09).
