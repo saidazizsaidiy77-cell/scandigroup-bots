@@ -3678,11 +3678,23 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('POST',
     `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`, {})).status, 400);
 
-  //  Zavoddan CHIQQAN mahsulotning qatori olib tashlanmaydi
-  const chiqqan = await admin('POST',
+  //  ★ QATOR CHIQQAN DONAGA TENGLASHTIRILADI. Qatorda 6 ta, chiqqani
+  //  ham 6 ta — ya'ni tuzatadigan farq yo'q va rad etiladi.
+  const tengi = await admin('POST',
     `/api/sales/orders/${z.id}/items/${qator.id}/remove`, { note: 'sinov' });
-  assert.equal(chiqqan.status, 400, chiqqan.text);
-  assert.match(chiqqan.body.error, /CHIQQAN/);
+  assert.equal(tengi.status, 400, tengi.text);
+  assert.match(tengi.body.error, /farq yo'q/);
+
+  //  Qatorni 9 ta qilib qo'yamiz: chiqqani baribir 6 ta — hujjat
+  //  haqiqatdan uch donaga ko'p turibdi va aynan shu tuzatiladi.
+  await dbq.query(`UPDATE order_items SET qty = 9 WHERE id = $1`, [qator.id]);
+  const tuz = await admin('POST',
+    `/api/sales/orders/${z.id}/items/${qator.id}/remove`, { note: 'sinov' });
+  assert.equal(tuz.status, 200, tuz.text);
+  assert.equal(tuz.body.chiqdi, 6);
+  assert.equal(tuz.body.edi, 9);
+  assert.equal((await admin('GET', '/api/sales/orders/' + z.id))
+    .body.items.find((x) => x.id === qator.id).qty, 6, 'soni haqiqatga tengdi');
 
   //  Chiqmagani esa olib tashlanadi
   assert.equal((await admin('POST',
@@ -3692,9 +3704,14 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal(qolgan.length, 1, 'qator hujjatdan tushdi');
   assert.equal(qolgan[0].id, qator.id);
 
-  //  Oxirgi qator olib tashlanmaydi — qatorsiz yuk xati hujjat emas
+  //  Oxirgi qator olib tashlanmaydi — qatorsiz yuk xati hujjat emas.
+  //  (Chiqqani nol bo'lgan yagona qator: shu shartga tushadi.)
+  const yolgiz = (await dbq.query(
+    `INSERT INTO order_items (order_id, product_id, qty, unit_price)
+     VALUES ($1, $2, 2, 50) RETURNING id`, [z.id, STU])).rows[0];
+  await dbq.query(`DELETE FROM order_items WHERE id = $1`, [qator.id]);
   const oxirgi = await admin('POST',
-    `/api/sales/orders/${z.id}/items/${qator.id}/remove`, { note: 'sinov' });
+    `/api/sales/orders/${z.id}/items/${yolgiz.id}/remove`, { note: 'sinov' });
   assert.equal(oxirgi.status, 400, oxirgi.text);
   assert.match(oxirgi.body.error, /Oxirgi qator/);
 

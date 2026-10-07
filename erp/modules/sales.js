@@ -1779,12 +1779,6 @@ router.post('/orders/:id/items/:itemId/remove', need('sales.fix'),
         [req.params.itemId, o.id])).rows[0];
       if (!it) throw new Error('Bu buyurtmada bunday qator yo\'q');
 
-      const jami = Number((await client.query(
-        `SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1`,
-        [o.id])).rows[0].n);
-      if (jami < 2)
-        throw new Error('Oxirgi qator olib tashlanmaydi — qatorsiz yuk '
-          + 'xati hujjat emas');
 
       const bron = Number((await client.query(
         `SELECT COALESCE(SUM(r.qty), 0)::int AS n
@@ -1802,19 +1796,44 @@ router.post('/orders/:id/items/:itemId/remove', need('sales.fix'),
           WHERE u.order_no = $1 AND u.status = 'shipped'
             AND u.product_id = $2`,
         [o.order_no, it.product_id])).rows[0].n);
-      if (chiqdi > 0)
+      //  ★ QATOR CHIQQAN DONAGA TENGLASHTIRILADI, va olib tashlash
+      //  shuning CHEGARA holati (`chiqdi = 0`). Hujjat haqiqatni
+      //  aytishi kerak: yuk xatida 40 dona turib, zavoddan 29 tasi
+      //  chiqqan bo'lsa qog'oz bilan balans AJRALIB turadi — qarz
+      //  KONVERDAN hisoblanadi va u 29 tani biladi.
+      //
+      //  Soni IXTIYORIY raqamga o'zgartirilmaydi: yagona to'g'ri
+      //  javob CHIQQAN dona va uni server o'zi biladi. Qo'lda raqam
+      //  so'ralsa yopilgan hujjat oddiy tahrirga aylanardi.
+      if (chiqdi >= it.qty)
         throw new Error(`${it.product}: bu mahsulotdan ${chiqdi} ta `
-          + 'zavoddan CHIQQAN — qator hujjatda qoladi. Narxni '
-          + 'tuzatish mumkin, olib tashlash yo\'q');
+          + `chiqqan, qatorda esa ${it.qty} ta — tuzatadigan farq yo'q`);
 
-      await client.query(`DELETE FROM order_items WHERE id = $1`, [it.id]);
+      if (chiqdi > 0) {
+        await client.query(
+          `UPDATE order_items SET qty = $2 WHERE id = $1 AND order_id = $3`,
+          [it.id, chiqdi, o.id]);
+      } else {
+        //  Oxirgi qator O'CHIRILMAYDI: qatorsiz yuk xati hujjat emas.
+        //  Soni tuzatishda bunday savol yo'q — qator joyida qoladi.
+        const jami = Number((await client.query(
+          `SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1`,
+          [o.id])).rows[0].n);
+        if (jami < 2)
+          throw new Error('Oxirgi qator olib tashlanmaydi — qatorsiz yuk '
+            + 'xati hujjat emas');
+        await client.query(`DELETE FROM order_items WHERE id = $1`, [it.id]);
+      }
       await audit(req, { module: 'sales', action: 'fix', entity: 'order',
                          entity_id: o.id,
-                         payload: { order_no: o.order_no, qator: 'olib tashlandi',
-                                    mahsulot: it.product, soni: it.qty,
+                         payload: { order_no: o.order_no,
+                                    qator: chiqdi > 0 ? 'soni tuzatildi'
+                                                      : 'olib tashlandi',
+                                    mahsulot: it.product,
+                                    edi: it.qty, boldi: chiqdi,
                                     note: sabab } }, client);
       await client.query('COMMIT');
-      res.json({ ok: true });
+      res.json({ ok: true, chiqdi, edi: it.qty });
     } catch (e) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: e.message });

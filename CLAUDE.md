@@ -1777,13 +1777,24 @@ yolg'on bo'lib qolaveradi, mijozning qarzi esa (u KONVERDAN
 hisoblanadi) o'sha qatorni baribir bilmaydi — ya'ni qog'oz bilan
 balans AJRALIB turadi.
 
-Chegara MAHSULOTNING qayerdaligidan chiqadi, qulaylikdan emas:
+**★ OLIB TASHLASH — UMUMIY QOIDANING CHEGARA HOLATI.** Savol
+aslida kengroq: hujjat haqiqatni aytsin. Yuk xatida 40 dona turib,
+zavoddan 29 tasi chiqqan bo'lsa qog'oz bilan balans AJRALIB
+turaveradi — qarz KONVERDAN hisoblanadi va u 29 tani biladi.
+Shuning uchun qator **CHIQQAN DONAGA TENGLASHTIRILADI**, hech
+narsa chiqmagan bo'lsa esa butunlay olib tashlanadi: bitta yo'l,
+ikkita natija.
 
-    bo'ladi      shu mahsulotdan BITTA HAM konver chiqmagan bo'lsa
-    bo'lmaydi    bittasi bo'lsa ham chiqqan — mahsulot mijozda va
-                 qog'oz uni to'g'ri aytmoqda (narx esa tuzatiladi)
+**Soni IXTIYORIY raqamga o'zgartirilmaydi**: yagona to'g'ri javob
+CHIQQAN dona va uni server o'zi biladi. Qo'lda raqam so'ralsa
+yopilgan hujjat oddiy tahrirga aylanardi.
+
+    tenglashadi  chiqqani qatordagidan KAM bo'lsa (40 → 29)
+    o'chadi      shu mahsulotdan bitta ham konver chiqmagan bo'lsa
+    bo'lmaydi    tuzatadigan farq yo'q (chiqqani qatordagicha)
     bo'lmaydi    qatorda tirik bron bor — avval konver qaytariladi
-    bo'lmaydi    oxirgi qator — qatorsiz yuk xati hujjat emas
+    bo'lmaydi    oxirgi qatorni O'CHIRISH — qatorsiz yuk xati hujjat
+                 emas; sonini tuzatish esa o'shanda ham ochiq
 
 Shart MAHSULOT bo'yicha (`order_no` matni + `product_id`): konver
 qaysi QATORNIKI ekani saqlanmagan — `sotilgan-narx` va «kam

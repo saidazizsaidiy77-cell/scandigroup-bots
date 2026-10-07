@@ -1434,15 +1434,18 @@ const close_ = () => { stopTick(); $('modalRoot').innerHTML = ''; cur = null; };
 //  bo'lsa rad etiladi.
 async function itemRemove(itemId){
   const it = cur.items.find(x => x.id === itemId);
-  const sabab = prompt(`«${it?.product || ''}» qatori yuk xatidan olib '''
-+ '''tashlanadi.\nFaqat zavoddan CHIQMAGAN qator olib tashlanadi.\n\n'''
-+ '''Sababi:`);
+  const nom = it?.product || '';
+  const sabab = prompt(nom + ' qatori zavoddan CHIQQAN donaga '
+    + 'tenglashtiriladi.\nHech narsa chiqmagan bo\'lsa qator butunlay '
+    + 'olib tashlanadi.\n\nSababi:');
   if (sabab === null) return;
   if (!sabab.trim()) return toast('Sabab yozilmagan', true);
   try {
-    await App.api(`/api/sales/orders/${cur.order.id}/items/${itemId}/remove`,
+    const r = await App.api(
+      `/api/sales/orders/${cur.order.id}/items/${itemId}/remove`,
       { method: 'POST', body: { note: sabab.trim() } });
-    toast('Qator olib tashlandi');
+    toast(r && r.chiqdi
+      ? `Soni ${r.edi} \u2192 ${r.chiqdi}` : 'Qator olib tashlandi');
     await openOrder(cur.order.id);
   } catch (e) { toast(e.message, true); }
 }
