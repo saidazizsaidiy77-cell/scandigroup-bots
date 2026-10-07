@@ -1725,6 +1725,102 @@ router.post('/orders/:id/unlock', need('sales.fix'), wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+//  ═══════════════ CHIQMAGAN QATORNI HUJJATDAN OLIB TASHLASH
+//
+//  ★ ZAVOD QARORI (2026-10). Chiqib ketgan buyurtmada qatorlar
+//  ro'yxati QOTIB turadi va bu to'g'ri: yuk xati mijoz imzolagan
+//  qog'oz, qatordagi dona esa haqiqatda ketgan mahsulot.
+//
+//  Lekin bitta hol bu asosni BUZADI: qatordan HECH NARSA chiqmagan.
+//  Z-715 da 7 ta stul yuk xatida turardi, zavoddan esa chiqmadi —
+//  konver tsexda qolib ketgan edi. O'shanda qoida hech narsani
+//  himoya qilmaydi: hujjat yolg'on bo'lib qolaveradi, mijozning
+//  qarzi esa (u KONVERDAN hisoblanadi) o'sha qatorni baribir
+//  bilmaydi — ya'ni qog'oz bilan balans AJRALIB turadi.
+//
+//  Shuning uchun olib tashlash bor, lekin chegarasi MAHSULOTNING
+//  qayerdaligidan chiqadi, qulaylikdan emas:
+//
+//    bo'ladi      shu mahsulotdan BITTA HAM konver chiqmagan bo'lsa
+//    bo'lmaydi    bittasi bo'lsa ham chiqqan bo'lsa — mahsulot
+//                 mijozda va qog'oz uni to'g'ri aytmoqda
+//    bo'lmaydi    qatorda tirik bron bo'lsa — avval konver
+//                 qaytariladi (aks holda konver band bo'lib qolardi)
+//    bo'lmaydi    oxirgi qator — qatorsiz yuk xati hujjat emas
+//
+//  Shart MAHSULOT bo'yicha (`order_no` matni + `product_id`), chunki
+//  konver qaysi QATORNIKI ekani saqlanmagan — `sotilgan-narx` va
+//  «kam chiqqan» bilan AYNAN bir xil qoida va bir xil sabab.
+//
+//  **Sabab MAJBURIY** (qulfni ochish bilan bir xil idiom): «nega
+//  hujjatdan tushdi» degan savol oy oxirida beriladi. Audit
+//  jurnalida yozuv `fix` deb turadi, `update` emas.
+//
+//  Huquqi `sales.fix` — faqat administrator.
+router.post('/orders/:id/items/:itemId/remove', need('sales.fix'),
+  wrap(async (req, res) => {
+    const sabab = String(req.body.note || '').trim();
+    if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const o = (await client.query(
+        `SELECT * FROM orders WHERE id = $1 FOR UPDATE`,
+        [req.params.id])).rows[0];
+      if (!o) throw new Error('Buyurtma topilmadi');
+      if (o.status !== 'shipped')
+        throw new Error('Faqat chiqib ketgan buyurtmada — qolganida '
+          + 'qator oddiy tahrirdan o\'chiriladi');
+
+      const it = (await client.query(
+        `SELECT i.id, i.qty, i.product_id, p.name AS product
+           FROM order_items i JOIN products p ON p.id = i.product_id
+          WHERE i.id = $1 AND i.order_id = $2`,
+        [req.params.itemId, o.id])).rows[0];
+      if (!it) throw new Error('Bu buyurtmada bunday qator yo\'q');
+
+      const jami = Number((await client.query(
+        `SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1`,
+        [o.id])).rows[0].n);
+      if (jami < 2)
+        throw new Error('Oxirgi qator olib tashlanmaydi — qatorsiz yuk '
+          + 'xati hujjat emas');
+
+      const bron = Number((await client.query(
+        `SELECT COALESCE(SUM(r.qty), 0)::int AS n
+           FROM unit_reservations r
+           JOIN production_units u ON u.id = r.unit_id
+          WHERE r.order_item_id = $1 AND u.status <> 'cancelled'`,
+        [it.id])).rows[0].n);
+      if (bron > 0)
+        throw new Error(`${it.product}: qatorda ${bron} ta konver `
+          + 'biriktirilgan — avval «Konver» oynasidan qaytaring');
+
+      const chiqdi = Number((await client.query(
+        `SELECT COALESCE(SUM(u.qty), 0)::int AS n
+           FROM production_units u
+          WHERE u.order_no = $1 AND u.status = 'shipped'
+            AND u.product_id = $2`,
+        [o.order_no, it.product_id])).rows[0].n);
+      if (chiqdi > 0)
+        throw new Error(`${it.product}: bu mahsulotdan ${chiqdi} ta `
+          + 'zavoddan CHIQQAN — qator hujjatda qoladi. Narxni '
+          + 'tuzatish mumkin, olib tashlash yo\'q');
+
+      await client.query(`DELETE FROM order_items WHERE id = $1`, [it.id]);
+      await audit(req, { module: 'sales', action: 'fix', entity: 'order',
+                         entity_id: o.id,
+                         payload: { order_no: o.order_no, qator: 'olib tashlandi',
+                                    mahsulot: it.product, soni: it.qty,
+                                    note: sabab } }, client);
+      await client.query('COMMIT');
+      res.json({ ok: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: e.message });
+    } finally { client.release(); }
+  }));
+
 //  ★ QAYTARISH QULFLANGAN BUYURTMADA YO'Q. Biriktirish — ish
 //  (qolgan donaga konver topiladi), qaytarish esa buyurtmaning
 //  va'dasini O'ZGARTIRADI: tsex allaqachon rejaga olgan mahsulot

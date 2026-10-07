@@ -3658,6 +3658,46 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`)).status, 400);
 
+  //  ★ CHIQMAGAN QATOR HUJJATDAN OLIB TASHLANADI, chiqqani esa YO'Q
+  //  (zavod qarori, 2026-10). Yuk xati mijoz imzolagan qog'oz —
+  //  lekin qatordan HECH NARSA chiqmagan bo'lsa u hech narsani
+  //  himoya qilmaydi: hujjat yolg'on bo'lib qolaveradi va mijozning
+  //  qarzi (u KONVERDAN hisoblanadi) o'sha qatorni baribir bilmaydi.
+  const { db: dbq } = require('../db');
+  const STU = (await H.id(`SELECT id FROM products WHERE sku = 'STU-LAURA'`)).id;
+  const qoshimcha = (await dbq.query(
+    `INSERT INTO order_items (order_id, product_id, qty, unit_price)
+     VALUES ($1, $2, 3, 100) RETURNING id`, [z.id, STU])).rows[0];
+
+  //  Huquqi faqat administratorda
+  assert.equal((await mudir('POST',
+    `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`,
+    { note: 'sinov' })).status, 403);
+
+  //  Sabab MAJBURIY — «nega hujjatdan tushdi» degan savol keyin beriladi
+  assert.equal((await admin('POST',
+    `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`, {})).status, 400);
+
+  //  Zavoddan CHIQQAN mahsulotning qatori olib tashlanmaydi
+  const chiqqan = await admin('POST',
+    `/api/sales/orders/${z.id}/items/${qator.id}/remove`, { note: 'sinov' });
+  assert.equal(chiqqan.status, 400, chiqqan.text);
+  assert.match(chiqqan.body.error, /CHIQQAN/);
+
+  //  Chiqmagani esa olib tashlanadi
+  assert.equal((await admin('POST',
+    `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`,
+    { note: 'zavoddan chiqmagan' })).status, 200);
+  const qolgan = (await admin('GET', '/api/sales/orders/' + z.id)).body.items;
+  assert.equal(qolgan.length, 1, 'qator hujjatdan tushdi');
+  assert.equal(qolgan[0].id, qator.id);
+
+  //  Oxirgi qator olib tashlanmaydi — qatorsiz yuk xati hujjat emas
+  const oxirgi = await admin('POST',
+    `/api/sales/orders/${z.id}/items/${qator.id}/remove`, { note: 'sinov' });
+  assert.equal(oxirgi.status, 400, oxirgi.text);
+  assert.match(oxirgi.body.error, /Oxirgi qator/);
+
   // Savdo o'zi chiqarib yubora olmaydi — bu ombor mudirining ishi
   const savdo = H.api(base, await H.sessionFor('Sinov sotuvchi'));
   assert.equal((await savdo('GET', '/api/sales/shipping')).status, 403);

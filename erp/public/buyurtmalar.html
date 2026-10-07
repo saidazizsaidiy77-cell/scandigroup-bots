@@ -1299,7 +1299,15 @@ function drawItems(){
             jadvaldan chiqib ketmasin. -->
       <td class="num"><div class="row" style="gap:6px;justify-content:flex-end;
            flex-wrap:wrap">${(cur.tuzat || cur.qulf)
-          ? (it.id ? `<button onclick="openPick(${it.id})">Konver</button>` : '')
+          ? (it.id ? `<button onclick="openPick(${it.id})">Konver</button>${
+              //  ★ CHIQMAGAN QATOR HUJJATDAN OLIB TASHLANADI (izoh:
+              //  modules/sales.js). Tugma faqat administratorda va
+              //  faqat chiqib ketgan buyurtmada; chegarani SERVER
+              //  qo'yadi — shu mahsulotdan bittasi ham chiqqan
+              //  bo'lsa rad etadi va sababini yozadi.
+              cur.tuzat
+                ? ` <button onclick="itemRemove(${it.id})">\u2715</button>` : ''}`
+            : '')
           : `<button onclick="konverOch(${i})">Konver</button>
         <button onclick="delItem(${i})">✕</button>`}</div></td>
     </tr>`;
@@ -1420,6 +1428,25 @@ const close_ = () => { stopTick(); $('modalRoot').innerHTML = ''; cur = null; };
 //  berkitilmaydi: xato bo'lganda buyurtmani tuzatish kerak va yagona
 //  chora bazaga qo'lda kirish bo'lib qolardi. Lekin u ataylab ikki
 //  bosqich — administrator ochadi, menejer tuzatadi.
+//  ★ CHIQMAGAN QATORNI HUJJATDAN OLIB TASHLASH. Sabab MAJBURIY —
+//  «nega hujjatdan tushdi» degan savol oy oxirida beriladi.
+//  Tekshiruvning O'ZI serverda: shu mahsulotdan bittasi ham chiqqan
+//  bo'lsa rad etiladi.
+async function itemRemove(itemId){
+  const it = cur.items.find(x => x.id === itemId);
+  const sabab = prompt(`«${it?.product || ''}» qatori yuk xatidan olib '''
++ '''tashlanadi.\nFaqat zavoddan CHIQMAGAN qator olib tashlanadi.\n\n'''
++ '''Sababi:`);
+  if (sabab === null) return;
+  if (!sabab.trim()) return toast('Sabab yozilmagan', true);
+  try {
+    await App.api(`/api/sales/orders/${cur.order.id}/items/${itemId}/remove`,
+      { method: 'POST', body: { note: sabab.trim() } });
+    toast('Qator olib tashlandi');
+    await openOrder(cur.order.id);
+  } catch (e) { toast(e.message, true); }
+}
+
 async function unlock(){
   const sabab = prompt('Nega ochilmoqda?');
   if (!sabab) return;

@@ -1767,6 +1767,30 @@ mahsulotdan BITTA qator bo'lsa. Ikkita bo'lsa qaysi biri ekanini bilib
 bo'lmaydi va taxmin qilingan narx yolg'on qarz yozardi, shuning uchun
 tizim taxmin qilmaydi — RAD ETADI va sababini yozadi.
 
+**★ CHIQMAGAN QATOR HUJJATDAN OLIB TASHLANADI** (zavod qarori,
+2026-10; `POST /orders/:id/items/:itemId/remove`, qatordagi **✕**).
+Qatorlar ro'yxati qotib turishining sababi bitta: qog'ozdagi dona
+HAQIQATDA ketgan. Bitta hol bu asosni buzadi — qatordan **hech
+narsa chiqmagan**: konver tsexda qolib ketgan, yuk xatida esa
+turibdi. O'shanda qoida hech narsani himoya qilmaydi: hujjat
+yolg'on bo'lib qolaveradi, mijozning qarzi esa (u KONVERDAN
+hisoblanadi) o'sha qatorni baribir bilmaydi — ya'ni qog'oz bilan
+balans AJRALIB turadi.
+
+Chegara MAHSULOTNING qayerdaligidan chiqadi, qulaylikdan emas:
+
+    bo'ladi      shu mahsulotdan BITTA HAM konver chiqmagan bo'lsa
+    bo'lmaydi    bittasi bo'lsa ham chiqqan — mahsulot mijozda va
+                 qog'oz uni to'g'ri aytmoqda (narx esa tuzatiladi)
+    bo'lmaydi    qatorda tirik bron bor — avval konver qaytariladi
+    bo'lmaydi    oxirgi qator — qatorsiz yuk xati hujjat emas
+
+Shart MAHSULOT bo'yicha (`order_no` matni + `product_id`): konver
+qaysi QATORNIKI ekani saqlanmagan — `sotilgan-narx` va «kam
+chiqqan» bilan AYNAN bir xil qoida va bir xil sabab. **Sabab
+MAJBURIY** (qulfni ochish bilan bir xil idiom), audit jurnalida
+yozuv `fix` deb turadi. Huquqi `sales.fix` — faqat administrator.
+
 **Mijoz almashsa konver ham ko'chadi** (`production_units.customer_id`):
 buyurtmada mijozni almashtirib, konverni eskisida qoldirish qarzni IKKI
 odamda yolg'on qilardi — yangisida ko'rinmas, eskisida turib qolardi.
