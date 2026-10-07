@@ -166,6 +166,11 @@ async function tgSoglik(){
       ${bor.map(t => `<p class="tag warn" style="display:block;text-align:left;
         white-space:normal;margin-top:10px">${t}</p>`).join('')}
       <p class="muted" style="font-size:12px;margin-top:12px">
+        Kunlik xabarlar SERVER vaqti bo'yicha yuriladi — hozir serverda
+        <b>${esc(d.vaqt || '')}</b>. Xulosa 08:00, ta'minot saldosi 09:00,
+        «ertaga topshiriladi» 17:00 da ketadi: vaqti kelmagan bo'lsa xabar
+        hali navbatga ham tushmaydi.</p>
+      <p class="muted" style="font-size:12px;margin-top:8px">
         Xodim bot bilan suhbatni O'ZI boshlashi kerak: Telegram botni ochib
         «Start» bosadi. Bot hech qachon birinchi bo'lib yoza olmaydi —
         bu Telegramning qoidasi, tizimning emas.</p>
@@ -182,6 +187,22 @@ async function tgSoglik(){
 //  joyda yozilsa «Tsex» sarlavhasi bir kun lavozimni saralab qo'yardi.
 //  Katakning KO'RINISHI esa o'z joyida qoladi — biri teg, biri rangli
 //  yozuv, biri oddiy matn.
+//  ★ KUNLIK XABAR RO'YXATDA KO'RINADI (zavod qarori, 2026-10).
+//  «Nega bu odamga xulosa bormadi» degan savol Xodimlar sahifasida
+//  beriladi va javobi UCHTA narsadan iborat: belgisi bormi, Telegram
+//  ID si yozilganmi va botga «Start» bosilganmi. Ikkinchisi ro'yxatda
+//  allaqachon turardi, BIRINCHISI esa yo'q edi — uni bilish uchun
+//  oltmish olti xodimning kartochkasini birma-bir ochib chiqishdan
+//  boshqa yo'l qolmasdi. Standarti `false`, ya'ni yangi xodimda belgi
+//  BO'LMAYDI va aynan shu eng ko'p uchraydigan sabab.
+//
+//  Ro'yxat KODDA: bu kunlik ishlar JADVALI (`KUNLIK`, `erp/server.js`
+//  bilan bir xil idiom), zavod ma'lumoti emas.
+const XABAR = [
+  { k: 'daily_digest',   t: 'xulosa' },
+  { k: 'supply_reports', t: 'saldo' },
+];
+
 const USTUN = [
   { k: 'name',  t: 'Ism',         v: w => w.name },
   { k: 'group', t: 'Guruh',       v: w => w.staff_group },
@@ -190,6 +211,10 @@ const USTUN = [
   { k: 'pos',   t: 'Lavozim',     v: w => w.position },
   { k: 'pin',   t: 'PIN',         v: w => (w.has_pin ? 'qo\'yilgan' : '') },
   { k: 'tg',    t: 'Telegram ID', v: w => (w.tg_id ? String(w.tg_id) : '') },
+  //  Telegram ID ning YONIDA: ikkala javob birga o'qiladi — belgisi
+  //  bor, lekin ID si yo'q xodim aynan shu ikki katakdan ko'rinadi.
+  { k: 'xab',   t: 'Kunlik xabar',
+    v: w => XABAR.filter(x => w[x.k]).map(x => x.t).join(', ') },
   { k: 'roles', t: 'Rollar',      v: w => w.roles.map(r => r.name).join(', ') },
   { k: 'act',   t: 'Holat',       v: w => (w.active ? 'faol' : '') },
 ];
@@ -257,6 +282,12 @@ function drawWorkers(){
           c.v(w) ? esc(c.v(w)) : '—'}</td>`).join('')}
       <td class="muted">${w.has_pin ? 'qo\'yilgan' : '—'}</td>
       <td class="muted">${w.tg_id ? esc(w.tg_id) : '<span class="tag warn">ulanmagan</span>'}</td>
+      <!--  ★ BELGISI BOR, LEKIN ID SI YO'Q — teg SARIQ bo'ladi: xabar
+            yuboriladigan joy yo'q va bu aynan «nega bormadi» degan
+            savolning javobi. Izohi diagnostika kartochkasida. -->
+      <td>${XABAR.filter(x => w[x.k]).map(x =>
+        `<span class="tag${w.tg_id ? '' : ' warn'}">${x.t}</span>`).join(' ')
+        || '<span class="muted">\u2014</span>'}</td>
       <td>${w.roles.length ? w.roles.map(r =>
         `<span class="tag">${esc(r.name)}${r.scope_shop ? ' · ' + esc(r.scope_shop) : ''}${
            r.scope_warehouse ? ' · ' + esc(r.scope_warehouse) : ''}${
@@ -266,7 +297,7 @@ function drawWorkers(){
       <td>${w.active ? '<span class="tag ok">faol</span>' : '<span class="tag">o\'chirilgan</span>'}</td>
       <td class="num"><button onclick="openForm(${w.id})">Tahrirlash</button></td>
     </tr>`).join('')
-    : `<tr><td colspan="10" class="muted" style="padding:16px">
+    : `<tr><td colspan="11" class="muted" style="padding:16px">
          ${q ? `«${esc(q)}» bo'yicha xodim topilmadi`
              : "Faol xodim yo'q \u2014 «O'chirilganlar» ni belgilang"}</td></tr>`;
 }

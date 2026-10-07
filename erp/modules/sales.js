@@ -539,7 +539,20 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
       WHERE i.order_id = $1 AND q.status = 'pending'`,
     [req.params.id])).rows[0].n);
 
-  res.json({ order: o, items, units: units.length ? units : shipped,
+  //  ★ CHIQIB KETGANDA FAQAT CHIQQANI KO'RSATILADI (zavod qarori,
+  //  2026-10). Ilgari shart `units.length ? units : shipped` edi —
+  //  ya'ni tirik bron BO'LSA u ustun turardi. Yopilgan buyurtmada
+  //  tirik bron bo'lmasligi kerak (chiqarishda o'chiriladi), lekin
+  //  BO'LIB QOLARDI: tasdiqlangan so'rov konverni allaqachon chiqib
+  //  ketgan buyurtmaga biriktirib qo'yardi (izoh: `modules/units.js`).
+  //  O'shanda kartochka tsexda yurgan BITTA konverni ko'rsatib,
+  //  HAQIQATDA chiqqan o'ntasini yashirardi — «qaysi partiya edi»
+  //  degan savol javobsiz qolardi.
+  //
+  //  Sabab tuzatildi, lekin ekran ham FAKTNI aytishi kerak: chiqib
+  //  ketgan buyurtmaning javobi — CHIQQAN konverlar.
+  res.json({ order: o, items,
+             units: o.status === 'shipped' ? shipped : units,
              req_pending, keeper: await keeperOf() });
 }));
 
@@ -1586,7 +1599,49 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
      HAVING SUM(r.qty) > i.qty
       ORDER BY o.id DESC`)).rows;
 
-  res.json({ rows, kop });
+  //  ★ CHIQIB KETGANDA KAM CHIQQANI HAM TOPILADI (zavod qarori,
+  //  2026-10). Yuqoridagi ikkala so'rov ham BRONGA qaraydi, chiqarishda
+  //  esa bron o'chiriladi — ya'ni yopilgan buyurtmada ular hech
+  //  narsa ko'rmasdi. Savol esa aynan o'sha yerda beriladi: yuk
+  //  xatida 40 dona turibdi, konverlar bo'yicha esa 29 ta chiqqan.
+  //
+  //  Hujjat qatorlardan bosiladi, mijozning qarzi esa konverdan
+  //  hisoblanadi (`v_customer_sales`) — ya'ni farq mijoz imzolagan
+  //  qog'oz bilan balansni ajratadi va u faqat shikoyat kelganda
+  //  bilinardi.
+  //
+  //  Bog'lanish `production_units.order_no` MATNI bo'yicha va
+  //  MAHSULOT bo'yicha: qaysi konver qaysi QATORNIKI ekani
+  //  saqlanmagan (bron chiqarishda o'chiriladi), lekin «shu
+  //  mahsulotdan nechta chiqdi» degan savolga javob bor.
+  //
+  //  Bu tuzatilmaydi — mahsulot mijozda. Lekin «nega shunday bo'ldi»
+  //  degan savolning javobi shu yerda.
+  const kam = (await db.query(
+    `WITH soralgan AS (
+       SELECT o.id, o.order_no, i.product_id, SUM(i.qty)::int AS qty
+         FROM orders o
+         JOIN order_items i ON i.order_id = o.id
+        WHERE o.status = 'shipped'
+        GROUP BY o.id, o.order_no, i.product_id
+     ), chiqdi AS (
+       SELECT u.order_no, u.product_id, SUM(u.qty)::int AS qty
+         FROM production_units u
+        WHERE u.status = 'shipped' AND u.order_no IS NOT NULL
+        GROUP BY u.order_no, u.product_id
+     )
+     SELECT s.id, s.order_no, o.customer_name AS customer,
+            o.manager_name AS manager, p.name AS item_product,
+            s.qty AS item_qty, COALESCE(c.qty, 0) AS chiqdi
+       FROM soralgan s
+       JOIN v_sales_orders o ON o.id = s.id
+       JOIN products p       ON p.id = s.product_id
+       LEFT JOIN chiqdi c    ON c.order_no = s.order_no
+                            AND c.product_id = s.product_id
+      WHERE COALESCE(c.qty, 0) < s.qty
+      ORDER BY s.id DESC, p.name`)).rows;
+
+  res.json({ rows, kop, kam });
 }));
 
 //  ★ QULFNI ADMINISTRATOR OCHADI (zavod qarori, 2026-10). Yo'l

@@ -1079,10 +1079,27 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
     //  Chiqish sanasi TEKSHIRILMAYDI (`assertMuddat`): konver aynan shu
     //  buyurtma uchun so'ralgan va menejer buni bilib so'ragan — bu
     //  yerda rad etish tasdiqlashning O'ZINI yiqitardi.
+    //  ★ YOPILGAN BUYURTMAGA BIRIKTIRILMAYDI (zavod qarori, 2026-10).
+    //  So'rov bugun yoziladi, tasdiq esa ertaga keladi — oradagi kunda
+    //  buyurtma chiqib ketgan yoki bekor qilingan bo'lishi mumkin.
+    //  Shart yo'q edi va natijasi ekranda ko'rindi: buyurtma «Chiqib
+    //  ketdi» bo'lib turar, ichida esa tsexda yurgan konverning TIRIK
+    //  broni bo'lardi. Ikki zarari bor edi. Birinchisi — konver
+    //  BAND bo'lib qolardi: u mijozga allaqachon berilgan buyurtmani
+    //  kutib turar va boshqa buyurtmaga taklif qilinmasdi. Ikkinchisi
+    //  — «Qaysi konver chiqdi» kartochkasi o'sha tirik bronni
+    //  ko'rsatib, HAQIQATDA chiqqan konverlarni yashirardi.
+    //
+    //  So'rovning O'ZI tasdiqlanaveradi va konver ochiladi: tsex
+    //  mahsulotni allaqachon rejaga olgan va tasdiqni rad etish
+    //  ishlab chiqarishni to'xtatardi — u zahira bo'lib qoladi,
+    //  savdo esa kerak bo'lsa qo'lda biriktiradi.
     if (q.order_item_id) {
       const kerak = (await client.query(
         `SELECT i.qty - COALESCE(SUM(r.qty), 0) AS qoldi
            FROM order_items i
+           JOIN orders o ON o.id = i.order_id
+                        AND o.status NOT IN ('shipped', 'cancelled')
            LEFT JOIN unit_reservations r ON r.order_item_id = i.id
           WHERE i.id = $1 GROUP BY i.qty`, [q.order_item_id])).rows[0];
       const n = Math.min(q.qty, Number(kerak?.qoldi) || 0);

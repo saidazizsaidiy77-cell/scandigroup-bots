@@ -11376,6 +11376,9 @@ test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () 
   assert.equal(typeof h.body.token, 'boolean');
   assert.ok(h.body.idsiz.includes('Tg yomon'), 'ID siz xodim ro\'yxatda');
   assert.ok(h.body.xato.some((x) => /403/.test(x.error || '')), 'xato ko\'rinadi');
+  //  Serverning soati: kunlik ishlar SERVER vaqti bo'yicha yuriydi va
+  //  «bugun bormadi» degan savolning javobi ko'pincha shu.
+  assert.ok(/^\d{2}:\d{2}$/.test(h.body.vaqt || ''), 'server soati keladi');
 
   //  Tozalab ketamiz: qolgan testlar o'z xabarini sanaydi.
   await db.query(

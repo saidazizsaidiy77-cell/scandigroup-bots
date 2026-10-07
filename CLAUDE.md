@@ -1851,6 +1851,45 @@ Chiqib ketganlar ham ro'yxatda: ular tuzatilmaydi (mahsulot
 mijozda), lekin shikoyat kelganda «nega shunday bo'ldi» degan
 savolning javobi o'sha yerda.
 
+**★ «KAM CHIQQAN» — CHIQIB KETGANNING O'Z SAVOLI** (zavod qarori,
+2026-10). Yuqoridagi ikkala so'rov ham BRONGA qaraydi, chiqarishda
+esa bron o'chiriladi — ya'ni yopilgan buyurtmada ular hech narsa
+ko'rmasdi. Savol esa aynan o'sha yerda beriladi: **yuk xatida 40
+dona turibdi, konverlar bo'yicha esa 29 ta chiqqan**.
+
+Hujjat QATORLARDAN bosiladi, mijozning qarzi esa KONVERDAN
+hisoblanadi (`v_customer_sales`) — farq mijoz imzolagan qog'oz
+bilan balansni ajratadi va u faqat shikoyat kelganda bilinardi.
+
+Bog'lanish `production_units.order_no` MATNI va MAHSULOT bo'yicha:
+qaysi konver qaysi QATORNIKI ekani saqlanmagan (bron chiqarishda
+o'chiriladi), lekin «shu mahsulotdan nechta chiqdi» degan savolga
+javob bor. Tuzatilmaydi — mahsulot mijozda.
+
+**★ YOPILGAN BUYURTMAGA SO'ROV KONVERI BIRIKTIRILMAYDI** (zavod
+qarori, 2026-10; `modules/units.js`). Savdo so'rov yozadi, tasdiq
+esa ertaga keladi — oradagi kunda buyurtma chiqib ketgan yoki bekor
+qilingan bo'lishi mumkin. Shart yo'q edi va natijasi ekranda
+ko'rindi: buyurtma «Chiqib ketdi» bo'lib turar, ichida esa tsexda
+yurgan konverning TIRIK broni bo'lardi.
+
+Ikki zarari bor edi. Konver BAND bo'lib qolardi — allaqachon
+berilgan buyurtmani kutib turar va boshqa mijozga taklif
+qilinmasdi; ustiga **«Qaysi konver chiqdi» kartochkasi o'sha tirik
+bronni ko'rsatib, HAQIQATDA chiqqan konverlarni yashirardi**
+(`units.length ? units : shipped` — tirik bron ustun turardi).
+
+So'rovning O'ZI tasdiqlanaveradi va konver ochiladi: tsex
+mahsulotni allaqachon rejaga olgan va tasdiqni rad etish ishlab
+chiqarishni to'xtatardi — konver zahira bo'lib qoladi, savdo kerak
+bo'lsa qo'lda biriktiradi. Ekran ham FAKTNI aytadi: chiqib ketgan
+buyurtmada kartochka CHIQQAN konverlarni ko'rsatadi
+(`o.status === 'shipped' ? shipped : units`).
+
+**Qatordagi «konver biriktirilmagan» yozuvi esa XATO EMAS**: bron
+chiqarishda o'chiriladi va yopilgan buyurtmada u har doim shunday
+turadi. Javob kartochkada.
+
 **★ BIRIKTIRILGAN KONVER RO'YXATDA HAR DOIM TURADI**, mahsuloti
 boshqa bo'lsa ham (`CANDIDATE_WHERE`, `modules/sales.js`). Nomzodlar
 ro'yxati MAHSULOT bo'yicha qisqaradi — to'g'ri — lekin o'sha shart
@@ -3023,6 +3062,29 @@ yashil yozuvga ko'z o'rganib qoladi va haqiqiy uzilish o'sha orada
 ko'rinmay ketardi (bron belgisi bilan bir xil qoida). Navbat soni esa
 token BOR bo'lganda aytiladi — tokensiz navbatning to'lishi kutilgan
 hol va ikkinchi marta aytish chalg'itardi.
+
+**★ ZANJIRNING BIRINCHI BO'G'INI RO'YXATDA KO'RINADI** (zavod
+qarori, 2026-10). «Nega bu odamga xabar bormadi» degan savolning
+javobi uchta: belgisi bormi, Telegram ID si yozilganmi, botga
+«Start» bosilganmi. Ikkinchisi Xodimlar ro'yxatida allaqachon
+turardi, BIRINCHISI esa yo'q edi — uni bilish uchun oltmish olti
+xodimning kartochkasini birma-bir ochib chiqishdan boshqa yo'l
+qolmasdi. Belgining standarti `false`, ya'ni YANGI xodimda u
+BO'LMAYDI va aynan shu eng ko'p uchraydigan sabab.
+
+Endi ro'yxatda **«Kunlik xabar»** ustuni bor va u Telegram ID ning
+YONIDA turadi: ikkala javob birga o'qiladi. Belgisi bor, lekin ID
+si yo'q xodimda teg SARIQ bo'ladi. Ro'yxat KODDA (`XABAR`,
+`public/xodimlar.html`) — bu kunlik ishlar JADVALI, zavod
+ma'lumoti emas.
+
+**★ SERVERNING SOATI HAM JAVOB.** Kunlik ishlar SERVER vaqti
+bo'yicha yuriydi (Railway'da UTC) — 08:00 ga qo'yilgan xulosa
+Toshkentda 13:00 da ketadi. «Bugun xabar bormadi» degan savol
+ertalab beriladi va javobi ko'pincha shu: **vaqti hali kelmagan**.
+Serverning soati esa ekranda hech qayerda ko'rinmasdi; endi u
+tashxis kartochkasida turadi. Mahalliy vaqt kerak bo'lsa
+`TZ=Asia/Tashkent` qo'yiladi.
 
 ### Rahbariyat xulosasi — 08:00
 

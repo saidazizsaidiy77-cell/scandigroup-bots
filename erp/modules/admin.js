@@ -558,11 +558,20 @@ router.get('/notify-health', need('admin.users'), wrap(async (_req, res) => {
           AND (daily_digest OR supply_reports)
         ORDER BY name`),
   ]);
+  //  ★ SERVERNING SOATI HAM JAVOB (zavod qarori, 2026-10). Kunlik
+  //  ishlar SERVER vaqti bo'yicha yuriydi (Railway'da UTC, izoh:
+  //  `erp/server.js`) — 08:00 ga qo'yilgan xulosa Toshkentda 13:00 da
+  //  ketadi. «Bugun xabar bormadi» degan savol ertalab beriladi va
+  //  javobi ko'pincha shu: vaqti hali kelmagan. Serverning soati esa
+  //  ekranda HECH QAYERDA ko'rinmasdi.
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
   res.json({
     token: String(process.env.ERP_TG_TOKEN || '').trim() !== '',
     navbatda: q.rows[0].n,
     xato: x.rows,
     idsiz: idsiz.rows.map((r) => r.name),
+    vaqt: `${p2(d.getHours())}:${p2(d.getMinutes())}`,
   });
 }));
 
