@@ -694,6 +694,31 @@ async function chegirma(ok) {
   } catch (e) { alert(e.message); }
 }
 
+//  ★ OSILIB QOLGAN BRON — OGOHLANTIRISH, hujjat emas (zavod qarori,
+//  2026-10). Chiqib ketgan buyurtmada tirik bron bo'lmasligi kerak:
+//  chiqarishda u o'chiriladi. Bo'lib qolsa — konver tsexda BAND
+//  bo'lib turadi va boshqa mijozga taklif qilinmaydi.
+//
+//  Kartochkaga qo'shilmaydi: u «qaysi konver chiqdi» degan savolning
+//  javobi va hujjat bo'lib o'qiladi — tsexda qolgan konverni unga
+//  qo'shish ikkala javobni ham buzardi. Shuning uchun alohida, qizil
+//  va qog'ozga chiqmaydi (`.no-print`).
+function osilganCard() {
+  const r = cur.osilgan || [];
+  if (!r.length) return '';
+  return `<div class="card no-print" style="margin-bottom:12px">
+    <b class="late">Konver hali shu buyurtmada band</b>
+    <p class="muted" style="margin:6px 0 10px">Buyurtma chiqib ketgan,
+      lekin quyidagi konver(lar) hali biriktirilgan holda turibdi —
+      ya'ni boshqa mijozga taklif qilinmaydi. Qatordagi
+      <b>«Konver»</b> tugmasini bosib qaytaring.</p>
+    ${r.map((u) => `<div class="muted" style="font-size:13px">
+      <b>${esc(u.conveyor_no || '')}</b> · ${esc(u.product || '')}${
+        u.section ? ' · ' + esc(u.section) : ''}${
+        u.shop ? ' · ' + esc(u.shop) : ''} \u2014 ${u.qty} ta</div>`).join('')}
+  </div>`;
+}
+
 function trackCard(o) {
   const list = cur.units || [];
   if (!list.length || o.status === 'cancelled') return '';
@@ -833,6 +858,7 @@ function draw(){
           o.locked_by_name ? ` Yopgan: ${esc(o.locked_by_name)}.` : ''}</p>
       </div>` : ''}
       ${chegirmaCard(o)}
+      ${osilganCard()}
       ${tuzat ? trackCard(o) : ''}
       ${ro ? docHtml(o) + trackCard(o) : `
       <div class="card"><div class="fields">

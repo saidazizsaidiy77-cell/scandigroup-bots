@@ -551,8 +551,15 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   //
   //  Sabab tuzatildi, lekin ekran ham FAKTNI aytishi kerak: chiqib
   //  ketgan buyurtmaning javobi — CHIQQAN konverlar.
+  //  ★ OSILIB QOLGAN BRON ALOHIDA AYTILADI (zavod qarori, 2026-10).
+  //  Kartochka endi CHIQQAN konverlarni ko'rsatadi — to'g'ri — lekin
+  //  o'shanda tirik bron ekrandan butunlay yo'qolardi: qatorda
+  //  «konver biriktirilmagan» turar, konver esa tsexda band bo'lib
+  //  qolaverardi. Javob yo'qolmasligi kerak, faqat o'z joyida
+  //  turishi kerak: hujjat — kartochkada, XATO — ogohlantirishda.
   res.json({ order: o, items,
              units: o.status === 'shipped' ? shipped : units,
+             osilgan: o.status === 'shipped' ? units : [],
              req_pending, keeper: await keeperOf() });
 }));
 
