@@ -3696,6 +3696,18 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('GET', '/api/sales/orders/' + z.id))
     .body.items.find((x) => x.id === qator.id).qty, 6, 'soni haqiqatga tengdi');
 
+  //  ★ TENGLASHTIRISH IKKI TOMONLI: qator chiqqanidan KAM bo'lib
+  //  qolgan bo'lsa ham o'sha raqamga keladi. Bir tomonlama bo'lsa ✕
+  //  bitta bosishda hujjatni tushirib yuborar, qaytaradigan yo'l esa
+  //  qolmasdi (`fixShipped` qator sonini o'zgartirmaydi).
+  await dbq.query(`UPDATE order_items SET qty = 4 WHERE id = $1`, [qator.id]);
+  const kop = await admin('POST',
+    `/api/sales/orders/${z.id}/items/${qator.id}/remove`, { note: 'sinov' });
+  assert.equal(kop.status, 200, kop.text);
+  assert.equal(kop.body.chiqdi, 6);
+  assert.equal((await admin('GET', '/api/sales/orders/' + z.id))
+    .body.items.find((x) => x.id === qator.id).qty, 6, 'qator yuqoriga ham keladi');
+
   //  Chiqmagani esa olib tashlanadi
   assert.equal((await admin('POST',
     `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`,

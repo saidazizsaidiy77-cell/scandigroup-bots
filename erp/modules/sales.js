@@ -513,7 +513,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   //  kartochka bilan chizadi (`trackCard`) — ikki nusxa yozilsa biri
   //  ertaga ikkinchisidan orqada qolardi.
   const shipped = o.status === 'shipped' ? (await db.query(
-    `SELECT u.id, NULL::int AS order_item_id, u.conveyor_no,
+    `SELECT u.id, u.product_id, NULL::int AS order_item_id, u.conveyor_no,
             u.qty, u.qty AS unit_qty, u.color, u.fabric, u.status, u.is_stock,
             NULL::text AS section, NULL::text AS shop,
             NULL::text AS warehouse, NULL::text AS warehouse_code,
@@ -1805,7 +1805,13 @@ router.post('/orders/:id/items/:itemId/remove', need('sales.fix'),
       //  Soni IXTIYORIY raqamga o'zgartirilmaydi: yagona to'g'ri
       //  javob CHIQQAN dona va uni server o'zi biladi. Qo'lda raqam
       //  so'ralsa yopilgan hujjat oddiy tahrirga aylanardi.
-      if (chiqdi >= it.qty)
+      //  ★ TENGLASHTIRISH IKKI TOMONLI (zavod qarori, 2026-10).
+      //  Ilgari qator faqat PASAYARDI va ✕ bir tomonli eshik
+      //  bo'lib qolgandi: bitta bosish hujjatni chiqqan donaga
+      //  tushirar, konver keyin topilsa qaytaradigan yo'l esa
+      //  qolmasdi (`fixShipped` soni o'zgartirmaydi). Qoidaning
+      //  o'zi «tenglashadi» deydi, pasayadi demaydi.
+      if (chiqdi === it.qty)
         throw new Error(`${it.product}: bu mahsulotdan ${chiqdi} ta `
           + `chiqqan, qatorda esa ${it.qty} ta — tuzatadigan farq yo'q`);
 

@@ -1435,9 +1435,24 @@ const close_ = () => { stopTick(); $('modalRoot').innerHTML = ''; cur = null; };
 async function itemRemove(itemId){
   const it = cur.items.find(x => x.id === itemId);
   const nom = it?.product || '';
-  const sabab = prompt(nom + ' qatori zavoddan CHIQQAN donaga '
-    + 'tenglashtiriladi.\nHech narsa chiqmagan bo\'lsa qator butunlay '
-    + 'olib tashlanadi.\n\nSababi:');
+  //  ★ RAQAM OLDIN AYTILADI, keyin o'zgaradi (zavod qarori, 2026-10).
+  //  Ilgari oyna faqat «chiqqan donaga tenglashtiriladi» deb turardi va
+  //  o'sha dona NECHTA ekanini aytmasdi: 40 talik qator bosilgan zahoti
+  //  6 ta bo'lib qoldi — odam 29 ni kutgandi va qaytaradigan yo'q edi.
+  //  Hisob SERVERNIKI, ekran esa o'sha raqamni AYNAN shu manbadan
+  //  o'qiydi (`cur.units` — chiqib ketgan konverlar): ikki joyda
+  //  yozilgan shart bir kun ajralib ketardi.
+  const chiqdi = (cur.units || [])
+    .filter(u => u.product_id === it?.product_id)
+    .reduce((s, u) => s + Number(u.qty || 0), 0);
+  if (it && chiqdi === Number(it.qty))
+    return toast('Zavoddan ' + chiqdi + ' ta chiqqan, qatorda ham '
+      + it.qty + ' ta \u2014 tuzatadigan farq yo\'q', true);
+  const sabab = prompt(nom + ': zavoddan ' + chiqdi + ' ta chiqqan.\n'
+    + (chiqdi
+        ? 'Qator ' + (it ? it.qty : '?') + ' \u2192 ' + chiqdi + ' bo\'ladi.'
+        : 'Qator butunlay olib tashlanadi.')
+    + '\n\nSababi:');
   if (sabab === null) return;
   if (!sabab.trim()) return toast('Sabab yozilmagan', true);
   try {
