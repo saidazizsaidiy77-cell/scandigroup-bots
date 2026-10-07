@@ -11378,7 +11378,12 @@ test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () 
   assert.equal(h.status, 200, h.text);
   assert.equal(typeof h.body.token, 'boolean');
   assert.ok(h.body.idsiz.includes('Tg yomon'), 'ID siz xodim ro\'yxatda');
-  assert.ok(h.body.xato.some((x) => /403/.test(x.error || '')), 'xato ko\'rinadi');
+  //  Ro'yxat OXIRGI BESHTASI bilan cheklangan va `queueDigest`
+  //  belgisi bor har xodimga bitta qator yozadi — 403 li qator
+  //  o'shalarning orasida beshtadan pastga tushib ketishi mumkin.
+  //  Shuning uchun AYNAN o'sha qator yuqorida tekshirilgan (`q.error`),
+  //  bu yerda esa kartochka xatoni UMUMAN ko'rsatishi tekshiriladi.
+  assert.ok(h.body.xato.length, 'xato ko\'rinadi');
   //  Serverning soati: kunlik ishlar SERVER vaqti bo'yicha yuriydi va
   //  «bugun bormadi» degan savolning javobi ko'pincha shu.
   assert.ok(/^\d{2}:\d{2}$/.test(h.body.vaqt || ''), 'server soati keladi');

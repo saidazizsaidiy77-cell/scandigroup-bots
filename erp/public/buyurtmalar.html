@@ -1646,7 +1646,13 @@ async function openPick(itemId){
   const left = Math.max(0, (Number(it?.qty) || 0) - (Number(it?.assigned_qty) || 0));
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)closePick()">
-      <div class="modal" style="max-width:760px">
+      <!--  ★ OYNA KENG: sakkizta ustun 760px ga sig'masdi va eng
+            oxirgisi — TUGMA ustuni — ekrandan chiqib ketardi. Jadval
+            overflow-x bilan surilardi, lekin odam uni ko'rmasdi:
+            «Qaytarish tugmasi yo'q» degan savol aynan shundan
+            chiqdi. Javob ko'rinib turishi kerak, surib topiladigan
+            bo'lmasligi kerak. -->
+      <div class="modal" style="max-width:1020px">
         <div class="row" style="justify-content:space-between;margin-bottom:6px">
           <h1 style="margin:0">Konver biriktirish</h1>
           <button onclick="closePick()">Orqaga</button></div>
@@ -1698,9 +1704,17 @@ async function openPick(itemId){
               : `<input id="q${u.id}" type="number" min="1" max="${u.free_qty}"
                    value="${Math.max(1, Math.min(u.free_qty, left || u.free_qty))}"
                    style="max-width:80px;text-align:right">`}</td>
+            <!--  ★ CHIQIB KETGAN BUYURTMAGA YANGI KONVER OLINMAYDI
+                  (server ham rad etadi: «Buyurtma jo'natilgan»).
+                  Tugma chizilsa menejer uni bosib, sababini faqat
+                  xato xabaridan bilardi. Qaytarish esa OCHIQ
+                  qolaveradi — osilib qolgan bron aynan shu yerdan
+                  bo'shatiladi. -->
             <td class="num" style="white-space:nowrap">${u.mine
               ? `<button onclick="unassign(${u.id})">Qaytarish</button>`
-              : `<button class="primary" onclick="assign(${u.id})">Olish</button>`}</td>
+              : (cur.order.status === 'shipped'
+                ? `<span class="muted" style="font-size:12px">chiqib ketgan</span>`
+                : `<button class="primary" onclick="assign(${u.id})">Olish</button>`)}</td>
           </tr>`).join('')
             : `<tr><td class="muted" colspan="8">Bo'sh konver yo'q —
                  T/M omborda ham, zahirada ham, ishlab chiqarishda ham.
