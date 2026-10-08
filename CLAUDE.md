@@ -995,6 +995,16 @@ uchun — shuning uchun har qator HUJJATGA bog'langan:
   · to'lov — order raqami (`P26-0004`), bosilsa **kirim orderi** ochiladi
     (`public/kassa-orderi.html`): kimdan, kim olib kelgan, summa, kurs.
 
+**★ MAHSULOT NOMI VA TURI BIRGA YOZILADI** (zavod qarori, 2026-10;
+`v_customer_ledger` dagi `note`). Lentada faqat nom turardi —
+«Elizabetta — 6 ta» — va mijoz bilan yuzma-yuz o'tirganda u qaysi
+mahsulot ekanini aytmasdi: zavodda bitta nom IKKI guruhda uchraydi
+(Milano penal ham bor, Milano stul ham). Tayyor mahsulotda nom va
+turi bitta narsa: yuk xati ham, konver pasporti ham, ombor qoldig'i
+ham, so'rovlar ro'yxati ham **`Nomi · Turi`** deb yozadi va hujjat
+ulardan ajralib turishi mumkin emas. Chiqarishdagi «konver
+biriktirilmagan» xabari ham shu shaklda.
+
 «Bu 500 dollar qayerdan chiqdi» degan savolga jadvaldagi raqamning o'zi
 javob bermasdi — mijoz hujjatni ko'rishi kerak. Ikkalasi ham ALOHIDA
 oynada ochiladi: dalolatnoma yonida ochiq turadi, mijoz bilan qator

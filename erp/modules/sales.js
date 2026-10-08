@@ -2496,9 +2496,10 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     //  nechta qator bo'ladi va «to'liq emas» degan xabar qaysi biri
     //  ekanini aytmasdi.
     const kam = (await client.query(
-      `SELECT p.name AS product, i.qty, b.bron
+      `SELECT p.name AS product, g.name AS product_type, i.qty, b.bron
          FROM order_items i
-         JOIN products p ON p.id = i.product_id
+         JOIN products p        ON p.id = i.product_id
+         JOIN product_groups g  ON g.id = p.group_id
          LEFT JOIN LATERAL (
            SELECT COALESCE(SUM(r.qty), 0)::int AS bron
              FROM unit_reservations r
@@ -2508,7 +2509,8 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
         ORDER BY p.name`, [o.id])).rows;
     if (kam.length)
       throw new Error('Konver biriktirilmagan: ' + kam
-        .map((x) => `${x.product} — ${x.qty - x.bron} ta`).join(', ')
+        .map((x) => `${x.product}${x.product_type ? ' · ' + x.product_type : ''}`
+                    + ` — ${x.qty - x.bron} ta`).join(', ')
         + '. Avval savdo qaytarib olib, konver biriktirsin');
 
     //  Faqat SHU buyurtmaga bron qilingan dona chiqadi. Konverning

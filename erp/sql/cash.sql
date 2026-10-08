@@ -831,7 +831,17 @@ UNION ALL
 SELECT u.customer_id,
        COALESCE(u.ship_on, DATE '1900-01-01'),
        'ship'::text,
-       (COALESCE(p.name, 'Mahsulot') || ' — ' || u.qty || ' ta')::text,
+       --  ★ MAHSULOT NOMI VA TURI BIRGA (zavod qarori, 2026-10).
+       --  Izohda faqat nom turardi — «Elizabetta — 6 ta» — va mijoz
+       --  bilan yuzma-yuz o'tirganda u qaysi mahsulot ekanini
+       --  aytmasdi: zavodda bitta nom IKKI guruhda uchraydi (Milano
+       --  penal ham bor, Milano stul ham). Tayyor mahsulotda nom va
+       --  turi birga o'qiladi — yuk xati, konver pasporti va ombor
+       --  qoldig'i hammasi shunday yozadi va hujjat ulardan
+       --  ajralib turmasligi kerak.
+       (COALESCE(p.name, 'Mahsulot')
+          || COALESCE(' · ' || g.name, '')
+          || ' — ' || u.qty || ' ta')::text,
        u.conveyor_no::text,
        u.order_no::text,
        GREATEST(COALESCE(u.total_amount, 0), 0)::numeric(16,2),
@@ -839,7 +849,8 @@ SELECT u.customer_id,
        (SELECT o2.id FROM orders o2 WHERE o2.order_no = u.order_no),
        NULL::text, NULL::int
   FROM production_units u
-  LEFT JOIN products p ON p.id = u.product_id
+  LEFT JOIN products p       ON p.id = u.product_id
+  LEFT JOIN product_groups g ON g.id = p.group_id
  WHERE u.status = 'shipped' AND u.customer_id IS NOT NULL
    AND COALESCE(u.total_amount, 0) <> 0
 UNION ALL
