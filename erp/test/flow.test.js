@@ -6855,14 +6855,30 @@ test('navbat belgisi: har raqam o\'z ro\'yxati bilan bir xil', async () => {
   assert.equal(navda(/chiqarishga berilmagan/), tayyor.length,
     'menyudagi raqam «Tayyor» tabidagi qatorlar soni bilan bir xil');
 
-  //  Chegirma navbatining o'z ro'yxati yo'q — u holat emas, qatorning
-  //  ustidagi belgi — shuning uchun buyurtmalar ro'yxatining O'ZIDAN
-  //  sanaladi (`discount_status`, `v_sales_orders` da bor).
-  const kutayotgan = (await admin('GET', '/api/sales/orders')).body.rows
-    .filter((o) => o.discount_status === 'pending'
-                && !['shipped', 'cancelled'].includes(o.status)).length;
-  assert.equal(navda(/chegirma tasdig'ini kutmoqda/), kutayotgan,
+  //  ★ CHEGIRMA NAVBATINING O'Z FILTRI BOR (zavod qarori, 2026-10):
+  //  `?discount=pending`. Tab emas — chegirma holat EMAS — lekin
+  //  menyudagi belgi ishni KO'RSATIB, unga olib bormasa direktor
+  //  o'sha uchtasini yuzlab qator orasidan terib olishi kerak
+  //  bo'lardi. Shart ikki joyda yozilmasligi uchun test raqamni
+  //  SERVER filtrlagan ro'yxatning UZUNLIGI bilan solishtiradi.
+  const cheg = (await admin('GET', '/api/sales/orders?discount=pending')).body.rows;
+  assert.equal(navda(/chegirma tasdig'ini kutmoqda/), cheg.length,
     'chegirma navbati ro\'yxatdagi bilan bir xil');
+  assert.ok(cheg.length, 'kutayotgan buyurtma bor');
+  for (const o of cheg) {
+    assert.equal(o.discount_status, 'pending');
+    assert.ok(!['shipped', 'cancelled'].includes(o.status),
+      `${o.order_no}: chiqib ketgani ham, bekor qilingani ham sanalmaydi`);
+  }
+  //  Filtrsiz ro'yxatda ular ko'proq bo'ladi — ya'ni filtr haqiqatan
+  //  qisqartiradi, shunchaki o'tib ketmaydi.
+  assert.ok((await admin('GET', '/api/sales/orders')).body.rows.length
+            > cheg.length, 'filtr ro\'yxatni qisqartiradi');
+  //  Yig'indi ham SHU filtrdan o'tadi (mijoz va menejer filtri bilan
+  //  bir xil sabab) va RO'YXATNING o'zidan qayta hisoblanganiga teng.
+  const cj = (await admin('GET', '/api/sales/orders?discount=pending')).body.jami;
+  assert.equal(cj.reduce((a, j) => a + Number(j.orders), 0), cheg.length,
+    'chegirma filtrida yig\'indi ro\'yxat bilan bir xil');
   //  Tabdagi har qator haqiqatan ham chiqarishga tayyor: hammasi
   //  javonda va hali yuborilmagan.
   for (const o of tayyor) {

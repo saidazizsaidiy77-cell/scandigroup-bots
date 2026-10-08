@@ -1432,6 +1432,42 @@ ikkinchi savol: yonida ALOHIDA belgi bo'lib turadi. Ilgari holatning
 O'RNIGA yozilardi va qator yana o'z tabidan boshqa nom bilan
 ko'rinardi; endi ikkala javob ham bir vaqtda o'qiladi.
 
+**★ KUTAYOTGANLARINI TOPADIGAN FILTR** (zavod qarori, 2026-10;
+`GET /api/sales/orders?discount=pending`, ro'yxat ustidagi
+**«Chegirma kutmoqda»** katakchasi). Menyuda «3 ta buyurtma chegirma
+tasdig'ini kutmoqda» deb turardi, lekin o'sha uchtasini TOPADIGAN
+yo'l yo'q edi: chegirma holat emas, ya'ni tabi ham yo'q, va zavodda
+yuzlab buyurtma bor. Belgi ishni KO'RSATARDI, lekin unga olib
+bormasdi — direktor har qatorni ochib ko'rishdan boshqa yo'l
+topolmasdi.
+
+**Tab QILINMADI**: chegirma holat emas (yuqorida) va tab bo'lsa qator
+yana o'z tabidan boshqa nom bilan ko'rinardi. Katakcha — ombor
+qoldig'idagi «Faqat fakt» bilan bir xil idiom.
+
+**Shart nav.js dagi NAVBAT bilan AYNAN bir xil**
+(`discount_status = 'pending'`, chiqib ketgani ham, bekor qilingani
+ham sanalmaydi): ikki joyda boshqacha yozilsa menyuda bitta raqam,
+ro'yxatda boshqasi turardi. Test raqamni SHU ro'yxatning UZUNLIGI
+bilan solishtiradi.
+
+Filtr **SERVERDA** va **yig'indiga ham ta'sir qiladi** — mijoz va
+menejer filtri bilan bir xil sabab: «chegirma kutayotganlarida qancha
+pul turibdi» degan savolga javob kerak, butun savdo aylanmasi emas.
+**Hammaga chiziladi**: direktor tasdiqlaydi, menejer esa «mening
+qaysi buyurtmam kutmoqda» degan savolga javob oladi — u ham mijozga
+narx ayta olmay turadi; doira (`ownOf`) o'z joyida qoladi.
+
+Manzildan ham qo'yiladi (`?discount=pending`), lekin **menyu havolasi
+uni olmaydi**: u butun buyurtmalar sahifasi va navbat belgisi
+o'shanga ilinadi (`data-page`) — havolaga filtr yozilsa menyu qatori
+har safar qisqargan ro'yxatni ochardi.
+
+**Tasdiqlash tugmasining o'zi buyurtmaning ICHIDA qolaveradi**
+(`chegirmaCard`): qaror narx va qatorlarni ko'rib qabul qilinadi,
+ro'yxatdan bir bosishda tasdiqlash esa ularni ko'rmasdan qabul
+qilish bo'lardi.
+
 Buyurtma baribir BITTA nakladnoy: yarmi tayyor bo'lgani uchun
 bo'linmaydi — hammasi omborga yetib kelmaguncha chiqarilmaydi.
 

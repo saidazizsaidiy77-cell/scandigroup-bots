@@ -348,6 +348,23 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
   //  shunday o'qilardi va saralash tanlanmaguncha shunday qoladi.
   const ust = TARTIB[req.query.sort] || 'o.ordered_on';
   const yon = String(req.query.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  //  ★ «CHEGIRMA KUTMOQDA» FILTRI (zavod qarori, 2026-10). Menyuda
+  //  «3 ta buyurtma chegirma tasdig'ini kutmoqda» deb turardi, lekin
+  //  o'sha uchtasini TOPADIGAN yo'l yo'q edi: chegirma holat emas
+  //  (tab bo'lib turmaydi) va direktor yuzlab qator orasidan ko'z
+  //  bilan terib olishi kerak bo'lardi — ya'ni belgi ishni
+  //  ko'rsatar, lekin unga olib bormasdi.
+  //
+  //  Shart nav.js dagi NAVBAT bilan AYNAN bir xil
+  //  (`discount_status = 'pending'` va chiqib ketgani ham, bekor
+  //  qilingani ham sanalmaydi): ikki joyda boshqacha yozilsa menyuda
+  //  bitta raqam, ro'yxatda boshqasi turardi. Test raqamni shu
+  //  ro'yxatning UZUNLIGI bilan solishtiradi.
+  //
+  //  Tab QILINMADI: chegirma — holat EMAS, buyurtmaning ustiga
+  //  tushgan ikkinchi savol (izoh: `HOLAT`). Tab bo'lsa qator o'z
+  //  tabidan boshqa nom bilan ko'rinardi.
+  const chegirma = req.query.discount === 'pending' || null;
   //  ★ BO'SH KATAK HAR DOIM OXIRIDA, yo'nalishdan qat'i nazar (ombor
   //  qoldig'i va xodimlar ro'yxati bilan bir xil qoida): chiqish
   //  sanasi yozilmagan o'nta buyurtma tepaga chiqsa javob ko'rinmasdi.
@@ -361,11 +378,17 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
              OR customer_name ILIKE '%' || $5 || '%')
         --  O'z buyurtmasi chegarasi: filtr EMAS, klient o'chira olmaydi.
         AND ($6::int IS NULL OR manager_id = $6)
+        --  ★ CHEGIRMA KUTAYOTGANLARI: shart nav.js dagi navbat bilan
+        --  bir xil (izoh: chegirma filtri, yuqorida).
+        AND ($7::boolean IS NOT TRUE
+             OR (o.discount_status = 'pending'
+                 AND o.status NOT IN ('shipped', 'cancelled')))
       ORDER BY ${ust} ${yon} NULLS LAST, o.id DESC
       LIMIT 500`,
     [chans, req.query.status || null,
      req.query.customer_id || null,
-     req.query.manager_id || null, req.query.q || null, ownOf(req)]);
+     req.query.manager_id || null, req.query.q || null, ownOf(req),
+     chegirma]);
 
   //  ★ HAR BUYURTMA QAYERDA — ro'yxatning o'zida.
   //
@@ -436,9 +459,16 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($4::text IS NULL OR order_no ILIKE '%' || $4 || '%'
              OR customer_name ILIKE '%' || $4 || '%')
         AND ($5::int IS NULL OR manager_id = $5)
+        --  Chegirma filtri yig'indiga ham TA'SIR QILADI — mijoz va
+        --  menejer filtri bilan bir xil sabab: «chegirma kutayotgan
+        --  buyurtmalarda qancha pul turibdi» degan savolga javob
+        --  kerak, butun savdo aylanmasi emas.
+        AND ($6::boolean IS NOT TRUE
+             OR (o.discount_status = 'pending'
+                 AND o.status NOT IN ('shipped', 'cancelled')))
       GROUP BY 1`,
     [chans, req.query.customer_id || null, req.query.manager_id || null,
-     req.query.q || null, ownOf(req)])).rows;
+     req.query.q || null, ownOf(req), chegirma])).rows;
 
   res.json({ rows, jami });
 }));

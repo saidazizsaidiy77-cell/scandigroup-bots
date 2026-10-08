@@ -75,6 +75,23 @@
             u yerda baribir bitta ism turardi (izoh: `ownOf`). -->
       <select id="fMgr" onchange="load()" style="max-width:200px" hidden></select>
       <input id="fQ" placeholder="Z№ yoki mijoz" style="max-width:240px" oninput="load()">
+      <!--  ★ «CHEGIRMA KUTMOQDA» FILTRI (zavod qarori, 2026-10).
+            Menyuda «3 ta buyurtma chegirma tasdig'ini kutmoqda» deb
+            turardi, lekin o'sha uchtasini TOPADIGAN yo'l yo'q edi:
+            chegirma holat EMAS, ya'ni tab bo'lib turmaydi va
+            direktor yuzlab qator orasidan ko'z bilan terib olishi
+            kerak bo'lardi — belgi ishni ko'rsatar, lekin unga olib
+            bormasdi.
+            Tab emas, KATAKCHA: tab bo'lsa qator o'z tabidan boshqa
+            nom bilan ko'rinardi (ombor qoldig'idagi «Faqat fakt»
+            bilan bir xil idiom).
+            Filtr SERVERDA va yig'indiga ham ta'sir qiladi (mijoz va
+            menejer filtri bilan bir xil sabab).
+            HAMMAGA chiziladi: direktor tasdiqlaydi, menejer esa
+            «mening qaysi buyurtmam kutmoqda» degan savolga javob
+            oladi — u ham mijozga narx ayta olmay turadi. -->
+      <label class="row" style="gap:6px;font-size:13px;white-space:nowrap">
+        <input type="checkbox" id="fCheg" onchange="load()"> Chegirma kutmoqda</label>
       <!--  ★ TO'DALAB CHIQARISHGA BERISH. Tugma faqat qator
             BELGILANGANDA chiqadi: doim turgan «0 tasini chiqarishga
             berish» savol qoldirardi. Joyi — belgilash qilinadigan
@@ -297,6 +314,14 @@ async function boot(){
   //  ishlatiladi: uning rangi hali yo'q, mijoz aytgani bo'yicha
   //  bo'yaladi. Qolgan hamma joyda rang konverning o'zidan keladi.
   palette = { colors: sg.colors, fabrics: sg.fabrics };
+  //  ★ FILTR MANZILDAN HAM QO'YILADI (`?discount=pending`). Menyudagi
+  //  havola buni OLMAYDI va olishi ham kerak emas: u butun
+  //  buyurtmalar sahifasi va navbat belgisi unga ilinadi
+  //  (`data-page`, `navbatTick`) — havolaga filtr yozilsa menyu
+  //  qatori har safar qisqargan ro'yxatni ochardi. Manzil esa
+  //  yozib yuboriladi: «mana shu uchtasi» degan havola.
+  if (new URLSearchParams(location.search).get('discount') === 'pending')
+    $('fCheg').checked = true;
   drawChips();
   await load();
 }
@@ -427,6 +452,7 @@ async function load(){
   if (sort) { q.set('sort', sort); q.set('dir', sortDir); }
   if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
   if ($('fMgr') && $('fMgr').value) q.set('manager_id', $('fMgr').value);
+  if ($('fCheg') && $('fCheg').checked) q.set('discount', 'pending');
   const javob = await App.api('/api/sales/orders?' + q);
   rows = javob.rows;
   //  Jami SERVERDAN keladi (izoh: modules/sales.js): ro'yxat 500
