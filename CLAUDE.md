@@ -3788,6 +3788,26 @@ o'rnida uch raqam turadi:
 Yuqorida ham shu: «Qoldiq» va «Bronda» kartochkalari. Ikkalasi ham
 o'lchov birligi bilan — dona bilan komplektni qo'shib bo'lmaydi.
 
+**★ BRONDA TURGAN KONVER KIMNI KUTAYOTGANINI AYTADI** (zavod qarori,
+2026-10; `GET /api/warehouse/fg/units` dagi `bron`). Yorliqda «6
+bron» turardi va mudirning savoli aynan shu yerda boshlanadi: QAYSI
+zakaz, QAYSI mijoz va QACHON chiqadi. Javob faqat savdo sahifasida
+edi — u esa ombor mudiriga umuman ochilmaydi, ya'ni u raqamni
+ko'rib, kimnikiligini bilmasdi va menejerga qo'ng'iroq qilardi.
+
+Endi qator ochilganda yorliqlarning OSTIDA mayda yozuv turadi:
+konver raqami → soni · zakaz · mijoz · chiqish sanasi. Alohida
+oyna qilinmadi — savol qator ochilgan joyda beriladi va javob ham
+o'sha yerda bo'lishi kerak (tsex ekranidagi bron ro'yxati bilan bir
+xil idiom). Bitta konverda bir nechta mijozning broni bo'ladi va
+HAMMASI yoziladi: «10 bron» degan raqam kimnikiligini aytmasdi.
+
+Manba `v_unit_bron` — jurnaldagi «N buyurtmada» bilan AYNAN bir
+xil: ikki joyda yozilgan shart bir kun ajralib ketardi. **Narx
+YO'Q**: T/M ombor dona sanaydi (ustunlar bilan bir xil qoida).
+Sanasi o'tib ketgani QIZIL — jo'natish ro'yxatidagi bilan bir xil
+sabab: mahsulot javonda turibdi, mijozga aytilgan kun esa o'tgan.
+
 **★ «QOLDIQ» BITTA NARSANI ANGLAYDI** (zavod qarori, 2026-09).
 Ilgari bitta ustun IKKI xil raqamni ko'rsatardi: savdoga bo'sh
 qoldiqni, ombor mudiriga esa javondagi JISMONIY sonini. Bitta so'z

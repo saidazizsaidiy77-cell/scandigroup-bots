@@ -804,6 +804,32 @@ function jamiRows(d) {
 //  Qaysi konver ekani «Harakat» tabida turadi, shuning uchun izohda
 //  o'sha yo'l ko'rsatiladi — lekin faqat tarixi ochiq xodimga:
 //  savdoga ko'rinmaydigan tabga yo'llash javobsiz savol bo'lardi.
+//  ★ BRONDA TURGAN KONVER KIMNI KUTAYOTGANI (zavod qarori,
+//  2026-10). Yorliqda «6 bron» turardi va mudirning savoli aynan
+//  shu yerda boshlanadi: qaysi zakaz, qaysi mijoz va qachon chiqadi.
+//  Ilgari javob faqat savdo sahifasida edi — u esa ombor mudiriga
+//  umuman ochilmaydi, ya'ni raqamni ko'rib, kimnikiligini bilmasdi.
+//
+//  Yorliqlarning OSTIDA, mayda yozuvda: alohida oyna qilinmadi —
+//  savol qator ochilgan joyda beriladi va javob ham o'sha yerda
+//  bo'lishi kerak (tsex ekranidagi bron ro'yxati bilan bir xil
+//  idiom). **Narx yo'q**: T/M ombor dona sanaydi.
+//
+//  Sana o'tib ketgani QIZIL — jo'natish ro'yxatidagi bilan bir xil
+//  qoida: mahsulot javonda turibdi, mijozga aytilgan kun esa o'tgan.
+function bronBlok(units) {
+  const bor = (units || []).filter(u => (u.bron || []).length);
+  if (!bor.length) return '';
+  const bugun = new Date().toISOString().slice(0, 10);
+  return `<div style="margin-top:8px;font-size:12px">${bor.map(u =>
+    (u.bron || []).map(b => `<div class="muted" style="padding:1px 0">
+      <b>${esc(u.conveyor_no)}</b> → ${b.qty} ta · ${
+        esc(b.order_no || '')} · ${esc(b.customer || '')}${
+        b.due_on ? ` · <span${String(b.due_on).slice(0, 10) < bugun
+          ? ' class="late"' : ''}>${d8(b.due_on)}</span>` : ''}</div>`)
+      .join('')).join('')}</div>`;
+}
+
 function yoqIzoh(r) {
   const kirdi = Number(r.kirdi) || 0, chiqdi = Number(r.chiqdi) || 0;
   const harakat = !canLedger ? ''
@@ -887,7 +913,7 @@ function drawStockRow(r) {
                 esc(u.conveyor_no)}',${u.qty},${u.reserved_qty || 0})"` : ''}
             >${esc(u.conveyor_no)}${u.qty > 1 ? ` \u00d7${u.qty}` : ''}${
               u.reserved_qty ? ` \u00b7 ${u.reserved_qty} bron` : ''}</span>`;
-        }).join('') + ((canMove || canCount)
+        }).join('') + bronBlok(units) + ((canMove || canCount)
         ? `<div class="muted" style="font-size:12px;margin-top:6px">Konver
              raqamini bosing \u2014 ${[canMove ? "boshqa omborga ko'chirish" : '',
                canCount ? "sonini to'g'rilash (sanoq)" : '',

@@ -1882,6 +1882,23 @@ test('konver bo\'linmaydi — ustiga bron qo\'yiladi, bir nechta mijozdan', asyn
   assert.equal(o1.units[0].qty, 6, 'bron soni ko\'rinadi');
   assert.equal(o1.units[0].unit_qty, 10, 'konverning o\'zi 10 ta');
 
+  //  ★ BRONDA TURGAN KONVER KIMNI KUTAYOTGANINI OMBOR QOLDIG'I ham
+  //  aytadi (zavod qarori, 2026-10): mudir yorliqdagi «6 bron» ni
+  //  ko'rib, qaysi zakaz, qaysi mijoz va qachon chiqishini savdo
+  //  sahifasini ochmasdan biladi — u sahifa unga umuman ochilmaydi.
+  const nomer = o1.units[0].conveyor_no;
+  const qold = (await admin('GET', '/api/warehouse/fg/units?w=TM&q='
+    + encodeURIComponent(nomer))).body.rows.find(u => u.conveyor_no === nomer);
+  assert.ok(qold, 'konver T/M qoldig\'ida turadi');
+  //  Konverda IKKI mijozning broni bor (6 + 4) va ikkalasi ham
+  //  qatorda turadi: «10 bron» degan raqam kimnikiligini aytmasdi.
+  assert.equal(qold.reserved_qty, 10);
+  assert.equal((qold.bron || []).length, 2, 'bron tafsiloti keladi');
+  const b1 = qold.bron.find(b => b.order_no === z1.no);
+  assert.ok(b1, 'birinchi buyurtma ro\'yxatda');
+  assert.equal(b1.qty, 6);
+  assert.ok(b1.customer, 'mijoz nomi ko\'rinadi');
+
   // Bron qo'yilgan konver boshqa omborga ko'chmaydi
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
   const koch = await mudir('POST', '/api/warehouse/fg/transfer',

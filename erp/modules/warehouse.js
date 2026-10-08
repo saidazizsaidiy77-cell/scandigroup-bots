@@ -611,7 +611,23 @@ router.get('/fg/units', need(...READ), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT id, conveyor_no, order_no, qty, fg_on, days_in_stock,
             customer_name, is_stock, total_amount, reserved_qty,
-            product, product_type, color, fabric, uom, product_id
+            product, product_type, color, fabric, uom, product_id,
+            --  ★ BRONDA TURGAN KONVER KIMNI KUTAYOTGANINI AYTADI
+            --  (zavod qarori, 2026-10). Yonida «6 bron» turardi va
+            --  mudirning savoli aynan shu yerda boshlanadi: QAYSI
+            --  zakaz, QAYSI mijoz va QACHON chiqadi. Javob uchun
+            --  savdo sahifasini ochish kerak edi — u esa ombor
+            --  mudiriga umuman ochilmaydi.
+            --
+            --  Manba v_unit_bron — jurnaldagi «N buyurtmada» bilan
+            --  AYNAN bir xil: ikki joyda yozilgan shart bir kun
+            --  ajralib ketardi. Narx YO'Q: T/M ombor dona sanaydi.
+            (SELECT json_agg(json_build_object(
+                      'qty', b.qty, 'order_no', b.order_no,
+                      'customer', b.customer_name, 'due_on', b.due_on)
+                    ORDER BY b.due_on NULLS LAST, b.order_no)
+               FROM v_unit_bron b
+              WHERE b.unit_id = v_fg_units.id) AS bron
        FROM v_fg_units
       WHERE warehouse_id = $4
         AND ($1::int IS NULL
