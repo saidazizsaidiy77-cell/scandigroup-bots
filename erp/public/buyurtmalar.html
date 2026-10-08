@@ -90,8 +90,13 @@
             HAMMAGA chiziladi: direktor tasdiqlaydi, menejer esa
             «mening qaysi buyurtmam kutmoqda» degan savolga javob
             oladi — u ham mijozga narx ayta olmay turadi. -->
-      <label class="row" style="gap:6px;font-size:13px;white-space:nowrap">
-        <input type="checkbox" id="fCheg" onchange="load()"> Chegirma kutmoqda</label>
+      <!--  Ko'rinishi «Faqat fakt» bilan bir xil (`ombor.html`):
+            `width:auto` SHART — umumiy `input{width:100%}` katakchani
+            butun joyga cho'zib, yozuvni o'ngga surib kesib qo'yardi. -->
+      <label class="tag" style="cursor:pointer;display:inline-flex;
+        align-items:center;gap:6px;padding:8px 10px;white-space:nowrap">
+        <input type="checkbox" id="fCheg" style="width:auto" onchange="load()">
+        Chegirma kutmoqda</label>
       <!--  ★ TO'DALAB CHIQARISHGA BERISH. Tugma faqat qator
             BELGILANGANDA chiqadi: doim turgan «0 tasini chiqarishga
             berish» savol qoldirardi. Joyi — belgilash qilinadigan
