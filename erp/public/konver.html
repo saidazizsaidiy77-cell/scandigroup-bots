@@ -149,7 +149,19 @@ function qator(r) {
       ? (r.order_id
           ? `<a href="/yukxati.html?id=${r.order_id}" target="_blank"
                >${esc(r.order_no || 'yuk xati')}</a>`
-          : esc(r.order_no || ''))
+          //  ★ EGASIZ CHIQQAN KONVERDA — TUZATISH TUGMASI. Bo'sh
+          //  katak bu yerda javob emas, savol: mahsulot zavoddan
+          //  chiqqan, lekin hujjati ham, mijozi ham yo'q — ya'ni
+          //  foyda-zararda turadi, mijozning qarzida esa yo'q.
+          //  Tugma faqat `sales.fix` da (administrator): yopilgan
+          //  hujjatga tegadigan har yo'l bilan bir xil qoida.
+          : r.order_no ? esc(r.order_no)
+          : canFix && !r.customer
+            ? `<button title="Buyurtmaga biriktirish"
+                 style="padding:4px 9px;font-size:12px"
+                 onclick="biriktir(${r.id}, '${esc(r.conveyor_no)}', ${r.qty})"
+                 >+ hujjat</button>`
+            : `<span class="muted">hujjat yo'q</span>`)
     : r.booked
       ? (r.bron || []).map((b) => `${esc(b.customer)} — ${b.qty} ta${
           b.order_no ? ` <span class="muted">${esc(b.order_no)}</span>` : ''}`)
@@ -167,7 +179,37 @@ function qator(r) {
     <td>${d8(sana) || '<span class="muted">—</span>'}</td></tr>`;
 }
 
+//  ★ BIRIKTIRISH IKKI SAVOL SO'RAYDI: qaysi hujjat va NEGA. Sabab
+//  majburiy (yopilgan hujjatga tegadigan har yo'l bilan bir xil
+//  idiom) va tekshiruvlar SERVERDA: buyurtma chiqib ketganmi, shu
+//  mahsulotning qatori bormi, narx aniqmi.
+//
+//  Qator O'ZI tenglashmaydi: yuk xatida 6 turgan joyda 29 chiqib
+//  ketgan bo'lishi mumkin — uni buyurtma ekranidagi ✕ tenglashtiradi
+//  va u sonini OLDIN aytadi. Shuning uchun javobda keyingi qadam
+//  yozilib turadi.
+async function biriktir(id, nomer, qty) {
+  const no = prompt(nomer + ' — ' + qty + ' ta zavoddan chiqqan, lekin '
+    + 'mijozi va hujjati yozilmagan.\n\nQaysi zakaz raqamiga biriktirilsin?');
+  if (!no || !no.trim()) return;
+  const sabab = prompt(no.trim() + ' ga biriktirilsin. Sababi:');
+  if (!sabab || !sabab.trim()) return;
+  try {
+    const r = await App.api('/api/sales/units/' + id + '/attach', {
+      method: 'POST',
+      body: { order_no: no.trim(), note: sabab.trim() },
+    });
+    alert(nomer + ' → ' + r.order_no + ' · ' + (r.customer || '')
+      + '\n' + r.qty + ' ta, ' + r.unit_price + ' $'
+      + '\n\nYuk xatining qatori chiqqan donaga to\'g\'ri kelmasa, '
+      + 'buyurtma ekranidagi \u2715 bilan tenglashtiring.');
+    await qidir();
+  } catch (e) { alert(e.message); }
+}
+
+let canFix = false;
 App.start(async () => {
+  canFix = App.can('sales.fix');
   const no = new URLSearchParams(location.search).get('no');
   if (no) { $('q').value = no; await qidir(); }
   else $('q').focus();

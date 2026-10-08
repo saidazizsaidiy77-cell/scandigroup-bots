@@ -1846,6 +1846,121 @@ router.post('/orders/:id/items/:itemId/remove', need('sales.fix'),
     } finally { client.release(); }
   }));
 
+//  ★ EGASIZ CHIQIB KETGAN KONVER HUJJATGA QAYTARILADI (zavod
+//  qarori, 2026-10). Konver pasportida «Mijozda — nomsiz» degan qator
+//  turardi: mahsulot zavoddan CHIQIB KETGAN (`status = 'shipped'`),
+//  lekin mijozi ham, zakaz raqami ham yozilmagan. Ya'ni u hech
+//  kimning hujjatida va hech kimning qarzida yo'q — foyda-zararda
+//  esa BOR (`v_pl_month` har chiqqan konverni o'qiydi). Natijasi:
+//  tushum turadi, qarz esa yo'q.
+//
+//  Tuzatadigan joy UMUMAN yo'q edi. Konver `shipped`, ya'ni jurnaldan
+//  chiqib ketgan va bron nomzodlari ro'yxatiga ham tushmaydi
+//  (`CANDIDATE_WHERE`: faqat `fg` va `production`). Yangi konver
+//  yasash esa yo'l emas: o'shanda foyda-zarar bitta mahsulotni IKKI
+//  marta sanardi.
+//
+//  Shuning uchun biriktirish — bron EMAS, hujjatning o'zini
+//  to'g'rilash: `customer_id`, `order_no` va narx konverga yoziladi,
+//  ya'ni `/ship` qiladigan ishning aynan o'zi. Huquqi `sales.fix`
+//  (faqat administrator), sabab MAJBURIY va audit jurnalida yozuv
+//  `fix` deb turadi — yopilgan hujjatga tegadigan har yo'l bilan bir
+//  xil idiom.
+//
+//  ★ FAQAT EGASI YO'Q KONVER. Mijozi bor konverni boshqa hujjatga
+//  ko'chirish bu yerdan qilinmaydi: u allaqachon kimningdir
+//  balansida va ikki tomonni birga o'zgartirish `fixShipped` ning
+//  ishi (buyurtmadagi mijozni almashtirish). Shart ikkala ustunga
+//  ham qo'yiladi: biri bo'sh, ikkinchisi to'lgan qator — boshqa
+//  xatoning izi va uni jimgina ustiga yozib yuborish tarixni
+//  yo'qotardi.
+//
+//  ★ QATOR O'ZI TENGLASHMAYDI. Biriktirilgandan keyin yuk xatining
+//  qatori chiqqan donadan kam bo'lib qolishi mumkin (6 turgan joyda
+//  29 chiqdi) — uni qatordagi ✕ tenglashtiradi va u SONINI oldin
+//  aytadi. Ikki savol, ikki bosish: bu konver kimniki, va hujjatda
+//  nechta yozilgan.
+router.post('/units/:id/attach', need('sales.fix'), wrap(async (req, res) => {
+  const sabab = String(req.body.note || '').trim();
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const no = cleanNo(req.body.order_no);
+  if (!no) return res.status(400).json({ error: 'Zakaz raqami yozilmagan' });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const u = (await client.query(
+      `SELECT u.id, u.conveyor_no, u.qty, u.status, u.customer_id, u.order_no,
+              u.unit_price, u.product_id, p.name AS product, g.name AS product_type
+         FROM production_units u
+         JOIN products p       ON p.id = u.product_id
+         JOIN product_groups g ON g.id = p.group_id
+        WHERE u.id = $1 FOR UPDATE OF u`, [req.params.id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+    if (u.status !== 'shipped')
+      throw new Error('Faqat chiqib ketgan konver — zavodda turganiga '
+        + 'buyurtma oynasidan konver biriktiriladi');
+    if (u.customer_id || u.order_no)
+      throw new Error(`${u.conveyor_no}: bu konverning egasi bor (`
+        + `${u.order_no || 'mijozi yozilgan'}) — mijozni almashtirish `
+        + 'buyurtma kartochkasidan qilinadi');
+
+    const o = (await client.query(
+      `SELECT o.id, o.order_no, o.status, o.customer_id, c.name AS customer
+         FROM orders o JOIN customers c ON c.id = o.customer_id
+        WHERE o.order_no = $1 FOR UPDATE OF o`, [no])).rows[0];
+    if (!o) throw new Error(`${no} — bunday buyurtma yo'q`);
+    if (o.status !== 'shipped')
+      throw new Error(`${no} hali chiqib ketmagan — chiqib ketgan konver `
+        + 'faqat yopilgan hujjatga biriktiriladi');
+
+    //  Buyurtmada SHU mahsulotning qatori bo'lishi SHART: yuk xati
+    //  qatorlardan bosiladi va ro'yxatda yo'q mahsulot qog'ozda ham
+    //  ko'rinmasdi — ya'ni qarz oshar, hujjat esa jim qolardi. Qator
+    //  qo'shish bu yerdan ham yo'q (`fixShipped` bilan bir xil
+    //  qoida): chiqib ketgan hujjatning qatorlari qotib turadi.
+    const qatorlar = (await client.query(
+      `SELECT id, qty, unit_price FROM order_items
+        WHERE order_id = $1 AND product_id = $2`, [o.id, u.product_id])).rows;
+    if (!qatorlar.length)
+      throw new Error(`${no} da «${u.product} · ${u.product_type}» qatori `
+        + "yo'q — chiqib ketgan hujjatga qator qo'shilmaydi");
+
+    //  Narx: buyurtma qatoridagisi mijoz IMZOLAGAN summa, ya'ni u
+    //  ustun turadi (★ NARX — YUK XATIDAN). Lekin faqat ANIQ
+    //  holatda ko'chadi: shu mahsulotdan BITTA qator bo'lsa.
+    //  Ikkita bo'lsa (bir xil mahsulot ikki rangda, ikki narxda)
+    //  qaysi biri ekanini bilib bo'lmaydi — `sotilgan-narx` bir
+    //  martalik ko'chirishi va `fixShipped` bilan aynan bir xil
+    //  qoida va bir xil sabab: tizim taxmin qilmaydi.
+    let narx = u.unit_price;
+    if (qatorlar.length === 1 && qatorlar[0].unit_price != null)
+      narx = qatorlar[0].unit_price;
+    if (narx == null)
+      throw new Error(`${u.conveyor_no}: narx yo'q — qarz nol bo'lib `
+        + 'yozilardi. Avval buyurtma qatoriga narx yozing');
+
+    await client.query(
+      `UPDATE production_units
+          SET customer_id = $2, order_no = $3, unit_price = $4
+        WHERE id = $1`, [u.id, o.customer_id, o.order_no, narx]);
+
+    await audit(req, { module: 'sales', action: 'fix', entity: 'order',
+                       entity_id: o.id,
+                       payload: { order_no: o.order_no,
+                                  konver: 'egasiz chiqqan konver biriktirildi',
+                                  conveyor_no: u.conveyor_no, qty: u.qty,
+                                  mahsulot: u.product, narx, note: sabab } },
+      client);
+    await client.query('COMMIT');
+    res.json({ ok: true, order_no: o.order_no, customer: o.customer,
+               qty: u.qty, unit_price: narx });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 //  ★ QAYTARISH QULFLANGAN BUYURTMADA YO'Q. Biriktirish — ish
 //  (qolgan donaga konver topiladi), qaytarish esa buyurtmaning
 //  va'dasini O'ZGARTIRADI: tsex allaqachon rejaga olgan mahsulot

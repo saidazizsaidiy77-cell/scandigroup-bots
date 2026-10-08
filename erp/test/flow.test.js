@@ -3725,6 +3725,49 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('GET', '/api/sales/orders/' + z.id))
     .body.items.find((x) => x.id === qator.id).qty, 6, 'qator yuqoriga ham keladi');
 
+  //  ★ EGASIZ CHIQIB KETGAN KONVER HUJJATGA QAYTARILADI (zavod
+  //  qarori, 2026-10). Konver `shipped`, lekin mijozi ham, zakaz
+  //  raqami ham yo'q: hech kimning qarzida yo'q, foyda-zararda esa
+  //  BOR. Jurnaldan ham chiqib ketgan, bron nomzodlariga ham
+  //  tushmaydi — ya'ni tuzatadigan yo'l faqat shu.
+  const kn = await H.id(`SELECT conveyor_no FROM production_units WHERE id = $1`,
+    [tayyor.id]);
+  await dbq.query(
+    `UPDATE production_units SET customer_id = NULL, order_no = NULL
+      WHERE id = $1`, [tayyor.id]);
+  const nomsiz = (await admin('GET', '/api/units/track?no='
+    + encodeURIComponent(kn.conveyor_no))).body.rows.find((r) => r.id === tayyor.id);
+  assert.equal(nomsiz.joy, 'Mijozda — nomsiz', 'pasportda sababi yoziladi');
+
+  //  Huquqi faqat administratorda — yopilgan hujjatga tegadi
+  assert.equal((await mudir('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: z.order_no, note: 'sinov' })).status, 403);
+  //  Sabab MAJBURIY
+  assert.equal((await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: z.order_no })).status, 400);
+  //  Bo'lmagan buyurtma rad etiladi
+  assert.equal((await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: 'Z26-9999', note: 'sinov' })).status, 400);
+
+  const bir = await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: z.order_no, note: 'qog\'ozda bor, tizimda yo\'q edi' });
+  assert.equal(bir.status, 200, bir.text);
+  assert.equal(bir.body.order_no, z.order_no);
+  //  Narx BUYURTMA QATORIDAN ko'chadi: mijoz imzolagan summa ustun
+  assert.equal(Number(bir.body.unit_price), 250);
+  const qayt = await H.id(
+    `SELECT customer_id, order_no, unit_price FROM production_units WHERE id = $1`,
+    [tayyor.id]);
+  assert.equal(qayt.customer_id, mijoz);
+  assert.equal(qayt.order_no, z.order_no);
+
+  //  Egasi bor konver ikkinchi marta biriktirilmaydi: u allaqachon
+  //  kimningdir balansida va mijozni almashtirish — `fixShipped` ning ishi
+  const takror = await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: z.order_no, note: 'sinov' });
+  assert.equal(takror.status, 400, takror.text);
+  assert.match(takror.body.error, /egasi bor/);
+
   //  Chiqmagani esa olib tashlanadi
   assert.equal((await admin('POST',
     `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`,

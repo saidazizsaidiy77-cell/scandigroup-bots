@@ -1812,6 +1812,49 @@ chiqqan» bilan AYNAN bir xil qoida va bir xil sabab. **Sabab
 MAJBURIY** (qulfni ochish bilan bir xil idiom), audit jurnalida
 yozuv `fix` deb turadi. Huquqi `sales.fix` — faqat administrator.
 
+**★ EGASIZ CHIQIB KETGAN KONVER HUJJATGA QAYTARILADI** (zavod
+qarori, 2026-10; `POST /api/sales/units/:id/attach`, konver
+pasportidagi **«+ hujjat»**). Pasportda «Mijozda — nomsiz» degan
+qator turardi: mahsulot zavoddan CHIQIB KETGAN
+(`status = 'shipped'`), lekin mijozi ham, zakaz raqami ham
+yozilmagan. Ya'ni u hech kimning hujjatida va hech kimning qarzida
+yo'q — foyda-zararda esa BOR (`v_pl_month` har chiqqan konverni
+o'qiydi): tushum turadi, qarz esa yo'q.
+
+**Tuzatadigan joy UMUMAN yo'q edi.** Konver `shipped`, ya'ni
+jurnaldan chiqib ketgan va bron nomzodlariga ham tushmaydi
+(`CANDIDATE_WHERE`: faqat `fg` va `production`). Yangi konver yasash
+yo'l emas: o'shanda foyda-zarar bitta mahsulotni IKKI marta sanardi.
+Yagona chora bazaga qo'lda kirish bo'lib qolardi.
+
+Shuning uchun biriktirish — bron EMAS, hujjatning o'zini
+to'g'rilash: `customer_id`, `order_no` va narx konverga yoziladi,
+ya'ni `/ship` qiladigan ishning aynan o'zi.
+
+    bo'ladi     `shipped`, mijozi ham, zakaz raqami ham BO'SH konver
+    bo'lmaydi   egasi bor konver — u kimningdir balansida va
+                mijozni almashtirish `fixShipped` ning ishi
+    bo'lmaydi   buyurtma hali chiqib ketmagan — zavodda turgan
+                konverga oddiy bron qo'yiladi
+    bo'lmaydi   buyurtmada shu mahsulotning qatori yo'q — chiqib
+                ketgan hujjatga qator qo'shilmaydi
+
+**Narx BUYURTMA QATORIDAN ko'chadi** (mijoz imzolagan summa ustun),
+lekin faqat ANIQ holatda: shu mahsulotdan BITTA qator bo'lsa —
+`sotilgan-narx` bir martalik ko'chirishi va `fixShipped` bilan aynan
+bir xil qoida. Narx hech qaysi tomonda bo'lmasa RAD etiladi: qarz nol
+bo'lib yozilardi.
+
+**Qator O'ZI tenglashmaydi.** Biriktirilgandan keyin yuk xatining
+qatori chiqqan donadan kam bo'lib qolishi mumkin (6 turgan joyda 29
+chiqdi) — uni qatordagi ✕ tenglashtiradi. Ikki savol, ikki bosish:
+bu konver kimniki, va hujjatda nechta yozilgan.
+
+Huquqi **`sales.fix`** — faqat administrator; **sabab MAJBURIY** va
+audit jurnalida yozuv `fix` deb turadi. Pasportdagi bo'sh katak
+o'rnida endi tugma yoki «hujjat yo'q» yozuvi turadi: bo'sh katak bu
+yerda javob emas, savol.
+
 **Mijoz almashsa konver ham ko'chadi** (`production_units.customer_id`):
 buyurtmada mijozni almashtirib, konverni eskisida qoldirish qarzni IKKI
 odamda yolg'on qilardi — yangisida ko'rinmas, eskisida turib qolardi.
