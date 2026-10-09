@@ -75,6 +75,8 @@ const WH = new URLSearchParams(location.search).get('w') || '';
 const wq = (p) => { if (WH) p.set('w', WH); return p; };
 let whName = '';
 let canMove = false, canFixQty = false, canCount = false, targets = [];
+//  Ochilgan qatorlardagi konverlar — oyna joriy rangni shundan oladi.
+const unitMap = new Map();
 //  ★ SAVDOGA FAQAT QOLDIQ (zavod qarori, 2026-09).
 //
 //  Ombor mudirining savoli AYLANMA: bugun nima keldi, nima chiqdi,
@@ -902,6 +904,7 @@ function drawStockRow(r) {
       ${units === undefined ? `<span class="muted">Yuklanmoqda\u2026</span>`
       : !units.length ? yoqIzoh(r)
       : units.map(u => {
+          unitMap.set(u.id, u);
           // Yorliq bosilsa oyna ochiladi: ko'chirish va/yoki sonini
           // to'g'rilash — qaysinisi huquqda bor bo'lsa.
           const ochiladi = (canMove && !u.reserved_qty) || canCount;
@@ -917,6 +920,7 @@ function drawStockRow(r) {
         ? `<div class="muted" style="font-size:12px;margin-top:6px">Konver
              raqamini bosing \u2014 ${[canMove ? "boshqa omborga ko'chirish" : '',
                canCount ? "sonini to'g'rilash (sanoq)" : '',
+               canCount ? "rangini o'zgartirish" : '',
                canFixQty ? 'bekor qilish' : '']
                .filter(Boolean).join(', ')}</div>` : '')}
     </td></tr>`}`;
@@ -1001,6 +1005,32 @@ function openMove(id, no, qty, bron) {
             zarar.</p>
         </div>` : ''}
 
+        <!--  ★ RANGNI O'ZGARTIRISH (zavod qarori, 2026-10). Kiritishda
+              adashilgan yoki omborda qayta bo'yalgan mahsulot. Faqat
+              BO'SH dona: bronli donaning rangi buyurtma qatorida
+              yozilgan. Rang FAQAT RO'YXATDAN, sabab majburiy —
+              tekshiruv serverda (POST /api/warehouse/fg/recolor). -->
+        ${canCount ? `<div class="stack" style="margin-top:20px;
+            border-top:1px solid var(--line);padding-top:18px">
+          <div><label>Rangini o'zgartirish${(unitMap.get(id)?.color || '').trim()
+              ? ' — hozir: ' + esc(unitMap.get(id).color.trim()) : ' — hozir rangsiz'}</label>
+            ${qty - bron > 0 ? `<div class="row" style="gap:10px;flex-wrap:wrap">
+              <select id="rcColor" style="flex:1;min-width:160px">
+                <option value="">Yuklanmoqda…</option></select>
+              <input id="rcQty" type="number" min="1" max="${qty - bron}"
+                value="${qty - bron}" style="max-width:90px" title="soni">
+            </div>` : `<p class="muted" style="font-size:12px;margin:4px 0 0">Hammasi
+              buyurtmada — bronli donaning rangi o'zgarmaydi.</p>`}</div>
+          ${qty - bron > 0 ? `<div><label>Sabab</label>
+            <input id="rcNote" placeholder="masalan: kiritishda adashilgan / qayta bo'yaldi"></div>
+          <button onclick="doRecolor(${id})">Rangini o'zgartirish</button>
+          <p class="muted" style="font-size:12px;margin:0">${bron
+            ? `<b>${bron}</b> tasi buyurtmada — ular eski rangda qoladi; o'zgargani
+               shu raqam bilan alohida qator bo'ladi.`
+            : `Bir qismini o'zgartirsangiz, o'sha qismi shu raqam bilan alohida qator
+               bo'ladi.`}</p>` : ''}
+        </div>` : ''}
+
         <!--  Butunlay noto'g'ri kiritilgan konver. Jurnaldagi «×» bilan
               bir xil yo'l — lekin omborga tushgan konver jurnaldan
               chiqib ketadi va u yerdan topilmasdi. Bronda turgani va
@@ -1015,6 +1045,7 @@ function openMove(id, no, qty, bron) {
             bo'lib qoladi.</p>
         </div>` : ''}
       </div></div>`;
+  if (canCount) rangToldir(id);
 }
 
 //  Bekor qilish jurnaldagi bilan bitta yo'l: `PATCH /api/units/:id` ga
@@ -1051,6 +1082,38 @@ async function doFixQty(id, eski) {
   } catch (e) { toast(e.message, true); }
 }
 const closeMove = () => { $('modalRoot').innerHTML = ''; };
+
+//  Rang ro'yxati bir marta o'qiladi: oyna har ochilganda serverga
+//  borish shart emas, ro'yxat kun davomida deyarli o'zgarmaydi.
+let rangRoyxat = null;
+async function rangToldir(id) {
+  const el = $('rcColor'); if (!el) return;
+  try {
+    if (!rangRoyxat) rangRoyxat = (await App.api('/api/warehouse/fg/colors')).colors;
+  } catch (e) { el.innerHTML = '<option value="">ro\'yxat ochilmadi</option>'; return; }
+  const hozir = (unitMap.get(id)?.color || '').trim().toLowerCase();
+  el.innerHTML = '<option value="">— rang tanlang —</option>' + rangRoyxat
+    .filter(c => c.toLowerCase() !== hozir)
+    .map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+
+async function doRecolor(id) {
+  const rang = $('rcColor').value;
+  if (!rang) return toast('Rang tanlanmagan', true);
+  const n = Number($('rcQty').value);
+  const sabab = $('rcNote').value.trim();
+  if (!sabab) return toast('Sabab yozilmagan', true);
+  const u = unitMap.get(id) || {};
+  if (!confirm(`${u.conveyor_no || ''}: ${n} tasining rangi «${
+      (u.color || 'rangsiz').trim()}» \u2192 «${rang}» qilinsinmi?`)) return;
+  try {
+    await App.api('/api/warehouse/fg/recolor', { method: 'POST',
+      body: JSON.stringify({ unit_id: id, qty: n, color: rang, note: sabab }) });
+    closeMove();
+    toast(`${u.conveyor_no || ''} · ${n} ta «${rang}» bo'ldi`);
+    await loadStock();
+  } catch (e) { toast(e.message, true); }
+}
 
 // ══════════════════════════════════════ SANOQ — QOLDIQNI TO'G'RILASH
 //

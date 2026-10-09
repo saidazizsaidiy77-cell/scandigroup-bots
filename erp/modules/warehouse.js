@@ -997,6 +997,113 @@ router.post('/fg/count', need('warehouse.manage', 'production.manage'),
     } finally { client.release(); }
   }));
 
+// ═══════════════════════════════════════ RANGNI O'ZGARTIRISH (T/M ombor)
+//
+//  ★ OMBORDAGI MAHSULOTNING RANGI O'ZGARADI (zavod qarori, 2026-10).
+//  Ikki hol bor va ikkalasida ham javob bitta yo'l edi — konverni
+//  bekor qilib, qaytadan kiritish (konveyer raqami yo'qolardi):
+//
+//    kiritishda adashilgan    «Venge» o'rniga «Oq» yozilgan
+//    qayta bo'yalgan          omborda turgan mahsulot mijoz so'ragan
+//                             rangga bo'yab berildi
+//
+//  ★ FAQAT BO'SH DONA. Bron mijozning buyurtma QATORIGA qo'yilgan va
+//  qatorda rang yozilgan: bronli donaning rangi o'zgarsa buyurtmada
+//  bir rang, javonda boshqasi turardi (qulf qoidasi bilan bir xil
+//  sabab). Shuning uchun bron ESKI qatorda qoladi, o'zgargan dona esa
+//  YANGI bo'lak bo'ladi — raqami o'sha (`clonePart`, ko'chirish va
+//  qisman qabul bilan bir xil idiom). Konverning hammasi bo'sh bo'lsa
+//  va hammasi o'zgarsa — qatorning o'zi o'zgaradi, bo'lak yaratilmaydi.
+//
+//  ★ RANG FAQAT BORIDAN (`assertRang` bilan bir xil qoida, katta-kichik
+//  harfga qaramaydi): bitta «Venge» va bitta «venge » ombor qoldig'ini
+//  ikkiga bo'lib yuborardi. Yangi rang — zavodning qarori, u jurnal
+//  orqali kiritiladi.
+//
+//  Sabab MAJBURIY (sanoq bilan bir xil): qoldiq rang bo'yicha
+//  ko'rinadi va «oq stul qayerga ketdi» degan savol keyin beriladi;
+//  javobi audit jurnalida — `recolor`, eski va yangi rang bilan.
+//  Huquqi sanoq bilan bir xil: javonni sanaydigan odam.
+const RANG = ['warehouse.manage', 'production.manage'];
+
+//  Rang ro'yxati — zavodda ishlatilgan ranglar, eng ko'p uchragani
+//  tepada. Ombor mudirida savdo huquqi yo'q, ya'ni savdoning
+//  `/suggest` yo'li unga ochilmaydi.
+router.get('/fg/colors', need(...RANG), wrap(async (_req, res) => {
+  const { rows } = await db.query(
+    `SELECT TRIM(color) AS color, COUNT(*)::int AS n
+       FROM production_units
+      WHERE NULLIF(TRIM(color), '') IS NOT NULL
+      GROUP BY TRIM(color)
+      ORDER BY n DESC, TRIM(color)`);
+  res.json({ colors: rows.map((r) => r.color) });
+}));
+
+router.post('/fg/recolor', need(...RANG), wrap(async (req, res) => {
+  const rang = String(req.body.color || '').trim();
+  if (!rang) throw bad('Rang tanlanmagan');
+  const sabab = String(req.body.note || '').trim();
+  if (!sabab) throw bad('Sabab yozilmagan');
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const u = (await client.query(
+      `SELECT u.*, COALESCE(u.warehouse_id, tm.id) AS at_wh,
+              COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                         WHERE r.unit_id = u.id), 0)::int AS reserved
+         FROM production_units u
+         LEFT JOIN warehouses tm ON tm.code = 'TM'
+        WHERE u.id = $1 FOR UPDATE OF u`, [req.body.unit_id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+    if (u.status !== 'fg') throw new Error(`${u.conveyor_no}: omborda emas`);
+
+    //  Doira CHEGARA: ko'rmaydigan omborning konveriga tegib bo'lmaydi.
+    //  So'rov tranzaksiyaning `client` idan (CLAUDE.md, 3-qoida).
+    const [perms, ids] = whScope(req);
+    const wh = (await client.query(
+      `SELECT w.id, w.name FROM warehouses w WHERE w.id = $3 AND ${SCOPE}`,
+      [perms, ids, u.at_wh])).rows[0];
+    if (!wh) throw new Error('Bu ombor sizga ochiq emas');
+
+    const bor = (await client.query(
+      `SELECT TRIM(color) AS color FROM production_units
+        WHERE LOWER(TRIM(color)) = LOWER($1) LIMIT 1`, [rang])).rows[0];
+    if (!bor) throw new Error(`Rang «${rang}» ro'yxatda yo'q — boridan tanlang`);
+    const yangiRang = bor.color;     // yozilishi bazadagidek bo'lsin
+    const eskiRang = String(u.color || '').trim();
+    if (eskiRang.toLowerCase() === yangiRang.toLowerCase())
+      throw new Error(`${u.conveyor_no}: rangi allaqachon «${yangiRang}»`);
+
+    const bosh = u.qty - u.reserved;
+    const n = req.body.qty == null || req.body.qty === '' ? bosh : Number(req.body.qty);
+    if (!bosh)
+      throw new Error(`${u.conveyor_no}: hammasi buyurtmada — bronli donaning ` +
+        `rangi o'zgarmaydi, avval savdo konverni qaytarsin`);
+    if (!Number.isInteger(n) || n <= 0 || n > bosh)
+      throw new Error(`${u.conveyor_no}: soni 1..${bosh} oralig'ida` +
+        (u.reserved ? ` (${u.reserved} tasi buyurtmada)` : ''));
+
+    const id = n < u.qty
+      ? await clonePart(client, req, u, n, { keepPlace: true })
+      : u.id;
+    await client.query(`UPDATE production_units SET color = $2 WHERE id = $1`,
+                       [id, yangiRang]);
+
+    await audit(req, { module: 'warehouse', action: 'recolor', entity: 'unit',
+                       entity_id: id,
+                       payload: { conveyor_no: u.conveyor_no, qty: n,
+                                  edi: eskiRang || null, boldi: yangiRang,
+                                  warehouse: wh.name, note: sabab } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, unit_id: id, qty: n, color: yangiRang,
+               split: id !== u.id });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 
 //  ★ SANOQ TARIXI — «qachon sanadik» degan savolning javobi, va u
 //  sanoq oynasining O'ZIDA turadi: mudir varaqni ochganda bugun
