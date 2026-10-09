@@ -350,8 +350,11 @@ router.delete('/products/:id', need('production.manage'), wrap(async (req, res) 
 //  belgilanadi.
 const PRICE = ['sales.discount'];
 
-router.get('/prices', need(...PRICE), wrap(async (req, res) => {
-  const q = String(req.query.q || '').trim() || null;
+//  Ro'yxat BITTA so'rovdan: ekran ham, Excel fayli ham. Ikki nusxa
+//  yozilsa filtr bir kun ajralib, faylda ekrandagidan boshqa qatorlar
+//  turardi.
+async function narxRows(query) {
+  const q = String(query.q || '').trim() || null;
   const { rows } = await db.query(
     `SELECT p.id, p.sku, p.name, p.size_label, p.active,
             g.name AS group_name, g.sort AS group_sort,
@@ -363,8 +366,41 @@ router.get('/prices', need(...PRICE), wrap(async (req, res) => {
         AND (p.active OR $3::boolean)
       ORDER BY g.sort, p.name, p.size_label NULLS FIRST
       LIMIT 2000`,
-    [q, Number(req.query.group_id) || null, req.query.all === '1']);
-  res.json({ rows });
+    [q, Number(query.group_id) || null, query.all === '1']);
+  return rows;
+}
+
+router.get('/prices', need(...PRICE), wrap(async (req, res) => {
+  res.json({ rows: await narxRows(req.query) });
+}));
+
+//  ★ EXCELGA YUKLASH (zavod qarori, 2026-10). Narx ro'yxati boshqa
+//  hisobga kerak bo'ladi — masalan ishlab chiqarishdagi bronsiz
+//  mahsulotning qiymati — va to'qson oltita qatorni skrinshot bilan
+//  ko'chirish bir ekranga sig'masdi va xato manbai edi.
+//
+//  Jurnal eksporti bilan bir xil idiom: CSV (xlsx kutubxonasiz),
+//  nuqta-vergul, BOM, kasr vergul bilan — Excel o'zbek/rus
+//  sozlamasida raqamni raqam deb o'qisin. Huquqi ekran bilan AYNAN
+//  bir xil (`sales.discount`): fayl ham narx.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+const csvNum = (v) => v == null ? '' : String(v).replace('.', ',');
+
+router.get('/prices/export', need(...PRICE), wrap(async (req, res) => {
+  const rows = await narxRows(req.query);
+  const head = ['Mahsulot', "O'lcham", 'SKU', 'Guruh',
+                'Ulgurji, $', 'Chakana, $', 'Holati'];
+  const body = rows.map((r) => [
+    csvCell(r.name), csvCell(r.size_label), csvCell(r.sku), csvCell(r.group_name),
+    csvNum(r.price_opt), csvNum(r.price_retail),
+    r.active ? '' : 'faolsiz'].join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="narxlar-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send('\uFEFF' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
 }));
 
 module.exports = router;

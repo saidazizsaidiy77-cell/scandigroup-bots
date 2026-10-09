@@ -2333,6 +2333,15 @@ test('narxdan past sotilmaydi \u2014 direktor tasdiqlaydi', async () => {
   const ich = await xodim('Sinov narx boshliq', 'ishlab_boshl');
   assert.equal((await ich('GET', '/api/catalog/prices')).status, 403);
   assert.equal((await admin('GET', '/api/catalog/prices')).status, 200);
+  //  Excel fayli ham narx: huquqi ekran bilan bir xil, qatorlari ham
+  assert.equal((await ich('GET', '/api/catalog/prices/export')).status, 403);
+  const fayl = await admin('GET', '/api/catalog/prices/export');
+  assert.equal(fayl.status, 200, fayl.text);
+  const satr = fayl.text.replace(/^\uFEFF/, '').trim().split('\r\n');
+  assert.match(satr[0], /Chakana/);
+  assert.equal(satr.length - 1,
+    (await admin('GET', '/api/catalog/prices')).body.rows.length,
+    'faylda ekrandagi qatorlarning hammasi');
 
   //  Katalog javobida ham narx YO'Q: ekranda yashirish himoya emas.
   const kat = (await ich('GET', '/api/catalog')).body.products[0];
