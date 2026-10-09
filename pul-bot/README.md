@@ -33,8 +33,9 @@ yolg'on yig'indi berardi.
 ## Ishga tushirish (Railway)
 
 1. @BotFather → `/newbot` → tokenni oling.
-2. Railway'da shu repozitoriydan **yangi servis**: Start command —
-   `npm run pul`. ERP bilan bir xil `DATABASE_URL` ni ulasa bo'ladi
+2. Railway'da shu repozitoriydan **yangi servis**, Settings → Config-as-code
+   → fayl yo'li `/pul-bot/railway.json` (ildizdagi `railway.json` ERP ni
+   ko'taradi va Start command ni bekor qiladi). ERP bilan bir xil `DATABASE_URL` ni ulasa bo'ladi
    (jadvallar `pf_` bilan boshlanadi va hech narsaga tegmaydi).
 3. O'zgaruvchilar: `PUL_BOT_TOKEN`, `PUL_BOT_USERS` (bo'sh qoldirib botga
    `/start` yozing — u ID ingizni aytadi), ixtiyoriy `PUL_TZ`, `PUL_DAILY_AT`.
