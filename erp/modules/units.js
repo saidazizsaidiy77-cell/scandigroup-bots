@@ -764,11 +764,20 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
             --  qo'shadi va u migratsiyada units.sql dan KEYIN yuradi —
             --  toza bazada view o'sha ustunni topa olmasdi va sayt
             --  ko'tarilmasdi (plan_auto bilan bir xil sabab).
-            zak.order_no
+            zak.order_no,
+            --  ★ BUYURTMA IZOHI HAM (zavod qarori, 2026-10). Savdo
+            --  yozgan so'rovning o'z izohi bo'sh bo'ladi — mijozning
+            --  gapini menejer BUYURTMAGA yozadi, tasdiqlovchi esa uni
+            --  ko'rmasdan tasdiqlardi. Bo'limlar ekranidagi bron
+            --  ro'yxati bilan bir xil ikki maydon (/:id/bron).
+            zak.order_note, zak.item_note
        FROM v_unit_requests q
        LEFT JOIN shops sh ON sh.id = q.shop_id
        LEFT JOIN LATERAL (
-         SELECT o.order_no FROM unit_requests uq
+         SELECT o.order_no,
+                NULLIF(TRIM(o.note), '')  AS order_note,
+                NULLIF(TRIM(oi.note), '') AS item_note
+           FROM unit_requests uq
            JOIN order_items oi ON oi.id = uq.order_item_id
            JOIN orders o       ON o.id  = oi.order_id
           WHERE uq.id = q.id) zak ON true

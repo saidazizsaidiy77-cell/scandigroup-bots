@@ -3005,7 +3005,8 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
 
-  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz, items: [
+  const z = (await admin('POST', '/api/sales/orders', { customer_id: mijoz,
+    note: 'Oyog\'i qora', items: [
     { product_id: STUL,  qty: 5, color: 'Oq', fabric: 'Velvet-12' },
     { product_id: PENAL, qty: 2 },
   ] })).body;
@@ -3053,6 +3054,8 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   const sorov = (await admin('GET', '/api/units/requests?status=pending'))
     .body.rows.find((x) => x.id === q.id);
   assert.equal(sorov.order_no, z.order_no, 'zakaz raqami ro\'yxatda');
+  //  Menejerning buyurtma izohi ham — tasdiqlovchi uni ko'rib qaror qiladi
+  assert.equal(sorov.order_note, 'Oyog\'i qora');
 
   //  Tasdiqlangach konver «boshlanmagan» bo'lib ochiladi va o'sha
   //  qatorga O'ZI biriktiriladi — menejer qaytib kelib qidirmaydi.

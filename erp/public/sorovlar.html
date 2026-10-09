@@ -300,11 +300,18 @@ function draw() {
             «mato mijozникиdan», «shoshilinch», «eski chizmadan» deb
             yozardi va tasdiqlovchi uni UMUMAN ko'rmasdi — ya'ni
             yozuv bor edi, lekin hech kimga yetib bormasdi.
-            Mahsulotning OSTIDA, chunki u o'sha mahsulot haqida. -->
+            Mahsulotning OSTIDA, chunki u o'sha mahsulot haqida.
+            Savdo yozgan so'rovda esa izoh BUYURTMADA turadi va u
+            ham shu yerda, «Buyurtma:» deb — so'rovchining gapi bilan
+            adashmasin. -->
       <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
         <div class="muted" style="font-size:12px">${esc(r.product_type)}</div>
         ${r.note ? `<div class="tag" style="font-size:12px;white-space:normal;
-          margin-top:4px">${esc(r.note)}</div>` : ''}</td>
+          margin-top:4px">${esc(r.note)}</div>` : ''}${
+        [r.item_note, r.order_note].filter(Boolean).length
+          ? `<div class="tag" style="font-size:12px;white-space:normal;
+          margin-top:4px">Buyurtma: ${
+            [r.item_note, r.order_note].filter(Boolean).map(esc).join(' · ')}</div>` : ''}</td>
       <td class="num">${r.qty}${r.uom ? ' <span class="muted">' + esc(r.uom) + '</span>' : ''}</td>
       <td class="muted">${[r.color, r.fabric].filter(Boolean).map(esc).join(' · ') || '—'}</td>
       <td>${d8(r.started_on) || '<span class="muted">—</span>'}</td>
