@@ -6,6 +6,7 @@
 | **Brauzerdan qanday kirish** | [DEPLOY.md](DEPLOY.md) |
 | Nomzod boti (Telegram) | `candidate-bot.js` |
 | HR boti (Telegram) | `hr-bot.js` |
+| Shaxsiy pul boti — harajat va daromad (Telegram) | [`pul-bot/`](pul-bot/README.md) · `npm run pul` |
 
 ## Tez ishga tushirish
 

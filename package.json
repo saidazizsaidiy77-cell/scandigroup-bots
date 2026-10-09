@@ -6,7 +6,8 @@
     "hr": "node hr-bot.js",
     "erp:migrate": "node erp/migrate.js",
     "candidate": "node candidate-bot.js",
-    "test": "node --test erp/test/*.test.js",
+    "pul": "node pul-bot/index.js",
+    "test": "node --test erp/test/*.test.js pul-bot/*.test.js",
     "erp:backup": "node erp/backup.js"
   },
   "dependencies": {
