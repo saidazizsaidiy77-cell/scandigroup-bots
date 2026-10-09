@@ -39,7 +39,11 @@
 <div class="card" style="margin-top:16px">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <h2 style="margin:0">Mahsulotlar</h2>
-    <span class="muted" id="cnt" style="font-size:13px"></span>
+    <div class="row" style="gap:12px;align-items:center">
+      <span class="muted" id="cnt" style="font-size:13px"></span>
+      <!--  Fayl EKRANDAGI filtr bilan: qidiruv, guruh va «faolsizi ham». -->
+      <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+    </div>
   </div>
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
 </div>
@@ -81,13 +85,27 @@ async function boot() {
   await load();
 }
 
-async function load() {
+//  Filtr BITTA joyda yig'iladi: ekran ham, Excel fayli ham shundan.
+function params() {
   const q = new URLSearchParams();
   if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
   if ($('fGroup').value)    q.set('group_id', $('fGroup').value);
   if ($('fOff').checked)    q.set('all', '1');
-  rows = (await App.api('/api/catalog/prices?' + q)).rows;
+  return q;
+}
+
+async function load() {
+  rows = (await App.api('/api/catalog/prices?' + params())).rows;
   draw();
+}
+
+async function exportCsv() {
+  $('btnCsv').disabled = true;
+  try {
+    await App.download('/api/catalog/prices/export?' + params(),
+      'narxlar-' + new Date().toISOString().slice(0, 10) + '.csv');
+  } catch (e) { toast(e.message, true); }
+  finally { $('btnCsv').disabled = false; }
 }
 
 function draw() {
