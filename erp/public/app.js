@@ -417,6 +417,18 @@ const App = (() => {
       title: 'Solishtirma dalolatnoma', lead: 'Mijoz bilan solishtirish',
       text: "Bitta mijozning davr ichidagi har bir harakati \u00b7 chiqim bosilsa yuk xati, to'lov bosilsa kirim orderi \u00b7 yonida yugurib boradigan qoldiq",
       perm: ['sales.view', 'sales.manage'] },
+    //  \u2605 SOTUV NARXLARI. \u00abTa'minot va xom ashyo \u2014 bitta bo'lim\u00bb
+    //  o'zgarishida bu qator materiallar bilan birga bexosdan o'chib
+    //  ketgan edi: sahifa ham, API ham joyida qoldi, menyuda esa
+    //  havolasi yo'qoldi. Xarid narxlari (`/xarid-narxlar.html`)
+    //  bilan adashtirmaslik kerak \u2014 bu SAVDO narxi.
+    { href: '/narxlar.html', mod: 'sales', nav: 'Narxlar',
+      title: 'Narxlar', lead: 'Ulgurji va chakana',
+      text: "Har mahsulotning ikki narxi \u00b7 menejer undan past sota olmaydi",
+      //  \u2605 FAQAT DIREKTORDA (zavod qarori, 2026-09): narx siyosati
+      //  uning ishi. `production.manage` yetarli emas \u2014 u katalog
+      //  huquqi. Tekshiruv baribir serverda.
+      perm: ['sales.discount'] },
     //  Hujjat sahifalari menyuda turmaydi: ular boshqa sahifadan,
     //  alohida oynada ochiladi (yukxati.html bilan bir xil).
     //  Bitta hujjat, ikki yo'nalish: mijoz to'laganda KIRIM, ta'minotchiga
