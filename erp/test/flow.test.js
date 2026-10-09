@@ -11555,6 +11555,72 @@ test('bitta manzil yiqilsa qolgani ketaveradi, sababi yozilib qoladi', async () 
   await db.query(`DELETE FROM notifications WHERE title LIKE 'Sinov %'`);
 });
 
+//  ── T/M OMBORDA RANG O'ZGARADI ────────────────────────────────────
+//
+//  Kiritishda adashilgan yoki omborda qayta bo'yalgan mahsulot. Faqat
+//  bo'sh dona; bronli qism eski rangda qoladi, o'zgargani shu raqam
+//  bilan alohida bo'lak bo'ladi. Rang faqat boridan, sabab majburiy.
+test('T/M omborda rang o\'zgaradi: faqat bo\'sh dona, faqat boridan', async () => {
+  const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  const ESKI = 'Rang sinov eski', YANGI = 'Rang sinov yangi';
+  //  Yangi rang zavodda allaqachon bor bo'lsin (ro'yxatdan tanlanadi)
+  await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 1, color: YANGI, is_opening: true, fg_on: '2026-09-05' }] });
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 5, color: ESKI, is_opening: true, fg_on: '2026-09-05' },
+  ] })).body.created[0];
+
+  //  Ro'yxatda ikkala rang ham bor
+  const ranglar = (await mudir('GET', '/api/warehouse/fg/colors')).body.colors;
+  assert.ok(ranglar.includes(YANGI));
+
+  //  Sabab majburiy, rang faqat boridan
+  assert.equal((await mudir('POST', '/api/warehouse/fg/recolor',
+    { unit_id: u.id, color: YANGI })).status, 400);
+  const yoq = await mudir('POST', '/api/warehouse/fg/recolor',
+    { unit_id: u.id, color: 'Bunday rang yo\'q', note: 'sinov' });
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /ro'yxatda yo'q/);
+
+  //  2 tasi buyurtmaga biriktiriladi
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90),
+    items: [{ product_id: PENAL, qty: 2, color: ESKI, unit_price: 1000 }] })).body;
+  const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: qator.id, unit_id: u.id, qty: 2 })).status, 200);
+
+  //  Bo'shidan ko'p o'zgartirib bo'lmaydi
+  assert.equal((await mudir('POST', '/api/warehouse/fg/recolor',
+    { unit_id: u.id, qty: 4, color: YANGI, note: 'qayta bo\'yaldi' })).status, 400);
+
+  //  3 ta bo'sh — hammasi yangi rangga, alohida bo'lak bo'lib
+  const ok = await mudir('POST', '/api/warehouse/fg/recolor',
+    { unit_id: u.id, qty: 3, color: YANGI.toUpperCase(), note: 'qayta bo\'yaldi' });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.split, true);
+  assert.equal(ok.body.color, YANGI, 'yozilishi bazadagidek');
+  const qatorlar = (await require('../db').db.query(
+    `SELECT id, qty, color FROM production_units
+      WHERE conveyor_no = $1 AND status = 'fg' ORDER BY id`, [u.conveyor_no])).rows;
+  assert.deepEqual(qatorlar.map((r) => [r.qty, r.color]), [[2, ESKI], [3, YANGI]],
+    'bronli 2 tasi eski rangda, 3 tasi yangi');
+  //  Bron eski qatorda qoldi
+  assert.equal((await admin('GET', `/api/units/${u.id}/bron`)).body.reserved, 2);
+
+  //  Bo'sh qolmadi — endi o'zgartirib bo'lmaydi
+  const bron = await mudir('POST', '/api/warehouse/fg/recolor',
+    { unit_id: u.id, color: YANGI, note: 'sinov' });
+  assert.equal(bron.status, 400);
+  assert.match(bron.body.error, /buyurtmada/);
+
+  //  Savdo xodimida huquq yo'q
+  const sot = await xodim('Sinov rang sotuvchi', 'sotuvchi');
+  assert.equal((await sot('POST', '/api/warehouse/fg/recolor',
+    { unit_id: ok.body.unit_id, color: ESKI, note: 'x' })).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
