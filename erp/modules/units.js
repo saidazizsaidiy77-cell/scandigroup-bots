@@ -1745,11 +1745,23 @@ router.get('/:id/bron', need('production.view', 'production.entry'),
   const [unit, rows] = await Promise.all([
     db.query(`SELECT id, conveyor_no, qty FROM production_units WHERE id = $1`,
              [req.params.id]),
+    //  ★ BUYURTMA IZOHI HAM KELADI (zavod qarori, 2026-10). Menejer
+    //  mijozning gapini («o'ng tomoni oyna», «oyog'i qora») buyurtmaga
+    //  yozadi, uni bajaradigan esa TSEX — lekin buyurtma oynasi tsex
+    //  boshlig'iga ochilmaydi va izoh unga hech qayerda ko'rinmasdi.
+    //  Qator izohi ham: bitta buyurtmada bir nechta mahsulot bo'ladi
+    //  va gap aynan shu konverga tegishli bo'lishi mumkin.
+    //  View'ga ustun QO'SHILMADI (2-qoida): ikki JOIN shu so'rovda.
     db.query(
-      `SELECT id, qty, order_id, order_no, due_on, customer_id, customer_name,
-              region, manager_name, order_status
-         FROM v_unit_bron WHERE unit_id = $1
-        ORDER BY created_at`, [req.params.id]),
+      `SELECT b.id, b.qty, b.order_id, b.order_no, b.due_on, b.customer_id,
+              b.customer_name, b.region, b.manager_name, b.order_status,
+              NULLIF(TRIM(o.note), '') AS order_note,
+              NULLIF(TRIM(i.note), '') AS item_note
+         FROM v_unit_bron b
+         JOIN orders o      ON o.id = b.order_id
+         JOIN order_items i ON i.id = b.order_item_id
+        WHERE b.unit_id = $1
+        ORDER BY b.created_at`, [req.params.id]),
   ]);
   if (!unit.rows[0]) return res.status(404).json({ error: 'Konver topilmadi' });
 
