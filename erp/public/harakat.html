@@ -295,6 +295,15 @@ function toggleBron(id, ev) {
     .catch(() => { openBron.delete(id); drawBoard(); });
 }
 
+//  Menejer buyurtmaga yozgan izoh — mijozning gapi, va uni tsex
+//  bajaradi. Qator izohi bo'lsa u ham (aynan shu mahsulot haqida).
+//  Butun kenglikda, ism va sonning OSTIDA: telefonda qator ikkiga
+//  bo'linadi va izoh o'z qatorida o'qilsin.
+const bronIzoh = x => [x.item_note, x.order_note].filter(Boolean).length
+  ? `<div class="izoh" style="flex-basis:100%;margin-top:0">${
+      [x.item_note, x.order_note].filter(Boolean).map(esc).join(' · ')}</div>`
+  : '';
+
 function bronRow(u) {
   const d = openBron.get(u.id);
   const inner = d === undefined
@@ -312,6 +321,7 @@ function bronRow(u) {
              <div style="white-space:nowrap"><b>${x.qty}</b> ta
                <span class="muted" style="font-size:12px;margin-left:8px">${
                  x.due_on ? d8(x.due_on) : 'muddatsiz'}</span></div>
+             ${bronIzoh(x)}
            </div>`).join('')}`;
   return `<tr class="bron"><td colspan="7"
     style="background:var(--bg);padding:10px 14px">${inner}</td></tr>`;

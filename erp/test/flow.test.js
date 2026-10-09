@@ -4057,7 +4057,7 @@ test('bo\'limlar ekranida konverning buyurtma soni ko\'rinadi', async () => {
   const u = (await admin('POST', '/api/units/', { items: [
     { product_id: PENAL, qty: 5, color: 'Tsex', section_id: ARRA }] })).body.created[0];
   const z = (await admin('POST', '/api/sales/orders', {
-    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90),
+    customer_id: mijoz, ship_to: 'ZAVOD', due_on: kun(90), note: 'Oyog\'i qora',
     items: [{ product_id: PENAL, qty: 3, color: 'Tsex', unit_price: 100 }] })).body;
   const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
@@ -4081,6 +4081,9 @@ test('bo\'limlar ekranida konverning buyurtma soni ko\'rinadi', async () => {
   assert.equal(d.rows.length, 1);
   assert.equal(d.rows[0].customer_name, 'Kanalsiz mijoz');
   assert.equal(d.rows[0].qty, 3);
+  //  Menejer buyurtmaga yozgan izoh tsexga ham yetadi
+  assert.equal(d.rows[0].order_note, 'Oyog\'i qora');
+  assert.equal(d.rows[0].item_note, null);
 
   //  Doira CHEGARA: boshqa tsexni so'rasa ham
   const lak = (await H.id(`SELECT id FROM shops WHERE name = 'Lak tsexi'`)).id;

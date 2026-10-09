@@ -886,8 +886,12 @@ function bronRow(r) {
              <td style="padding:3px 16px 3px 0" class="muted">${esc(x.order_no)}</td>
              <td style="padding:3px 16px 3px 0" class="muted">${
                x.due_on ? d8(x.due_on) : '—'}</td>
-             <td style="padding:3px 0" class="muted">${
+             <td style="padding:3px 16px 3px 0" class="muted">${
                x.manager_name ? esc(x.manager_name) : ''}</td>
+             <!--  Buyurtma izohi — bo'limlar ekranidagi bilan bir xil
+                   (izoh: `/:id/bron`, modules/units.js). -->
+             <td style="padding:3px 0;font-size:12px" class="muted">${
+               [x.item_note, x.order_note].filter(Boolean).map(esc).join(' · ')}</td>
            </tr>`).join('')}</tbody></table>`;
   return `<tr class="bron"><td colspan="16"
     style="background:var(--bg);padding:10px 14px">${inner}</td></tr>`;
