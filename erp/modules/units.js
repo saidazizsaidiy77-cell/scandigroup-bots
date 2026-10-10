@@ -399,6 +399,141 @@ router.get('/export', need('production.view'), wrap(async (req, res) => {
   res.send('\uFEFF' + [head, ...body].join('\r\n') + '\r\n');
 }));
 
+// ══════════════════ ISHLAB CHIQARISH REJASI — SAVDOGA NISBATAN TALAB
+//
+//  ★ NIMANI ISHLAB CHIQARISH KERAK (zavod qarori, 2026-10). Savol
+//  har hafta beriladi va javob uch joyda yotardi: nima sotilgani
+//  (chiqib ketgan konverlar), omborda nima turgani (T/M qoldig'i) va
+//  yo'lda nima kelayotgani (jurnal). Uchalasini qo'lda qo'shib
+//  chiqish kerak edi va natija kim hisoblaganiga qarab boshqacha
+//  chiqardi.
+//
+//  Hisob mahsulot (nomi + turi) bo'yicha, rangsiz — reja rang bilan
+//  tuziladigan bo'lsa ham konver RANGSIZ tug'iladi (izoh: CLAUDE.md,
+//  «rangi yo'q konver har qanday rangga yaraydi»):
+//
+//    kunlik savdo   = oxirgi `days` kunda CHIQIB KETGAN dona / days
+//    talab          = kunlik savdo × horizon × (1 + safety%)
+//    mavjud         = T/M ombordagi BO'SH + horizon ichida tayyor
+//                     bo'ladigan BO'SH konver (zahira va boshlanmagan
+//                     ham — ular bizniki va buyurtma kutmoqda)
+//    kerak          = talab − mavjud (manfiy bo'lsa — nol)
+//
+//  «Bo'sh» — bronni AYIRGANI: buyurtmaga biriktirilgan dona allaqachon
+//  boshqa mijozniki va yangi talabni yopmaydi.
+//
+//  ★ SAVDO = CHIQIB KETGAN, buyurtma yozilgani emas: buyurtma hali
+//  pul ham, mahsulot ham emas (foyda-zarar bilan bir xil o'q).
+//
+//  ★ VITRINA HISOBGA KIRMAYDI: u savdoga chiqmaydi (izoh: CLAUDE.md,
+//  «Vitrina savdoga umuman chiqmaydi»), ya'ni talabni yopmaydi.
+//
+//  ★ SANA REJADAN: konver qachon omborga tushishi `v_unit_register`
+//  dagi `fg_on` dan — fakt → boshliq qo'ygan reja → marshrut. Jurnal
+//  va bo'limlar ekrani bilan BIR manba: ikki joyda hisoblansa reja
+//  ekrandagi sanaga mos kelmay qolardi. Ufqdan keyin keladigani
+//  ALOHIDA ustunda turadi va hisobga qo'shilmaydi.
+//
+//  Marshruti yo'q mahsulot (matras) zavodda YASALMAYDI — u ham
+//  ro'yxatda turadi, lekin «sotib olinadi» belgisi bilan: talab
+//  bor, faqat javob ishlab chiqarish emas, xarid.
+const REJA = ['production.reports', 'production.manage'];
+const sonParam = (v, def, min, max) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : def;
+};
+
+async function talabRejasi(query) {
+  const days    = sonParam(query.days, 60, 7, 365);
+  const horizon = sonParam(query.horizon, 20, 1, 120);
+  const safety  = sonParam(query.safety, 20, 0, 200);
+  const { rows } = await db.query(
+    `WITH tm AS (SELECT id FROM warehouses WHERE code = 'TM'),
+     band AS (SELECT unit_id, SUM(qty)::int AS q
+                FROM unit_reservations GROUP BY unit_id),
+     sotuv AS (
+       SELECT product_id, SUM(qty)::int AS qty
+         FROM production_units
+        WHERE status = 'shipped'
+          AND ship_on >  CURRENT_DATE - $1::int
+          AND ship_on <= CURRENT_DATE
+        GROUP BY product_id),
+     ombor AS (
+       SELECT u.product_id,
+              SUM(GREATEST(u.qty - COALESCE(b.q, 0), 0))::int AS qty
+         FROM production_units u
+         LEFT JOIN band b ON b.unit_id = u.id
+        WHERE u.status = 'fg'
+          AND COALESCE(u.warehouse_id, (SELECT id FROM tm)) = (SELECT id FROM tm)
+        GROUP BY u.product_id),
+     yol AS (
+       SELECT v.product_id,
+              SUM(GREATEST(v.qty - COALESCE(b.q, 0), 0))
+                FILTER (WHERE v.fg_on IS NULL
+                           OR v.fg_on <= CURRENT_DATE + $2::int)::int AS ulguradi,
+              SUM(GREATEST(v.qty - COALESCE(b.q, 0), 0))
+                FILTER (WHERE v.fg_on > CURRENT_DATE + $2::int)::int AS keyin
+         FROM v_unit_register v
+         LEFT JOIN band b ON b.unit_id = v.id
+        WHERE v.status = 'production'
+        GROUP BY v.product_id)
+     SELECT p.id AS product_id, p.name AS product, g.name AS product_type,
+            g.uom, g.sort AS group_sort,
+            (p.route_template_id IS NULL) AS sotib_olinadi,
+            COALESCE(s.qty, 0)        AS sold,
+            COALESCE(o.qty, 0)        AS fg_free,
+            COALESCE(y.ulguradi, 0)   AS wip_due,
+            COALESCE(y.keyin, 0)      AS wip_later
+       FROM products p
+       JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN sotuv s ON s.product_id = p.id
+       LEFT JOIN ombor o ON o.product_id = p.id
+       LEFT JOIN yol   y ON y.product_id = p.id
+      WHERE COALESCE(s.qty, 0) + COALESCE(o.qty, 0)
+          + COALESCE(y.ulguradi, 0) + COALESCE(y.keyin, 0) > 0`,
+    [days, horizon]);
+
+  const out = rows.map((r) => {
+    const kunlik = r.sold / days;
+    const talab = Math.ceil(kunlik * horizon * (1 + safety / 100));
+    const mavjud = r.fg_free + r.wip_due;
+    return {
+      ...r,
+      daily: Math.round(kunlik * 100) / 100,
+      demand: talab,
+      available: mavjud,
+      need: Math.max(0, talab - mavjud),
+      //  Mavjud zaxira necha kunga yetadi — savdo bo'lmasa javob yo'q
+      cover_days: kunlik > 0 ? Math.floor(mavjud / kunlik) : null,
+    };
+  });
+  //  Eng katta yetishmovchilik tepada, keyin savdosi ko'pi
+  out.sort((a, b) => b.need - a.need || b.sold - a.sold
+    || a.group_sort - b.group_sort || a.product.localeCompare(b.product));
+  return { days, horizon, safety, rows: out };
+}
+
+router.get('/demand-plan', need(...REJA), wrap(async (req, res) => {
+  res.json(await talabRejasi(req.query));
+}));
+
+router.get('/demand-plan/export', need(...REJA), wrap(async (req, res) => {
+  const d = await talabRejasi(req.query);
+  const head = ['Mahsulot', 'Turi', 'Birligi', `Sotildi (${d.days} kun)`,
+                'Kunlik', `Talab (${d.horizon} kun, +${d.safety}%)`,
+                "T/M bo'sh", `Yo'lda (${d.horizon} kun ichida)`, 'Keyinroq',
+                'Mavjud', 'Ishlab chiqarish kerak', 'Necha kunga yetadi', 'Izoh'];
+  const body = d.rows.map((r) => [
+    csvCell(r.product), csvCell(r.product_type), csvCell(r.uom),
+    r.sold, csvNum(r.daily), r.demand, r.fg_free, r.wip_due, r.wip_later,
+    r.available, r.need, r.cover_days ?? '',
+    r.sotib_olinadi ? 'sotib olinadi' : ''].join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="ishlab-chiqarish-rejasi-${today()}.csv"`);
+  res.send('\uFEFF' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
+}));
+
 // ══════════════════ KONVER PASPORTI — RAQAM BO'YICHA QIDIRUV ═══════════════
 //
 //  ★ BITTA RAQAM — BUTUN TARIX (zavod qarori, 2026-09). Zavodning eng

@@ -11621,6 +11621,53 @@ test('T/M omborda rang o\'zgaradi: faqat bo\'sh dona, faqat boridan', async () =
     { unit_id: ok.body.unit_id, color: ESKI, note: 'x' })).status, 403);
 });
 
+//  ── ISHLAB CHIQARISH REJASI — SAVDOGA NISBATAN TALAB ──────────────
+//
+//  Sotilgan (chiqib ketgan), T/M ombordagi bo'sh va yo'ldagi bo'sh
+//  konver bitta jadvalda; bron hisobga kirmaydi. Raqamlar baza
+//  ustidagi farq bilan tekshiriladi — boshqa testlar ham PENAL yozadi.
+test('ishlab chiqarish rejasi: talab savdodan, mavjud bronsiz', async () => {
+  const qator = async () => (await admin('GET',
+    '/api/units/demand-plan?days=60&horizon=20&safety=0')).body.rows
+    .find((r) => r.product_id === PENAL) || { sold: 0, fg_free: 0, wip_due: 0 };
+  const oldin = await qator();
+
+  //  30 tasi 10 kun oldin chiqib ketgan
+  const sotilgan = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 30, is_opening: true, fg_on: kun(-20) }] })).body.created[0];
+  await require('../db').db.query(
+    `UPDATE production_units SET status = 'shipped', ship_on = CURRENT_DATE - 10
+      WHERE id = $1`, [sotilgan.id]);
+  //  T/M omborda 5 ta, 2 tasi bronda — bo'shi 3
+  const ombor = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 5, color: 'Reja sinov', is_opening: true,
+      fg_on: kun(-1) }] })).body.created[0];
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, ship_to: 'ZAVOD',
+    items: [{ product_id: PENAL, qty: 2, color: 'Reja sinov', unit_price: 1000 }] })).body;
+  const q = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: ombor.id, qty: 2 })).status, 200);
+
+  const keyin = await qator();
+  assert.equal(keyin.sold - oldin.sold, 30, 'chiqib ketgani savdo');
+  assert.equal(keyin.fg_free - oldin.fg_free, 3, 'bron ayirildi');
+  //  Formula: talab = sold/60*20 (zaxira 0), kerak = talab − mavjud
+  assert.equal(keyin.demand, Math.ceil(keyin.sold / 60 * 20));
+  assert.equal(keyin.available, keyin.fg_free + keyin.wip_due);
+  assert.equal(keyin.need, Math.max(0, keyin.demand - keyin.available));
+
+  //  Excel fayli ham o'sha hisobdan
+  const fayl = await admin('GET', '/api/units/demand-plan/export?days=60&horizon=20&safety=0');
+  assert.equal(fayl.status, 200, fayl.text);
+  assert.match(fayl.text, /Ishlab chiqarish kerak/);
+
+  //  Huquq: savdo xodimiga yopiq
+  const sot = await xodim('Sinov reja sotuvchi', 'sotuvchi');
+  assert.equal((await sot('GET', '/api/units/demand-plan')).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

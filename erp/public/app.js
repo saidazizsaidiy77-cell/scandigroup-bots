@@ -301,6 +301,15 @@ const App = (() => {
       perm: ['production.reports', 'production.manage', 'sales.view',
              'sales.manage', 'cash.view', 'cash.manage',
              'warehouse.view', 'warehouse.manage'] },
+    //  ★ ISHLAB CHIQARISH REJASI (zavod qarori, 2026-10): savdoga
+    //  nisbatan qaysi mahsulotdan nechta yasash kerak. Hisob serverda
+    //  (`talabRejasi`, modules/units.js) — sotilgan, T/M ombordagi bo'sh
+    //  va yo'ldagi bo'sh konver bitta jadvalda.
+    { href: '/reja.html', mod: ['reports', 'production'], nav: 'Ishlab chiqarish rejasi',
+      group: 'Ishlab chiqarish hisobotlari',
+      title: 'Ishlab chiqarish rejasi', lead: 'Savdoga nisbatan talab',
+      text: "Oxirgi savdo \u00b7 T/M ombordagi va yo'ldagi bo'sh mahsulot \u00b7 keyingi kunlarga nimadan nechta yasash kerak",
+      perm: ['production.reports', 'production.manage'] },
     { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
       group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',
