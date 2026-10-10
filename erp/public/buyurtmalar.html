@@ -1598,14 +1598,21 @@ const yop = () => { $('modalRoot').innerHTML = ''; };
 //  saqlanadi (serverda `ORDER BY i.sort, i.id`), lekin ehtiyot uchun
 //  mahsuloti ham solishtiriladi — mos kelmasa oyna ochilmaydi va
 //  menejer begona qatorga konver biriktirib qo'ymaydi.
+//  ★ ALLAQACHON SAQLANGAN QATOR HAM AVVAL SAQLANADI (zavod qarori,
+//  2026-10). Ilgari faqat YANGI qator saqlanardi, eskisi esa
+//  to'g'ridan-to'g'ri oynani ochardi — va ekranda tanlangan, lekin
+//  bazaga yozilmagan rang yoki mato yo'qolardi: oyna sarlavhasida
+//  «Safia · Tilla · Bejiviy» turar, server esa bazadagi bo'sh matoni
+//  ko'rib «matosi tanlanmagan» deb rad etardi. Ekran bilan baza bir
+//  bosishda ajralib ketardi.
 async function konverOch(i) {
   const it = cur.items[i];
   if (!it) return;
-  if (it.id) return openPick(it.id);
   if (!it.product_id) return alert('Avval qatorda mahsulotni tanlang');
+  const eskiId = it.id || null;
   const kutgan = Number(it.product_id);
   if (!await saqla({ qulfla: false })) return;
-  const yangi = cur.items[i];
+  const yangi = eskiId ? cur.items.find(x => x.id === eskiId) : cur.items[i];
   if (!yangi || !yangi.id || Number(yangi.product_id) !== kutgan)
     return alert('Qator saqlandi — «Konver» ni qaytadan bosing');
   openPick(yangi.id);
