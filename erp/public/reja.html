@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ishlab chiqarish rejasi · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Ishlab chiqarish rejasi</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="max-width:150px"><label>Savdo davri, kun</label>
+      <input id="fDays" type="number" min="7" max="365" value="60" onchange="load()"></div>
+    <div style="max-width:150px"><label>Reja ufqi, kun</label>
+      <input id="fHor" type="number" min="1" max="120" value="20" onchange="load()"></div>
+    <div style="max-width:150px"><label>Zaxira, %</label>
+      <input id="fSaf" type="number" min="0" max="200" value="20" onchange="load()"></div>
+    <div style="min-width:180px"><label>Turi</label>
+      <select id="fType" onchange="draw()"></select></div>
+    <label class="tag" style="cursor:pointer;display:inline-flex;align-items:center;
+      gap:6px;padding:8px 10px;white-space:nowrap">
+      <input type="checkbox" id="fNeed" style="width:auto" onchange="draw()">
+      Faqat kerak bo'lganlar</label>
+    <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    <b>Talab</b> = oxirgi davrda chiqib ketgan dona ÷ kun × ufq × (1 + zaxira).
+    <b>Mavjud</b> = T/M ombordagi bo'sh + ufq ichida omborga tushadigan bo'sh
+    konver (zahira va boshlanmagan ham). Bronda turgani hisobga
+    kirmaydi — u allaqachon mijozniki. Vitrina kirmaydi — u savdoga chiqmaydi.
+    Rang hisobga olinmaydi: konver rangsiz tug'iladi.</p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="kpi" class="grid g3" style="margin-bottom:16px"></div>
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<script>
+//  ISHLAB CHIQARISH REJASI — savdoga nisbatan talab.
+//
+//  Hisob BITTA joyda — serverda (`talabRejasi`, modules/units.js):
+//  ekran ham, Excel fayli ham o'shandan. Sahifa faqat filtrlaydi va
+//  chizadi, raqamni o'zi hisoblamaydi.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const son = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { maximumFractionDigits: 2 }).replace(/ /g, ' ');
+
+let d = null;
+
+function toast(msg, bad) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), bad ? 5000 : 2600);
+}
+
+function params() {
+  return new URLSearchParams({ days: $('fDays').value || 60,
+    horizon: $('fHor').value || 20, safety: $('fSaf').value || 0 });
+}
+
+async function load() {
+  try { d = await App.api('/api/units/demand-plan?' + params()); }
+  catch (e) { $('body').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const turlar = [...new Set(d.rows.map(r => r.product_type))];
+  const tanlangan = $('fType').value;
+  $('fType').innerHTML = '<option value="">Barcha tur</option>' + turlar
+    .map(t => `<option${t === tanlangan ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  draw();
+}
+
+//  Yig'indi O'LCHOV BIRLIGI bo'yicha: stul dona, penal komplekt —
+//  qo'shib bo'lmaydi (ombor qoldig'i bilan bir xil qoida).
+function kpi(rows) {
+  const g = {};
+  for (const r of rows) {
+    if (r.sotib_olinadi) continue;
+    const k = r.product_type;
+    g[k] ||= { uom: r.uom, need: 0, n: 0 };
+    g[k].need += r.need; if (r.need) g[k].n++;
+  }
+  return Object.entries(g).filter(([, v]) => v.need)
+    .map(([k, v]) => `<div class="card"><label>${esc(k)} — ishlab chiqarish kerak</label>
+      <div class="kpi">${son(v.need)} <small>${esc(v.uom || '')}</small></div>
+      <div class="muted" style="font-size:12px;margin-top:4px">${v.n} ta mahsulot</div></div>`).join('')
+    || '<p class="muted">Ufq ichida yetishmovchilik yo\'q.</p>';
+}
+
+function draw() {
+  if (!d) return;
+  const t = $('fType').value, faqat = $('fNeed').checked;
+  const rows = d.rows.filter(r => (!t || r.product_type === t) && (!faqat || r.need > 0));
+  $('kpi').innerHTML = kpi(rows);
+  if (!rows.length) {
+    $('body').innerHTML = '<p class="muted">Mahsulot topilmadi.</p>'; return; }
+  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Mahsulot</th><th>Turi</th>
+      <th class="num">Sotildi<div class="muted" style="font-size:11px">${d.days} kun</div></th>
+      <th class="num">Kunlik</th>
+      <th class="num">Talab<div class="muted" style="font-size:11px">${d.horizon} kun, +${d.safety}%</div></th>
+      <th class="num">T/M bo'sh</th>
+      <th class="num">Yo'lda<div class="muted" style="font-size:11px">${d.horizon} kun ichida</div></th>
+      <th class="num">Keyinroq</th>
+      <th class="num">Ishlab chiqarish<div class="muted" style="font-size:11px">kerak</div></th>
+      <th class="num">Yetadi, kun</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td><b>${esc(r.product)}</b>${r.sotib_olinadi
+        ? ' <span class="tag">sotib olinadi</span>' : ''}</td>
+      <td class="muted">${esc(r.product_type)}</td>
+      <td class="num">${son(r.sold)}</td>
+      <td class="num muted">${son(r.daily)}</td>
+      <td class="num">${son(r.demand)}</td>
+      <td class="num">${son(r.fg_free)}</td>
+      <td class="num">${son(r.wip_due)}</td>
+      <td class="num muted">${r.wip_later ? son(r.wip_later) : ''}</td>
+      <td class="num">${r.need ? `<b class="late">${son(r.need)}</b>` : '<span class="muted">—</span>'}
+        <span class="muted" style="font-size:11px">${r.need ? esc(r.uom || '') : ''}</span></td>
+      <td class="num ${r.cover_days != null && r.cover_days < d.horizon ? 'late' : 'muted'}">${
+        r.cover_days == null ? '' : son(r.cover_days)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function exportCsv() {
+  $('btnCsv').disabled = true;
+  try {
+    await App.download('/api/units/demand-plan/export?' + params(),
+      'ishlab-chiqarish-rejasi-' + new Date().toISOString().slice(0, 10) + '.csv');
+  } catch (e) { toast(e.message, true); }
+  finally { $('btnCsv').disabled = false; }
+}
+
+App.start(load, 'production.reports', 'production.manage');
+</script>
+</body>
+</html>
