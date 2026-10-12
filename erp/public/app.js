@@ -312,7 +312,7 @@ const App = (() => {
       perm: ['production.reports', 'production.manage'] },
     //  ★ SEKIN AYLANADIGAN ZAXIRA (zavod qarori, 2026-10): rejaning
     //  teskarisi — nimadan ORTIQCHA. Hisob serverda (`sekinZaxira`).
-    { href: '/sekin.html', mod: ['reports', 'production'], nav: 'Sekin zaxira',
+    { href: '/sekin.html', mod: 'reports', nav: 'Sekin zaxira',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Sekin aylanadigan zaxira', lead: 'Qotib turgan mahsulot',
       text: "Savdosi yo'q yoki sekin sotilayotgan bo'sh zaxira \u00b7 necha kundan beri turibdi \u00b7 qancha pul qotgan",
