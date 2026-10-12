@@ -671,6 +671,81 @@ router.get('/slow-stock/export', need(...REJA), wrap(async (req, res) => {
   res.send('﻿' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
 }));
 
+// ══════════════════ BOSHLANG'ICH QOLDIQ — KIRITILGANLAR ═════════════════════
+//
+//  ★ «NIMA KIRITILDI» DEGAN SAVOLGA JOY (zavod qarori, 2026-10). Qoldiq
+//  kiritiladi, saqlanadi — va shundan keyin uni ko'radigan joy YO'Q edi:
+//  tsexga kirgani harakatlar lentasida «bo'limga kirgan» sanasi bilan,
+//  omborga kirgani ombor tarixida «omborga kirgan» sanasi bilan turardi,
+//  ya'ni ikkalasi ham KIRITILGAN kun bo'yicha emas va bir-biridan alohida.
+//  Ma'lumotning o'zi bor edi (`is_opening`, `created_at`, `created_by`).
+//
+//  Qator — KONVER RAQAMI, bo'lak emas: konver keyin bo'linadi va har
+//  bo'lak o'z qatori bilan yangi `created_at` oladi (`clonePart`). Shuning
+//  uchun kiritilgan vaqt — bo'laklarning ENG ERTASI, kim — o'sha qatorni
+//  yozgan odam. Soni bekor qilinganisiz, ostida esa HOZIR qayerda turgani:
+//  tsexda · omborda · chiqib ketgan · bekor.
+async function qoldiqKiritilgan(query) {
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from || '') ? query.from : null;
+  const to   = /^\d{4}-\d{2}-\d{2}$/.test(query.to || '') ? query.to : null;
+  const kim  = Number(query.worker_id) || null;
+  const { rows } = await db.query(
+    `WITH g AS (
+       SELECT u.conveyor_no,
+              MIN(u.created_at) AS kiritildi,
+              (ARRAY_AGG(u.created_by ORDER BY u.created_at, u.part))[1] AS by_id,
+              (ARRAY_AGG(u.product_id ORDER BY u.created_at, u.part))[1] AS product_id,
+              COALESCE(SUM(u.qty) FILTER (WHERE u.status <> 'cancelled'), 0)::int AS qty,
+              COALESCE(SUM(u.qty) FILTER (WHERE u.status = 'production'), 0)::int AS tsexda,
+              COALESCE(SUM(u.qty) FILTER (WHERE u.status = 'fg'), 0)::int AS omborda,
+              COALESCE(SUM(u.qty) FILTER (WHERE u.status = 'shipped'), 0)::int AS chiqdi,
+              COALESCE(SUM(u.qty) FILTER (WHERE u.status = 'cancelled'), 0)::int AS bekor
+         FROM production_units u
+        WHERE u.is_opening
+        GROUP BY u.conveyor_no)
+     SELECT g.*, p.name AS product, gr.name AS product_type, gr.uom,
+            w.name AS by_name
+       FROM g
+       JOIN products p        ON p.id = g.product_id
+       JOIN product_groups gr ON gr.id = p.group_id
+       LEFT JOIN workers w    ON w.id = g.by_id
+      WHERE ($1::date IS NULL OR g.kiritildi::date >= $1)
+        AND ($2::date IS NULL OR g.kiritildi::date <= $2)
+        AND ($3::int IS NULL OR g.by_id = $3)
+      ORDER BY g.kiritildi DESC, g.conveyor_no
+      LIMIT 2000`, [from, to, kim]);
+  //  Filtr ro'yxati: boshlang'ich qoldiq kiritgan odamlar, butun shtat emas
+  const workers = (await db.query(
+    `SELECT DISTINCT w.id, w.name FROM production_units u
+       JOIN workers w ON w.id = u.created_by
+      WHERE u.is_opening ORDER BY w.name`)).rows;
+  return { from, to, rows, workers };
+}
+
+const QOLDIQ_KORISH = ['production.manage', 'production.units'];
+
+router.get('/opening-log', need(...QOLDIQ_KORISH), wrap(async (req, res) => {
+  res.json(await qoldiqKiritilgan(req.query));
+}));
+
+router.get('/opening-log/export', need(...QOLDIQ_KORISH), wrap(async (req, res) => {
+  const d = await qoldiqKiritilgan(req.query);
+  const vaqt = (t) => {
+    const x = new Date(t), p = (n) => String(n).padStart(2, '0');
+    return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())} ${p(x.getHours())}:${p(x.getMinutes())}`;
+  };
+  const head = ['Kiritildi', 'Kim', 'Konver', 'Mahsulot', 'Turi', 'Birligi',
+                'Soni', 'Tsexda', 'Omborda', 'Chiqib ketgan', 'Bekor'];
+  const body = d.rows.map((r) => [
+    vaqt(r.kiritildi), csvCell(r.by_name), csvCell(r.conveyor_no), csvCell(r.product),
+    csvCell(r.product_type), csvCell(r.uom), r.qty, r.tsexda, r.omborda,
+    r.chiqdi, r.bekor].join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="boshlangich-qoldiq-${today()}.csv"`);
+  res.send('﻿' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
+}));
+
 // ══════════════════ KONVER PASPORTI — RAQAM BO'YICHA QIDIRUV ═══════════════
 //
 //  ★ BITTA RAQAM — BUTUN TARIX (zavod qarori, 2026-09). Zavodning eng

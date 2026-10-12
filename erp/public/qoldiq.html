@@ -116,6 +116,28 @@
   </div>
 </div>
 
+<!--  ★ KIRITILGANLAR (zavod qarori, 2026-10): saqlangandan keyin nima
+      kiritilgani shu yerda — kiritilgan KUN bo'yicha, yangisi tepada.
+      Hisob serverda (qoldiqKiritilgan, modules/units.js). -->
+<div class="card" style="margin-top:16px">
+  <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <h2 style="margin:0">Kiritilganlar</h2>
+    <span class="muted" id="logCount" style="font-size:13px"></span>
+  </div>
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:12px">
+    <div style="max-width:170px"><label>Kiritilgan, dan</label>
+      <input id="lFrom" type="date" onchange="loadLog()"></div>
+    <div style="max-width:170px"><label>gacha</label>
+      <input id="lTo" type="date" onchange="loadLog()"></div>
+    <div style="min-width:180px"><label>Kim kiritgan</label>
+      <select id="lWho" onchange="loadLog()"></select></div>
+    <button onclick="logBugun()">Bugun</button>
+    <button onclick="logHammasi()">Hammasi</button>
+    <button onclick="logExcel()" id="btnLogCsv">Excelga yuklash</button>
+  </div>
+  <div id="logBody" style="margin-top:14px"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
 <div id="modalRoot"></div>
 
 <script>
@@ -443,7 +465,8 @@ async function save(){
       App.api('/api/units/next-no'), App.api('/api/units/suggest')]);
     fillSuggest();
     seq = 0;
-    alert(`${r.created.length} ta konver kiritildi. Jurnal sahifasida ko'rishingiz mumkin.`);
+    loadLog();
+    alert(`${r.created.length} ta konver kiritildi. Pastdagi «Kiritilganlar» ro'yxatida ko'rinadi.`);
   }catch(e){ alert(e.message); }
   // Tugmalar holatini sum() belgilaydi: saqlangach jadval bo'shaydi va
   // tugma o'z-o'zidan o'chadi, yarim saqlangan holatda yoqilib qolmaydi.
@@ -559,7 +582,73 @@ async function saveImport() {
   }
 }
 
-App.start(boot, 'production.units', 'production.manage');
+//  ── KIRITILGANLAR ───────────────────────────────────────────────────
+const pad2 = n => String(n).padStart(2, '0');
+const isoKun = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const logParams = () => {
+  const p = new URLSearchParams();
+  if ($('lFrom').value) p.set('from', $('lFrom').value);
+  if ($('lTo').value)   p.set('to', $('lTo').value);
+  if ($('lWho').value)  p.set('worker_id', $('lWho').value);
+  return p;
+};
+function logBugun() { $('lFrom').value = $('lTo').value = isoKun(new Date()); loadLog(); }
+function logHammasi() { $('lFrom').value = $('lTo').value = ''; loadLog(); }
+
+async function loadLog() {
+  let d;
+  try { d = await App.api('/api/units/opening-log?' + logParams()); }
+  catch (e) { $('logBody').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const tanlangan = $('lWho').value;
+  $('lWho').innerHTML = '<option value="">Hamma</option>' + d.workers.map(w =>
+    `<option value="${w.id}"${String(w.id) === tanlangan ? ' selected' : ''}>${esc(w.name)}</option>`).join('');
+  const jami = {};
+  for (const r of d.rows) jami[r.uom || ''] = (jami[r.uom || ''] || 0) + r.qty;
+  $('logCount').textContent = d.rows.length
+    ? `${d.rows.length} konver · ` + Object.entries(jami).map(([u, n]) => `${nf(n)} ${u}`).join(' · ')
+    : '';
+  if (!d.rows.length) {
+    $('logBody').innerHTML = '<p class="muted">Bu oraliqda boshlang\'ich qoldiq kiritilmagan.</p>';
+    return;
+  }
+  //  Kun bo'yicha guruh: «oxirgi marta nima kiritildi» degan savol shu
+  const kunlar = [];
+  for (const r of d.rows) {
+    const k = isoKun(new Date(r.kiritildi));
+    if (!kunlar.length || kunlar[kunlar.length - 1].k !== k) kunlar.push({ k, rows: [] });
+    kunlar[kunlar.length - 1].rows.push(r);
+  }
+  const joy = r => [
+    r.tsexda && `tsexda ${nf(r.tsexda)}`, r.omborda && `omborda ${nf(r.omborda)}`,
+    r.chiqdi && `chiqib ketgan ${nf(r.chiqdi)}`, r.bekor && `bekor ${nf(r.bekor)}`,
+  ].filter(Boolean).join(' · ');
+  $('logBody').innerHTML = `<div class="tbox"><table>
+    <thead><tr><th>Vaqt</th><th>Kim</th><th>Konver</th><th>Mahsulot</th>
+      <th class="num">Soni</th><th>Hozir</th></tr></thead>
+    <tbody>${kunlar.map(g => `
+      <tr><td colspan="6" style="padding-top:14px"><b>${g.k.slice(8, 10)}.${g.k.slice(5, 7)}.${g.k.slice(2, 4)}</b>
+        <span class="muted" style="font-size:12px">· ${g.rows.length} konver</span></td></tr>
+      ${g.rows.map(r => { const t = new Date(r.kiritildi); return `<tr>
+        <td class="muted">${pad2(t.getHours())}:${pad2(t.getMinutes())}</td>
+        <td>${esc(r.by_name || '—')}</td>
+        <td><a href="/konver.html?no=${encodeURIComponent(r.conveyor_no)}" target="_blank"
+          style="color:var(--accent)">${esc(r.conveyor_no)}</a></td>
+        <td><b>${esc(r.product)}</b> <span class="muted">· ${esc(r.product_type)}</span></td>
+        <td class="num">${nf(r.qty)} <span class="muted" style="font-size:11px">${esc(r.uom || '')}</span></td>
+        <td class="muted" style="font-size:12px">${esc(joy(r))}</td></tr>`; }).join('')}`).join('')}
+    </tbody></table></div>`;
+}
+
+async function logExcel() {
+  $('btnLogCsv').disabled = true;
+  try {
+    await App.download('/api/units/opening-log/export?' + logParams(),
+      'boshlangich-qoldiq-' + isoKun(new Date()) + '.csv');
+  } catch (e) { alert(e.message); }
+  finally { $('btnLogCsv').disabled = false; }
+}
+
+App.start(() => { loadLog(); return boot(); }, 'production.units', 'production.manage');
 </script>
 </body>
 </html>
