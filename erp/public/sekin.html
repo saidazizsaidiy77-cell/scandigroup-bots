@@ -144,7 +144,7 @@ function draw() {
   $('kpi').innerHTML = kpi(rows);
   if (!rows.length) {
     $('body').innerHTML = '<p class="muted">Sekin aylanadigan zaxira topilmadi.</p>'; return; }
-  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+  $('body').innerHTML = `<div class="tbox"><table>
     <thead><tr><th>Mahsulot</th><th>Turi</th>
       <th class="num">T/M bo'sh<div class="muted" style="font-size:11px">yoshi</div></th>
       <th class="num">Ishlab chiq.<div class="muted" style="font-size:11px">bo'sh · yoshi</div></th>

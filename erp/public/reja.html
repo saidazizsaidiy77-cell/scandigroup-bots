@@ -132,7 +132,7 @@ function draw() {
   $('kpi').innerHTML = kpi(rows);
   if (!rows.length) {
     $('body').innerHTML = '<p class="muted">Mahsulot topilmadi.</p>'; return; }
-  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+  $('body').innerHTML = `<div class="tbox"><table>
     <thead><tr><th>Mahsulot</th><th>Turi</th>
       <th class="num">Sotildi<div class="muted" style="font-size:11px">${d.days} kun</div></th>
       <th class="num">Kunlik</th>
