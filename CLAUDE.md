@@ -3645,6 +3645,16 @@ chetlab, id ni qo'lda yuborsa ham qabul qilinmaydi.
 Bu filtr emas, **chegara**: `scopeOf(req)` orqali so'rovga qo'shiladi,
 klient uni o'chira olmaydi.
 
+**★ QO'SHIMCHA TSEXLAR** (`worker_extra_shops`, zavod qarori 2026-10).
+Rol doirasiga bitta tsex sig'adi (kalit `worker_id, role_code`), boshliq
+esa ikki tsexni birga yuritadi. Xodimlar sahifasida «Qo'shimcha
+tsexlar» belgilansa doira KENGAYADI: bo'limlar ekranida ikkala tsex
+turadi va ikkalasining «konverga yangi buyurtma» Telegram xabari
+keladi. Doirasi yo'q xodimga ta'sir qilmaydi — u allaqachon hammasini
+ko'radi va bitta katakcha uni bitta tsexga qamab qo'ymasin. Qoida
+ikki joyda va AYNAN bir xil: sessiyada `erp/auth.js`, xabar
+oluvchilarida `v_worker_shop_scope`.
+
 **Tarixga tegadigan maydonlar** faqat `production.manage` da: konveyer
 raqami, soni, **mahsulot**, turgan joyi, FAKT sanalar.
 

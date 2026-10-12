@@ -11729,6 +11729,60 @@ test('sekin zaxira: savdosi yo\'q va sekin, bron ayiriladi, narx huquqda', async
   assert.equal((await sot('GET', '/api/units/slow-stock')).status, 403);
 });
 
+//  ── BITTA XODIM — BIR NECHTA TSEX ─────────────────────────────────
+//
+//  Rol doirasiga bitta tsex sig'adi; qo'shimcha tsex doirani
+//  kengaytiradi: konverlar ekranda ko'rinadi va yangi buyurtma xabari
+//  ham keladi. Doirasi yo'q xodimni toraytirmaydi.
+test("qo'shimcha tsex: ekran va bron xabari ikkala tsexdan", async () => {
+  const { db } = require('../db');
+  const KOR = (await H.id(`SELECT shop_id AS id FROM sections WHERE id = $1`, [ARRA])).id;
+  const LAK = (await H.id(
+    `SELECT wr.scope_shop_id AS id FROM worker_roles wr
+       JOIN workers w ON w.id = wr.worker_id
+      WHERE w.name = 'Bo''yoq ustasi' AND wr.scope_shop_id IS NOT NULL LIMIT 1`)).id;
+  assert.notEqual(KOR, LAK);
+  await db.query(`INSERT INTO workers (name) VALUES ('Sinov ikki tsex')
+                  ON CONFLICT DO NOTHING`);
+  const wid = (await H.id(`SELECT id FROM workers WHERE name = 'Sinov ikki tsex'`)).id;
+  const ok = await admin('PATCH', '/api/admin/workers/' + wid, {
+    roles: [{ code: 'tsex_usta', scope_shop_id: LAK }], extra_shops: [KOR] });
+  assert.equal(ok.status, 200, ok.text);
+  const row = (await admin('GET', '/api/admin/workers')).body.find((w) => w.id === wid);
+  assert.deepEqual(row.extra_shops, [KOR]);
+
+  const u = H.api(base, await H.sessionFor('Sinov ikki tsex'));
+  const b = (await u('GET', '/api/units/board')).body;
+  const ids = b.shops.map((x) => x.id);
+  assert.ok(ids.includes(KOR) && ids.includes(LAK), 'ikkala tsex ekranda');
+  assert.equal((await u('GET', '/api/units/board?shop_id=' + KOR)).status, 200);
+
+  //  Korpus konveriga bron — xabar unga ham boradi
+  await db.query(`INSERT INTO customers (name) VALUES ('Sinov ikki tsex mijozi')
+                    ON CONFLICT (lower(name)) DO NOTHING`);
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name = 'Sinov ikki tsex mijozi'`)).id;
+  const k = await newUnit({ section_id: ARRA, qty: 3 });
+  const z = await admin('POST', '/api/sales/orders',
+    { customer_id: mijoz, items: [{ product_id: PENAL, qty: 1, unit_price: 500 }] });
+  const q = (await admin('GET', '/api/sales/orders/' + z.body.id)).body.items[0];
+  const oldin = Number((await H.id(`SELECT COALESCE(MAX(id),0)::int AS n FROM notifications`)).n);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.body.id}/assign`,
+    { item_id: q.id, unit_id: k.id, qty: 1 })).status, 200);
+  const x = (await db.query(
+    `SELECT 1 FROM notifications WHERE id > $1 AND worker_id = $2 AND kind = 'unit_bron'`,
+    [oldin, wid])).rowCount;
+  assert.equal(x, 1, "qo'shimcha tsexning bron xabari");
+
+  //  Doirasi yo'q xodimga qo'shimcha tsex ta'sir qilmaydi
+  await admin('PATCH', '/api/admin/workers/' + wid, {
+    roles: [{ code: 'tsex_usta' }], extra_shops: [KOR] });
+  const u2 = H.api(base, await H.sessionFor('Sinov ikki tsex'));
+  const hamma = (await db.query(`SELECT COUNT(*)::int AS n FROM shops`)).rows[0].n;
+  const b2 = (await u2('GET', '/api/units/board')).body;
+  assert.ok(b2.shops.length > 1 && b2.shops.length <= hamma, 'toraymadi');
+  assert.ok(b2.shops.some((x) => x.id === LAK), 'boshqa tsex ham ko\'rinadi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

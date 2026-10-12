@@ -619,3 +619,31 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS position    TEXT;
 
 CREATE INDEX IF NOT EXISTS workers_shop_idx    ON workers (shop_id)    WHERE shop_id    IS NOT NULL;
 CREATE INDEX IF NOT EXISTS workers_section_idx ON workers (section_id) WHERE section_id IS NOT NULL;
+
+--  ★ BITTA XODIM — BIR NECHTA TSEX (zavod qarori, 2026-10).
+--  Rol doirasi (`worker_roles.scope_shop_id`) bitta katak: kalit
+--  (worker_id, role_code), ya'ni bitta rolda faqat BITTA tsex sig'adi.
+--  Zavodda esa boshliq ikki tsexni birga yuritadi va unga ikkalasining
+--  konveri ham, ikkalasining yangi buyurtma xabari ham kerak.
+--
+--  Qo'shimcha tsexlar XODIMDA: ular doirani KENGAYTIRADI, toraytirmaydi.
+--  Doirasi umuman yo'q xodim (rahbariyat) allaqachon hammasini ko'radi —
+--  unga qo'shimcha tsex yozilsa e'tiborga olinmaydi, aks holda bitta
+--  katakcha uni bitta tsexga qamab qo'yardi.
+CREATE TABLE IF NOT EXISTS worker_extra_shops (
+  worker_id INT NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+  shop_id   INT NOT NULL REFERENCES shops(id)   ON DELETE CASCADE,
+  PRIMARY KEY (worker_id, shop_id)
+);
+
+--  Xodimning tsex doirasi — BITTA joyda: Telegram xabari kimga borishi
+--  shundan o'qiladi (`notify.queueShop`), sessiyadagi doira esa
+--  `erp/auth.js` da xuddi shu qoida bilan quriladi.
+CREATE OR REPLACE VIEW v_worker_shop_scope AS
+SELECT worker_id, scope_shop_id AS shop_id
+  FROM worker_roles WHERE scope_shop_id IS NOT NULL
+UNION
+SELECT e.worker_id, e.shop_id
+  FROM worker_extra_shops e
+ WHERE EXISTS (SELECT 1 FROM worker_roles wr
+                WHERE wr.worker_id = e.worker_id AND wr.scope_shop_id IS NOT NULL);

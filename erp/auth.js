@@ -22,7 +22,7 @@ async function loadWorker(workerId) {
             can_release, can_request_unit, can_add_customer, mat_scope
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
-  const [perms, roles] = await Promise.all([
+  const [perms, roles, extra] = await Promise.all([
     db.query(`SELECT permission_code FROM v_worker_permissions WHERE worker_id = $1`, [workerId]),
     db.query(
       `SELECT wr.role_code AS code, r.name, r.surface,
@@ -30,7 +30,10 @@ async function loadWorker(workerId) {
               wr.scope_warehouse_id, wr.scope_own, wr.price_kind
          FROM worker_roles wr JOIN roles r ON r.code = wr.role_code
         WHERE wr.worker_id = $1 ORDER BY r.sort`, [workerId]),
+    //  Qo'shimcha tsexlar (izoh: sql/production.sql) — doirani kengaytiradi
+    db.query(`SELECT shop_id FROM worker_extra_shops WHERE worker_id = $1`, [workerId]),
   ]);
+  const asosiy = roles.rows.map((r) => r.scope_shop_id).filter(Boolean);
   return {
     ...w,
     //  ★ OMBOR BELGISI XODIMDA (izoh: sql/warehouse.sql). Bitta rolda
@@ -58,7 +61,11 @@ async function loadWorker(workerId) {
       .filter((p) => w.can_request_unit !== false || p !== 'production.request'),
     roles: roles.rows,
     // Usta faqat o'z tsexini ko'rishi uchun: rollardagi eng tor doira
-    scope_shop_ids: roles.rows.map((r) => r.scope_shop_id).filter(Boolean),
+    //  Qo'shimchasi faqat doirasi BOR xodimga qo'shiladi: doirasi yo'q
+    //  (rahbariyat) hammasini ko'radi va bitta katakcha uni bitta tsexga
+    //  qamab qo'ymasin (`v_worker_shop_scope` bilan bir xil qoida).
+    scope_shop_ids: asosiy.length
+      ? [...new Set([...asosiy, ...extra.rows.map((r) => r.shop_id)])] : [],
     // Savdo yo'nalishi: bo'sh bo'lsa hamma kanal (izoh: sql/units.sql)
     scope_channels: roles.rows.map((r) => r.scope_channel).filter(Boolean),
     // Vitrina sotuvchisi o'z nuqtasini ko'radi (izoh: sql/warehouse.sql)

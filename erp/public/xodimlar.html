@@ -765,6 +765,27 @@ function openForm(id){
             </div>
           </div>
 
+          <!--  ★ QO'SHIMCHA TSEXLAR. Rol doirasiga faqat bitta tsex
+                sig'adi, boshliq esa ikki tsexni birga yuritadi: unga
+                ikkalasining konveri ham, yangi buyurtma xabari ham
+                kerak. Doirani KENGAYTIRADI — doirasi yo'q xodimga
+                ta'sir qilmaydi (u allaqachon hammasini ko'radi). -->
+          <div>
+            <label>Qo'shimcha tsexlar <span class="muted"
+              style="text-transform:none;letter-spacing:0">— tsex doirasi bor xodimga</span></label>
+            <div class="row" style="gap:8px;flex-wrap:wrap">
+              ${meta.shops.map(s => `
+                <label class="tag" style="cursor:pointer;display:inline-flex;
+                  align-items:center;gap:6px;padding:6px 10px">
+                  <input type="checkbox" class="xshop" value="${s.id}" style="width:auto"
+                    ${(w?.extra_shops || []).map(String).includes(String(s.id)) ? 'checked' : ''}>
+                  ${esc(s.name)}</label>`).join('')}
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:6px">
+              Belgilangan tsexning konverlari bo'limlar ekranida ko'rinadi va
+              ularga tushgan yangi buyurtma Telegramga ham keladi</div>
+          </div>
+
           ${w ? `<div class="row" style="gap:10px;align-items:center">
             <input type="checkbox" id="wActive" style="width:auto" ${w.active ? 'checked' : ''}>
             <span>Faol</span></div>` : ''}
@@ -821,6 +842,8 @@ async function save(id){
     mat_scope: $('wMatScope').value,
     cash_groups: [...document.querySelectorAll('.cashg')]
       .filter(c => c.checked).map(c => c.value),
+    extra_shops: [...document.querySelectorAll('.xshop')]
+      .filter(c => c.checked).map(c => Number(c.value)),
     roles,
   };
   if (id) body.active = $('wActive').checked;
