@@ -238,6 +238,11 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
     QOLGAN qismini to'ldiradi va sahifaning o'zi surilmaydi. Bu yerdagi
     70vh — JS ishlamay qolgan holatga zaxira. */
 .tbox{overflow:auto;max-height:70vh}
+/*  Qutidagi har jadvalning sarlavhasi qotadi — alohida klass yozish
+    shart emas (ishlab chiqarish rejasi, sekin zaxira). Fon qattiq,
+    pastki chiziq `box-shadow` bilan: yuqoridagi sabab bilan bir xil. */
+.tbox thead th{position:sticky;top:0;z-index:2;background:var(--surface);
+  box-shadow:inset 0 -1px 0 var(--line)}
 .stock .s-qty,.stock .s-price,.stock .s-amount,
 .stock .s-bron,.stock .s-in,.stock .s-out{text-align:right}
 /* Aylanma: kirdi yashil, chiqdi kulrang — ko'z qaysi tomon ekanini

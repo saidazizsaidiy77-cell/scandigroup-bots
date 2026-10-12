@@ -305,14 +305,14 @@ const App = (() => {
     //  nisbatan qaysi mahsulotdan nechta yasash kerak. Hisob serverda
     //  (`talabRejasi`, modules/units.js) — sotilgan, T/M ombordagi bo'sh
     //  va yo'ldagi bo'sh konver bitta jadvalda.
-    { href: '/reja.html', mod: ['reports', 'production'], nav: 'Ishlab chiqarish rejasi',
+    { href: '/reja.html', mod: 'reports', nav: 'Ishlab chiqarish rejasi',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Ishlab chiqarish rejasi', lead: 'Savdoga nisbatan talab',
       text: "Oxirgi savdo \u00b7 T/M ombordagi va yo'ldagi bo'sh mahsulot \u00b7 keyingi kunlarga nimadan nechta yasash kerak",
       perm: ['production.reports', 'production.manage'] },
     //  ★ SEKIN AYLANADIGAN ZAXIRA (zavod qarori, 2026-10): rejaning
     //  teskarisi — nimadan ORTIQCHA. Hisob serverda (`sekinZaxira`).
-    { href: '/sekin.html', mod: ['reports', 'production'], nav: 'Sekin zaxira',
+    { href: '/sekin.html', mod: 'reports', nav: 'Sekin zaxira',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Sekin aylanadigan zaxira', lead: 'Qotib turgan mahsulot',
       text: "Savdosi yo'q yoki sekin sotilayotgan bo'sh zaxira \u00b7 necha kundan beri turibdi \u00b7 qancha pul qotgan",

@@ -61,6 +61,32 @@ const son = (v) => Number(v || 0).toLocaleString('ru-RU',
   { maximumFractionDigits: 2 }).replace(/ /g, ' ');
 
 let d = null;
+const KALIT = {};
+
+//  ★ SARLAVHA BOSILSA SARALANADI (ombor qoldig'i bilan bir xil idiom):
+//  raqamda birinchi bosish ko'pdan kichikka, matnda A→Z, ikkinchisi
+//  teskari. Bo'sh katak har doim oxirida. Saralash KLIENTDA — ro'yxat
+//  to'liq sahifada turadi. Standart — server tartibi.
+let srt = null;
+const MATN = new Set(['product', 'product_type']);
+function saralaBos(k) {
+  srt = srt && srt.k === k ? { k, dir: -srt.dir } : { k, dir: MATN.has(k) ? 1 : -1 };
+  draw();
+}
+function sarala(rows) {
+  if (!srt) return rows;
+  const { k, dir } = srt, val = KALIT[k] || ((r) => r[k]);
+  return [...rows].sort((a, b) => {
+    const x = val(a), y = val(b);
+    const bx = x == null || x === '', by = y == null || y === '';
+    if (bx || by) return bx - by;
+    return MATN.has(k) ? dir * String(x).localeCompare(String(y)) : dir * (x - y);
+  });
+}
+const th = (k, nom, ost = '', cls = 'num') =>
+  `<th class="${cls}" style="cursor:pointer;user-select:none" onclick="saralaBos('${k}')">${nom}${
+    srt && srt.k === k ? (srt.dir > 0 ? ' ▲' : ' ▼') : ''}${
+    ost ? `<div class="muted" style="font-size:11px">${ost}</div>` : ''}</th>`;
 
 //  ★ TUR — BIR NECHTASI BIRGA (jurnaldagi «Maxsulot guruhi» bilan bir
 //  xil idiom): penal, kamod va sp ko'pincha birga ko'riladi. Bo'sh
@@ -128,20 +154,20 @@ function kpi(rows) {
 function draw() {
   if (!d) return;
   const tanla = turTanlandi, faqat = $('fNeed').checked;
-  const rows = d.rows.filter(r => tanla(r) && (!faqat || r.need > 0));
+  const rows = sarala(d.rows.filter(r => tanla(r) && (!faqat || r.need > 0)));
   $('kpi').innerHTML = kpi(rows);
   if (!rows.length) {
     $('body').innerHTML = '<p class="muted">Mahsulot topilmadi.</p>'; return; }
-  $('body').innerHTML = `<div style="overflow-x:auto"><table>
-    <thead><tr><th>Mahsulot</th><th>Turi</th>
-      <th class="num">Sotildi<div class="muted" style="font-size:11px">${d.days} kun</div></th>
-      <th class="num">Kunlik</th>
-      <th class="num">Talab<div class="muted" style="font-size:11px">${d.horizon} kun, +${d.safety}%</div></th>
-      <th class="num">T/M bo'sh</th>
-      <th class="num">Yo'lda<div class="muted" style="font-size:11px">${d.horizon} kun ichida</div></th>
-      <th class="num">Keyinroq</th>
-      <th class="num">Ishlab chiqarish<div class="muted" style="font-size:11px">kerak</div></th>
-      <th class="num">Yetadi, kun</th></tr></thead>
+  $('body').innerHTML = `<div class="tbox"><table>
+    <thead><tr>${th('product', 'Mahsulot', '', '')}${th('product_type', 'Turi', '', '')}
+      ${th('sold', 'Sotildi', d.days + ' kun')}
+      ${th('daily', 'Kunlik')}
+      ${th('demand', 'Talab', d.horizon + ' kun, +' + d.safety + '%')}
+      ${th('fg_free', "T/M bo'sh")}
+      ${th('wip_due', "Yo'lda", d.horizon + ' kun ichida')}
+      ${th('wip_later', 'Keyinroq')}
+      ${th('need', 'Ishlab chiqarish', 'kerak')}
+      ${th('cover_days', 'Yetadi, kun')}</tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td><b>${esc(r.product)}</b>${r.sotib_olinadi
         ? ' <span class="tag">sotib olinadi</span>' : ''}</td>
