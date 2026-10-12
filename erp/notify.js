@@ -90,8 +90,8 @@ async function queueShop({ shop_id, perms, module, kind, title, body }, client) 
   const c = client || db;
   const { rows } = await c.query(
     `SELECT DISTINCT w.id FROM workers w
-       JOIN worker_roles wr        ON wr.worker_id = w.id
-                                  AND wr.scope_shop_id = $1
+       JOIN v_worker_shop_scope ss ON ss.worker_id = w.id
+                                  AND ss.shop_id = $1
        JOIN v_worker_permissions vp ON vp.worker_id = w.id
       WHERE w.active AND vp.permission_code = ANY($2)`, [shop_id, perms]);
   //  Qaytariladigan raqam HAQIQATDA yozilgan xabarlar soni: turni

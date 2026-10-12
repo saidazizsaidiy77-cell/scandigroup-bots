@@ -1416,8 +1416,8 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
       if (tsex) {
         const kimga = (await client.query(
           `SELECT DISTINCT w.id FROM workers w
-             JOIN worker_roles wr ON wr.worker_id = w.id
-                                 AND wr.scope_shop_id = $1
+             JOIN v_worker_shop_scope ss ON ss.worker_id = w.id
+                                 AND ss.shop_id = $1
              JOIN v_worker_permissions vp ON vp.worker_id = w.id
             WHERE w.active AND vp.permission_code = 'production.entry'`,
           [tsex])).rows;

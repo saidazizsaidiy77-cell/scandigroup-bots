@@ -78,6 +78,10 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
             --  Ro'yxat «o'chirilganlar» niki: qator yo'q = HAMMASI
             --  keladi, ya'ni ertaga yangi xabar turi qo'shilsa u o'zi
             --  keladi va unutilgan xodim xabarsiz qolmaydi.
+            --  Qo'shimcha tsexlar (izoh: sql/production.sql)
+            COALESCE((SELECT array_agg(e.shop_id ORDER BY e.shop_id)
+                        FROM worker_extra_shops e
+                       WHERE e.worker_id = w.id), '{}') AS extra_shops,
             COALESCE((SELECT array_agg(o.kind ORDER BY o.kind)
                         FROM worker_notify_off o
                        WHERE o.worker_id = w.id), '{}') AS notify_off,
@@ -201,6 +205,18 @@ async function saveNotify(client, workerId, yoqilgan) {
   }
 }
 
+//  Qo'shimcha tsexlar: to'liq ro'yxat keladi, bo'sh — «yo'q» degani.
+//  Maydon yuborilmasa tegilmaydi.
+async function saveExtraShops(client, workerId, ids) {
+  if (!Array.isArray(ids)) return;
+  await client.query(`DELETE FROM worker_extra_shops WHERE worker_id = $1`, [workerId]);
+  for (const sid of ids.map(Number).filter(Boolean))
+    await client.query(
+      `INSERT INTO worker_extra_shops (worker_id, shop_id)
+       SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM shops WHERE id = $2)
+       ON CONFLICT DO NOTHING`, [workerId, sid]);
+}
+
 async function saveCashGroups(client, workerId, codes) {
   if (!Array.isArray(codes)) return;
   await client.query(`DELETE FROM worker_expense_groups WHERE worker_id = $1`,
@@ -291,6 +307,7 @@ router.post('/workers', need('admin.users'), wrap(async (req, res) => {
          r.price_kind === 'retail' ? 'retail' : null]);
     }
     await saveCashGroups(client, w.id, req.body.cash_groups);
+    await saveExtraShops(client, w.id, req.body.extra_shops);
     await saveNotify(client, w.id, req.body.notify_on);
     await audit(req, { module: 'admin', action: 'create', entity: 'worker',
                        entity_id: w.id, payload: { name, roles } }, client);
@@ -433,9 +450,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
       }
     }
     await saveCashGroups(client, id, req.body.cash_groups);
+    await saveExtraShops(client, id, req.body.extra_shops);
     await saveNotify(client, id, req.body.notify_on);
     // Rol yoki holat o'zgarsa sessiyalar bekor qilinadi — huquq darhol kuchga kiradi
-    if (Array.isArray(roles) || active === false)
+    if (Array.isArray(roles) || Array.isArray(req.body.extra_shops) || active === false)
       await client.query(`DELETE FROM sessions WHERE worker_id = $1`, [id]);
     await audit(req, { module: 'admin', action: 'update', entity: 'worker',
                        entity_id: id, payload: req.body }, client);
