@@ -305,7 +305,7 @@ const App = (() => {
     //  nisbatan qaysi mahsulotdan nechta yasash kerak. Hisob serverda
     //  (`talabRejasi`, modules/units.js) — sotilgan, T/M ombordagi bo'sh
     //  va yo'ldagi bo'sh konver bitta jadvalda.
-    { href: '/reja.html', mod: ['reports', 'production'], nav: 'Ishlab chiqarish rejasi',
+    { href: '/reja.html', mod: 'reports', nav: 'Ishlab chiqarish rejasi',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Ishlab chiqarish rejasi', lead: 'Savdoga nisbatan talab',
       text: "Oxirgi savdo \u00b7 T/M ombordagi va yo'ldagi bo'sh mahsulot \u00b7 keyingi kunlarga nimadan nechta yasash kerak",
