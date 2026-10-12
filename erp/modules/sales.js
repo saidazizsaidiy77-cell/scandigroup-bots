@@ -365,6 +365,14 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
   //  tushgan ikkinchi savol (izoh: `HOLAT`). Tab bo'lsa qator o'z
   //  tabidan boshqa nom bilan ko'rinardi.
   const chegirma = req.query.discount === 'pending' || null;
+  //  ★ CHIQQAN SANA ORALIG'I (zavod qarori, 2026-10). «Chiqib ketdi»
+  //  tabi KUNLAR bo'yicha o'qiladi va savol ko'pincha oraliq haqida:
+  //  «sentabrda nima chiqdi». Shart FAQAT chiqib ketgan buyurtmaga
+  //  tegadi — qolgan tablarda bu sana yo'q (izoh: «Chiqqan kun»).
+  //  Yig'indiga ham ta'sir qiladi: «shu oyda qancha chiqdi» degan
+  //  savolga javob kerak, butun tarix emas.
+  const sana = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+  const chFrom = sana(req.query.shipped_from), chTo = sana(req.query.shipped_to);
   //  ★ BO'SH KATAK HAR DOIM OXIRIDA, yo'nalishdan qat'i nazar (ombor
   //  qoldig'i va xodimlar ro'yxati bilan bir xil qoida): chiqish
   //  sanasi yozilmagan o'nta buyurtma tepaga chiqsa javob ko'rinmasdi.
@@ -383,12 +391,15 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($7::boolean IS NOT TRUE
              OR (o.discount_status = 'pending'
                  AND o.status NOT IN ('shipped', 'cancelled')))
+        AND (o.status <> 'shipped'
+             OR (($8::date IS NULL OR o.shipped_on >= $8)
+                 AND ($9::date IS NULL OR o.shipped_on <= $9)))
       ORDER BY ${ust} ${yon} NULLS LAST, o.id DESC
       LIMIT 500`,
     [chans, req.query.status || null,
      req.query.customer_id || null,
      req.query.manager_id || null, req.query.q || null, ownOf(req),
-     chegirma]);
+     chegirma, chFrom, chTo]);
 
   //  ★ HAR BUYURTMA QAYERDA — ro'yxatning o'zida.
   //
@@ -466,9 +477,12 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($6::boolean IS NOT TRUE
              OR (o.discount_status = 'pending'
                  AND o.status NOT IN ('shipped', 'cancelled')))
+        AND (o.status <> 'shipped'
+             OR (($7::date IS NULL OR o.shipped_on >= $7)
+                 AND ($8::date IS NULL OR o.shipped_on <= $8)))
       GROUP BY 1`,
     [chans, req.query.customer_id || null, req.query.manager_id || null,
-     req.query.q || null, ownOf(req), chegirma])).rows;
+     req.query.q || null, ownOf(req), chegirma, chFrom, chTo])).rows;
 
   res.json({ rows, jami });
 }));
