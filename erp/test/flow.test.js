@@ -11822,6 +11822,30 @@ test("boshlang'ich qoldiq: kiritilganlar ro'yxati kun va kim bilan", async () =>
   assert.equal((await sot('GET', '/api/units/opening-log')).status, 403);
 });
 
+//  ── CHIQIB KETDI TABI: CHIQQAN SANA ORALIG'I ─────────────────────────
+test("chiqib ketgan buyurtmalar chiqqan sana bo'yicha filtrlanadi", async () => {
+  const hamma = (await admin('GET', '/api/sales/orders?status=shipped')).body;
+  assert.ok(hamma.rows.length > 0, 'testlarda chiqib ketgan buyurtma bor');
+  const kun = String(hamma.rows[0].shipped_on).slice(0, 10);
+  const q = `shipped_from=${kun}&shipped_to=${kun}`;
+  const f = (await admin('GET', '/api/sales/orders?status=shipped&' + q)).body;
+  assert.ok(f.rows.length > 0);
+  for (const o of f.rows) assert.equal(String(o.shipped_on).slice(0, 10), kun);
+  //  Jami ham o'sha ro'yxatdan
+  const j = f.jami.find((x) => x.holat === 'shipped');
+  assert.equal(j.orders, f.rows.length);
+  assert.equal(Number(j.amount).toFixed(2),
+    f.rows.reduce((a, o) => a + Number(o.amount || 0), 0).toFixed(2));
+  //  Boshqa tablarga tegmaydi
+  const kalit = (js) => JSON.stringify(js.filter((x) => x.holat !== 'shipped')
+    .sort((a, b) => a.holat.localeCompare(b.holat)));
+  assert.equal(kalit(f.jami), kalit(hamma.jami));
+  //  Bo'sh oraliq — nol
+  const yoq = (await admin('GET',
+    '/api/sales/orders?status=shipped&shipped_from=2000-01-01&shipped_to=2000-01-02')).body;
+  assert.equal(yoq.rows.length, 0);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

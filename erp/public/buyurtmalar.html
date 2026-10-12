@@ -75,6 +75,14 @@
             u yerda baribir bitta ism turardi (izoh: `ownOf`). -->
       <select id="fMgr" onchange="load()" style="max-width:200px" hidden></select>
       <input id="fQ" placeholder="Z№ yoki mijoz" style="max-width:240px" oninput="load()">
+      <!--  Chiqqan sana oralig'i — FAQAT «Chiqib ketdi» tabida: boshqa
+            tablarda bu sana yo'q. Filtr serverda, jamiga ham ta'sir qiladi. -->
+      <span id="shipRange" style="display:none;gap:6px;align-items:center">
+        <span class="muted" style="font-size:12px">Chiqqan:</span>
+        <input id="fShipFrom" type="date" style="max-width:150px" onchange="load()">
+        <span class="muted">—</span>
+        <input id="fShipTo" type="date" style="max-width:150px" onchange="load()">
+      </span>
       <!--  ★ «CHEGIRMA KUTMOQDA» FILTRI (zavod qarori, 2026-10).
             Menyuda «3 ta buyurtma chegirma tasdig'ini kutmoqda» deb
             turardi, lekin o'sha uchtasini TOPADIGAN yo'l yo'q edi:
@@ -458,6 +466,8 @@ async function load(){
   if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
   if ($('fMgr') && $('fMgr').value) q.set('manager_id', $('fMgr').value);
   if ($('fCheg') && $('fCheg').checked) q.set('discount', 'pending');
+  if ($('fShipFrom').value) q.set('shipped_from', $('fShipFrom').value);
+  if ($('fShipTo').value)   q.set('shipped_to', $('fShipTo').value);
   const javob = await App.api('/api/sales/orders?' + q);
   rows = javob.rows;
   //  Jami SERVERDAN keladi (izoh: modules/sales.js): ro'yxat 500
@@ -473,6 +483,7 @@ async function load(){
   //  Sarlavha ham, katak ham SHU o'zgaruvchidan chiqadi.
   const chiqqan = status === 'shipped';
   if ($('thShip')) $('thShip').hidden = !chiqqan;
+  $('shipRange').style.display = chiqqan ? 'inline-flex' : 'none';
   //  Sarlavhalar har chizilganda qayta ulanadi: `innerHTML` bilan
   //  strelka qo'yilgach eski hodisa yo'qoladi.
   sortUla();
