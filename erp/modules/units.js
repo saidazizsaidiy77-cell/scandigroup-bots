@@ -438,6 +438,12 @@ router.get('/export', need('production.view'), wrap(async (req, res) => {
 //  ro'yxatda turadi, lekin «sotib olinadi» belgisi bilan: talab
 //  bor, faqat javob ishlab chiqarish emas, xarid.
 const REJA = ['production.reports', 'production.manage'];
+//  Tur filtri (Excel uchun): `types=Penal,Kamod` — ekrandagi chip
+//  tanlovi bilan bir xil, fayl ekrandagi qatorlarni bersin.
+const turFiltr = (query) => {
+  const t = String(query.types || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return t.length ? (r) => t.includes(r.product_type) : () => true;
+};
 const sonParam = (v, def, min, max) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : def;
@@ -493,7 +499,8 @@ async function talabRejasi(query) {
           + COALESCE(y.ulguradi, 0) + COALESCE(y.keyin, 0) > 0`,
     [days, horizon]);
 
-  const out = rows.map((r) => {
+  const tur = turFiltr(query);
+  const out = rows.filter(tur).map((r) => {
     const kunlik = r.sold / days;
     const talab = Math.ceil(kunlik * horizon * (1 + safety / 100));
     const mavjud = r.fg_free + r.wip_due;
@@ -532,6 +539,136 @@ router.get('/demand-plan/export', need(...REJA), wrap(async (req, res) => {
   res.setHeader('Content-Disposition',
     `attachment; filename="ishlab-chiqarish-rejasi-${today()}.csv"`);
   res.send('\uFEFF' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
+}));
+
+// ══════════════════ SEKIN AYLANADIGAN ZAXIRA ═══════════════════════════════
+//
+//  ★ QOTIB TURGAN PUL (zavod qarori, 2026-10). Ishlab chiqarish rejasi
+//  «nimadan YETMAYDI» degan savolga javob beradi; teskarisi — «nimadan
+//  ORTIQCHA» — unda ko'rinmasdi: savdosi yo'q mahsulotda «Yetadi, kun»
+//  katagi bo'sh turardi (nolga bo'lib bo'lmaydi) va 72 ta bo'sh Luxury
+//  stul hech qanday belgisiz ro'yxatda yotardi.
+//
+//  Hisobot BO'SH zaxirani oladi (bron ayirilgan — u mijozniki) va uni
+//  savdo tezligi bilan solishtiradi:
+//
+//    savdo yo'q   davr ichida bitta ham chiqmagan, bo'sh zaxira bor
+//    sekin        bo'sh zaxira chegaradan (standart 60 kun) ko'proqqa yetadi
+//
+//  Manbalar ishlab chiqarish rejasi bilan AYNAN bir xil (T/M bo'sh,
+//  ishlab chiqarishdagi bo'sh, chiqib ketgan savdo) — ikki hisobot bitta
+//  mahsulot haqida ikki xil raqam aytmasin. Vitrina kirmaydi: u
+//  ko'rgazma, savdoga chiqmaydi.
+//
+//  YOSHI — eng eski bo'sh konver qachondan beri turibdi: omborda
+//  `fg_on` dan, ishlab chiqarishda `started_on` dan.
+//
+//  ★ QIYMAT FAQAT NARX HUQUQI BORGA (`sales.discount`, `cash.view`,
+//  `cash.manage`): katalog narxi direktorniki (izoh: «Narx faqat
+//  direktorda»). Qolganga raqam umuman kelmaydi — ustunni yashirish
+//  himoya emas. Qiymat ULGURJI narxda: zaxira ko'pincha ulgurji
+//  ketadi va chakana raqam qotib turgan pulni oshirib ko'rsatardi.
+const NARXLI = ['sales.discount', 'cash.view', 'cash.manage'];
+
+async function sekinZaxira(query, narxli) {
+  const days  = sonParam(query.days, 60, 7, 365);
+  const chega = sonParam(query.cover, 60, 1, 720);
+  const { rows } = await db.query(
+    `WITH tm AS (SELECT id FROM warehouses WHERE code = 'TM'),
+     band AS (SELECT unit_id, SUM(qty)::int AS q
+                FROM unit_reservations GROUP BY unit_id),
+     sotuv AS (
+       SELECT product_id,
+              SUM(qty) FILTER (WHERE ship_on > CURRENT_DATE - $1::int
+                                 AND ship_on <= CURRENT_DATE)::int AS qty,
+              MAX(ship_on) AS oxirgi
+         FROM production_units
+        WHERE status = 'shipped'
+        GROUP BY product_id),
+     bosh AS (
+       SELECT u.product_id, u.status, u.fg_on, u.started_on,
+              GREATEST(u.qty - COALESCE(b.q, 0), 0) AS q
+         FROM production_units u
+         LEFT JOIN band b ON b.unit_id = u.id
+        WHERE (u.status = 'fg'
+               AND COALESCE(u.warehouse_id, (SELECT id FROM tm)) = (SELECT id FROM tm))
+           OR u.status = 'production'),
+     zaxira AS (
+       SELECT product_id,
+              SUM(q) FILTER (WHERE status = 'fg')::int         AS fg_free,
+              SUM(q) FILTER (WHERE status = 'production')::int AS wip_free,
+              MIN(fg_on) FILTER (WHERE status = 'fg' AND q > 0)              AS fg_eng_eski,
+              MIN(started_on) FILTER (WHERE status = 'production' AND q > 0) AS wip_eng_eski
+         FROM bosh GROUP BY product_id)
+     SELECT p.id AS product_id, p.name AS product, g.name AS product_type,
+            g.uom, g.sort AS group_sort,
+            (p.route_template_id IS NULL) AS sotib_olinadi,
+            COALESCE(z.fg_free, 0)  AS fg_free,
+            COALESCE(z.wip_free, 0) AS wip_free,
+            (CURRENT_DATE - z.fg_eng_eski)  AS fg_age,
+            (CURRENT_DATE - z.wip_eng_eski) AS wip_age,
+            COALESCE(s.qty, 0) AS sold,
+            s.oxirgi AS last_ship,
+            (CURRENT_DATE - s.oxirgi) AS idle_days,
+            p.price_opt
+       FROM zaxira z
+       JOIN products p ON p.id = z.product_id
+       JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN sotuv s ON s.product_id = p.id
+      WHERE COALESCE(z.fg_free, 0) + COALESCE(z.wip_free, 0) > 0`,
+    [days]);
+
+  const out = [];
+  const tur = turFiltr(query);
+  for (const r of rows.filter(tur)) {
+    const free = r.fg_free + r.wip_free;
+    const kunlik = r.sold / days;
+    const cover = kunlik > 0 ? Math.floor(free / kunlik) : null;
+    const holat = !r.sold ? 'savdo_yoq' : cover >= chega ? 'sekin' : null;
+    if (!holat && query.all !== '1') continue;
+    const narx = r.price_opt == null ? null : Number(r.price_opt);
+    const { price_opt, ...qator } = r;
+    out.push({
+      ...qator, free, holat,
+      daily: Math.round(kunlik * 100) / 100,
+      cover_days: cover,
+      ...(narxli ? { price_opt: narx,
+                     value: narx == null ? null : Math.round(free * narx * 100) / 100 } : {}),
+    });
+  }
+  //  Savdosi yo'q tepada, keyin qotib turgan pul (yoki dona) ko'pi
+  const tartib = { savdo_yoq: 0, sekin: 1 };
+  out.sort((a, b) => (tartib[a.holat] ?? 2) - (tartib[b.holat] ?? 2)
+    || (narxli ? (b.value || 0) - (a.value || 0) : 0)
+    || b.free - a.free || a.product.localeCompare(b.product));
+  return { days, cover: chega, narxli, rows: out };
+}
+
+const narxlimi = (req) => NARXLI.some((p) => req.user.permissions.includes(p));
+
+router.get('/slow-stock', need(...REJA), wrap(async (req, res) => {
+  res.json(await sekinZaxira(req.query, narxlimi(req)));
+}));
+
+router.get('/slow-stock/export', need(...REJA), wrap(async (req, res) => {
+  const d = await sekinZaxira(req.query, narxlimi(req));
+  const HOLAT = { savdo_yoq: "savdo yo'q", sekin: 'sekin' };
+  const head = ['Holati', 'Mahsulot', 'Turi', 'Birligi', "T/M bo'sh",
+                'Omborda, kun', "Ishlab chiqarishda bo'sh", 'Ishlab chiqarishda, kun',
+                "Jami bo'sh", `Sotildi (${d.days} kun)`, 'Kunlik',
+                'Necha kunga yetadi', 'Oxirgi savdo', 'Savdosiz, kun',
+                ...(d.narxli ? ['Ulgurji narx, $', 'Qiymat, $'] : [])];
+  const body = d.rows.map((r) => [
+    csvCell(HOLAT[r.holat] || ''), csvCell(r.product), csvCell(r.product_type),
+    csvCell(r.uom), r.fg_free, r.fg_age ?? '', r.wip_free, r.wip_age ?? '',
+    r.free, r.sold, csvNum(r.daily), r.cover_days ?? '',
+    r.last_ship || '',
+    r.idle_days ?? '',
+    ...(d.narxli ? [csvNum(r.price_opt), csvNum(r.value)] : [])].join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="sekin-zaxira-${today()}.csv"`);
+  res.send('﻿' + [head.map(csvCell).join(';'), ...body].join('\r\n') + '\r\n');
 }));
 
 // ══════════════════ KONVER PASPORTI — RAQAM BO'YICHA QIDIRUV ═══════════════

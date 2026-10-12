@@ -11668,6 +11668,67 @@ test('ishlab chiqarish rejasi: talab savdodan, mavjud bronsiz', async () => {
   assert.equal((await sot('GET', '/api/units/demand-plan')).status, 403);
 });
 
+//  ── SEKIN AYLANADIGAN ZAXIRA ───────────────────────────────────────
+//
+//  Savdosi yo'q bo'sh zaxira «savdo yo'q», ko'p kunga yetadigani
+//  «sekin»; bron ayiriladi; qiymat faqat narx huquqi borga keladi.
+test('sekin zaxira: savdosi yo\'q va sekin, bron ayiriladi, narx huquqda', async () => {
+  const { db } = require('../db');
+  const yangi = async (nom, narx) => (await db.query(
+    `INSERT INTO products (sku, name, group_id, route_template_id, price_opt)
+     SELECT $1, $1, group_id, route_template_id, $2 FROM products WHERE id = $3
+     RETURNING id`, [nom, narx, PENAL])).rows[0].id;
+  const JIM = await yangi('Sekin sinov jim', 100);
+  const SEK = await yangi('Sekin sinov sekin', null);
+  const kirit = async (pid, qty) => (await admin('POST', '/api/units/', { items: [
+    { product_id: pid, qty, is_opening: true, fg_on: kun(-30) }] })).body.created[0];
+
+  //  JIM: omborda 10 ta, 4 tasi bronda — bo'shi 6, savdo yo'q
+  const u = await kirit(JIM, 10);
+  await db.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
+    SELECT $1, oi.id, 4 FROM order_items oi ORDER BY oi.id LIMIT 1`, [u.id]);
+  //  SEK: 60 kunda 1 ta chiqdi, omborda 5 ta — 300 kunga yetadi
+  const s = await kirit(SEK, 1);
+  await db.query(`UPDATE production_units SET status = 'shipped',
+    ship_on = CURRENT_DATE - 5 WHERE id = $1`, [s.id]);
+  await kirit(SEK, 5);
+
+  const r = await admin('GET', '/api/units/slow-stock?days=60&cover=60');
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.narxli, true);
+  const jim = r.body.rows.find((x) => x.product_id === JIM);
+  const sek = r.body.rows.find((x) => x.product_id === SEK);
+  assert.equal(jim.holat, 'savdo_yoq');
+  assert.equal(jim.free, 6, 'bron ayirildi');
+  assert.equal(jim.cover_days, null);
+  assert.equal(jim.value, 600);
+  assert.equal(jim.fg_age, 30);
+  assert.equal(sek.holat, 'sekin');
+  assert.equal(sek.cover_days, 300);
+  assert.equal(sek.idle_days, 5);
+  assert.equal(sek.value, null, "narxsiz — qiymat yo'q");
+
+  //  Chegara 400 kun bo'lsa SEK tushib qoladi
+  const r2 = await admin('GET', '/api/units/slow-stock?days=60&cover=400');
+  assert.ok(!r2.body.rows.some((x) => x.product_id === SEK));
+
+  const fayl = await admin('GET', '/api/units/slow-stock/export?days=60&cover=60');
+  assert.equal(fayl.status, 200, fayl.text);
+  assert.match(fayl.text, /Sekin sinov jim/);
+  //  Tur filtri faylga ham tegadi
+  const boshqa = await admin('GET', '/api/units/slow-stock/export?days=60&cover=60&types=Yoq-tur');
+  assert.doesNotMatch(boshqa.text, /Sekin sinov jim/);
+
+  //  Narx huquqi yo'q odamga qiymat kelmaydi; savdoga sahifa yopiq
+  const ish = await xodim('Sinov sekin boshliq', 'ishlab_boshl');
+  const r3 = await ish('GET', '/api/units/slow-stock?days=60&cover=60');
+  assert.equal(r3.status, 200, r3.text);
+  assert.equal(r3.body.narxli, false);
+  assert.ok(!('value' in r3.body.rows.find((x) => x.product_id === JIM)));
+  const sot = await xodim('Sinov sekin sotuvchi', 'sotuvchi');
+  assert.equal((await sot('GET', '/api/units/slow-stock')).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

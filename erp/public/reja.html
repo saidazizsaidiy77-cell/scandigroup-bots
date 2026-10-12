@@ -24,13 +24,16 @@
       <input id="fHor" type="number" min="1" max="120" value="20" onchange="load()"></div>
     <div style="max-width:150px"><label>Zaxira, %</label>
       <input id="fSaf" type="number" min="0" max="200" value="20" onchange="load()"></div>
-    <div style="min-width:180px"><label>Turi</label>
-      <select id="fType" onchange="draw()"></select></div>
     <label class="tag" style="cursor:pointer;display:inline-flex;align-items:center;
       gap:6px;padding:8px 10px;white-space:nowrap">
       <input type="checkbox" id="fNeed" style="width:auto" onchange="draw()">
       Faqat kerak bo'lganlar</label>
     <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+  </div>
+  <div style="margin-top:14px">
+    <label>Turi <span class="muted" id="fTypesHint"
+      style="text-transform:none;letter-spacing:0">— hammasi</span></label>
+    <div class="row" id="fTypes" style="gap:8px;flex-wrap:wrap"></div>
   </div>
   <p class="muted" style="font-size:12px;margin-top:10px">
     <b>Talab</b> = oxirgi davrda chiqib ketgan dona ÷ kun × ufq × (1 + zaxira).
@@ -59,6 +62,30 @@ const son = (v) => Number(v || 0).toLocaleString('ru-RU',
 
 let d = null;
 
+//  ★ TUR — BIR NECHTASI BIRGA (jurnaldagi «Maxsulot guruhi» bilan bir
+//  xil idiom): penal, kamod va sp ko'pincha birga ko'riladi. Bo'sh
+//  to'plam — hammasi. Tanlov shu brauzerda eslab qolinadi.
+const TUR_KEY = 'turlar:reja';
+let turlar = [], turSel = new Set();
+try { turSel = new Set(JSON.parse(localStorage.getItem(TUR_KEY) || '[]')); } catch (e) {}
+const turTanlandi = (r) => !turSel.size || turSel.has(r.product_type);
+
+function drawTypes() {
+  //  Ro'yxatda yo'q tur tanlovda qolib ketmasin — aks holda jadval bo'sh chiqardi
+  for (const t of [...turSel]) if (!turlar.includes(t)) turSel.delete(t);
+  $('fTypes').innerHTML = turlar.map((t, i) =>
+    `<button class="chip${turSel.has(t) ? ' on' : ''}" onclick="toggleType(${i})">${esc(t)}</button>`).join('');
+  $('fTypesHint').textContent = turSel.size ? '— tanlangani' : '— hammasi, keragini bosing';
+}
+
+function toggleType(i) {
+  const t = turlar[i];
+  turSel.has(t) ? turSel.delete(t) : turSel.add(t);
+  try { localStorage.setItem(TUR_KEY, JSON.stringify([...turSel])); } catch (e) {}
+  drawTypes();
+  draw();
+}
+
 function toast(msg, bad) {
   const el = document.createElement('div');
   el.className = 'toast' + (bad ? ' bad' : '');
@@ -75,10 +102,9 @@ function params() {
 async function load() {
   try { d = await App.api('/api/units/demand-plan?' + params()); }
   catch (e) { $('body').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-  const turlar = [...new Set(d.rows.map(r => r.product_type))];
-  const tanlangan = $('fType').value;
-  $('fType').innerHTML = '<option value="">Barcha tur</option>' + turlar
-    .map(t => `<option${t === tanlangan ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  turlar = [...new Map(d.rows.map(r => [r.product_type, r.group_sort ?? 0])).entries()]
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([t]) => t);
+  drawTypes();
   draw();
 }
 
@@ -101,8 +127,8 @@ function kpi(rows) {
 
 function draw() {
   if (!d) return;
-  const t = $('fType').value, faqat = $('fNeed').checked;
-  const rows = d.rows.filter(r => (!t || r.product_type === t) && (!faqat || r.need > 0));
+  const tanla = turTanlandi, faqat = $('fNeed').checked;
+  const rows = d.rows.filter(r => tanla(r) && (!faqat || r.need > 0));
   $('kpi').innerHTML = kpi(rows);
   if (!rows.length) {
     $('body').innerHTML = '<p class="muted">Mahsulot topilmadi.</p>'; return; }
@@ -129,14 +155,18 @@ function draw() {
       <td class="num">${r.need ? `<b class="late">${son(r.need)}</b>` : '<span class="muted">—</span>'}
         <span class="muted" style="font-size:11px">${r.need ? esc(r.uom || '') : ''}</span></td>
       <td class="num ${r.cover_days != null && r.cover_days < d.horizon ? 'late' : 'muted'}">${
-        r.cover_days == null ? '' : son(r.cover_days)}</td>
+        r.cover_days != null ? son(r.cover_days)
+        : r.available ? '<span class="tag" style="color:#a66a00" title="Davr ichida sotilmagan — nolga bo\'lib bo\'lmaydi">savdo yo\'q</span>'
+        : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 
 async function exportCsv() {
   $('btnCsv').disabled = true;
   try {
-    await App.download('/api/units/demand-plan/export?' + params(),
+    const p = params();
+    if (turSel.size) p.set('types', [...turSel].join(','));
+    await App.download('/api/units/demand-plan/export?' + p,
       'ishlab-chiqarish-rejasi-' + new Date().toISOString().slice(0, 10) + '.csv');
   } catch (e) { toast(e.message, true); }
   finally { $('btnCsv').disabled = false; }
