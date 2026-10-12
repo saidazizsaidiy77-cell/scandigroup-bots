@@ -310,6 +310,13 @@ const App = (() => {
       title: 'Ishlab chiqarish rejasi', lead: 'Savdoga nisbatan talab',
       text: "Oxirgi savdo \u00b7 T/M ombordagi va yo'ldagi bo'sh mahsulot \u00b7 keyingi kunlarga nimadan nechta yasash kerak",
       perm: ['production.reports', 'production.manage'] },
+    //  ★ SEKIN AYLANADIGAN ZAXIRA (zavod qarori, 2026-10): rejaning
+    //  teskarisi — nimadan ORTIQCHA. Hisob serverda (`sekinZaxira`).
+    { href: '/sekin.html', mod: ['reports', 'production'], nav: 'Sekin zaxira',
+      group: 'Ishlab chiqarish hisobotlari',
+      title: 'Sekin aylanadigan zaxira', lead: 'Qotib turgan mahsulot',
+      text: "Savdosi yo'q yoki sekin sotilayotgan bo'sh zaxira \u00b7 necha kundan beri turibdi \u00b7 qancha pul qotgan",
+      perm: ['production.reports', 'production.manage'] },
     { href: '/zavod.html', mod: 'reports', nav: 'Zavod',
       group: 'Ishlab chiqarish hisobotlari',
       title: "Zavod ko'rinishi", lead: 'Nima qayerda',

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sekin aylanadigan zaxira · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Sekin aylanadigan zaxira</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div style="max-width:150px"><label>Savdo davri, kun</label>
+      <input id="fDays" type="number" min="7" max="365" value="60" onchange="load()"></div>
+    <div style="max-width:170px"><label>«Sekin» chegarasi, kun</label>
+      <input id="fCover" type="number" min="1" max="720" value="60" onchange="load()"></div>
+    <div style="min-width:160px"><label>Holati</label>
+      <select id="fHolat" onchange="draw()">
+        <option value="">Ikkalasi</option>
+        <option value="savdo_yoq">Savdo yo'q</option>
+        <option value="sekin">Sekin</option>
+      </select></div>
+    <button onclick="exportCsv()" id="btnCsv">Excelga yuklash</button>
+  </div>
+  <div style="margin-top:14px">
+    <label>Turi <span class="muted" id="fTypesHint"
+      style="text-transform:none;letter-spacing:0">— hammasi</span></label>
+    <div class="row" id="fTypes" style="gap:8px;flex-wrap:wrap"></div>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    <b>Bo'sh zaxira</b> — T/M ombordagi va ishlab chiqarishdagi, bronga
+    olinmagan konver (bronda turgani mijozniki). Vitrina kirmaydi.
+    <b>Savdo yo'q</b> — davr ichida bitta ham chiqib ketmagan.
+    <b>Sekin</b> — bo'sh zaxira hozirgi savdo tezligida chegaradan
+    ko'proq kunga yetadi. <b>Yoshi</b> — eng eski bo'sh konver necha
+    kundan beri turibdi.<span id="narxIzoh"></span></p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="kpi" class="grid g3" style="margin-bottom:16px"></div>
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<script>
+//  SEKIN AYLANADIGAN ZAXIRA — ishlab chiqarish rejasining teskarisi.
+//
+//  Hisob BITTA joyda — serverda (`sekinZaxira`, modules/units.js):
+//  ekran ham, Excel ham o'shandan. Qiymat ustuni faqat server uni
+//  bergan bo'lsa chiziladi (narx huquqi).
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const son = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { maximumFractionDigits: 2 }).replace(/ /g, ' ');
+const pul = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { maximumFractionDigits: 0 }).replace(/ /g, ' ') + ' $';
+const sana = (s) => s ? s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(2, 4) : '';
+
+let d = null;
+
+//  ★ TUR — BIR NECHTASI BIRGA (jurnaldagi «Maxsulot guruhi» bilan bir
+//  xil idiom): penal, kamod va sp ko'pincha birga ko'riladi. Bo'sh
+//  to'plam — hammasi. Tanlov shu brauzerda eslab qolinadi.
+const TUR_KEY = 'turlar:sekin';
+let turlar = [], turSel = new Set();
+try { turSel = new Set(JSON.parse(localStorage.getItem(TUR_KEY) || '[]')); } catch (e) {}
+const turTanlandi = (r) => !turSel.size || turSel.has(r.product_type);
+
+function drawTypes() {
+  //  Ro'yxatda yo'q tur tanlovda qolib ketmasin — aks holda jadval bo'sh chiqardi
+  for (const t of [...turSel]) if (!turlar.includes(t)) turSel.delete(t);
+  $('fTypes').innerHTML = turlar.map((t, i) =>
+    `<button class="chip${turSel.has(t) ? ' on' : ''}" onclick="toggleType(${i})">${esc(t)}</button>`).join('');
+  $('fTypesHint').textContent = turSel.size ? '— tanlangani' : '— hammasi, keragini bosing';
+}
+
+function toggleType(i) {
+  const t = turlar[i];
+  turSel.has(t) ? turSel.delete(t) : turSel.add(t);
+  try { localStorage.setItem(TUR_KEY, JSON.stringify([...turSel])); } catch (e) {}
+  drawTypes();
+  draw();
+}
+
+function toast(msg, bad) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), bad ? 5000 : 2600);
+}
+
+function params() {
+  return new URLSearchParams({ days: $('fDays').value || 60,
+    cover: $('fCover').value || 60 });
+}
+
+async function load() {
+  try { d = await App.api('/api/units/slow-stock?' + params()); }
+  catch (e) { $('body').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  turlar = [...new Map(d.rows.map(r => [r.product_type, r.group_sort ?? 0])).entries()]
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([t]) => t);
+  drawTypes();
+  $('narxIzoh').innerHTML = d.narxli
+    ? ' <b>Qiymat</b> — bo\'sh zaxira × ulgurji narx; narxi yo\'q mahsulot qo\'shilmaydi.' : '';
+  draw();
+}
+
+//  Yig'indi holat bo'yicha; dona O'LCHOV BIRLIGI bo'yicha ajratiladi —
+//  stul dona, penal komplekt, qo'shib bo'lmaydi.
+function kpi(rows) {
+  const NOM = { savdo_yoq: "Savdo yo'q", sekin: 'Sekin sotilmoqda' };
+  return Object.keys(NOM).map(h => {
+    const rs = rows.filter(r => r.holat === h);
+    const uom = {};
+    for (const r of rs) uom[r.uom || ''] = (uom[r.uom || ''] || 0) + r.free;
+    const dona = Object.entries(uom).map(([u, n]) => `${son(n)} <small>${esc(u)}</small>`)
+      .join(' · ') || '0';
+    const narxsiz = rs.filter(r => r.value == null).length;
+    return `<div class="card"><label>${NOM[h]}</label>
+      <div class="kpi">${d.narxli ? pul(rs.reduce((s, r) => s + (r.value || 0), 0)) : dona}</div>
+      <div class="muted" style="font-size:12px;margin-top:4px">${rs.length} ta mahsulot${
+        d.narxli ? ' · ' + dona : ''}${d.narxli && narxsiz ? ` · ${narxsiz} tasida narx yo'q` : ''}</div></div>`;
+  }).join('');
+}
+
+function yosh(n) {
+  if (n == null) return '';
+  return `<div class="${n >= d.cover ? 'late' : 'muted'}" style="font-size:11px">${son(n)} kun</div>`;
+}
+
+function draw() {
+  if (!d) return;
+  const tanla = turTanlandi, h = $('fHolat').value;
+  const rows = d.rows.filter(r => tanla(r) && (!h || r.holat === h));
+  $('kpi').innerHTML = kpi(rows);
+  if (!rows.length) {
+    $('body').innerHTML = '<p class="muted">Sekin aylanadigan zaxira topilmadi.</p>'; return; }
+  $('body').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Mahsulot</th><th>Turi</th>
+      <th class="num">T/M bo'sh<div class="muted" style="font-size:11px">yoshi</div></th>
+      <th class="num">Ishlab chiq.<div class="muted" style="font-size:11px">bo'sh · yoshi</div></th>
+      <th class="num">Jami bo'sh</th>
+      <th class="num">Sotildi<div class="muted" style="font-size:11px">${d.days} kun</div></th>
+      <th class="num">Yetadi, kun</th>
+      <th>Oxirgi savdo</th>
+      ${d.narxli ? '<th class="num">Qiymat<div class="muted" style="font-size:11px">ulgurji</div></th>' : ''}
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td><b>${esc(r.product)}</b>${r.holat === 'savdo_yoq'
+        ? ' <span class="tag late">savdo yo\'q</span>'
+        : ' <span class="tag" style="color:#a66a00">sekin</span>'}${r.sotib_olinadi
+        ? ' <span class="tag">sotib olinadi</span>' : ''}</td>
+      <td class="muted">${esc(r.product_type)}</td>
+      <td class="num">${r.fg_free ? son(r.fg_free) + yosh(r.fg_age) : '<span class="muted">—</span>'}</td>
+      <td class="num">${r.wip_free ? son(r.wip_free) + yosh(r.wip_age) : '<span class="muted">—</span>'}</td>
+      <td class="num"><b>${son(r.free)}</b>
+        <span class="muted" style="font-size:11px">${esc(r.uom || '')}</span></td>
+      <td class="num">${son(r.sold)}</td>
+      <td class="num">${r.cover_days == null ? '<span class="muted">∞</span>' : son(r.cover_days)}</td>
+      <td>${r.last_ship ? `${sana(r.last_ship)}<div class="muted" style="font-size:11px">${son(r.idle_days)} kun oldin</div>`
+        : '<span class="muted">hech qachon</span>'}</td>
+      ${d.narxli ? `<td class="num">${r.value == null ? '<span class="muted">narx yo\'q</span>' : pul(r.value)}</td>` : ''}
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function exportCsv() {
+  $('btnCsv').disabled = true;
+  try {
+    const p = params();
+    if (turSel.size) p.set('types', [...turSel].join(','));
+    await App.download('/api/units/slow-stock/export?' + p,
+      'sekin-zaxira-' + new Date().toISOString().slice(0, 10) + '.csv');
+  } catch (e) { toast(e.message, true); }
+  finally { $('btnCsv').disabled = false; }
+}
+
+App.start(load, 'production.reports', 'production.manage');
+</script>
+</body>
+</html>
