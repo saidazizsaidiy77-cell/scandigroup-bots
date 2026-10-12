@@ -11783,6 +11783,45 @@ test("qo'shimcha tsex: ekran va bron xabari ikkala tsexdan", async () => {
   assert.ok(b2.shops.some((x) => x.id === LAK), 'boshqa tsex ham ko\'rinadi');
 });
 
+//  ── BOSHLANG'ICH QOLDIQ — KIRITILGANLAR ──────────────────────────────
+test("boshlang'ich qoldiq: kiritilganlar ro'yxati kun va kim bilan", async () => {
+  const bugun = new Date().toISOString().slice(0, 10);
+  const r = await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, is_opening: true, fg_on: kun(-3) },
+    { product_id: PENAL, qty: 2, is_opening: true, section_id: ARRA }] });
+  assert.equal(r.status, 200, r.text);
+  const [a, b] = r.body.created;
+  //  Oddiy konver ro'yxatga tushmaydi
+  const oddiy = await newUnit({ section_id: ARRA });
+
+  const l = await admin('GET', '/api/units/opening-log');
+  assert.equal(l.status, 200, l.text);
+  const nos = l.body.rows.map((x) => x.conveyor_no);
+  assert.ok(nos.includes(a.conveyor_no) && nos.includes(b.conveyor_no));
+  assert.ok(!nos.includes(oddiy.conveyor_no), 'oddiy konver emas');
+  const qa = l.body.rows.find((x) => x.conveyor_no === a.conveyor_no);
+  assert.equal(qa.qty, 4);
+  assert.equal(qa.omborda, 4, 'omborga kiritilgani');
+  assert.equal(qa.by_name, 'Administrator');
+  assert.equal(l.body.rows.find((x) => x.conveyor_no === b.conveyor_no).tsexda, 2);
+  //  Yangisi tepada
+  const vaqt = l.body.rows.map((x) => new Date(x.kiritildi).getTime());
+  assert.deepEqual(vaqt, [...vaqt].sort((x, y) => y - x));
+
+  //  Sana filtri — kechagi kunda bugungilar yo'q
+  const kecha = await admin('GET', '/api/units/opening-log?from=2000-01-01&to=2000-01-02');
+  assert.equal(kecha.body.rows.length, 0);
+  const bu = await admin('GET', `/api/units/opening-log?from=${bugun}&to=${bugun}`);
+  assert.ok(bu.body.rows.some((x) => x.conveyor_no === a.conveyor_no));
+
+  const f = await admin('GET', '/api/units/opening-log/export');
+  assert.equal(f.status, 200, f.text);
+  assert.match(f.text, new RegExp(a.conveyor_no));
+
+  const sot = await xodim('Sinov qoldiq sotuvchi', 'sotuvchi');
+  assert.equal((await sot('GET', '/api/units/opening-log')).status, 403);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
