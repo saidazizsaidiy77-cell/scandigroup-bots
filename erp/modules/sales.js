@@ -3512,9 +3512,16 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const son = (v) => Number(v || 0);
 
   //  Har xodim uchun alohida varaq — Excel'dagi bilan bir xil shakl.
-  const kimlar = kim ? [kim]
+  //  ★ ISHDAN KETGAN XODIMNING VARAG'I CHIZILMAYDI (zavod qarori,
+  //  2026-10). Uning mijozlari hali unga biriktirilgan bo'lishi mumkin va
+  //  fakt view'da yozilib turaveradi — lekin u endi o'lchanmaydi. Ro'yxat
+  //  xodimlar ro'yxatidan (faqat FAOL savdo xodimi) qisqaradi; boshliqning
+  //  yig'indisiga esa tegilmaydi — savdo bo'lgan, bo'lim uni qilgan.
+  const faol = new Set(xodim.rows.map((w) => w.id));
+  const kimlar = (kim ? [kim]
     : [...new Set([...plans.rows.map((p) => p.worker_id),
-                   ...facts.rows.map((f) => f.worker_id)])];
+                   ...facts.rows.map((f) => f.worker_id)])])
+    .filter((id) => faol.has(id));
 
   const varaq = kimlar.map((wid) => {
     const pl = plans.rows.filter((p) => p.worker_id === wid);

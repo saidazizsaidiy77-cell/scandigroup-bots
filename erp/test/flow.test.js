@@ -8403,6 +8403,15 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
     { name: 'KPI begona mijoz', manager_id: mgr })).body;
   assert.ok(!(await mijozlari()).includes(begonaMij.id));
 
+  //  ── ISHDAN KETGAN XODIM VARAQDA CHIZILMAYDI ─────────────────────
+  await db.query(`UPDATE workers SET active = false WHERE id = $1`, [m2]);
+  const hamma = (await admin('GET', `/api/sales/kpi?mon=${OY}`)).body;
+  assert.ok(!hamma.varaq.some((x) => x.worker_id === m2), 'faol emas — varaq yo\'q');
+  assert.ok(!hamma.xodimlar.some((x) => x.id === m2), 'ro\'yxatda ham yo\'q');
+  assert.ok(!(await admin('GET', `/api/sales/kpi?mon=${OY}&worker_id=${m2}`))
+    .body.varaq.length, 'id bilan so\'ralsa ham');
+  await db.query(`UPDATE workers SET active = true WHERE id = $1`, [m2]);
+
   //  Sinov qaytarishi bekor qilinadi: mijoz balansini haqdorga
   //  o'tkazib, keyingi qarzdorlik testlarining yig'indisini buzmasin.
   await db.query(`UPDATE cust_returns SET status = 'cancelled'
