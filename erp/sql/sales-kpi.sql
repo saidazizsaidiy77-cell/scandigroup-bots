@@ -56,8 +56,32 @@ VALUES
   ('SEGMENT', 'Segment bo''yicha savdo','usd', true,  0.15, 3, true),
   --  Hali ishlatilmaydi — zavod qo'shganda `active` yoqiladi.
   ('QARZ',    'Muddati o''tgan qarz',   'usd', false, 0.00, 4, false),
-  ('YANGI',   'Yangi mijoz',            'ta',  false, 0.00, 5, false)
+  ('YANGI',   'Yangi mijoz',            'ta',  false, 0.00, 5, false),
+  ('DONA',    'Turkum bo''yicha savdo, dona', 'ta', true, 0.00, 4, true)
 ON CONFLICT (code) DO NOTHING;
+
+--  ★ KPI OG'IRLIKSIZ — TURKUM BO'YICHA SUMMA VA DONA (zavod qarori,
+--  2026-10). Savdo xodimlari ko'paydi va reja endi har TURKUM uchun
+--  ikki raqam bilan qo'yiladi: qancha dollarlik va nechta dona.
+--  Tushum (kassa) va AKB ko'rsatkich sifatida olib tashlandi,
+--  og'irlik ham: UMUMIY KPI = turkumlar bo'yicha jami summa fakti ÷
+--  jami summa rejasi (`modules/sales.js`, `GET /kpi`). Dona har
+--  turkumda alohida ko'rinadi, lekin umumiy foizga kirmaydi — stul
+--  DONA, penal KOMPLEKT va ularni qo'shib bo'lmaydi.
+--
+--  Bir martalik: keyin saytdan (yoki bazadan) qaytarib yoqilgani
+--  keyingi deploy'da o'chirilmasin. TUSHUM fakti view'da QOLADI —
+--  bonus bazasi baribir tushgan pul.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'kpi-ogirliksiz') THEN
+    UPDATE sales_kpi_indicators SET active = false WHERE code IN ('TUSHUM', 'AKB');
+    UPDATE sales_kpi_indicators
+       SET name = 'Turkum bo''yicha savdo, $', default_weight = 0
+     WHERE code = 'SEGMENT';
+    INSERT INTO migration_flags (key) VALUES ('kpi-ogirliksiz');
+  END IF;
+END $$;
 
 --  ★ REJA XODIM VA OY BO'YICHA. Kim kimga qo'yishi huquqdan chiqadi
 --  (`sales.kpi`), kodda ism yozilmaydi (4-qoida): direktor va
@@ -159,6 +183,12 @@ CREATE INDEX IF NOT EXISTS idx_workers_sales_head
 
 DROP VIEW IF EXISTS v_sales_kpi_fact CASCADE;
 CREATE VIEW v_sales_kpi_fact AS
+--  Shoxlar alohida yig'iladi, keyin BITTA qatorga qo'shiladi: chiqim va
+--  qaytarish bir oy va bir turkumga tushsa ekranda ikkita qator emas,
+--  sof raqam turishi kerak.
+SELECT worker_id, mon, indicator, category,
+       SUM(fakt)::numeric(16,2) AS fakt
+  FROM (
 --  ★ BITTA MIJOZ IKKI ODAMGA SANALADI: o'z menejeriga va uning
 --  bo'lim boshlig'iga. Yig'indi SHU YERDA, har ko'rsatkichda emas —
 --  AKB `COUNT(DISTINCT)` bilan hisoblanadi va menejerlarning
@@ -214,4 +244,36 @@ SELECT k.worker_id, date_trunc('month', u.ship_on)::date, 'SEGMENT',
   JOIN product_groups g ON g.id = p.group_id
  WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
    AND u.total_amount IS NOT NULL
- GROUP BY 1, 2, 4;
+ GROUP BY 1, 2, 4
+UNION ALL
+--  4. DONA — chiqib ketgan mahsulot SONI, turkum bo'yicha.
+SELECT k.worker_id, date_trunc('month', u.ship_on)::date, 'DONA',
+       g.sales_category,
+       SUM(u.qty)::numeric(16,2)
+  FROM production_units u
+  JOIN kim k            ON k.customer_id = u.customer_id
+  JOIN products p       ON p.id = u.product_id
+  JOIN product_groups g ON g.id = p.group_id
+ WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+ GROUP BY 1, 2, 4
+UNION ALL
+--  5. ★ MIJOZDAN QAYTGANI AYIRILADI — summa ham, dona ham, QAYTGAN
+--  oyda (foyda-zarar bilan bir xil qoida: chiqqan oyning raqami
+--  o'zgarmaydi). Faqat QABUL QILINGANI: yozilgan, lekin ombor
+--  ko'rmagan mahsulot hali mijozda. Summa — hujjatda qotgan sotilgan
+--  narx.
+SELECT k.worker_id, date_trunc('month', r.ret_on)::date, x.ind,
+       g.sales_category,
+       -SUM(CASE x.ind WHEN 'DONA' THEN i.qty
+                       ELSE i.qty * COALESCE(i.price, 0) END)::numeric(16,2)
+  FROM cust_returns r
+  JOIN cust_return_items i ON i.return_id = r.id
+  JOIN production_units u  ON u.id = i.unit_id
+  JOIN kim k               ON k.customer_id = r.customer_id
+  JOIN products p          ON p.id = u.product_id
+  JOIN product_groups g    ON g.id = p.group_id
+  CROSS JOIN (VALUES ('SEGMENT'), ('DONA')) x(ind)
+ WHERE r.status = 'accepted'
+ GROUP BY 1, 2, 3, 4
+  ) t
+ GROUP BY 1, 2, 3, 4;

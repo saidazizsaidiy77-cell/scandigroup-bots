@@ -2990,31 +2990,35 @@ o'zgartirilsa zavod qo'ygan rejalar o'z ko'rsatkichini topmay qolardi.
 
 ---
 
-**★ SAVDO XODIMINING KPI SI UCHTA NARSADAN YIG'ILADI** (zavod qarori,
-2026-10; `sql/sales-kpi.sql`, `public/savdo-kpi.html`). Oylik natija
-bitta raqam emas: bir nechta ko'rsatkich, har biri o'z OG'IRLIGI
-bilan.
+**★ SAVDO XODIMINING KPI SI — TURKUM BO'YICHA SUMMA VA DONA,
+OG'IRLIKSIZ** (zavod qarori, 2026-10; `sql/sales-kpi.sql`,
+`public/savdo-kpi.html`). Savdo xodimlari ko'paydi va reja endi har
+TURKUM (mehmonxona · yotoqxona · stol · stul) uchun ikki raqam bilan
+qo'yiladi: **qancha dollarlik** (`SEGMENT`) va **nechta dona**
+(`DONA`). Ilgari uchta ko'rsatkich og'irlik bilan qo'shilardi
+(Tushum 0,70 · AKB 0,15 · Segment 0,15) — Tushum va AKB ko'rsatkich
+sifatida o'chirildi (`migration_flags`: `kpi-ogirliksiz`), og'irlik
+ham.
 
-    Bajarilish      =  Fakt / Reja
-    KPIga ta'siri   =  Bajarilish × Og'irlik
-    UMUMIY KPI      =  ta'sirlarning yig'indisi
+    UMUMIY KPI  =  jami summa fakti ÷ jami summa rejasi
 
-Og'irliklar yig'indisi 1,00 bo'lishi SHART va tekshiruv serverda:
-0,9 bo'lsa hech kim 100% ga yetolmaydi, 1,1 bo'lsa hammasini bajargan
-odam 110% oladi. Oyna og'irlik yig'indisini yozayotganda ko'rsatib
-turadi — xato saqlashda emas, terilayotganda bilinsin.
+**Dona umumiy foizga KIRMAYDI**: stul DONA, penal KOMPLEKT va
+ularni qo'shib bo'lmaydi (ombor qoldig'i bilan bir xil qoida) — u
+har turkumda o'z bajarilishi bilan turadi.
 
-**Ko'rsatkichlar ro'yxati BAZADA** (`sales_kpi_indicators`, 4-qoida):
-hozir uchtasi ishlatiladi — **Tushum** (0,70), **AKB** (0,15) va
-**Segment bo'yicha savdo** (0,15). «Muddati o'tgan qarz» va «Yangi
-mijoz» qatorlari hoziroq yozilgan, lekin O'CHIQ (`active = false`):
-ro'yxatda turgani bilan hisobga tushmaydi — zavod qo'shganda bitta
-katakcha yoqiladi.
+**Fakt — chiqib ketgan mahsulot, mijozdan qaytgani AYIRILGAN**:
+qaytarish QAYTGAN oyda, faqat qabul qilingani, hujjatda qotgan
+sotilgan narx bilan (foyda-zarar bilan bir xil qoida).
 
-**★ SEGMENT ICHIDA TURKUMLAR BOR va ular ALOHIDA ko'rsatkich EMAS**
-(`by_category`): og'irlikni OTA qator ko'taradi, to'rtta turkum esa
-uning tafsiloti. Teskarisi qilinsa og'irliklar yig'indisi buzilardi
-va bitta savdo ikki marta sanalardi.
+**Bonus bazasi baribir TUSHGAN PUL** (kassadan): KPI eshikni ochadi,
+pul hajmini beradi. Shuning uchun TUSHUM fakti view'da qoladi,
+ko'rsatkich bo'lmasa ham.
+
+**★ REJANI FAQAT ADMINISTRATOR QO'YADI** (`sales.kpi`, zavod
+qarori 2026-10). Direktor va savdo boshlig'idan olib tashlandi —
+DOIMIY qoida (`DELETE` `core-seed.sql` da), bayroq emas. Ko'rish
+o'zgarmadi: rahbariyat hammasini (`production.reports`), boshliq
+o'zini va qo'l ostidagilarni (`sales_head_id`), menejer o'zini.
 
 **Nomlar `sales_kpi_*` bilan boshlanadi, va bu ataylab**: loyihada
 ALLAQACHON `kpi_targets` bor (`sql/cash.sql`, `modules/kpi.js`) va u
@@ -3029,9 +3033,7 @@ ko'tarilmasdi.
 (`workers.sales_head_id`, zavod qarori 2026-10). Savdo bo'lim
 boshlig'ining O'ZIDA mijoz yo'q — mijoz menejerga biriktirilgan
 (`customers.manager_id`) — ya'ni uning fakti HAR DOIM nol bo'lib
-turardi va direktor unga reja qo'ya olmasdi. Holbuki zanjir aynan
-shunday ishlaydi: direktor boshliqqa qo'yadi, boshliq o'z
-menejerlariga.
+turardi va unga qo'yilgan reja hech qachon bajarilmasdi.
 
 Belgi XODIMDA va Xodimlar sahifasida qo'yiladi: menejerning
 kartochkasida uning boshlig'i tanlanadi. Kodga na ism, na lavozim
@@ -3051,17 +3053,13 @@ AKB ning `COUNT(DISTINCT)` i hech qachon ikki marta sanamaydi — ota
 qator bo'ysunuvchilarining mijozlarini QO'SHIB emas, BIRLASHTIRIB
 sanaydi.
 
-**Reja qo'yish huquqi `sales.kpi`** — direktor, administrator va
-savdo bo'lim boshlig'i. **Ko'rish huquqi ALOHIDA emas**: har savdo
-xodimi O'Z varaqasini ko'radi, reja qo'yadigan odam esa qo'l
-ostidagilarnikini ham. Tugma huquqi yo'q odamda umuman chizilmaydi,
-tekshiruv esa serverda.
+**Reja qo'yish huquqi `sales.kpi`** — FAQAT administrator (yuqorida).
+Tugma huquqi yo'q odamda umuman chizilmaydi, tekshiruv esa serverda.
 
-Ekranda har xodim o'z varaqasi bo'lib turadi: ko'rsatkich · reja ·
-fakt · bajarilish · og'irlik · KPIga ta'siri. Rang **Indeksda**,
-bajarilishda emas: bajarilish bitta ko'rsatkichning javobi, indeks
-esa butun oyning — boshliq varaqaga qarab birinchi navbatda shuni
-o'qiydi.
+Ekranda har xodim o'z varaqasi: turkum · summa (reja · fakt ·
+bajarilish · bugungacha reja · indeks · prognoz) · dona (reja · fakt
+· bajarilish). Rang **Indeksda**, bajarilishda emas: bajarilish oyning
+FAKTI, indeks esa «orqadamanmi» degan savolning javobi.
 
 ---
 
