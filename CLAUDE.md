@@ -2944,8 +2944,8 @@ qarori 2026-10). Ishlab chiqarish mahsulotni GURUH bilan yuritadi
 (penal, kamod, sp, stol, stul) — marshrut, raqamning harfi va o'lchov
 birligi o'sha yerda. Savdo esa boshqa kesimda gapiradi:
 
-    MEHMON   Mehmonxona to'plami    penal · kamod · matras
-    YOTOQ    Yotoqxona to'plami     sp
+    MEHMON   Mehmonxona to'plami    penal · kamod
+    YOTOQ    Yotoqxona to'plami     sp · matras
     STOL     Stol                   stol
     STUL     Stul                   stul
 
@@ -2960,7 +2960,12 @@ bitta katakdan biriktiriladi, kodga tegilmaydi (4-qoida).
 «Mehmonxona» va «mehmonxona » ikkita turkum bo'lib, hisobot jimgina
 ikkiga bo'linardi (rang va mato bilan bir xil qoida — faqat boridan).
 
-**★ MATRAS MEHMONXONA TO'PLAMIGA KIRADI**, va uning qatori
+**★ MATRAS YOTOQXONA TO'PLAMIGA KIRADI** (zavod qarori, 2026-10;
+ilgari mehmonxona edi — `migration_flags`: `matras-yotoq`). KPI da
+uning SUMMASI turkum savdosiga qo'shiladi, DONASI esa yo'q: matras
+to'plam emas va «nechta to'plam sotildi» degan savolga qo'shilsa
+bitta to'plam ikki marta sanalardi (`product_groups.kpi_dona`, guruhda
+— 4-qoida). Uning qatori
 `sql/warehouse.sql` da — guruhning O'ZI o'sha faylda yaratilgani
 uchun. Avval u `catalog-groups.sql` dagi bir martalik bayroqqa
 qo'shilgan edi va ishlayotgan baza ustida to'g'ri ishladi, TOZA
@@ -3016,6 +3021,14 @@ bo'yicha chiqib ketgan mahsulot), belgilangan xodimga **TUSHGAN
 PULDAN** (kassa). Standarti `false` — savdo. Belgi Xodimlar
 sahifasida, «Savdo bo'lim boshlig'i» ostida. TUSHUM fakti shu sababdan
 view'da qoladi, ko'rsatkich bo'lmasa ham.
+
+**★ BELGILI XODIMDA ASOSIY KPI — PUL TUSHUMI** (zavod qarori,
+2026-10). «KPI bonusi tushgan puldan» belgisi bor xodimga (savdo
+bo'lim boshlig'i) reja oynasida qo'shimcha «Pul tushumi rejasi, $»
+so'raladi; rejasi qo'yilsa UMUMIY KPI va bonus kassaga KELGAN puldan
+hisoblanadi, turkum savdosi esa ma'lumot uchun qoladi. Ko'rsatkich
+(`TUSHUM`) bazada o'chiq turaveradi — u faqat belgili xodimniki va
+server boshqasiga uning rejasini qabul qilmaydi.
 
 **★ IKKI MENEJERLI MIJOZ** (`customers.manager2_id`, zavod qarori
 2026-10). B2B mijozida ikki menejer ishlaydi: biri stol-stul,

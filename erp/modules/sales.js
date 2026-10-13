@@ -3580,7 +3580,6 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     const rejali = asosiy.ichi.filter((c) => c.reja > 0);
     const rejaJami = rejali.reduce((a, c) => a + c.reja, 0);
     const savdo = rejali.reduce((a, c) => a + c.fakt, 0);
-    const umumiy = rejaJami > 0 ? savdo / rejaJami : 0;
 
     //  ★ BONUS BAZASI XODIMDA (`workers.kpi_bonus_tushum`, zavod
     //  qarori 2026-10): menejerga SAVDODAN (rejasi bor turkumlar),
@@ -3590,6 +3589,23 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       .reduce((a, f) => a + son(f.fakt), 0);
     const tushumdan = !!(xodim.rows.find((w) => w.id === wid) || {}).kpi_bonus_tushum;
     const baza = tushumdan ? tushum : savdo;
+
+    //  ★ BELGILANGAN XODIMDA ASOSIY KPI — PUL TUSHUMI (zavod qarori,
+    //  2026-10). Uning ishi mijozdan pulni olib kirish: reja dollarda
+    //  qo'yiladi, fakt — kassaga KELGAN pul (`v_sales_kpi_fact`, TUSHUM
+    //  shoxi), va UMUMIY KPI shundan. Turkum savdosi varaqda ma'lumot
+    //  uchun qoladi. Ko'rsatkich bazada o'chiq turaveradi: u faqat SHU
+    //  belgili xodimniki, qolganlar reja oynasida uni ko'rmaydi.
+    const tReja = son((pl.find((p) => p.indicator === 'TUSHUM' && !p.category) || {}).plan);
+    const tushumQator = !tushumdan ? null : {
+      code: 'TUSHUM', name: 'Pul tushumi', reja: tReja, fakt: tushum,
+      bajarilish: tReja > 0 ? tushum / tReja : 0,
+      plan_bugun: tReja * nisbat,
+      indeks: tReja * nisbat > 0 ? tushum / (tReja * nisbat) : 0,
+      prognoz: nisbat > 0 ? tushum / nisbat : 0 };
+    const tushumAsosiy = !!(tushumQator && tReja > 0);
+    const umumiy = tushumAsosiy ? tushumQator.bajarilish
+      : (rejaJami > 0 ? savdo / rejaJami : 0);
     const foiz = umumiy * 100;
     const stavka = bonusStavka(bands.rows, foiz);
     //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
@@ -3605,7 +3621,8 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       worker_name: (xodim.rows.find((w) => w.id === wid) || {}).name
         || (pl[0] || {}).worker_name || '',
       ostida,
-      qator, umumiy: foiz, tushum, savdo,
+      qator, umumiy: foiz, tushum, savdo, tushum_qator: tushumQator,
+      umumiy_baza: tushumAsosiy ? 'tushum' : 'savdo',
       bonus_baza: tushumdan ? 'tushum' : 'savdo',
       bonus_stavka: stavka, bonus: baza * stavka / 100,
     };
@@ -3638,6 +3655,9 @@ router.post('/kpi', need('sales.kpi'), wrap(async (req, res) => {
   //  qolardi.
   const faol = new Set((await db.query(
     `SELECT code FROM sales_kpi_indicators WHERE active`)).rows.map((r) => r.code));
+  //  Pul tushumi rejasi — faqat belgisi bor xodimga (yuqorida, `GET /kpi`).
+  if ((await db.query(`SELECT kpi_bonus_tushum FROM workers WHERE id = $1`,
+    [wid])).rows[0]?.kpi_bonus_tushum) faol.add('TUSHUM');
   const yot = items.find((x) => !faol.has(x.indicator));
   if (yot) return res.status(400).json({
     error: `«${yot.indicator}» ko'rsatkichi ishlatilmaydi` });
