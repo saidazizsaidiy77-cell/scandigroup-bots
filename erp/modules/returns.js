@@ -45,10 +45,10 @@ const chans = (req) => {
 };
 async function mijoz(c, req, id) {
   const m = (await c.query(
-    `SELECT id, name, channel, manager_id FROM customers WHERE id = $1`, [id])).rows[0];
+    `SELECT id, name, channel, manager_id, manager2_id FROM customers WHERE id = $1`, [id])).rows[0];
   if (!m) throw Object.assign(new Error('Mijoz topilmadi'), { status: 404 });
   const ch = chans(req), own = ownOf(req);
-  if ((ch && !ch.includes(m.channel)) || (own && m.manager_id !== own))
+  if ((ch && !ch.includes(m.channel)) || (own && ![m.manager_id, m.manager2_id].includes(own)))
     throw Object.assign(new Error('Bu mijoz sizning doirangizda emas'), { status: 403 });
   return m;
 }
@@ -117,7 +117,7 @@ router.get('/', need(...READ), wrap(async (req, res) => {
        LEFT JOIN sections s      ON s.id = i.section_id
       WHERE ($1::text IS NULL OR r.status = $1)
         AND ($2::boolean OR (($3::text[] IS NULL OR c.channel = ANY($3))
-                             AND ($4::int IS NULL OR c.manager_id = $4)))
+                             AND ($4::int IS NULL OR $4 IN (c.manager_id, c.manager2_id))))
       GROUP BY r.id, c.name, cw.name, aw.name
       ORDER BY (r.status = 'new') DESC, r.id DESC
       LIMIT 500`,

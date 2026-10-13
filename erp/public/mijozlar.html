@@ -174,7 +174,7 @@ function toggleList(){
 function render(){
   const q = $('fQ').value.trim().toLowerCase();
   const rows = customers.filter(c => !q ||
-    [c.name, c.country, c.region, c.phone, c.channel_name, c.manager_name]
+    [c.name, c.country, c.region, c.phone, c.channel_name, c.manager_name, c.manager2_name]
       .some(v => (v || '').toLowerCase().includes(q)));
   $('tB').innerHTML = rows.length ? rows.map(c => `
     <tr>
@@ -183,7 +183,8 @@ function render(){
       <td class="muted">${c.region ? esc(c.region) : '—'}</td>
       <td class="muted">${c.phone ? esc(c.phone) : '—'}</td>
       <td>${c.channel_name ? `<span class="tag">${esc(c.channel_name)}</span>` : '<span class="muted">—</span>'}</td>
-      <td class="muted">${c.manager_name ? esc(c.manager_name) : '<span class="tag warn">biriktirilmagan</span>'}</td>
+      <td class="muted">${c.manager_name ? esc(c.manager_name) : '<span class="tag warn">biriktirilmagan</span>'}${
+        c.manager2_name ? ' · ' + esc(c.manager2_name) : ''}</td>
       <td class="num">${c.orders}</td><td class="num">${c.qty}</td>
       <td class="num">${money(c.amount)}</td>
       <!-- Qarz — BALANS (boshlang'ich qarz + chiqib ketgan mahsulot),
@@ -242,6 +243,16 @@ function openForm(id){
                     m.is_sales ? '' : ' ·'}</option>`).join('')}
               </select></div>
           </div>
+          <!--  ★ IKKINCHI MENEJER (izoh: sql/units.sql). B2B mijozida
+                ikkitasi ishlaydi: biri stol-stul, ikkinchisi korpus.
+                Ikkalasi mijozni to'liq ko'radi; KPI da har biri faqat
+                o'z rejasi bor turkum bilan o'lchanadi. -->
+          <div><label>2-menejer</label>
+            <select id="cManager2"><option value="">— yo'q —</option>
+              ${managers.map(m => `<option value="${m.id}"
+                ${c?.manager2_id === m.id ? 'selected' : ''}>${esc(m.name)}${
+                  m.is_sales ? '' : ' ·'}</option>`).join('')}
+            </select></div>
           <div><label>Kanali</label>
             <select id="cChannel"><option value="">—</option>
               ${channels.map(ch => `<option value="${ch.code}"
@@ -447,6 +458,7 @@ async function save(id){
     country: $('cCountry').value || null,
     region: $('cRegion').value.trim() || null,
     manager_id: $('cManager').value || null,
+    manager2_id: Number($('cManager2').value) || null,
     phone: $('cPhone').value.trim() || null,
     channel: $('cChannel').value || null,
     note: $('cNote').value.trim() || null,

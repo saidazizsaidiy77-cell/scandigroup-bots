@@ -279,7 +279,7 @@ const NAVBATLAR = [
       `SELECT COUNT(*)::int AS n FROM v_sales_orders o
         WHERE ${require('./sales').HOLAT} = 'reserved'
           AND ($1::text[] IS NULL OR o.channel = ANY($1))
-          AND ($2::int IS NULL OR o.manager_id = $2)`,
+          AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))`,
       [chanOf(req), ownOf(req)]);
     return [{ page: '/buyurtmalar.html', mod: 'sales', n,
               izoh: `${n} ta buyurtma tayyor — chiqarishga berilmagan` }];

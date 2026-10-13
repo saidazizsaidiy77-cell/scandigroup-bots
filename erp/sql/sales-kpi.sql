@@ -178,6 +178,13 @@ BEGIN
   END IF;
 END $$;
 
+--  ★ BONUS BAZASI XODIMDA (zavod qarori, 2026-10): menejerlarga
+--  SAVDODAN (chiqib ketgan mahsulot, rejasi bor turkumlar bo'yicha),
+--  belgilangan xodimga — TUSHGAN PULDAN. Standarti `false`: ilgari
+--  hammaga tushgan puldan edi, zavod endi uni bitta odamga qoldirdi.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS kpi_bonus_tushum BOOLEAN
+  NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS idx_workers_sales_head
   ON workers(sales_head_id) WHERE sales_head_id IS NOT NULL;
 
@@ -208,6 +215,19 @@ WITH kim AS (
   SELECT c.id, w.sales_head_id
     FROM customers c
     JOIN workers w ON w.id = c.manager_id
+   WHERE w.sales_head_id IS NOT NULL
+  --  ★ IKKINCHI MENEJER ham (izoh: sql/units.sql). Mijozning savdosi
+  --  ikkalasiga ham yoziladi; har biri faqat o'z rejasi bor turkum
+  --  bo'yicha o'lchanadi. `UNION` (ALL emas): ikkala menejerning
+  --  boshlig'i bitta bo'lsa unga mijoz BIR marta tushadi.
+  UNION
+  SELECT c.id, c.manager2_id
+    FROM customers c
+   WHERE c.manager2_id IS NOT NULL
+  UNION
+  SELECT c.id, w.sales_head_id
+    FROM customers c
+    JOIN workers w ON w.id = c.manager2_id
    WHERE w.sales_head_id IS NOT NULL
 )
 --  1. TUSHUM — mijozdan kelgan pul. Bekor qilingani va hali qabul

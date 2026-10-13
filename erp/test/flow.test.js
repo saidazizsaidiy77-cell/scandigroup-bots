@@ -1171,8 +1171,15 @@ test('savdo xodimiga faqat O\'Z mijozi va O\'Z buyurtmasi ko\'rinadi', async () 
 
   const kun = (await m1('GET', '/api/sales/day')).body;
   assert.ok(kun.rows.some((r) => r.id === kun1.body.id), 'o\'z buyurtmasi sanaladi');
-  assert.ok(!kun.rows.some((r) => r.id === oz.body.id),
-    'boshqa menejerning buyurtmasi kunga tushmaydi');
+  //  ★ `oz` ni endi m2 yuritadi, lekin MIJOZ m1 niki — mijozning
+  //  menejeri uning hamma buyurtmasini ko'radi (ikki menejerli mijoz
+  //  qoidasi, izoh: sql/units.sql). Boshqa mijozning buyurtmasi esa
+  //  kunga tushmaydi.
+  assert.ok(kun.rows.some((r) => r.id === oz.body.id),
+    'o\'z mijozining buyurtmasi sanaladi');
+  const begonaKun = (await m2('GET', '/api/sales/day')).body;
+  assert.ok(!begonaKun.rows.some((r) => r.id === kun1.body.id),
+    'boshqa menejerning mijozi kunga tushmaydi');
   //  Yig'indi RO'YXATDAN sanaladi, ya'ni shart qo'shilgach ham
   //  `olindi = chiqdi + qoldi` to'g'ri qolaveradi.
   assert.equal(kun.olindi, kun.rows.length);
@@ -8239,10 +8246,20 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
 
   //  ★ UMUMIY — JAMI SUMMA bo'yicha: 223 770 / 415 000.
   assert.equal(Math.round(v.umumiy * 100) / 100, 53.92, 'UMUMIY KPI');
-  assert.equal(v.tushum, 221031, 'bonus bazasi — tushgan pul');
   assert.equal(Number(v.bonus_stavka), 0.75, '53,92% → 0,75%');
+  //  ★ BONUS BAZASI XODIMDA: standarti SAVDO (chiqib ketgan mahsulot),
+  //  belgilangan xodimga TUSHGAN PUL.
+  assert.equal(v.bonus_baza, 'savdo');
   assert.equal(Math.round(v.bonus * 100) / 100,
+    Math.round(223770 * 0.0075 * 100) / 100);
+  assert.equal(v.tushum, 221031);
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + mgr,
+    { kpi_bonus_tushum: true })).status, 200);
+  const vt = await ol();
+  assert.equal(vt.bonus_baza, 'tushum');
+  assert.equal(Math.round(vt.bonus * 100) / 100,
     Math.round(221031 * 0.0075 * 100) / 100);
+  await admin('PATCH', '/api/admin/workers/' + mgr, { kpi_bonus_tushum: false });
 
   //  Shkala BAZADA: bosqich qo'shish kodga tegmaydi (4-qoida).
   const kpi = (await admin('GET', `/api/sales/kpi?mon=${OY}`)).body;
@@ -8335,6 +8352,56 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   const vb3 = await ol(boshId);
   assert.equal(q(vb3, 'DONA').fakt, 0,
     'bog\'lanish uzilgach boshliqda raqam qolmaydi');
+
+  //  ── IKKI MENEJERLI MIJOZ (zavod qarori, 2026-10) ────────────────
+  //  Ikkinchi menejer stol-stul sotadi: mijozni ham, butun qarzini
+  //  ham, birinchi menejer yozgan buyurtmani ham ko'radi. KPI da esa
+  //  faqat o'z rejasi bor turkum (STOL, STUL) bilan o'lchanadi.
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov KPI stulchi'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers
+                                      WHERE name = 'Sinov KPI stulchi')`);
+  const m2 = (await H.id(
+    `SELECT id FROM workers WHERE name = 'Sinov KPI stulchi'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code, scope_own)
+                  VALUES ($1,'sotuvchi', true) ON CONFLICT DO NOTHING`, [m2]);
+  const m2api = H.api(base, await H.sessionFor('Sinov KPI stulchi'));
+  const mijozlari = async () => (await m2api('GET', '/api/units/customers'))
+    .body.customers.map((c) => c.id);
+  assert.ok(!(await mijozlari()).includes(mij.id), 'biriktirilmaguncha ko\'rinmaydi');
+  assert.equal((await admin('PATCH', '/api/units/customers/' + mij.id,
+    { manager2_id: m2 })).status, 200);
+  assert.ok((await mijozlari()).includes(mij.id), 'ikkinchi menejer ko\'radi');
+  assert.equal((await H.id(`SELECT manager_id FROM customers WHERE id = $1`,
+    [mij.id])).manager_id, mgr, 'birinchi menejer joyida');
+
+  //  Birinchi menejer yozgan buyurtma ikkinchisiga ham ochiq.
+  const zak = (await admin('POST', '/api/sales/orders',
+    { customer_id: mij.id, manager_id: mgr, items: [] })).body;
+  assert.ok(zak.id, JSON.stringify(zak));
+  assert.equal((await m2api('GET', '/api/sales/orders/' + zak.id)).status, 200);
+  assert.ok((await m2api('GET', '/api/sales/orders')).body.rows
+    .some((o) => o.id === zak.id));
+  //  Qarzdorlikda ham.
+  assert.ok((await m2api('GET', '/api/sales/debts?from=1900-01-01&to=2030-01-01'))
+    .body.rows.some((r) => r.id === mij.id));
+
+  await admin('POST', '/api/sales/kpi', { mon: OY, worker_id: m2, items: [
+    { indicator: 'SEGMENT', category: 'STOL', plan: 50000 },
+    { indicator: 'SEGMENT', category: 'STUL', plan: 100000 },
+    { indicator: 'DONA',    category: 'STUL', plan: 20 }] });
+  const v2m = await ol(m2);
+  //  Fakt ikkalasiga ham yoziladi va varaqda ko'rinadi...
+  assert.equal(tk(v2m, 'SEGMENT', 'MEHMON').fakt, 59650);
+  //  ...lekin umumiy foiz va bonus faqat rejasi bor turkumdan.
+  const stolStul = tk(v2m, 'SEGMENT', 'STOL').fakt + tk(v2m, 'SEGMENT', 'STUL').fakt;
+  assert.equal(Math.round(v2m.savdo * 100) / 100, Math.round(stolStul * 100) / 100);
+  assert.equal(Math.round(v2m.umumiy * 100) / 100,
+    Math.round(stolStul / 150000 * 10000) / 100);
+
+  //  Boshqa menejerning mijozi baribir yopiq.
+  const begonaMij = (await admin('POST', '/api/units/customers',
+    { name: 'KPI begona mijoz', manager_id: mgr })).body;
+  assert.ok(!(await mijozlari()).includes(begonaMij.id));
 
   //  Sinov qaytarishi bekor qilinadi: mijoz balansini haqdorga
   //  o'tkazib, keyingi qarzdorlik testlarining yig'indisini buzmasin.

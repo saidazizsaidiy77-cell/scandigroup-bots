@@ -787,10 +787,13 @@ SELECT c.id, c.name, c.country, c.region, c.phone,
          + COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0)
          - pay.paid - qayt.amount)::numeric(16,2) AS balance,
        --  ★ MIJOZDAN QAYTGANI (qabul qilingani): qarzdan ayiriladi
-       qayt.amount AS returned_amount
+       qayt.amount AS returned_amount,
+       --  Ikkinchi menejer (izoh: sql/units.sql) — oxirida, 2-qoida.
+       c.manager2_id, m2.name AS manager2_name
 FROM customers c
 LEFT JOIN customer_channels ch ON ch.code = c.channel
 LEFT JOIN workers m            ON m.id = c.manager_id
+LEFT JOIN workers m2           ON m2.id = c.manager2_id
 LEFT JOIN production_units u   ON u.customer_id = c.id AND u.status <> 'cancelled'
 --  To'lovlar alohida LATERAL bilan: konverlar bilan bitta JOIN ga
 --  qo'shilsa har to'lov har konverga ko'payib, summa bir necha barobar
@@ -807,7 +810,7 @@ LEFT JOIN LATERAL (
 WHERE c.active
 GROUP BY c.id, c.name, c.country, c.region, c.phone, ch.name, c.channel,
          c.manager_id, m.name, c.opening_debt, c.opening_debt_on, pay.paid,
-         qayt.amount;
+         qayt.amount, c.manager2_id, m2.name;
 
 -- ═══════════════════════════════════════════════════ QARZDORLIK LENTASI
 --
