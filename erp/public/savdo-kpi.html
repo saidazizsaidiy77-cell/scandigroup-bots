@@ -164,11 +164,29 @@ function varaq(v) {
     <td class="num">${n0(dn.fakt)}</td>
     <td class="num">${dn.reja ? pct(dn.bajarilish) : '—'}</td>
   </tr>`;
-  const turkumlar = d.categories.map((c) =>
+  //  ★ FAQAT REJA QO'YILGAN TURKUM CHIZILADI (zavod qarori, 2026-10).
+  //  Ikki menejerli mijozda stol-stul menejeriga korpus ham yoziladi,
+  //  lekin u uning KPI si emas — nol rejali qator faqat chalg'itardi.
+  //  Umumiy foiz ham AYNAN shu turkumlardan (server, `GET /kpi`), shuning
+  //  uchun «Jami» ham ko'rinib turgan qatorlardan qo'shiladi — aks holda
+  //  jadval o'z yig'indisiga mos kelmasdi. Reja umuman yo'q bo'lsa savdosi
+  //  bor turkumlar ko'rsatiladi: bo'sh varaq javob emas.
+  const rejali = d.categories.filter((c) =>
+    ich(S, c.code).reja > 0 || ich(D, c.code).reja > 0);
+  const korin = rejali.length ? rejali : d.categories.filter((c) =>
+    ich(S, c.code).fakt || ich(D, c.code).fakt);
+  const yig = (q) => {
+    const r = korin.map((c) => ich(q, c.code));
+    const t = (k) => r.reduce((a, x) => a + Number(x[k] || 0), 0);
+    const reja = t('reja'), fakt = t('fakt'), pb = t('plan_bugun');
+    return { reja, fakt, plan_bugun: pb, prognoz: t('prognoz'),
+             bajarilish: reja ? fakt / reja : 0, indeks: pb ? fakt / pb : 0 };
+  };
+  const turkumlar = korin.map((c) =>
     qator(esc(c.name), ich(S, c.code), ich(D, c.code), false)).join('');
-  //  Turkumi yo'q savdo YO'QOLMAYDI: u jamiga qo'shilgan, lekin
-  //  turkumlar ichida ko'rinmaydi — alohida qator bo'lib yoziladi.
-  const turkumsiz = S.turkumsiz || D.turkumsiz ? `<tr class="muted">
+  //  Turkumi yo'q savdo — faqat reja umuman yo'q bo'lganda: rejasi bor
+  //  varaqda u KPI ga tegishli emas.
+  const turkumsiz = !rejali.length && (S.turkumsiz || D.turkumsiz) ? `<tr class="muted">
     <td>Turkumi qo'yilmagan</td><td class="num">—</td>
     <td class="num">${n2(S.turkumsiz)}</td><td colspan="5"></td>
     <td class="num">${n0(D.turkumsiz)}</td><td></td></tr>` : '';
@@ -211,7 +229,7 @@ function varaq(v) {
         <th class="num">Reja</th><th class="num">Fakt</th>
         <th class="num">Bajarilish</th>
       </tr></thead>
-      <tbody>${turkumlar}${turkumsiz}${qator('Jami', S, D, true)}</tbody>
+      <tbody>${turkumlar}${turkumsiz}${korin.length ? qator('Jami', yig(S), yig(D), true) : ''}</tbody>
     </table></div></div>`;
 }
 
