@@ -671,8 +671,21 @@ UPDATE product_groups SET no_width  = 4    WHERE code = 'MATRAS' AND no_width  I
 --  ma'lumotni tuzatadi, bu esa guruh qachon yaratilsa ham
 --  tegishli (oylik doirasi bilan bir xil idiom). Faqat BO'SH katak
 --  to'ldiriladi — saytdan o'zgartirilgani qaytarib qo'yilmaydi.
-UPDATE product_groups SET sales_category = 'MEHMON'
+UPDATE product_groups SET sales_category = 'YOTOQ'
  WHERE code = 'MATRAS' AND sales_category IS NULL;
+
+--  ★ MATRAS YOTOQXONA TO'PLAMIDA (zavod qarori, 2026-10 — yuqoridagi
+--  qarorni almashtiradi): u yotoqxona to'plami bilan sotiladi. Bir
+--  martalik ko'chirish (bayroq): eski qoida qo'ygan MEHMON ni YOTOQ ga
+--  o'tkazadi, keyin saytdan o'zgartirilgani qaytarib qo'yilmaydi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'matras-yotoq') THEN
+    UPDATE product_groups SET sales_category = 'YOTOQ'
+     WHERE code = 'MATRAS' AND sales_category = 'MEHMON';
+    INSERT INTO migration_flags (key) VALUES ('matras-yotoq');
+  END IF;
+END $$;
 
 --  Zavodda matrasning bitta turi sotiladi (zavod qarori): o'lcham
 --  bo'yicha ajratish kerak bo'lsa har o'lcham ALOHIDA mahsulot bo'ladi

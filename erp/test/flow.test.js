@@ -8071,16 +8071,13 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
   const turkum = (kod) => kat.groups.filter((g) => g.sales_category === kod);
   assert.ok(turkum('MEHMON').length >= 2,
     'penal va kamod bitta turkumda');
-  assert.equal(turkum('YOTOQ').map((g) => g.code).join(), 'SP');
+  assert.ok(turkum('YOTOQ').some((g) => g.code === 'SP'), 'sp yotoqxonada');
 
-  //  ★ MATRAS HAM MEHMONXONA TO'PLAMIDA (zavod qarori, 2026-10).
-  //  Ilgari u turkumsiz edi — zavod javobini bermagandi — va
-  //  foyda-zararda «Turkumsiz» bo'lib alohida qatorda turardi.
-  //  Matras zavodda YASALMAYDI (ta'minotchidan tayyor keladi),
-  //  lekin SOTILADI mehmonxona to'plami bilan birga: turkum
-  //  savdoniki, marshrutniki emas.
+  //  ★ MATRAS YOTOQXONA TO'PLAMIDA (zavod qarori, 2026-10). Matras
+  //  zavodda YASALMAYDI (ta'minotchidan tayyor keladi), lekin SOTILADI
+  //  yotoqxona to'plami bilan birga: turkum savdoniki, marshrutniki emas.
   const mat = kat.groups.find((g) => g.code === 'MATRAS');
-  if (mat) assert.equal(mat.sales_category, 'MEHMON');
+  if (mat) assert.equal(mat.sales_category, 'YOTOQ');
 
   //  ── Ikki turkumdan mahsulot chiqarib yuboramiz
   const mij = (await admin('POST', '/api/units/customers',
@@ -8210,7 +8207,7 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   const grp = (await db.query(
     `SELECT g.sales_category AS cat, MIN(p.id) AS pid
        FROM product_groups g JOIN products p ON p.group_id = g.id
-      WHERE g.sales_category IS NOT NULL GROUP BY 1`)).rows;
+      WHERE g.sales_category IS NOT NULL AND g.kpi_dona GROUP BY 1`)).rows;
   //  [summa, dona] — narx donaga bo'linadi.
   const FAKT = { STOL: [28775, 5], STUL: [84695, 13], YOTOQ: [50650, 2],
                  MEHMON: [59650, 10] };
@@ -8259,7 +8256,20 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   assert.equal(vt.bonus_baza, 'tushum');
   assert.equal(Math.round(vt.bonus * 100) / 100,
     Math.round(221031 * 0.0075 * 100) / 100);
+  //  ★ BELGILI XODIMDA ASOSIY KPI — PUL TUSHUMI: rejasi qo'yilsa UMUMIY
+  //  shundan (221 031 / 300 000), turkum savdosi ma'lumot bo'lib qoladi.
+  assert.equal((await qoy([{ indicator: 'TUSHUM', plan: 300000 }, ...items])).status, 200);
+  const vtu = await ol();
+  assert.equal(vtu.umumiy_baza, 'tushum');
+  assert.equal(vtu.tushum_qator.reja, 300000);
+  assert.equal(Math.round(vtu.umumiy * 100) / 100,
+    Math.round(221031 / 300000 * 10000) / 100);
+  assert.equal(q(vtu, 'SEGMENT').fakt, 223770, 'turkum savdosi joyida');
   await admin('PATCH', '/api/admin/workers/' + mgr, { kpi_bonus_tushum: false });
+  //  Belgisiz xodimga pul tushumi rejasi qabul qilinmaydi.
+  assert.equal((await qoy([{ indicator: 'TUSHUM', plan: 1 }])).status, 400);
+  assert.equal((await qoy(items)).status, 200);
+  assert.equal((await ol()).tushum_qator, null);
 
   //  Shkala BAZADA: bosqich qo'shish kodga tegmaydi (4-qoida).
   const kpi = (await admin('GET', `/api/sales/kpi?mon=${OY}`)).body;
@@ -8402,6 +8412,24 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   const begonaMij = (await admin('POST', '/api/units/customers',
     { name: 'KPI begona mijoz', manager_id: mgr })).body;
   assert.ok(!(await mijozlari()).includes(begonaMij.id));
+
+  //  ── MATRAS: YOTOQXONA SUMMASIGA KIRADI, DONASIGA EMAS ───────────
+  const matP = await H.id(`SELECT p.id FROM products p
+     JOIN product_groups g ON g.id = p.group_id WHERE g.code = 'MATRAS' LIMIT 1`);
+  if (matP) {
+    const oldin = await ol();
+    const mu = (await db.query(
+      `INSERT INTO production_units (conveyor_no, product_id, qty, status,
+                                     ship_on, unit_price, customer_id)
+       VALUES ('KPI-MAT', $1, 3, 'shipped', $2::date, 100, $3) RETURNING id`,
+      [matP.id, M1, mij.id])).rows[0];
+    const keyin = await ol();
+    assert.equal(tk(keyin, 'SEGMENT', 'YOTOQ').fakt,
+      tk(oldin, 'SEGMENT', 'YOTOQ').fakt + 300, 'summaga kiradi');
+    assert.equal(tk(keyin, 'DONA', 'YOTOQ').fakt,
+      tk(oldin, 'DONA', 'YOTOQ').fakt, 'donaga kirmaydi');
+    await db.query(`DELETE FROM production_units WHERE id = $1`, [mu.id]);
+  }
 
   //  ── ISHDAN KETGAN XODIM VARAQDA CHIZILMAYDI ─────────────────────
   await db.query(`UPDATE workers SET active = false WHERE id = $1`, [m2]);

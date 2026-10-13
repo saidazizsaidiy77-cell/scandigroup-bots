@@ -188,6 +188,24 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS kpi_bonus_tushum BOOLEAN
 CREATE INDEX IF NOT EXISTS idx_workers_sales_head
   ON workers(sales_head_id) WHERE sales_head_id IS NOT NULL;
 
+--  ★ DONA SANOG'IGA KIRMAYDIGAN GURUH (`product_groups.kpi_dona`,
+--  zavod qarori 2026-10). Matras yotoqxona to'plami bilan sotiladi va
+--  uning SUMMASI turkumning savdosiga qo'shiladi — lekin u to'plam
+--  emas: «nechta yotoqxona to'plami sotildi» degan savolga matras
+--  qo'shilsa bitta to'plam ikki marta sanalardi. Belgi BAZADA, guruhda
+--  (4-qoida): ertaga boshqa qo'shimcha mahsulot ham shunday bo'lsa
+--  bitta katakcha. Bir martalik (bayroq) — saytdan o'zgartirilgani
+--  qaytarilmaydi.
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS kpi_dona BOOLEAN
+  NOT NULL DEFAULT true;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'matras-donasiz') THEN
+    UPDATE product_groups SET kpi_dona = false WHERE code = 'MATRAS';
+    INSERT INTO migration_flags (key) VALUES ('matras-donasiz');
+  END IF;
+END $$;
+
 DROP VIEW IF EXISTS v_sales_kpi_fact CASCADE;
 CREATE VIEW v_sales_kpi_fact AS
 --  Shoxlar alohida yig'iladi, keyin BITTA qatorga qo'shiladi: chiqim va
@@ -275,6 +293,7 @@ SELECT k.worker_id, date_trunc('month', u.ship_on)::date, 'DONA',
   JOIN products p       ON p.id = u.product_id
   JOIN product_groups g ON g.id = p.group_id
  WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+   AND g.kpi_dona
  GROUP BY 1, 2, 4
 UNION ALL
 --  5. ★ MIJOZDAN QAYTGANI AYIRILADI — summa ham, dona ham, QAYTGAN
@@ -294,6 +313,7 @@ SELECT k.worker_id, date_trunc('month', r.ret_on)::date, x.ind,
   JOIN product_groups g    ON g.id = p.group_id
   CROSS JOIN (VALUES ('SEGMENT'), ('DONA')) x(ind)
  WHERE r.status = 'accepted'
+   AND (x.ind <> 'DONA' OR g.kpi_dona)
  GROUP BY 1, 2, 3, 4
   ) t
  GROUP BY 1, 2, 3, 4;
