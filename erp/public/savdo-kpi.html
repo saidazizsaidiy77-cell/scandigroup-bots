@@ -99,25 +99,28 @@ function load() {
 }
 
 function draw() {
-  //  Xodim ro'yxati FAQAT reja qo'yadigan odamda: qolganiga u yerda
-  //  baribir bitta ism turardi (buyurtmalardagi menejer filtri bilan
-  //  bir xil qoida va bir xil sabab).
-  if (d.hammasi) {
+  //  Xodim ro'yxati faqat bir nechta varaq ko'radigan odamda
+  //  (rahbariyat va boshliq): menejerda u yerda baribir bitta ism
+  //  turardi.
+  if (d.tanlaydi) {
     $('wrapWorker').style.display = '';
     const eski = $('fWorker').value;
     $('fWorker').innerHTML = '<option value="">— barchasi —</option>'
       + d.xodimlar.map((w) => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
     $('fWorker').value = eski || '';
-    $('btnPlan').innerHTML = canPlan()
-      ? `<button class="primary" onclick="planOch()">Reja qo'yish</button>` : '';
   }
+  $('btnPlan').innerHTML = canPlan()
+    ? `<button class="primary" onclick="planOch()">Reja qo'yish</button>` : '';
 
   $('izoh').innerHTML = `Oyda <b>${d.jami_kun}</b> kun, shundan
     <b>${d.otgan_kun}</b> tasi o'tgan (bugun sanalmaydi).
     <b>Bugungacha reja</b> — oylik rejaning shu kunga to'g'ri keladigan
     qismi; <b>indeks</b> — fakt shu rejaning necha foizi;
     <b>prognoz</b> — shu sur'atda oy oxirida qancha bo'lishi.
-    Rang <b>indeksda</b>: 100% — sur'at joyida, undan past — orqada.`;
+    Rang <b>indeksda</b>: 100% — sur'at joyida, undan past — orqada.
+    <b>Umumiy KPI</b> — jami summa bo'yicha (og'irliksiz); dona har
+    turkumda alohida, chunki stul dona, penal komplekt. Mijozdan
+    qaytgani qaytgan oyda ayiriladi.`;
 
   $('printHead').innerHTML = `<h2>Savdo KPI</h2>
     <div>${d.yil}-yil ${String(d.oy).padStart(2, '0')}-oy
@@ -135,21 +138,44 @@ function draw() {
   $('royxat').innerHTML = d.varaq.map(varaq).join('');
 }
 
-//  ★ BITTA XODIM — BITTA VARAQ, rasmdagi jadval bilan bir xil shakl.
-//  Tepada javob (KPI foizi va bonus), ostida uning qayerdan chiqqani.
+//  ★ BITTA XODIM — BITTA VARAQ. Tepada javob (KPI foizi va bonus),
+//  ostida TURKUMLAR: har birida summa va dona — reja, fakt,
+//  bajarilish. Og'irlik yo'q (zavod qarori, 2026-10): umumiy foiz jami
+//  summa faktining jami summa rejasiga nisbati.
+const ind = (v, code) => v.qator.find((q) => q.code === code)
+  || { reja: 0, fakt: 0, bajarilish: 0, plan_bugun: 0, indeks: 0,
+       prognoz: 0, turkumsiz: 0, ichi: [] };
+
 function varaq(v) {
   const st = v.bonus_stavka;
+  const S = ind(v, 'SEGMENT'), D = ind(v, 'DONA');
+  const ich = (q, code) => q.ichi.find((c) => c.code === code)
+    || { reja: 0, fakt: 0, bajarilish: 0, plan_bugun: 0, indeks: 0, prognoz: 0 };
+  const qator = (nom, s, dn, jami) => `<tr${jami ? ' style="font-weight:700"' : ''}>
+    <td>${nom}</td>
+    <td class="num">${n2(s.reja)}</td>
+    <td class="num">${n2(s.fakt)}</td>
+    <td class="num">${s.reja ? pct(s.bajarilish) : '—'}</td>
+    <td class="num">${n2(s.plan_bugun)}</td>
+    <td class="num">${s.reja ? `<span class="tag ${bajCls(s.indeks)}">${pct(s.indeks)}</span>` : '—'}</td>
+    <td class="num">${n2(s.prognoz)}</td>
+    <td class="num">${n0(dn.reja)}</td>
+    <td class="num">${n0(dn.fakt)}</td>
+    <td class="num">${dn.reja ? pct(dn.bajarilish) : '—'}</td>
+  </tr>`;
+  const turkumlar = d.categories.map((c) =>
+    qator(esc(c.name), ich(S, c.code), ich(D, c.code), false)).join('');
+  //  Turkumi yo'q savdo YO'QOLMAYDI: u jamiga qo'shilgan, lekin
+  //  turkumlar ichida ko'rinmaydi — alohida qator bo'lib yoziladi.
+  const turkumsiz = S.turkumsiz || D.turkumsiz ? `<tr class="muted">
+    <td>Turkumi qo'yilmagan</td><td class="num">—</td>
+    <td class="num">${n2(S.turkumsiz)}</td><td colspan="5"></td>
+    <td class="num">${n0(D.turkumsiz)}</td><td></td></tr>` : '';
   return `<div class="card" style="margin-top:16px">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;
          gap:16px;align-items:flex-end;margin-bottom:14px">
       <div>
         <h2 style="margin:0">${esc(v.worker_name)}</h2>
-        <div class="muted" style="font-size:12px;margin-top:4px">
-          og'irliklar yig'indisi: ${n2(v.ogirlik_jami)}</div>
-        <!--  ★ QO'L OSTIDAGILAR YOZILADI: boshliqning raqami
-              ularning yig'indisidan chiqadi va buni ekran aytmasa,
-              u o'z varag'ida «men hech narsa sotmaganman-ku» degan
-              savol bilan qolardi. -->
         ${(v.ostida || []).length ? `<div class="muted"
           style="font-size:12px;margin-top:4px">Qo'l ostida:
           <b>${v.ostida.map(esc).join(', ')}</b> — ularning savdosi
@@ -158,106 +184,49 @@ function varaq(v) {
       <div class="row" style="gap:24px;flex-wrap:wrap">
         <div>
           <div class="muted" style="font-size:12px">UMUMIY KPI</div>
-          <!--  Katta raqam RANGSIZ: u oylik bajarilish va oy boshida
-                tabiiy past bo'ladi — qizil qilib qo'ysak har oyning
-                birinchi haftasi «yomon» bo'lib ko'rinardi. -->
           <div style="font-size:28px;font-weight:700">${n2(v.umumiy)}%</div>
+          <div class="muted" style="font-size:11px">jami summa bo'yicha</div>
         </div>
         <div>
           <div class="muted" style="font-size:12px">BONUS (${n2(st)}%)</div>
           <div style="font-size:28px;font-weight:700">${n2(v.bonus)} $</div>
           <!--  Bonus BAZASI — tushgan pul, reja emas: KPI eshikni
                 ochadi, pul esa hajmini beradi (zavod qarori). -->
-          <div class="muted" style="font-size:11px">tushgan puldan</div>
+          <div class="muted" style="font-size:11px">tushgan pul ${n2(v.tushum)} $ dan</div>
         </div>
       </div>
     </div>
     <div style="overflow-x:auto"><table>
       <thead><tr>
-        <th>Ko'rsatkich</th><th class="num">Og'irlik</th>
+        <th rowspan="2">Turkum</th>
+        <th class="num" colspan="6" style="text-align:center">Summa, $</th>
+        <th class="num" colspan="3" style="text-align:center">Dona</th>
+      </tr><tr>
         <th class="num">Reja</th><th class="num">Fakt</th>
-        <th class="num">Bajarilish</th><th class="num">Ta'sir</th>
-        <th class="num">Bugungacha reja</th><th class="num">Indeks</th>
-        <th class="num">Prognoz</th>
+        <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
+        <th class="num">Indeks</th><th class="num">Prognoz</th>
+        <th class="num">Reja</th><th class="num">Fakt</th>
+        <th class="num">Bajarilish</th>
       </tr></thead>
-      <tbody>${v.qator.map((q) => qatorHtml(v, q)).join('')}
-      <tr><td colspan="5"><b>Jami</b></td>
-        <td class="num"><b>${n2(v.umumiy)}%</b></td>
-        <td colspan="3"></td></tr></tbody>
+      <tbody>${turkumlar}${turkumsiz}${qator('Jami', S, D, true)}</tbody>
     </table></div></div>`;
-}
-
-function qatorHtml(v, q) {
-  const bosh = `<tr${q.by_category ? ` style="cursor:pointer"
-      onclick="ochYop('${v.worker_id}-${q.code}')"` : ''}>
-    <td><b>${esc(q.name)}</b>${q.by_category
-      ? ' <span class="muted" style="font-size:11px">▾ turkumlar</span>' : ''}</td>
-    <td class="num">${n2(q.ogirlik)}</td>
-    <td class="num">${son(q.reja, q.unit)}</td>
-    <td class="num">${son(q.fakt, q.unit)}</td>
-    <td class="num">${pct(q.bajarilish)}</td>
-    <td class="num">${pct(q.tasir)}</td>
-    <td class="num">${son(q.plan_bugun, q.unit)}</td>
-    <td class="num"><span class="tag ${bajCls(q.indeks)}">${pct(q.indeks)}</span></td>
-    <td class="num">${son(q.prognoz, q.unit)}</td>
-  </tr>`;
-  if (!q.by_category) return bosh;
-  //  Turkumi yo'q savdo YO'QOLMAYDI: u ota qatordagi faktga
-  //  qo'shilgan, lekin turkumlar ichida ko'rinmaydi — shuning uchun
-  //  alohida qator bo'lib yoziladi (bo'sh katak savol, yo'q qator
-  //  esa yolg'on).
-  const ich = q.ichi.map((c) => `<tr class="ich-${v.worker_id}-${q.code}"
-      style="display:none">
-    <td style="padding-left:28px" class="muted">${esc(c.name)}</td>
-    <td class="num"></td>
-    <td class="num">${son(c.reja, q.unit)}</td>
-    <td class="num">${son(c.fakt, q.unit)}</td>
-    <td class="num">${pct(c.bajarilish)}</td>
-    <td class="num"></td>
-    <td class="num">${son(c.plan_bugun, q.unit)}</td>
-    <td class="num"><span class="tag ${bajCls(c.indeks)}">${pct(c.indeks)}</span></td>
-    <td class="num">${son(c.prognoz, q.unit)}</td>
-  </tr>`).join('') + (q.turkumsiz ? `<tr class="ich-${v.worker_id}-${q.code}"
-      style="display:none">
-    <td style="padding-left:28px" class="muted">Turkumi qo'yilmagan</td>
-    <td class="num"></td><td class="num">—</td>
-    <td class="num">${son(q.turkumsiz, q.unit)}</td>
-    <td colspan="5"></td></tr>` : '');
-  return bosh + ich;
-}
-
-function ochYop(key) {
-  document.querySelectorAll('.ich-' + key).forEach((tr) => {
-    tr.style.display = tr.style.display === 'none' ? '' : 'none';
-  });
 }
 
 // ═══════════════════════════════════════════════ REJA QO'YISH
 //
-//  ★ REJA BIR MARTA, BITTA SO'ROVDA saqlanadi (server ham shunday
-//  qabul qiladi): uchta ko'rsatkich va to'rtta turkum — yettita
-//  qator. Ularni bitta-bitta yuborish og'irliklar yig'indisini YARIM
-//  holatda qoldirardi.
-//
-//  ★ OG'IRLIKLAR YIG'INDISI EKRANDA YURIB TURADI: 1,00 bo'lmasa
-//  server rad etadi va odam nimasi kamligini bilmay qolardi.
+//  ★ REJA BIR MARTA, BITTA SO'ROVDA saqlanadi: har turkum uchun summa
+//  va dona. Og'irlik yo'q (zavod qarori, 2026-10). Rejani faqat
+//  administrator qo'yadi (`sales.kpi`).
 function planOch() {
   const wid = $('fWorker').value;
   const eski = wid ? d.varaq.find((v) => String(v.worker_id) === String(wid)) : null;
   const q = (code, cat) => {
     const v = eski && eski.qator.find((x) => x.code === code);
-    if (!v) return 0;
-    if (!cat) return v.reja;
-    return (v.ichi.find((c) => c.code === cat) || {}).reja || 0;
-  };
-  const og = (code) => {
-    const v = eski && eski.qator.find((x) => x.code === code);
-    return v ? v.ogirlik
-      : Number((d.indicators.find((i) => i.code === code) || {}).default_weight || 0);
+    return v ? ((v.ichi.find((c) => c.code === cat) || {}).reja || 0) : 0;
   };
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
-      <div class="modal" style="max-width:720px">
+      <div class="modal" style="max-width:640px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
           <h1 style="margin:0">KPI rejasi</h1>
           <button onclick="yop()">Yopish</button></div>
@@ -270,59 +239,37 @@ function planOch() {
             <input id="pMon" type="month" value="${d.yil}-${
               String(d.oy).padStart(2, '0')}"></div>
         </div>
-        <table><thead><tr><th>Ko'rsatkich</th>
-          <th class="num" style="width:120px">Og'irlik</th>
-          <th class="num" style="width:160px">Oylik reja</th></tr></thead>
-        <tbody>${d.indicators.map((i) => `
-          <tr><td><b>${esc(i.name)}</b>
-            <div class="muted" style="font-size:11px">${esc(i.unit || '')}</div></td>
-            <td class="num"><input id="w_${i.code}" type="number" step="0.01"
-              min="0" max="1" value="${og(i.code)}" oninput="ogJami()"
-              style="max-width:100px;text-align:right"></td>
-            <td class="num">${i.by_category
-              ? `<span class="muted" style="font-size:12px">turkumlardan
-                   yig'iladi</span><input id="p_${i.code}" type="hidden" value="">`
-              : `<input id="p_${i.code}" type="number" step="0.01" min="0"
-                   value="${q(i.code)}" style="max-width:140px;text-align:right">`}</td>
-          </tr>
-          ${!i.by_category ? '' : d.categories.map((c) => `
-          <tr><td style="padding-left:28px" class="muted">${esc(c.name)}</td>
-            <td></td>
-            <td class="num"><input id="p_${i.code}_${c.code}" type="number"
-              step="0.01" min="0" value="${q(i.code, c.code)}"
-              oninput="segJami()" style="max-width:140px;text-align:right"></td>
-          </tr>`).join('')}`).join('')}
+        <table><thead><tr><th>Turkum</th>
+          <th class="num" style="width:170px">Summa, $</th>
+          <th class="num" style="width:130px">Dona</th></tr></thead>
+        <tbody>${d.categories.map((c) => `
+          <tr><td>${esc(c.name)}</td>
+            <td class="num"><input id="s_${c.code}" type="number" step="0.01" min="0"
+              value="${q('SEGMENT', c.code)}" oninput="planJami()"
+              style="max-width:150px;text-align:right"></td>
+            <td class="num"><input id="d_${c.code}" type="number" step="1" min="0"
+              value="${q('DONA', c.code)}" oninput="planJami()"
+              style="max-width:110px;text-align:right"></td></tr>`).join('')}
+          <tr style="font-weight:700"><td>Jami</td>
+            <td class="num" id="sJami"></td><td class="num" id="dJami"></td></tr>
         </tbody></table>
-        <p class="muted" id="ogIzoh" style="margin:14px 0 0;font-size:12px"></p>
+        <p class="muted" style="margin:14px 0 0;font-size:12px">Umumiy KPI
+          jami summa bo'yicha hisoblanadi. Bo'sh qoldirilgan turkum — reja yo'q.</p>
         <div class="row" style="gap:10px;margin-top:16px">
           <button class="primary" onclick="planSaqla()">Saqlash</button>
           <button onclick="yop()">Bekor</button></div>
       </div></div>`;
-  ogJami();
-  segJami();
+  planJami();
 }
 const yop = () => { $('modalRoot').innerHTML = ''; };
 
-function ogJami() {
-  const s = d.indicators.reduce((a, i) =>
-    a + (Number(($('w_' + i.code) || {}).value) || 0), 0);
-  const ok = Math.abs(s - 1) <= 0.005;
-  $('ogIzoh').innerHTML = `Og'irliklar yig'indisi:
-    <b class="${ok ? 'ok' : 'bad'}">${n2(s)}</b>
-    — <b>1,00</b> bo'lishi shart.${ok ? ''
-      : " Aks holda hech kim 100% ga yetolmaydi yoki hammasini bajargan odam 100% dan oshib ketadi."}`;
-}
-
-//  Segment rejasi turkumlardan YIG'ILADI va yig'indi shu yerda
-//  ko'rinadi: odam to'rtta raqamni yozib, umumiysini o'zi qo'shib
-//  o'tirmasin.
-function segJami() {
-  d.indicators.filter((i) => i.by_category).forEach((i) => {
-    const s = d.categories.reduce((a, c) =>
-      a + (Number(($(`p_${i.code}_${c.code}`) || {}).value) || 0), 0);
-    const el = $('p_' + i.code);
-    if (el) el.value = s;
-  });
+//  Jami shu yerda yurib turadi: odam to'rtta raqamni yozib, umumiysini
+//  o'zi qo'shib o'tirmasin.
+function planJami() {
+  const yig = (p) => d.categories.reduce((a, c) =>
+    a + (Number(($(p + c.code) || {}).value) || 0), 0);
+  $('sJami').textContent = n2(yig('s_'));
+  $('dJami').textContent = n0(yig('d_'));
 }
 
 async function planSaqla() {
@@ -331,22 +278,18 @@ async function planSaqla() {
   const wid = Number($('pWorker').value);
   const mon = $('pMon').value;
   const items = [];
-  for (const i of d.indicators) {
-    items.push({ indicator: i.code, category: null,
-      plan: Number($('p_' + i.code).value) || 0,
-      weight: Number($('w_' + i.code).value) || 0 });
-    if (!i.by_category) continue;
-    for (const c of d.categories)
-      items.push({ indicator: i.code, category: c.code,
-        plan: Number($(`p_${i.code}_${c.code}`).value) || 0 });
+  for (const c of d.categories) {
+    items.push({ indicator: 'SEGMENT', category: c.code,
+      plan: Number($('s_' + c.code).value) || 0 });
+    items.push({ indicator: 'DONA', category: c.code,
+      plan: Number($('d_' + c.code).value) || 0 });
   }
   try {
     await App.api('/api/sales/kpi', { method: 'POST',
       body: JSON.stringify({ worker_id: wid, mon, items }) });
     yop();
     //  Saqlangan xodim va oyga O'TILADI: odam rejani qo'yib, uning
-    //  natijasini darrov ko'rishi kerak — qaytib filtrni sozlab
-    //  o'tirmasin.
+    //  natijasini darrov ko'rishi kerak.
     $('fWorker').value = String(wid);
     $('fMon').value = mon;
     load();

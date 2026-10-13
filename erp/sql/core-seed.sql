@@ -204,8 +204,6 @@ UNION ALL SELECT 'direktor', 'production.reports'
 UNION ALL SELECT 'direktor', 'production.approve'
 --  Chegirmani ham DIREKTOR tasdiqlaydi: narx siyosati uning ishi.
 UNION ALL SELECT 'direktor', 'sales.discount'
---  KPI rejasini direktor savdo bo'lim boshlig'iga qo'yadi.
-UNION ALL SELECT 'direktor', 'sales.kpi'
 UNION ALL SELECT 'direktor', 'admin.audit'
 ON CONFLICT DO NOTHING;
 
@@ -401,10 +399,14 @@ SELECT 'savdo_boshliq', permission_code
   FROM role_permissions WHERE role_code = 'sotuvchi'
 ON CONFLICT DO NOTHING;
 
---  ★ KPI REJASI — BOSHLIQNIKI, menejerniki emas. Ko'chirishdan KEYIN
---  turadi: `sotuvchi` da bu huquq yo'q va bo'lmasligi ham kerak —
---  menejer o'ziga reja qo'yib olardi. Boshliq esa qo'l ostidagilarga
---  qo'yadi, o'zinikini direktor qo'yadi.
-INSERT INTO role_permissions (role_code, permission_code) VALUES
-  ('savdo_boshliq', 'sales.kpi')
-ON CONFLICT DO NOTHING;
+--  ★ KPI REJASINI FAQAT ADMINISTRATOR QO'YADI (zavod qarori, 2026-10).
+--  Ilgari direktor boshliqqa, boshliq menejerlarga qo'yardi. Endi reja
+--  bitta qo'ldan: administrator `sales.kpi` ni «hamma huquq» qatori
+--  bilan oladi. Ko'rish o'zgarmadi — direktor va ta'sischi hammasini
+--  (`production.reports`), boshliq o'zini va qo'l ostidagilarni,
+--  menejer o'zini ko'radi.
+--
+--  DOIMIY qoida, bayroq emas: eski bazada bu qatorlar bor edi va
+--  `ON CONFLICT DO NOTHING` ularni o'chirmaydi.
+DELETE FROM role_permissions
+ WHERE permission_code = 'sales.kpi' AND role_code <> 'admin';

@@ -3452,7 +3452,21 @@ const kpiYozadi = (req) => req.user.permissions.includes('sales.kpi');
 router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const K = KPI_OY(req.query.mon);
   const hammasi = kpiHammasi(req);
-  const kim = hammasi ? (Number(req.query.worker_id) || null) : req.user.id;
+  //  ★ BOSHLIQ O'ZINI VA QO'L OSTIDAGILARNI KO'RADI. Reja qo'yish
+  //  administratorga ko'chgach (zavod qarori, 2026-10) boshliqda
+  //  `sales.kpi` qolmadi — lekin «menejerim qanday ketyapti» degan
+  //  savol unda qoladi. Doira `workers.sales_head_id` dan, ya'ni KPI
+  //  faktini yig'adigan bog'lanishning O'ZIDAN.
+  const ostim = hammasi ? [] : (await db.query(
+    `SELECT id FROM workers WHERE active AND sales_head_id = $1`,
+    [req.user.id])).rows.map((r) => r.id);
+  const ruxsat = [req.user.id, ...ostim];
+  const sorov = Number(req.query.worker_id) || null;
+  const kim = hammasi ? sorov
+    : ostim.length ? (ruxsat.includes(sorov) ? sorov : null) : req.user.id;
+  //  `kim` bo'sh va hammasini ko'rmaydigan odam — boshliq: faqat o'z
+  //  doirasi.
+  const doira = !hammasi && !kim ? ruxsat : null;
 
   const [ind, cat, bands, plans, facts, xodim] = await Promise.all([
     db.query(`SELECT * FROM sales_kpi_indicators WHERE active ORDER BY sort, code`),
@@ -3462,12 +3476,14 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     db.query(
       `SELECT t.*, w.name AS worker_name
          FROM sales_kpi_targets t JOIN workers w ON w.id = t.worker_id
-        WHERE t.mon = $1::date AND ($2::int IS NULL OR t.worker_id = $2)`,
-      [K.mon, kim]),
+        WHERE t.mon = $1::date AND ($2::int IS NULL OR t.worker_id = $2)
+          AND ($3::int[] IS NULL OR t.worker_id = ANY($3))`,
+      [K.mon, kim, doira]),
     db.query(
       `SELECT * FROM v_sales_kpi_fact
-        WHERE mon = $1::date AND ($2::int IS NULL OR worker_id = $2)`,
-      [K.mon, kim]),
+        WHERE mon = $1::date AND ($2::int IS NULL OR worker_id = $2)
+          AND ($3::int[] IS NULL OR worker_id = ANY($3))`,
+      [K.mon, kim, doira]),
     //  ★ RO'YXATDA SAVDO XODIMI, butun shtat emas: KPI savdo
     //  bo'limining o'lchovi va qorovul u yerda turishi mantiqsiz
     //  (menejer ro'yxati bilan bir xil qoida — huquqdan chiqadi,
@@ -3492,25 +3508,18 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const varaq = kimlar.map((wid) => {
     const pl = plans.rows.filter((p) => p.worker_id === wid);
     const fk = facts.rows.filter((f) => f.worker_id === wid);
-    let umumiy = 0, ogirlikJami = 0;
 
     const qator = ind.rows.map((i) => {
       const otaReja = pl.find((p) => p.indicator === i.code && !p.category);
-      //  ★ SEGMENTDA OTA QATOR YIG'INDI: fakt turkumlardan qo'shiladi,
-      //  reja esa ota qatorda turadi (yoki turkumlardan yig'iladi —
-      //  ikkalasi teng bo'lishi kerak va ekran buni ko'rsatadi).
+      //  ★ OTA QATOR YIG'INDI: fakt turkumlardan qo'shiladi, reja esa
+      //  turkumlardan yig'iladi (eski oylarda ota qatorda turgan bo'lsa
+      //  o'sha olinadi).
       const faktlar = fk.filter((f) => f.indicator === i.code);
       const fakt = faktlar.reduce((a, f) => a + son(f.fakt), 0);
       const turkumReja = pl.filter((p) => p.indicator === i.code && p.category);
-      const reja = otaReja ? son(otaReja.plan)
-        : turkumReja.reduce((a, p) => a + son(p.plan), 0);
-      const ogirlik = otaReja && otaReja.weight != null ? son(otaReja.weight)
-        : son(i.default_weight);
-
-      const bajarilish = reja > 0 ? fakt / reja : 0;
-      const tasir = bajarilish * ogirlik;
-      umumiy += tasir;
-      ogirlikJami += ogirlik;
+      const reja = turkumReja.length
+        ? turkumReja.reduce((a, p) => a + son(p.plan), 0)
+        : son((otaReja || {}).plan);
 
       const ichi = !i.by_category ? [] : cat.rows.map((c) => {
         const r = son((turkumReja.find((p) => p.category === c.code) || {}).plan);
@@ -3529,16 +3538,26 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
 
       return { code: i.code, name: i.name, unit: i.unit,
                by_category: i.by_category,
-               reja, fakt, bajarilish, ogirlik, tasir,
+               reja, fakt, bajarilish: reja > 0 ? fakt / reja : 0,
                plan_bugun: reja * nisbat,
                indeks: reja * nisbat > 0 ? fakt / (reja * nisbat) : 0,
                prognoz: nisbat > 0 ? fakt / nisbat : 0,
                turkumsiz, ichi };
     });
 
+    //  ★ UMUMIY KPI — JAMI SUMMA BO'YICHA, og'irliksiz (zavod qarori,
+    //  2026-10): turkumlar bo'yicha chiqib ketgan mahsulot summasi ÷
+    //  shu summaning rejasi. Dona umumiy foizga KIRMAYDI — stul dona,
+    //  penal komplekt va ularni qo'shib bo'lmaydi; u har turkumda o'z
+    //  bajarilishi bilan turadi.
+    const asosiy = qator.find((q) => q.code === 'SEGMENT') || { bajarilish: 0 };
+    const umumiy = asosiy.bajarilish;
+
     //  Bonus BAZASI — tushgan pul (zavod qarori): KPI eshikni ochadi,
-    //  pul esa hajmini beradi.
-    const tushum = son((qator.find((q) => q.code === 'TUSHUM') || {}).fakt);
+    //  pul esa hajmini beradi. TUSHUM endi ko'rsatkich emas, lekin
+    //  fakti view'da qoladi — baza shundan.
+    const tushum = fk.filter((f) => f.indicator === 'TUSHUM')
+      .reduce((a, f) => a + son(f.fakt), 0);
     const foiz = umumiy * 100;
     const stavka = bonusStavka(bands.rows, foiz);
     //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
@@ -3554,14 +3573,18 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       worker_name: (xodim.rows.find((w) => w.id === wid) || {}).name
         || (pl[0] || {}).worker_name || '',
       ostida,
-      qator, umumiy: foiz, ogirlik_jami: ogirlikJami,
+      qator, umumiy: foiz, tushum,
       bonus_stavka: stavka, bonus: tushum * stavka / 100,
     };
   }).sort((a, b) => b.umumiy - a.umumiy);
 
   res.json({ ...K, nisbat, hammasi, yozadi: kpiYozadi(req),
+             //  Xodim ro'yxati boshliqqa ham chiziladi — faqat o'z doirasi.
+             tanlaydi: hammasi || ostim.length > 0,
              bands: bands.rows,
-             xodimlar: xodim.rows, categories: cat.rows,
+             xodimlar: hammasi ? xodim.rows
+               : xodim.rows.filter((w) => ruxsat.includes(w.id)),
+             categories: cat.rows,
              indicators: ind.rows, varaq });
 }));
 
@@ -3576,16 +3599,15 @@ router.post('/kpi', need('sales.kpi'), wrap(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
 
-  //  ★ OG'IRLIKLAR YIG'INDISI 1,00 BO'LISHI SHART. 0,9 bo'lsa hech
-  //  kim 100% ga yetolmaydi, 1,1 bo'lsa hammasini bajargan odam
-  //  110% olardi — ikkala holatda ham bonus shkalasi ma'nosini
-  //  yo'qotadi. Tiyinlarga yo'l qo'yiladi (0,7 + 0,15 + 0,15).
-  const ogirlik = items.filter((x) => !x.category)
-    .reduce((a, x) => a + (Number(x.weight) || 0), 0);
-  if (Math.abs(ogirlik - 1) > 0.005)
-    return res.status(400).json({
-      error: `Og'irliklar yig'indisi 1,00 bo'lishi kerak — hozir ${
-        ogirlik.toFixed(2)}` });
+  //  ★ OG'IRLIK YO'Q (zavod qarori, 2026-10): umumiy foiz jami summa
+  //  bo'yicha hisoblanadi. Faqat FAOL ko'rsatkich qabul qilinadi —
+  //  o'chirilganiga reja yozilsa u varaqda ko'rinmay, bazada osilib
+  //  qolardi.
+  const faol = new Set((await db.query(
+    `SELECT code FROM sales_kpi_indicators WHERE active`)).rows.map((r) => r.code));
+  const yot = items.find((x) => !faol.has(x.indicator));
+  if (yot) return res.status(400).json({
+    error: `«${yot.indicator}» ko'rsatkichi ishlatilmaydi` });
 
   const client = await db.connect();
   try {
@@ -3607,9 +3629,8 @@ router.post('/kpi', need('sales.kpi'), wrap(async (req, res) => {
       await client.query(
         `INSERT INTO sales_kpi_targets (worker_id, mon, indicator, category,
                                   plan, weight, set_by)
-         VALUES ($1,$2::date,$3,$4,$5,$6,$7)`,
-        [wid, K.mon, it.indicator, it.category || null, plan,
-         it.category ? null : (Number(it.weight) || 0), req.user.id]);
+         VALUES ($1,$2::date,$3,$4,$5,NULL,$6)`,
+        [wid, K.mon, it.indicator, it.category || null, plan, req.user.id]);
       n++;
     }
     await audit(req, { module: 'sales', action: 'kpi-plan', entity: 'sales_kpi_targets',
