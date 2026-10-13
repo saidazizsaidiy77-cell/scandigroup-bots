@@ -184,19 +184,27 @@ function varaq(v) {
              bajarilish: reja ? fakt / reja : 0, indeks: pb ? fakt / pb : 0 };
   };
   const DJ = yig(D);
-  const jadval = (q, f, sarlavha, tsiz) => `<div style="overflow-x:auto;margin-top:14px">
-    <!--  Ustunlar QOTIB turadi: ikki jadval biri ostida va raqamlar
-          bir chiziqda o'qilishi kerak. -->
+  //  ★ BITTA JADVAL, TURKUM OSTIDA DONASI (zavod qarori, 2026-10):
+  //  ikki alohida jadvalda bitta turkumning summasi va donasi bir-biridan
+  //  uzoqda turardi va ko'z ularni juftlab o'qiy olmasdi. Endi har turkum
+  //  ikki qator — summa, ostida mayda yozuvda donasi.
+  const juft = (nom, c, jami) => {
+    const s = c ? ich(S, c.code) : yig(S), dn = c ? ich(D, c.code) : yig(D);
+    return qator(`${nom} <span class="muted" style="font-size:11px">· $</span>`, s, n2, jami)
+      + qator(`<span class="muted" style="padding-left:16px">dona</span>`, dn, n0, false)
+        .replace('<tr>', '<tr class="dona-qator" style="font-size:12px">');
+  };
+  const jadval = (tsizS, tsizD) => `<div style="overflow-x:auto;margin-top:14px">
     <table style="table-layout:fixed;min-width:760px">
       <thead><tr>
-        <th style="width:22%">${sarlavha}</th>
+        <th style="width:22%">Turkum</th>
         <th class="num">Reja</th><th class="num">Fakt</th>
         <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
         <th class="num">Indeks</th><th class="num">Prognoz</th>
       </tr></thead>
-      <tbody>${korin.map((c) => qator(esc(c.name), ich(q, c.code), f, false)).join('')}
-      ${tsiz}
-      ${korin.length ? qator('Jami', yig(q), f, true) : ''}</tbody>
+      <tbody>${korin.map((c) => juft(esc(c.name), c, false)).join('')}
+      ${tsizS}${tsizD}
+      ${korin.length ? juft('Jami', null, true) : ''}</tbody>
     </table></div>`;
   //  Turkumi yo'q savdo — faqat reja umuman yo'q bo'lganda: rejasi bor
   //  varaqda u KPI ga tegishli emas.
@@ -240,8 +248,7 @@ function varaq(v) {
         </div>
       </div>
     </div>
-    ${jadval(S, n2, 'Summa, $', tsiz(S, n2))}
-    ${jadval(D, n0, 'Dona', tsiz(D, n0))}
+    ${jadval(tsiz(S, n2), tsiz(D, n0))}
   </div>`;
 }
 
