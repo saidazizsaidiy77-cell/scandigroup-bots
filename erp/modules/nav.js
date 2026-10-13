@@ -227,6 +227,17 @@ const NAVBATLAR = [
               izoh: `${n} ta omborlar aro hujjat sizni kutmoqda` }];
   },
 
+  //  ★ 6b. MIJOZDAN QAYTARISH — ombor mudirining navbati (zavod
+  //  qarori, 2026-10). Shart `modules/returns.js` dagi ro'yxat bilan
+  //  bir xil: `status = 'new'` — yozilgan, hali qabul qilinmagan.
+  async (req) => {
+    if (!bor(req, 'warehouse.move', 'warehouse.manage', 'production.manage')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n FROM cust_returns WHERE status = 'new'`);
+    return [{ page: '/qaytarish.html', mod: 'warehouse', n,
+              izoh: `${n} ta mijozdan qaytarish qabul qilinmagan` }];
+  },
+
   //  ★ 6a. CHEGIRMA TASDIG'I — DIREKTORNING NAVBATI (zavod qarori,
   //  2026-09). Narxdan past yozilgan buyurtma u qaror qilmaguncha
   //  omborga o'tmaydi, ya'ni menejer ham, mijoz ham kutib turadi.

@@ -21,6 +21,7 @@ const TURLAR = [
 
   { kod: 'fg_inbox',       bolim: 'Ombor', nom: 'T/M omborga qabul qilishni kutmoqda' },
   { kod: 'wh_return',      bolim: 'Ombor', nom: 'Omborlar aro hujjat' },
+  { kod: 'cust_return',    bolim: 'Ombor', nom: 'Mijozdan qaytarish — qabul kutmoqda' },
 
   { kod: 'order_to_ship',  bolim: 'Savdo', nom: 'Buyurtma chiqarishga berildi' },
   { kod: 'order_ready',    bolim: 'Savdo', nom: 'Buyurtma tayyor' },

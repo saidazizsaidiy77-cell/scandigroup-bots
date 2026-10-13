@@ -776,6 +776,7 @@ router.get('/track', need('production.view', 'production.entry',
 
   const { rows } = await db.query(
     `SELECT u.id, u.conveyor_no, u.part, u.qty, u.status, u.is_stock,
+            u.returned_qty,
             u.started_on, u.color, u.fabric, u.fg_on, u.ship_on,
             u.handover_on, u.order_no,
             sc.name AS section, sh.name AS shop,
@@ -821,7 +822,9 @@ router.get('/track', need('production.view', 'production.entry',
   //  chiqadi — sahifada takrorlansa bir kun ikkalasi ajralib ketardi.
   const joy = (r) => {
     if (r.status === 'cancelled') return 'Bekor qilingan';
-    if (r.status === 'shipped')   return `Mijozda — ${r.customer || 'nomsiz'}`;
+    //  Qaytgani o'z bo'lagida turadi — bu qator faqat qolganini aytadi
+    if (r.status === 'shipped')   return `Mijozda — ${r.customer || 'nomsiz'}`
+      + (r.returned_qty ? ` · ${r.returned_qty} tasi qaytgan` : '');
     if (r.status === 'fg')        return r.warehouse || 'T/M ombor';
     //  Ishlab chiqarishda: bo'limi bo'lsa tsexi bilan, bo'lmasa
     //  «Boshlanmagan» — buyurtmalar ro'yxatidagi bilan bir xil so'z.
@@ -829,7 +832,12 @@ router.get('/track', need('production.view', 'production.entry',
     return `${r.section}${r.shop ? ' · ' + r.shop : ''}`;
   };
 
-  const tirik = rows.filter((r) => r.status !== 'cancelled');
+  //  ★ MIJOZDAN QAYTGANI ikki marta sanalmaydi: chiqib ketgan qator
+  //  tarixda o'z sonida qoladi (izoh: sql/warehouse.sql), qaytgan dona
+  //  esa yangi bo'lakda turadi. Hisobda chiqqan qatorning QOLGANI olinadi.
+  const tirik = rows.filter((r) => r.status !== 'cancelled')
+    .map((r) => (r.status === 'shipped'
+      ? { ...r, qty: Number(r.qty) - Number(r.returned_qty || 0) } : r));
   const b = rows[0];
   res.json({
     found: true,
@@ -2003,7 +2011,7 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
   //    · bronda turgan konver bekor qilinmaydi — mijozga va'da qilingan
   //      mahsulot jimgina yo'qolib qolardi (soni bilan bir xil qoida);
   //    · chiqib ketgani bekor qilinmaydi — u mijozda va balansida turibdi,
-  //      qaytishi «Qaytib olish» bilan yoziladi (u hali yo'q).
+  //      qaytishi «Mijozdan qaytarish» hujjati bilan yoziladi (modules/returns.js).
   //  Qoldiq ham yangilanadi: `fg_stock` jamlanma jadval, konverni
   //  o'zgartirish uni o'zi tuzatmaydi.
   let oldUnit = null;

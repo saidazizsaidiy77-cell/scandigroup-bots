@@ -830,3 +830,64 @@ CREATE TABLE IF NOT EXISTS fg_counts (
 CREATE INDEX IF NOT EXISTS idx_fg_counts_on  ON fg_counts(counted_on);
 CREATE INDEX IF NOT EXISTS idx_fg_counts_wh  ON fg_counts(warehouse_id);
 CREATE INDEX IF NOT EXISTS idx_fg_counts_doc ON fg_counts(doc_no);
+
+-- ═══════════════════════════════════════════ MIJOZDAN QAYTARISH
+--
+--  ★ QAYTGAN MAHSULOT HUJJAT BILAN KIRADI (zavod qarori, 2026-10;
+--  `cust_returns`, `R26-0001`, `/qaytarish.html`). Mahsulot chiqib
+--  ketgan, keyin qaytadi: brak, o'lcham, mijoz fikrini o'zgartirdi.
+--  Ilgari buning yo'li YO'Q edi va mijozning qarzi ham, ombor ham
+--  yolg'on bo'lib qolardi.
+--
+--  Uch bosqich, ikki odam (vitrinadan qaytarish bilan bir xil idiom):
+--      1. savdo menejeri   hujjatni yozadi              new
+--      2. ombor mudiri     mahsulotni ko'rib qabul qiladi  accepted
+--  Qarz ham, ombor ham FAQAT ikkinchi bosqichda o'zgaradi.
+--
+--  ★ CHIQIB KETGAN QATOR TARIXDA O'Z HOLICHA QOLADI. Mijoz 10 ta
+--  olgani — fakt, u imzolagan yuk xatida yozilgan; 2 tasi qaytgani —
+--  boshqa kunning boshqa fakti. Shuning uchun chiqib ketgan qatorga
+--  faqat `returned_qty` qo'shiladi, qaytgan dona esa YANGI bo'lak
+--  bo'lib tug'iladi (raqami o'sha) va o'z yo'lidan yuradi: T/M omborga,
+--  tsexga tuzatishga yoki hisobdan chiqariladi. Qarzdan ayirma ham
+--  shunday — chiqim qatori qisqarmaydi, lentaga QAYTARISH qatori
+--  qo'shiladi (qaytgan kun bilan).
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS returned_qty INT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS cust_returns (
+  id           SERIAL PRIMARY KEY,
+  doc_no       TEXT UNIQUE,
+  customer_id  INT  NOT NULL REFERENCES customers(id),
+  ret_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  status       TEXT NOT NULL DEFAULT 'new'
+               CHECK (status IN ('new','accepted','rejected','cancelled')),
+  --  Sabab MAJBURIY: «nega qaytdi» degan savol mijoz bilan
+  --  solishtirishda birinchi beriladi.
+  note         TEXT NOT NULL,
+  created_by   INT REFERENCES workers(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  accepted_by  INT REFERENCES workers(id),
+  accepted_on  DATE,
+  decided_by   INT REFERENCES workers(id),
+  decided_at   TIMESTAMPTZ,
+  decide_note  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cust_ret_status ON cust_returns(status);
+CREATE INDEX IF NOT EXISTS idx_cust_ret_cust   ON cust_returns(customer_id);
+
+--  Narx YOZILGANDA qotadi — chiqib ketgan qatorning sotilgan narxi
+--  (yuk xatidan, izoh: «Narx — yuk xatidan»): mijoz qancha to'lagan
+--  bo'lsa, shuncha qaytadi.
+CREATE TABLE IF NOT EXISTS cust_return_items (
+  id          SERIAL PRIMARY KEY,
+  return_id   INT NOT NULL REFERENCES cust_returns(id) ON DELETE CASCADE,
+  unit_id     INT NOT NULL REFERENCES production_units(id),
+  qty         INT NOT NULL CHECK (qty > 0),
+  price       NUMERIC(14,2),
+  --  Qabul qilinganda: qayerga ketdi va qaysi yangi bo'lak bo'ldi
+  dest        TEXT CHECK (dest IN ('fg','shop','writeoff')),
+  section_id  INT REFERENCES sections(id),
+  new_unit_id INT REFERENCES production_units(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cust_ret_items_ret  ON cust_return_items(return_id);
+CREATE INDEX IF NOT EXISTS idx_cust_ret_items_unit ON cust_return_items(unit_id);

@@ -514,7 +514,13 @@ const App = (() => {
     //  turibdi (`/dalolatnoma.html`). Bu yerda qolgani nusxa edi va
     //  ekranda bitta bo'lim ikki marta ko'rinardi — biri ishlaydigan
     //  havola, ikkinchisi «rejada» degan kulrang yozuv.
-    { mod: 'sales', nav: 'Qaytib olish (mijozdan)',     perm: ['sales.manage'] },
+    //  ★ MIJOZDAN QAYTARISH (zavod qarori, 2026-10): menejer yozadi,
+    //  ombor mudiri qabul qiladi — sahifa ikkala bo'limda ham.
+    { href: '/qaytarish.html', mod: ['sales', 'warehouse'], nav: 'Qaytib olish (mijozdan)',
+      title: 'Mijozdan qaytarish', lead: 'Qaytgan mahsulot',
+      text: "Menejer hujjat yozadi \u00b7 ombor mudiri qabul qiladi \u00b7 qarz sotilgan narxda kamayadi",
+      perm: ['sales.view', 'sales.manage', 'warehouse.view', 'warehouse.move',
+             'warehouse.manage'] },
 
     // ═══════════════════════════════ TA'MINOT VA XOM ASHYO
     //

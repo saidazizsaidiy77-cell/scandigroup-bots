@@ -2031,6 +2031,50 @@ tanlamaydi, lekin javob ekranda bo'ladi.
 
 ---
 
+## Mijozdan qaytarish
+
+**★ QAYTGAN MAHSULOT HUJJAT BILAN KIRADI** (zavod qarori, 2026-10;
+`cust_returns`, `R26-0001`, `modules/returns.js`, `/qaytarish.html`).
+Ikki odam, ikki bosqich — vitrinadan qaytarish bilan bir xil idiom:
+
+    1. savdo menejeri   hujjatni yozadi: qaysi konverdan nechta, sabab   new
+    2. ombor mudiri     mahsulotni ko'rib qabul qiladi                   accepted
+
+**Qarz ham, ombor ham FAQAT qabulda o'zgaradi**: yo'ldagi mahsulot hali
+mijozniki. Yozilgan, lekin qabul qilinmagan dona ikkinchi hujjatga
+tushmaydi (`BOSH`). Sabab MAJBURIY. Rad etish va bekor qilish bitta
+yo'ldan (`/reject`): `rejected` — mudirniki, `cancelled` — o'zinikidir.
+
+**Qabulda har konver uchun QAYERGA ketishi tanlanadi**: T/M omborga
+(butun — qayta sotiladi), tsexga tuzatishga (marshrutdagi bo'limga yoki
+«boshlanmagan») yoki hisobdan chiqariladi. Konverning BIR QISMI qaytadi.
+
+**★ CHIQIB KETGAN QATOR TARIXDA O'Z HOLICHA QOLADI.** Mijoz 10 ta
+olgani — u imzolagan yuk xatidagi fakt; 2 tasi qaytgani — boshqa
+kunning boshqa fakti. Shuning uchun chiqqan qatorga faqat
+`returned_qty` qo'shiladi, qaytgan dona esa YANGI bo'lak bo'lib
+tug'iladi (raqami o'sha). Qarz ham shunday: chiqim qatori qisqarmaydi,
+lentaga QAYTARISH qatori (HAQDOR) o'z kuni bilan qo'shiladi —
+dalolatnomada ikkala hujjat ham ko'rinadi.
+
+**Summa — SOTILGAN narx** (`unit_price`, yuk xatidan), hujjat
+yozilganda qotadi. U uch joyga tushadi: mijoz balansi
+(`v_customer_sales.returned_amount`), qarzdorlik lentasi
+(`v_customer_ledger`, `kind = 'return'`) va foyda-zarar (`v_pl_month` —
+QAYTGAN oyning savdosidan ayiriladi, chiqqan oyniki o'zgarmaydi).
+Konver pasporti (`/track`) chiqqan qatordan qaytganini ayirib sanaydi —
+aks holda bitta dona ikki marta sanalardi.
+
+**Hali ayirilmaydi**: savdo KPI fakti, kesim kartochkalari
+(`v_channel_sales` …) va kunlik xulosa — ular yalpi chiqimni sanaydi.
+
+Huquqi: yozish — `sales.manage` (savdo doirasi CHEGARA: `channelsOf`,
+`ownOf`); qabul — `warehouse.move`/`manage`, `production.manage`.
+Ombor mudiriga Telegram xabari (`cust_return`) va menyuda navbat
+(`nav.js`, 6b).
+
+---
+
 ## Kassa
 
 **Ikkita pul joyi** (`cash_accounts`): **Asosiy kassa** (naqd) va **Bank
@@ -4079,7 +4123,7 @@ konver jurnaldan chiqib ketadi va u yerdan topilmasdi. Qoldiqdan ham,
 jamlanma `fg_stock` dan ham chiqadi; tarixi o'chmaydi — konver «bekor
 qilingan» bo'lib qoladi. Ikki holda bekor qilinmaydi: **bronda turgani**
 (mijozga va'da qilingan) va **chiqib ketgani** (u mijozda va balansida —
-qaytishi «Qaytib olish» bilan yoziladi, u hali yo'q).
+qaytishi «Mijozdan qaytarish» hujjati bilan yoziladi, pastda).
 
 ---
 

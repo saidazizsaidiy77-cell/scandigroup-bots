@@ -103,6 +103,9 @@ function draw() {
     if (r.kind === 'payment' && r.op_id)
       return `<a href="/kassa-orderi.html?id=${r.op_id}" target="_blank"
                 >${esc(r.doc_no || 'kirim orderi')}</a>`;
+    //  Mijozdan qaytarish — o'z hujjat raqami bilan (R26-…)
+    if (r.kind === 'return')
+      return `<span>${esc(r.doc_no || 'qaytarish')}</span>`;
     return `<span class="muted">${esc(r.order_no || '—')}</span>`;
   };
 
