@@ -225,28 +225,25 @@ SELECT worker_id, mon, indicator, category,
 --  menejer» va direktorning o'zi dasturda o'lchanmaydi. Rekursiya
 --  yozilsa bugun hech narsa bermay, ertaga halqani tekshirish
 --  kerak bo'lardi.
+--  ★ FAKT FAQAT O'ZIGA BIRIKTIRILGAN MIJOZDAN (zavod qarori, 2026-10 —
+--  oldingi «boshliqqa qo'l ostidagilarning yig'indisi» qarorini
+--  almashtiradi). Savdo bo'lim boshlig'ining ham o'z mijozlari bor va u
+--  shular bilan o'lchanadi; bo'lim yig'indisi uning varag'ini butun
+--  bo'limning savdosi bilan to'ldirib, o'zi nima qilgani ko'rinmay
+--  qolardi. `sales_head_id` KO'RISH uchun qoladi: boshliq qo'l
+--  ostidagilarning varag'ini ochadi (`GET /kpi`).
 WITH kim AS (
   SELECT c.id AS customer_id, c.manager_id AS worker_id
     FROM customers c
    WHERE c.manager_id IS NOT NULL
-  UNION
-  SELECT c.id, w.sales_head_id
-    FROM customers c
-    JOIN workers w ON w.id = c.manager_id
-   WHERE w.sales_head_id IS NOT NULL
   --  ★ IKKINCHI MENEJER ham (izoh: sql/units.sql). Mijozning savdosi
   --  ikkalasiga ham yoziladi; har biri faqat o'z rejasi bor turkum
-  --  bo'yicha o'lchanadi. `UNION` (ALL emas): ikkala menejerning
-  --  boshlig'i bitta bo'lsa unga mijoz BIR marta tushadi.
+  --  bo'yicha o'lchanadi. `UNION` (ALL emas): bitta odam ikkala katakda
+  --  tursa mijoz unga BIR marta tushadi.
   UNION
   SELECT c.id, c.manager2_id
     FROM customers c
    WHERE c.manager2_id IS NOT NULL
-  UNION
-  SELECT c.id, w.sales_head_id
-    FROM customers c
-    JOIN workers w ON w.id = c.manager2_id
-   WHERE w.sales_head_id IS NOT NULL
 )
 --  1. TUSHUM — mijozdan kelgan pul. Bekor qilingani va hali qabul
 --  qilinmagani (`pending`) sanalmaydi: pul hali kassada emas.
