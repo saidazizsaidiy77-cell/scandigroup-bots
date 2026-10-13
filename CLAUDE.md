@@ -3061,29 +3061,19 @@ ko'tarilmasdi.
 **Fayl migratsiyada ENG OXIRIDA**: `v_sales_kpi_fact` kassani ham
 (`cash_ops`) va savdo turkumini ham (`sales_categories`) o'qiydi.
 
-**★ BOSHLIQNING KPI SI MENEJERLARIDAN YIG'ILADI**
-(`workers.sales_head_id`, zavod qarori 2026-10). Savdo bo'lim
-boshlig'ining O'ZIDA mijoz yo'q — mijoz menejerga biriktirilgan
-(`customers.manager_id`) — ya'ni uning fakti HAR DOIM nol bo'lib
-turardi va unga qo'yilgan reja hech qachon bajarilmasdi.
+**★ BOSHLIQ HAM O'Z MIJOZLARI BILAN O'LCHANADI** (zavod qarori,
+2026-10 — ilgari uning fakti qo'l ostidagilarning yig'indisi edi).
+Savdo bo'lim boshlig'ining o'z mijozlari bor; bo'lim yig'indisi uning
+varag'ini butun bo'limning savdosi bilan to'ldirib, o'zi nima
+qilgani ko'rinmay qolardi. Fakt endi HAMMAGA bir xil:
+`customers.manager_id` yoki `manager2_id` (`v_sales_kpi_fact`, `kim`
+CTE).
 
-Belgi XODIMDA va Xodimlar sahifasida qo'yiladi: menejerning
-kartochkasida uning boshlig'i tanlanadi. Kodga na ism, na lavozim
-yoziladi (4-qoida) — ertaga menejer boshqa boshliqqa o'tsa bitta
-katakcha ko'chadi. **Rol buni ajrata olmaydi**: boshliq ham
-`savdo_boshliq`, menejer ham `sotuvchi` va rol huquqlari KODDA
-turadi.
-
-O'ZINI o'ziga boshliq qilib qo'yib bo'lmaydi (`CHECK`) va ikki
-odamni bir-biriga ham (`modules/admin.js`): halqa paydo bo'lsa
-yig'indi cheksiz aylanardi.
-
-Fakt BITTA joyda yig'iladi — `v_sales_kpi_fact` ning `kim` CTE si:
-mijoz O'Z menejeriga ham, menejerning boshlig'iga ham tegishli
-bo'ladi (`UNION`). Uchala shoxi ham shu CTE dan o'tadi, shuning uchun
-AKB ning `COUNT(DISTINCT)` i hech qachon ikki marta sanamaydi — ota
-qator bo'ysunuvchilarining mijozlarini QO'SHIB emas, BIRLASHTIRIB
-sanaydi.
+`workers.sales_head_id` KO'RISH uchun qoladi: boshliq qo'l
+ostidagilarning varag'ini ochadi va varaqda ularning ismi yozilib
+turadi. Belgi Xodimlar sahifasida, kodga na ism, na lavozim
+(4-qoida). O'zini o'ziga boshliq qilib qo'yib bo'lmaydi (`CHECK`) va
+ikki odamni bir-biriga ham (`modules/admin.js`).
 
 **Reja qo'yish huquqi `sales.kpi`** — FAQAT administrator (yuqorida).
 Tugma huquqi yo'q odamda umuman chizilmaydi, tekshiruv esa serverda.

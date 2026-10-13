@@ -8317,7 +8317,7 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   assert.ok(bosh.body.varaq.every((x) => x.worker_id === mgr));
   assert.equal((await qoy(items, men)).status, 403);
 
-  //  ── BOSHLIQ: fakti qo'l ostidagilardan, ko'rishi ham shular ─────
+  //  ── BOSHLIQ: fakti FAQAT o'z mijozlaridan, ko'rishi qo'l ostidagilar ─
   await db.query(`INSERT INTO workers (name) SELECT 'Sinov KPI boshliq'
                    WHERE NOT EXISTS (SELECT 1 FROM workers
                                       WHERE name = 'Sinov KPI boshliq')`);
@@ -8331,8 +8331,9 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
 
   const vb = await ol(boshId);
   assert.ok(vb, 'boshliqning varag\'i bor');
-  assert.equal(q(vb, 'DONA').fakt, 28, 'menejerning donasi kirdi');
-  assert.equal(vb.tushum, 221031);
+  //  ★ Menejerning savdosi boshliqqa QO'SHILMAYDI (zavod qarori, 2026-10).
+  assert.equal(q(vb, 'DONA').fakt, 0, 'menejerning donasi kirmaydi');
+  assert.equal(vb.tushum, 0);
   assert.deepEqual(vb.ostida, ['Sinov KPI menejer']);
 
   //  Boshliq rejani QO'YMAYDI, lekin o'zini va menejerini ko'radi —
