@@ -163,6 +163,9 @@ function varaq(v) {
     <td class="num">${n0(dn.reja)}</td>
     <td class="num">${n0(dn.fakt)}</td>
     <td class="num">${dn.reja ? pct(dn.bajarilish) : '—'}</td>
+    <td class="num">${n0(dn.plan_bugun)}</td>
+    <td class="num">${dn.reja ? `<span class="tag ${bajCls(dn.indeks)}">${pct(dn.indeks)}</span>` : '—'}</td>
+    <td class="num">${n0(dn.prognoz)}</td>
   </tr>`;
   //  ★ FAQAT REJA QO'YILGAN TURKUM CHIZILADI (zavod qarori, 2026-10).
   //  Ikki menejerli mijozda stol-stul menejeriga korpus ham yoziladi,
@@ -182,6 +185,7 @@ function varaq(v) {
     return { reja, fakt, plan_bugun: pb, prognoz: t('prognoz'),
              bajarilish: reja ? fakt / reja : 0, indeks: pb ? fakt / pb : 0 };
   };
+  const DJ = yig(D);
   const turkumlar = korin.map((c) =>
     qator(esc(c.name), ich(S, c.code), ich(D, c.code), false)).join('');
   //  Turkumi yo'q savdo — faqat reja umuman yo'q bo'lganda: rejasi bor
@@ -189,7 +193,7 @@ function varaq(v) {
   const turkumsiz = !rejali.length && (S.turkumsiz || D.turkumsiz) ? `<tr class="muted">
     <td>Turkumi qo'yilmagan</td><td class="num">—</td>
     <td class="num">${n2(S.turkumsiz)}</td><td colspan="5"></td>
-    <td class="num">${n0(D.turkumsiz)}</td><td></td></tr>` : '';
+    <td class="num">${n0(D.turkumsiz)}</td><td colspan="4"></td></tr>` : '';
   return `<div class="card" style="margin-top:16px">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;
          gap:16px;align-items:flex-end;margin-bottom:14px">
@@ -206,6 +210,16 @@ function varaq(v) {
           <div style="font-size:28px;font-weight:700">${n2(v.umumiy)}%</div>
           <div class="muted" style="font-size:11px">rejasi bor turkumlar summasi bo'yicha</div>
         </div>
+        <!--  ★ SONI HAM TEPADA (zavod qarori, 2026-10): reja summa VA
+              dona bilan qo'yiladi, ya'ni ikkinchi javob ham bir qarashda
+              ko'rinishi kerak. Umumiy KPI ga kirmaydi — stul dona, penal
+              komplekt (izoh: sql/sales-kpi.sql). -->
+        <div>
+          <div class="muted" style="font-size:12px">SONI</div>
+          <div style="font-size:28px;font-weight:700">${DJ.reja
+            ? n2(DJ.bajarilish * 100) + '%' : '—'}</div>
+          <div class="muted" style="font-size:11px">${n0(DJ.fakt)} / ${n0(DJ.reja)} dona</div>
+        </div>
         <div>
           <div class="muted" style="font-size:12px">BONUS (${n2(st)}%)</div>
           <div style="font-size:28px;font-weight:700">${n2(v.bonus)} $</div>
@@ -221,13 +235,14 @@ function varaq(v) {
       <thead><tr>
         <th rowspan="2">Turkum</th>
         <th class="num" colspan="6" style="text-align:center">Summa, $</th>
-        <th class="num" colspan="3" style="text-align:center">Dona</th>
+        <th class="num" colspan="6" style="text-align:center">Dona</th>
       </tr><tr>
         <th class="num">Reja</th><th class="num">Fakt</th>
         <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
         <th class="num">Indeks</th><th class="num">Prognoz</th>
         <th class="num">Reja</th><th class="num">Fakt</th>
-        <th class="num">Bajarilish</th>
+        <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
+        <th class="num">Indeks</th><th class="num">Prognoz</th>
       </tr></thead>
       <tbody>${turkumlar}${turkumsiz}${korin.length ? qator('Jami', yig(S), yig(D), true) : ''}</tbody>
     </table></div></div>`;
