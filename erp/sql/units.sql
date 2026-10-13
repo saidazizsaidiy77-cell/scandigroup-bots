@@ -186,6 +186,30 @@ CREATE INDEX IF NOT EXISTS idx_customers_region  ON customers(region);
 CREATE INDEX IF NOT EXISTS idx_customers_channel ON customers(channel);
 CREATE INDEX IF NOT EXISTS idx_customers_manager ON customers(manager_id);
 
+--  ★ IKKINCHI MENEJER (zavod qarori, 2026-10). B2B mijozida ikki
+--  menejer ishlaydi: biri stol va stul sotadi, ikkinchisi korpus
+--  mebel. Ikkalasi mijozni, uning butun qarzini va HAMMA buyurtmasini
+--  ko'radi — mijoz bilan gaplashganda to'liq manzara kerak. KPI da
+--  esa har biri faqat O'Z rejasi bor turkum bo'yicha o'lchanadi
+--  (`modules/sales.js`, `GET /kpi`): turkumni kodga yozish shart
+--  emas, reja buni o'zi aytadi.
+--
+--  Alohida «mijoz–menejer» jadvali yozilmadi: zavodda ikkitadan
+--  ko'p bo'lmaydi va bitta ustun har so'rovga bitta shart bo'lib
+--  qo'shiladi.
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS manager2_id INT REFERENCES workers(id);
+CREATE INDEX IF NOT EXISTS idx_customers_manager2 ON customers(manager2_id)
+  WHERE manager2_id IS NOT NULL;
+
+--  ★ «BU MIJOZ MENIKIMI» — BITTA JOYDA. «Faqat o'zinikini» chegarasi
+--  o'ttizga yaqin so'rovda turadi; ikkinchi menejer har biriga qo'lda
+--  yozilsa bittasi unutilardi va o'sha ekranda mijoz yo'qolib qolardi.
+CREATE OR REPLACE FUNCTION mijoz_meniki(cid INT, w INT) RETURNS BOOLEAN
+LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (SELECT 1 FROM customers
+                  WHERE id = cid AND w IN (manager_id, manager2_id))
+$$;
+
 -- ★ KONVEYER BIRLIGI
 --   conveyor_no — ishlab chiqarish beradi, majburiy va takrorlanmas
 --   order_no    — savdo bo'limi keyin qo'yadi; zakaz hali yo'q bo'lsa NULL

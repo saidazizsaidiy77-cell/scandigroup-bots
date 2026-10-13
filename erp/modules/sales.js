@@ -33,9 +33,13 @@ const channelsOf = (req) => {
 //  ★ O'Z BUYURTMASI — CHEGARA (`ownOf`, izoh: erp/auth.js). Tranzaksiya
 //  ichidagi yo'llarda buyurtma qatori allaqachon o'qilgan, shuning
 //  uchun ikkinchi so'rov yozilmaydi — tekshiruv shu yerda.
+//  Buyurtma o'ziniki — u yozgan YOKI mijoz uniki (ikki menejerli
+//  mijoz, izoh: sql/units.sql): ikkalasi ham mijozning hamma
+//  buyurtmasini ko'radi va yuritadi. `mijoz_m1/m2` buyurtmani o'qigan
+//  so'rovning o'zidan keladi.
 function assertOwn(req, o) {
   const own = ownOf(req);
-  if (own && o.manager_id !== own)
+  if (own && ![o.manager_id, o.mijoz_m1, o.mijoz_m2].includes(own))
     throw new Error('Bu buyurtma boshqa menejerniki');
 }
 
@@ -104,11 +108,11 @@ async function assertCustomer(client, req, customerId) {
   const chans = channelsOf(req);
   const own = ownOf(req);
   const { rows } = await client.query(
-    `SELECT name, channel, manager_id FROM customers WHERE id = $1`, [customerId]);
+    `SELECT name, channel, manager_id, manager2_id FROM customers WHERE id = $1`, [customerId]);
   if (!rows[0]) throw new Error('Mijoz topilmadi');
   if (chans && !chans.includes(rows[0].channel))
     throw new Error(`«${rows[0].name}» sizning yo'nalishingizda emas`);
-  if (own && rows[0].manager_id !== own)
+  if (own && ![rows[0].manager_id, rows[0].manager2_id].includes(own))
     throw new Error(`«${rows[0].name}» boshqa menejerning mijozi`);
 }
 
@@ -385,7 +389,7 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($5::text IS NULL OR order_no ILIKE '%' || $5 || '%'
              OR customer_name ILIKE '%' || $5 || '%')
         --  O'z buyurtmasi chegarasi: filtr EMAS, klient o'chira olmaydi.
-        AND ($6::int IS NULL OR manager_id = $6)
+        AND ($6::int IS NULL OR manager_id = $6 OR mijoz_meniki(customer_id, $6))
         --  ★ CHEGIRMA KUTAYOTGANLARI: shart nav.js dagi navbat bilan
         --  bir xil (izoh: chegirma filtri, yuqorida).
         AND ($7::boolean IS NOT TRUE
@@ -469,7 +473,7 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
         AND ($3::int  IS NULL OR manager_id = $3)
         AND ($4::text IS NULL OR order_no ILIKE '%' || $4 || '%'
              OR customer_name ILIKE '%' || $4 || '%')
-        AND ($5::int IS NULL OR manager_id = $5)
+        AND ($5::int IS NULL OR manager_id = $5 OR mijoz_meniki(customer_id, $5))
         --  Chegirma filtri yig'indiga ham TA'SIR QILADI — mijoz va
         --  menejer filtri bilan bir xil sabab: «chegirma kutayotgan
         --  buyurtmalarda qancha pul turibdi» degan savolga javob
@@ -494,7 +498,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   const o = (await db.query(
     `SELECT o.*, ${HOLAT} AS holat FROM v_sales_orders o
       WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
-        AND ($3::int IS NULL OR manager_id = $3)`,
+        AND ($3::int IS NULL OR manager_id = $3 OR mijoz_meniki(customer_id, $3))`,
     [req.params.id, chans, ownOf(req)])).rows[0];
   if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
@@ -964,7 +968,8 @@ router.patch('/orders/:id', need(...WRITE), wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const cur = (await client.query(
-      `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+      `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
+       FROM orders o JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
     if (!cur) throw new Error('Buyurtma topilmadi');
     const chans = channelsOf(req);
@@ -1229,7 +1234,7 @@ router.get('/orders/:id/candidates', need(...READ), wrap(async (req, res) => {
        JOIN customers c ON c.id = o.customer_id
       WHERE i.id = $1 AND i.order_id = $2
         AND ($3::text[] IS NULL OR c.channel = ANY($3))
-        AND ($4::int IS NULL OR o.manager_id = $4)`,
+        AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))`,
     [req.query.item_id, req.params.id, chans, ownOf(req)])).rows[0];
   if (!it) return res.status(404).json({ error: 'Qator topilmadi' });
 
@@ -1339,7 +1344,8 @@ router.post('/orders/:id/assign', need(...WRITE), wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const o = (await client.query(
-      `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+      `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
+       FROM orders o JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
     if (!o) throw new Error('Buyurtma topilmadi');
     const chans = channelsOf(req);
@@ -1482,7 +1488,8 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
 
     const o = (await client.query(
-      `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+      `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
+       FROM orders o JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
     if (!o) throw new Error('Buyurtma topilmadi');
     const chans = channelsOf(req);
@@ -1724,7 +1731,8 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
 //  yozadigan yagona ikkitasi — hech qachon yopilmasdi.
 router.post('/orders/:id/lock', need(...WRITE), wrap(async (req, res) => {
   const o = (await db.query(
-    `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+    `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
+       FROM orders o JOIN customers c ON c.id = o.customer_id
       WHERE o.id = $1`, [req.params.id])).rows[0];
   if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
   const chans = channelsOf(req);
@@ -2015,7 +2023,8 @@ router.post('/orders/:id/unassign', need(...WRITE), wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const o = (await client.query(
-      `SELECT o.*, c.channel FROM orders o JOIN customers c ON c.id = o.customer_id
+      `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
+       FROM orders o JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
     if (!o) throw new Error('Buyurtma topilmadi');
     const chans = channelsOf(req);
@@ -2093,7 +2102,7 @@ router.get('/waybill/:id', need(...READ, ...SHIP), wrap(async (req, res) => {
     `SELECT * FROM v_sales_orders
       WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
         --  Ombor mudirida doira yo'q, ya'ni hujjat unga ochiq qolaveradi.
-        AND ($3::int IS NULL OR manager_id = $3)`,
+        AND ($3::int IS NULL OR manager_id = $3 OR mijoz_meniki(customer_id, $3))`,
     [req.params.id, chans, ownOf(req)])).rows[0];
   if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
@@ -2146,7 +2155,7 @@ async function sendOne(req, id) {
   try {
     await client.query('BEGIN');
     const o = (await client.query(
-      `SELECT o.*, c.channel,
+      `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2,
               COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
                           JOIN order_items i ON i.id = r.order_item_id
                          WHERE i.order_id = o.id), 0)::int AS bron
@@ -2274,7 +2283,7 @@ router.patch('/orders/:id/payment', need(...WRITE), wrap(async (req, res) => {
        FROM customers c
       WHERE o.id = $1 AND c.id = o.customer_id
         AND ($3::text[] IS NULL OR c.channel = ANY($3))
-        AND ($4::int IS NULL OR o.manager_id = $4)
+        AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))
       RETURNING o.order_no, o.payment_on`,
     [req.params.id, req.body.payment_on || null, channelsOf(req), ownOf(req)]);
   if (!rows[0]) return res.status(404).json({ error: 'Buyurtma topilmadi' });
@@ -2296,7 +2305,7 @@ router.post('/orders/:id/unsend', need(...WRITE), wrap(async (req, res) => {
        FROM customers c
       WHERE o.id = $1 AND c.id = o.customer_id AND o.status = 'to_ship'
         AND ($2::text[] IS NULL OR c.channel = ANY($2))
-        AND ($3::int IS NULL OR o.manager_id = $3)
+        AND ($3::int IS NULL OR o.manager_id = $3 OR mijoz_meniki(o.customer_id, $3))
       RETURNING o.order_no`, [req.params.id, channelsOf(req), ownOf(req)]);
   if (!rows[0]) return res.status(400).json({ error: 'Buyurtma omborda emas' });
   await audit(req, { module: 'sales', action: 'send-undo', entity: 'order',
@@ -2421,36 +2430,36 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
            WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
              AND ($3::text[] IS NULL OR o.channel = ANY($3))
-             AND ($4::int IS NULL OR o.manager_id = $4)) AS chiqdi,
+             AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))) AS chiqdi,
          (SELECT COUNT(*) FROM v_sales_orders o
            WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
              AND ($3::text[] IS NULL OR o.channel = ANY($3))
-             AND ($4::int IS NULL OR o.manager_id = $4)) AS chiqdi_soni,
+             AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))) AS chiqdi_soni,
          --  ZAVODDA TURGANI — bugungi holat: bekor qilingani ham,
          --  chiqib ketgani ham hisobga olinmaydi (buyurtmalar
          --  ro'yxatidagi «Hammasi» chipi bilan bir xil qoida).
          (SELECT COALESCE(SUM(o.amount), 0) FROM v_sales_orders o
            WHERE o.status NOT IN ('shipped', 'cancelled')
              AND ($3::text[] IS NULL OR o.channel = ANY($3))
-             AND ($4::int IS NULL OR o.manager_id = $4)) AS zavodda,
+             AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))) AS zavodda,
          (SELECT COUNT(*) FROM v_sales_orders o
            WHERE o.status NOT IN ('shipped', 'cancelled')
              AND ($3::text[] IS NULL OR o.channel = ANY($3))
-             AND ($4::int IS NULL OR o.manager_id = $4)) AS zavodda_soni,
+             AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))) AS zavodda_soni,
          --  KECHIKKAN: mijozga aytilgan kun o'tib ketgan, lekin
          --  mahsulot hali chiqmagan.
          (SELECT COUNT(*) FROM v_sales_orders o
            WHERE o.status NOT IN ('shipped', 'cancelled')
              AND o.due_on IS NOT NULL AND o.due_on < CURRENT_DATE
              AND ($3::text[] IS NULL OR o.channel = ANY($3))
-             AND ($4::int IS NULL OR o.manager_id = $4)) AS kechikkan,
+             AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))) AS kechikkan,
          --  QARZ: mijozning balansi (boshlang'ich + chiqqan − to'lov).
          --  Faqat QARZDOR tomoni: haqdorni ayirish «0» degan javob
          --  berib, ikkalasini ham yashirardi (qarzdorlik hisoboti
          --  bilan bir xil qoida).
          (SELECT COALESCE(SUM(GREATEST(v.balance, 0)), 0) FROM v_customer_sales v
            WHERE ($3::text[] IS NULL OR v.channel = ANY($3))
-             AND ($4::int IS NULL OR v.manager_id = $4)) AS qarz`, P),
+             AND ($4::int IS NULL OR $4 IN (v.manager_id, v.manager2_id))) AS qarz`, P),
 
     //  Oylar bo'yicha chiqqan summa — trend. Oyi bo'sh bo'lsa ham
     //  ustun turadi: bo'sh ustun javob, yo'q ustun esa savol
@@ -2468,7 +2477,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
                 ON o.status = 'shipped'
                AND date_trunc('month', o.shipped_on) = oy.m
                AND ($3::text[] IS NULL OR o.channel = ANY($3))
-               AND ($4::int IS NULL OR o.manager_id = $4)
+               AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))
         GROUP BY oy.m ORDER BY oy.m`, P),
 
     //  Yo'nalish kesimi — ORALIQ ichida chiqqani.
@@ -2481,7 +2490,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          LEFT JOIN customer_channels ch ON ch.code = c.channel
         WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
           AND ($3::text[] IS NULL OR o.channel = ANY($3))
-          AND ($4::int IS NULL OR o.manager_id = $4)
+          AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))
         GROUP BY 1 ORDER BY amount DESC`, P),
 
     //  Menejerlar. Doirasi bor xodimda bitta qator qoladi va sahifa
@@ -2493,7 +2502,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          FROM v_sales_orders o
         WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
           AND ($3::text[] IS NULL OR o.channel = ANY($3))
-          AND ($4::int IS NULL OR o.manager_id = $4)
+          AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))
         GROUP BY 1 ORDER BY amount DESC LIMIT 8`, P),
 
     //  Mahsulot kesimi: qaysi mahsulot ko'p sotilgan. DONA emas,
@@ -2509,7 +2518,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          JOIN product_groups g ON g.id = p.group_id
         WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
           AND ($3::text[] IS NULL OR o.channel = ANY($3))
-          AND ($4::int IS NULL OR o.manager_id = $4)
+          AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))
         GROUP BY p.name, g.name ORDER BY amount DESC LIMIT 8`, P),
 
     //  Eng katta qarzdorlar — BUGUNGI holat (oraliqqa bog'liq emas).
@@ -2522,7 +2531,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          FROM v_customer_sales v
         WHERE v.balance > 0
           AND ($1::text[] IS NULL OR v.channel = ANY($1))
-          AND ($2::int IS NULL OR v.manager_id = $2)
+          AND ($2::int IS NULL OR $2 IN (v.manager_id, v.manager2_id))
         ORDER BY v.balance DESC LIMIT 10`, [chans, own]),
 
     //  Buyurtmalar HOLAT bo'yicha — bugun zavodda nima turibdi.
@@ -2534,7 +2543,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          FROM v_sales_orders o
         WHERE o.status NOT IN ('shipped', 'cancelled')
           AND ($1::text[] IS NULL OR o.channel = ANY($1))
-          AND ($2::int IS NULL OR o.manager_id = $2)
+          AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
         GROUP BY o.status ORDER BY amount DESC`, [chans, own]),
   ]);
 
@@ -2581,7 +2590,7 @@ router.get('/day', need(...KUN), wrap(async (req, res) => {
         AND (o.status = 'to_ship'
              OR (o.status = 'shipped'
                  AND o.shipped_on = COALESCE($1::date, CURRENT_DATE)))
-        AND ($2::int IS NULL OR o.manager_id = $2)
+        AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
       ORDER BY (o.status = 'shipped'), o.plan_on, o.order_no`, [on, own]);
   res.json({
     on,
@@ -2856,8 +2865,8 @@ const DEBT_SQL = `
      --  Ikkisi bir xil ustunni qaraydi, lekin bir xil narsa emas:
      --  birini xodim o'zi tanlaydi, ikkinchisini klient o'chira
      --  olmaydi (buyurtmalar ro'yxati bilan aynan bir xil idiom).
-     AND ($5::int IS NULL OR c.manager_id = $5)
-     AND ($6::int IS NULL OR c.manager_id = $6)
+     AND ($5::int IS NULL OR $5 IN (c.manager_id, c.manager2_id))
+     AND ($6::int IS NULL OR $6 IN (c.manager_id, c.manager2_id))
      AND ($4::text IS NULL OR c.name ILIKE '%' || $4 || '%'
           OR c.region ILIKE '%' || $4 || '%' OR c.phone ILIKE '%' || $4 || '%')
    GROUP BY c.id, c.name, c.region, c.phone, c.channel, ch.name, m.name
@@ -2918,7 +2927,7 @@ router.get('/debts/:id', need(...READ), wrap(async (req, res) => {
   const c = (await db.query(
     `SELECT id, name FROM customers
       WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
-        AND ($3::int IS NULL OR manager_id = $3)`,
+        AND ($3::int IS NULL OR $3 IN (manager_id, manager2_id))`,
     [req.params.id, chans, ownOf(req)])).rows[0];
   if (!c) return res.status(404).json({ error: 'Mijoz topilmadi' });
 
@@ -2969,7 +2978,7 @@ router.get('/payment/:id', need(...READ), wrap(async (req, res) => {
        LEFT JOIN workers k     ON k.id = o.created_by
        LEFT JOIN orders ord    ON ord.id = o.order_id
       WHERE o.id = $1 AND ($2::text[] IS NULL OR c.channel = ANY($2))
-        AND ($3::int IS NULL OR c.manager_id = $3)`,
+        AND ($3::int IS NULL OR $3 IN (c.manager_id, c.manager2_id))`,
     [req.params.id, chans, ownOf(req)])).rows[0];
   if (!o) return res.status(404).json({ error: 'Hujjat topilmadi' });
   res.json({ op: o });
@@ -3076,10 +3085,12 @@ async function mijozSaldoMatni(rows) {
 async function qarzYubor(client) {
   const c = client || db;
   const { rows } = await c.query(
-    `SELECT v.manager_id, v.name, v.balance
+    `SELECT k.manager_id, v.name, v.balance
        FROM v_customer_sales v
-      WHERE v.manager_id IS NOT NULL AND ROUND(v.balance::numeric, 2) <> 0
-      ORDER BY v.manager_id, ABS(v.balance) DESC, v.name`);
+       --  Ikki menejerli mijoz ikkalasining ro'yxatida turadi.
+       CROSS JOIN LATERAL (VALUES (v.manager_id), (v.manager2_id)) k(manager_id)
+      WHERE k.manager_id IS NOT NULL AND ROUND(v.balance::numeric, 2) <> 0
+      ORDER BY k.manager_id, ABS(v.balance) DESC, v.name`);
   const kimga = new Map();
   for (const r of rows) {
     if (!kimga.has(r.manager_id)) kimga.set(r.manager_id, []);
@@ -3489,7 +3500,7 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     //  (menejer ro'yxati bilan bir xil qoida — huquqdan chiqadi,
     //  lavozimdan emas).
     db.query(
-      `SELECT DISTINCT w.id, w.name, w.sales_head_id
+      `SELECT DISTINCT w.id, w.name, w.sales_head_id, w.kpi_bonus_tushum
          FROM workers w
          JOIN worker_roles wr      ON wr.worker_id = w.id
          JOIN role_permissions rp  ON rp.role_code = wr.role_code
@@ -3550,14 +3561,28 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     //  shu summaning rejasi. Dona umumiy foizga KIRMAYDI — stul dona,
     //  penal komplekt va ularni qo'shib bo'lmaydi; u har turkumda o'z
     //  bajarilishi bilan turadi.
-    const asosiy = qator.find((q) => q.code === 'SEGMENT') || { bajarilish: 0 };
-    const umumiy = asosiy.bajarilish;
+    //
+    //  ★ FAQAT REJASI BOR TURKUM HISOBGA OLINADI (zavod qarori,
+    //  2026-10). Ikki menejerli mijozda (izoh: sql/units.sql) savdoning
+    //  hammasi ikkalasiga ham yoziladi — stol-stul sotadiganiga korpus
+    //  ham tushadi. Qaysi turkum kimniki ekanini REJA aytadi: stol-stul
+    //  menejeriga korpusga reja qo'yilmaydi, ya'ni korpus savdosi uning
+    //  foizini ham, bonusini ham ko'tarmaydi. Varaqda esa ko'rinib
+    //  turadi — yashirilgan raqam savol qoldirardi.
+    const asosiy = qator.find((q) => q.code === 'SEGMENT') || { ichi: [] };
+    const rejali = asosiy.ichi.filter((c) => c.reja > 0);
+    const rejaJami = rejali.reduce((a, c) => a + c.reja, 0);
+    const savdo = rejali.reduce((a, c) => a + c.fakt, 0);
+    const umumiy = rejaJami > 0 ? savdo / rejaJami : 0;
 
-    //  Bonus BAZASI — tushgan pul (zavod qarori): KPI eshikni ochadi,
-    //  pul esa hajmini beradi. TUSHUM endi ko'rsatkich emas, lekin
-    //  fakti view'da qoladi — baza shundan.
+    //  ★ BONUS BAZASI XODIMDA (`workers.kpi_bonus_tushum`, zavod
+    //  qarori 2026-10): menejerga SAVDODAN (rejasi bor turkumlar),
+    //  belgilangan xodimga TUSHGAN PULDAN. KPI eshikni ochadi, baza
+    //  hajmini beradi.
     const tushum = fk.filter((f) => f.indicator === 'TUSHUM')
       .reduce((a, f) => a + son(f.fakt), 0);
+    const tushumdan = !!(xodim.rows.find((w) => w.id === wid) || {}).kpi_bonus_tushum;
+    const baza = tushumdan ? tushum : savdo;
     const foiz = umumiy * 100;
     const stavka = bonusStavka(bands.rows, foiz);
     //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
@@ -3573,8 +3598,9 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       worker_name: (xodim.rows.find((w) => w.id === wid) || {}).name
         || (pl[0] || {}).worker_name || '',
       ostida,
-      qator, umumiy: foiz, tushum,
-      bonus_stavka: stavka, bonus: tushum * stavka / 100,
+      qator, umumiy: foiz, tushum, savdo,
+      bonus_baza: tushumdan ? 'tushum' : 'savdo',
+      bonus_stavka: stavka, bonus: baza * stavka / 100,
     };
   }).sort((a, b) => b.umumiy - a.umumiy);
 

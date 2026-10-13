@@ -595,6 +595,17 @@ function openForm(id){
               <div class="muted" style="font-size:12px;margin-top:4px">
                 Shu menejerning savdosi boshliqning KPI siga ham
                 qo'shiladi. Boshliqning o'zida bo'sh qoladi.</div>
+            </div>
+            <!--  ★ KPI BONUSI QAYSI RAQAMDAN (zavod qarori, 2026-10):
+                  menejerlarga SAVDODAN (chiqib ketgan mahsulot),
+                  belgilangan xodimga esa TUSHGAN PULDAN. Kodga ism
+                  yozilmaydi (4-qoida) — belgi xodimda. -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:10px">
+              <input type="checkbox" id="wBonusTushum" style="width:auto"
+                     ${w?.kpi_bonus_tushum ? 'checked' : ''}>
+              <span style="flex:1">KPI bonusi tushgan puldan
+                <span class="muted" style="font-size:12px">· belgilanmasa bonus
+                  savdo summasidan (chiqib ketgan mahsulot) hisoblanadi</span></span>
             </div></div>
 
           <!--  ★ KONVER SO'ROVINI KIM YOZADI (izoh: sql/units.sql).
@@ -832,6 +843,7 @@ async function save(id){
     //  Bo'sh tanlangani «yo'q» degani: menejerni boshliqdan
     //  chiqarish uchun boshqa yo'l qolmasdi.
     sales_head_id: Number($('wSalesHead').value) || 0,
+    kpi_bonus_tushum: $('wBonusTushum').checked,
     sees_cash: $('wCashSee').checked,
     can_add_supplier: $('wSupAdd').checked,
     can_request_unit: $('wReq').checked,

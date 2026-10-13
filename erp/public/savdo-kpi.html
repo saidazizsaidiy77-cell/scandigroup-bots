@@ -118,9 +118,10 @@ function draw() {
     qismi; <b>indeks</b> — fakt shu rejaning necha foizi;
     <b>prognoz</b> — shu sur'atda oy oxirida qancha bo'lishi.
     Rang <b>indeksda</b>: 100% — sur'at joyida, undan past — orqada.
-    <b>Umumiy KPI</b> — jami summa bo'yicha (og'irliksiz); dona har
-    turkumda alohida, chunki stul dona, penal komplekt. Mijozdan
-    qaytgani qaytgan oyda ayiriladi.`;
+    <b>Umumiy KPI</b> — rejasi bor turkumlar summasi bo'yicha
+    (og'irliksiz): ikki menejerli mijozda har kim faqat o'z turkumi
+    bilan o'lchanadi. Dona har turkumda alohida, chunki stul dona,
+    penal komplekt. Mijozdan qaytgani qaytgan oyda ayiriladi.`;
 
   $('printHead').innerHTML = `<h2>Savdo KPI</h2>
     <div>${d.yil}-yil ${String(d.oy).padStart(2, '0')}-oy
@@ -185,14 +186,16 @@ function varaq(v) {
         <div>
           <div class="muted" style="font-size:12px">UMUMIY KPI</div>
           <div style="font-size:28px;font-weight:700">${n2(v.umumiy)}%</div>
-          <div class="muted" style="font-size:11px">jami summa bo'yicha</div>
+          <div class="muted" style="font-size:11px">rejasi bor turkumlar summasi bo'yicha</div>
         </div>
         <div>
           <div class="muted" style="font-size:12px">BONUS (${n2(st)}%)</div>
           <div style="font-size:28px;font-weight:700">${n2(v.bonus)} $</div>
           <!--  Bonus BAZASI — tushgan pul, reja emas: KPI eshikni
                 ochadi, pul esa hajmini beradi (zavod qarori). -->
-          <div class="muted" style="font-size:11px">tushgan pul ${n2(v.tushum)} $ dan</div>
+          <div class="muted" style="font-size:11px">${v.bonus_baza === 'tushum'
+            ? `tushgan pul ${n2(v.tushum)} $ dan`
+            : `savdo ${n2(v.savdo)} $ dan`}</div>
         </div>
       </div>
     </div>

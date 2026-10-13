@@ -90,7 +90,7 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  mijozdan yig'adi (`mijozOwn`, `channelsOf`, yuqorida).
     db.query(`SELECT id, name, region FROM customers
                WHERE active AND ($1::text[] IS NULL OR channel = ANY($1))
-                 AND ($2::int IS NULL OR manager_id = $2)
+                 AND ($2::int IS NULL OR $2 IN (manager_id, manager2_id))
                ORDER BY name`, [chans, mijozOwn(req)]),
     //  Ta'minotchi ro'yxati HAMMAGA: podotchyot olgan xodim ham
     //  ta'minotchiga to'lov qiladi (ombor mudiri bozorda naqd
@@ -427,7 +427,8 @@ async function assertSide(client, kind, id, req) {
     const own = mijozOwn(req);
     if (own) {
       const ok = await client.query(
-        `SELECT 1 FROM customers WHERE id = $1 AND manager_id = $2`, [id, own]);
+        `SELECT 1 FROM customers WHERE id = $1 AND $2 IN (manager_id, manager2_id)`,
+        [id, own]);
       if (!ok.rowCount) throw new Error('Bu mijoz boshqa menejerniki');
     }
   }

@@ -3000,7 +3000,7 @@ qo'yiladi: **qancha dollarlik** (`SEGMENT`) va **nechta dona**
 sifatida o'chirildi (`migration_flags`: `kpi-ogirliksiz`), og'irlik
 ham.
 
-    UMUMIY KPI  =  jami summa fakti ÷ jami summa rejasi
+    UMUMIY KPI  =  rejasi bor turkumlar fakti ÷ ularning rejasi
 
 **Dona umumiy foizga KIRMAYDI**: stul DONA, penal KOMPLEKT va
 ularni qo'shib bo'lmaydi (ombor qoldig'i bilan bir xil qoida) — u
@@ -3010,9 +3010,28 @@ har turkumda o'z bajarilishi bilan turadi.
 qaytarish QAYTGAN oyda, faqat qabul qilingani, hujjatda qotgan
 sotilgan narx bilan (foyda-zarar bilan bir xil qoida).
 
-**Bonus bazasi baribir TUSHGAN PUL** (kassadan): KPI eshikni ochadi,
-pul hajmini beradi. Shuning uchun TUSHUM fakti view'da qoladi,
-ko'rsatkich bo'lmasa ham.
+**★ BONUS BAZASI XODIMDA** (`workers.kpi_bonus_tushum`, zavod
+qarori 2026-10): menejerga **SAVDODAN** (rejasi bor turkumlar
+bo'yicha chiqib ketgan mahsulot), belgilangan xodimga **TUSHGAN
+PULDAN** (kassa). Standarti `false` — savdo. Belgi Xodimlar
+sahifasida, «Savdo bo'lim boshlig'i» ostida. TUSHUM fakti shu sababdan
+view'da qoladi, ko'rsatkich bo'lmasa ham.
+
+**★ IKKI MENEJERLI MIJOZ** (`customers.manager2_id`, zavod qarori
+2026-10). B2B mijozida ikki menejer ishlaydi: biri stol-stul,
+ikkinchisi korpus. **Ikkalasi mijozni, butun qarzini va HAMMA
+buyurtmasini ko'radi** — «Faqat o'zinikini» chegarasi bitta
+funksiyadan o'tadi (`mijoz_meniki(cid, w)`, `sql/units.sql`) va
+mijozning menejeri (birinchi ham, ikkinchi ham) o'z mijozining
+buyurtmasini kim yozganidan qat'i nazar ko'radi.
+
+KPI fakti ikkalasiga ham yoziladi (`v_sales_kpi_fact`, `kim` CTE),
+lekin **umumiy foiz va bonus FAQAT REJASI BOR turkumdan**: stol-stul
+menejeriga korpusga reja qo'yilmaydi, ya'ni korpus savdosi uning
+foizini ko'tarmaydi. Qaysi turkum kimniki ekanini kodga yozish
+shart emas — reja buni aytadi. Varaqda esa hamma turkum ko'rinadi.
+Ikkinchi menejerni doirasi yo'q xodim qo'yadi (mijoz kartochkasi,
+«2-menejer»); 09:00 dagi qarz xabari ikkalasiga ham boradi.
 
 **★ REJANI FAQAT ADMINISTRATOR QO'YADI** (`sales.kpi`, zavod
 qarori 2026-10). Direktor va savdo boshlig'idan olib tashlandi —

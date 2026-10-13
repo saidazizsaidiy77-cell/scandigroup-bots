@@ -36,7 +36,7 @@ router.get('/customers', need('production.view', 'sales.view'), wrap(async (req,
   const [customers, channels, managers] = await Promise.all([
     db.query(`SELECT * FROM v_customer_sales
                WHERE ($1::text[] IS NULL OR channel = ANY($1))
-                 AND ($2::int IS NULL OR manager_id = $2)
+                 AND ($2::int IS NULL OR $2 IN (manager_id, manager2_id))
                ORDER BY name`, [chans, own]),
     db.query(`SELECT * FROM customer_channels ORDER BY sort`),
     //  ★ MENEJER RO'YXATIDA FAQAT SAVDO XODIMI (zavod qarori, 2026-09).
@@ -62,7 +62,8 @@ router.get('/customers', need('production.view', 'sales.view'), wrap(async (req,
         WHERE w.active
           AND (EXISTS (SELECT 1 FROM v_worker_permissions vp
                         WHERE vp.worker_id = w.id AND vp.module = 'sales')
-            OR EXISTS (SELECT 1 FROM customers c WHERE c.manager_id = w.id)
+            OR EXISTS (SELECT 1 FROM customers c
+                        WHERE w.id IN (c.manager_id, c.manager2_id))
             OR EXISTS (SELECT 1 FROM orders o    WHERE o.manager_id = w.id))
         ORDER BY is_sales DESC, w.name`),
   ]);
@@ -116,14 +117,16 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
       // Takror kiritilsa yangi qator yaratmaydi — bo'sh maydonlarni to'ldiradi
       const { rows } = await client.query(
         `INSERT INTO customers (name, phone, country, region, channel, manager_id,
-                                note, opening_debt, opening_debt_on)
-         VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8,$9)
+                                note, opening_debt, opening_debt_on, manager2_id)
+         VALUES ($1,$2, COALESCE($3, 'O''zbekiston'), $4,$5,$6,$7,$8,$9,
+                 NULLIF($10::int, $6::int))
          ON CONFLICT (lower(name)) DO UPDATE SET
            phone      = COALESCE(EXCLUDED.phone,      customers.phone),
            country    = COALESCE(EXCLUDED.country,    customers.country),
            region     = COALESCE(EXCLUDED.region,     customers.region),
            channel    = COALESCE(EXCLUDED.channel,    customers.channel),
            manager_id = COALESCE(EXCLUDED.manager_id, customers.manager_id),
+           manager2_id = COALESCE(EXCLUDED.manager2_id, customers.manager2_id),
            note       = COALESCE(EXCLUDED.note,       customers.note),
            -- Boshlang'ich qarz bir marta kiritiladi. Qayta yuklashda
            -- yozilgani o'chmaydi, faqat bo'sh bo'lsa to'ldiriladi.
@@ -132,7 +135,10 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
          RETURNING id, name, phone, country, region, channel, manager_id`,
         [name, it.phone || null, it.country || null, it.region || null,
          it.channel || null, it.manager_id || null, it.note || null,
-         it.opening_debt ?? null, it.opening_debt_on || null]);
+         it.opening_debt ?? null, it.opening_debt_on || null,
+         //  Ikkinchi menejerni doirasi bor xodim qo'ymaydi (PATCH bilan
+         //  bir xil qoida).
+         ownOf(req) ? null : (Number(it.manager2_id) || null)]);
       saved.push(rows[0]);
     }
     await client.query('COMMIT');
@@ -147,7 +153,7 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
 
 router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
   const { name, phone, country, region, channel, manager_id, note, active,
-          opening_debt, opening_debt_on } = req.body;
+          opening_debt, opening_debt_on, manager2_id } = req.body;
   const { rows } = await db.query(
     `UPDATE customers SET
        name       = COALESCE($2, name),
@@ -162,18 +168,25 @@ router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
        -- raqamni tozalash imkoni bo'lsin. Shuning uchun COALESCE emas —
        -- maydon yuborilgan bo'lsa nima yuborilgan bo'lsa shu yoziladi.
        opening_debt    = CASE WHEN $10::boolean THEN $11::numeric ELSE opening_debt END,
-       opening_debt_on = CASE WHEN $10::boolean THEN $12::date    ELSE opening_debt_on END
+       opening_debt_on = CASE WHEN $10::boolean THEN $12::date    ELSE opening_debt_on END,
+       --  ★ IKKINCHI MENEJER (izoh: sql/units.sql). Bo'sh yuborilgani
+       --  «tegma» emas, «yo'q» degani; maydon kelmasa tegilmaydi.
+       --  Doirasi bor xodim uni o'zgartirmaydi — kim kimga biriktirilishi
+       --  doirasi yo'q xodimning ishi (birinchi menejer bilan bir xil).
+       manager2_id = CASE WHEN $14::boolean AND $13::int IS NULL
+                          THEN NULLIF($15::int, manager_id) ELSE manager2_id END
      WHERE id = $1
        --  Chegara SHU YERDA ham: doirasi bor xodim boshqa menejerning
        --  mijozini id bilan yuborib tahrirlay olmaydi.
-       AND ($13::int IS NULL OR manager_id = $13)
+       AND ($13::int IS NULL OR $13 IN (manager_id, manager2_id))
      RETURNING id`,
     [req.params.id, name || null, phone || null, country || null, region || null,
      channel || null, manager_id || null, note || null,
      typeof active === 'boolean' ? active : null,
      opening_debt !== undefined,
      opening_debt === '' || opening_debt == null ? null : Number(opening_debt),
-     opening_debt_on || null, ownOf(req)]);
+     opening_debt_on || null, ownOf(req),
+     manager2_id !== undefined, Number(manager2_id) || null]);
   if (!rows[0]) return res.status(404).json({ error: 'Mijoz topilmadi' });
   res.json({ ok: true });
 }));
