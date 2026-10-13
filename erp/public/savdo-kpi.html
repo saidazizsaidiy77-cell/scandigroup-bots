@@ -188,11 +188,18 @@ function varaq(v) {
   //  ikki alohida jadvalda bitta turkumning summasi va donasi bir-biridan
   //  uzoqda turardi va ko'z ularni juftlab o'qiy olmasdi. Endi har turkum
   //  ikki qator — summa, ostida mayda yozuvda donasi.
+  //  ★ DONA BOSILGANDA OCHILADI (zavod qarori, 2026-10): har turkum
+  //  ostida doim turgan dona qatori jadvalni ikki barobar uzaytirardi va
+  //  asosiy javob — summa — o'sha qatorlar orasida yo'qolardi. Turkum
+  //  qatori bosilsa ostida donasi chiqadi, yana bosilsa yopiladi.
   const juft = (nom, c, jami) => {
     const s = c ? ich(S, c.code) : yig(S), dn = c ? ich(D, c.code) : yig(D);
-    return qator(`${nom} <span class="muted" style="font-size:11px">· $</span>`, s, n2, jami)
+    const kalit = `d-${v.worker_id}-${c ? c.code : 'jami'}`;
+    return qator(`${nom} <span class="muted" style="font-size:11px">▾ dona</span>`, s, n2, false)
+        .replace(/^<tr>/, `<tr style="cursor:pointer${jami ? ';font-weight:700' : ''}"
+          onclick="ochYop('${kalit}')">`)
       + qator(`<span class="muted" style="padding-left:16px">dona</span>`, dn, n0, false)
-        .replace('<tr>', '<tr class="dona-qator" style="font-size:12px">');
+        .replace('<tr>', `<tr class="${kalit}" style="display:none;font-size:12px">`);
   };
   const jadval = (tsizS, tsizD) => `<div style="overflow-x:auto;margin-top:14px">
     <table style="table-layout:fixed;min-width:760px">
@@ -250,6 +257,12 @@ function varaq(v) {
     </div>
     ${jadval(tsiz(S, n2), tsiz(D, n0))}
   </div>`;
+}
+
+function ochYop(k) {
+  document.querySelectorAll('.' + k).forEach((tr) => {
+    tr.style.display = tr.style.display === 'none' ? '' : 'none';
+  });
 }
 
 // ═══════════════════════════════════════════════ REJA QO'YISH
