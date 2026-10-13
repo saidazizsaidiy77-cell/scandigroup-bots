@@ -3521,6 +3521,57 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const nisbat = K.jami_kun ? K.otgan_kun / K.jami_kun : 0;
   const son = (v) => Number(v || 0);
 
+  //  ★ PROGNOZ — FAKT + JARAYONDAGI BUYURTMALAR (zavod qarori,
+  //  2026-10). Ilgari prognoz sur'atdan edi (fakt ÷ o'tgan kunlar
+  //  ulushi): oyning birinchi kunlaridagi bitta katta yuk oy oxirini
+  //  o'n barobar qilib ko'rsatardi, bo'sh kunlar esa nolga tushirardi.
+  //  Zavodda esa javob allaqachon bor — yozilgan, lekin hali chiqib
+  //  ketmagan buyurtmalar: boshlanmagan, ishlab chiqarilmoqda, tayyor
+  //  va mijozga chiqarilsin. Ular holat bo'yicha BO'LINMAYDI — bitta
+  //  umumiy raqam («jarayondagi buyurtmalar»).
+  //
+  //  Bog'lanish FAKT bilan AYNAN bir xil: mijozning menejeri (birinchi
+  //  ham, ikkinchi ham — `v_sales_kpi_fact`, `kim` CTE), turkum
+  //  guruhdan, dona faqat `kpi_dona` li guruhda. Aks holda fakt bir
+  //  qoida bilan, prognoz boshqasi bilan yig'ilib, bir-biriga
+  //  qo'shilmasdi.
+  //
+  //  Faqat JORIY oyda: o'tgan oyning prognozi uning fakti, keyingi oyga
+  //  esa bugungi buyurtmalar ro'yxati javob emas.
+  const joriy = K.mon === KPI_OY().mon;
+  const jarayon = !joriy ? [] : (await db.query(
+    `WITH kim AS (
+       SELECT id AS customer_id, manager_id AS worker_id FROM customers
+        WHERE manager_id IS NOT NULL
+       UNION
+       SELECT id, manager2_id FROM customers WHERE manager2_id IS NOT NULL)
+     SELECT k.worker_id, g.sales_category AS category,
+            SUM(oi.qty * COALESCE(oi.unit_price, 0)) AS summa,
+            COALESCE(SUM(oi.qty) FILTER (WHERE g.kpi_dona), 0) AS dona
+       FROM orders o
+       JOIN kim k              ON k.customer_id = o.customer_id
+       JOIN order_items oi     ON oi.order_id = o.id
+       JOIN products p         ON p.id = oi.product_id
+       LEFT JOIN product_groups g ON g.id = p.group_id
+      WHERE o.status IN ('new', 'reserved', 'to_ship')
+        AND ($1::int IS NULL OR k.worker_id = $1)
+        AND ($2::int[] IS NULL OR k.worker_id = ANY($2))
+      GROUP BY 1, 2`, [kim, doira])).rows;
+
+  //  ★ PUL TUSHUMI PROGNOZI — PUL KIRIM SANASIDAN (`orders.payment_on`).
+  //  Menejer mijoz bilan kelishgan kun shu oyga tushgan buyurtmalar —
+  //  butun zavodniki, chunki belgili xodimning fakti ham butun
+  //  zavodniki. Faqat BUGUNDAN keyingi kun: o'tib ketgani yo pul
+  //  allaqachon kelgan (faktda turibdi) yo kelmagan — ikkala holda ham
+  //  qo'shish yolg'on bo'lardi.
+  const kutilganPul = !joriy ? 0 : Number((await db.query(
+    `SELECT COALESCE(SUM(oi.qty * COALESCE(oi.unit_price, 0)), 0) AS s
+       FROM orders o JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status <> 'cancelled'
+        AND o.payment_on >= CURRENT_DATE
+        AND date_trunc('month', o.payment_on)::date = $1::date`,
+    [K.mon])).rows[0].s);
+
   //  Har xodim uchun alohida varaq — Excel'dagi bilan bir xil shakl.
   //  ★ ISHDAN KETGAN XODIMNING VARAG'I CHIZILMAYDI (zavod qarori,
   //  2026-10). Uning mijozlari hali unga biriktirilgan bo'lishi mumkin va
@@ -3537,7 +3588,13 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     const pl = plans.rows.filter((p) => p.worker_id === wid);
     const fk = facts.rows.filter((f) => f.worker_id === wid);
 
+    const jr = jarayon.filter((x) => x.worker_id === wid);
+    const jar = (code, cat) => jr
+      .filter((x) => cat === undefined || x.category === cat)
+      .reduce((a, x) => a + son(code === 'DONA' ? x.dona : x.summa), 0);
+
     const qator = ind.rows.map((i) => {
+      const bor = i.code === 'SEGMENT' || i.code === 'DONA';
       const otaReja = pl.find((p) => p.indicator === i.code && !p.category);
       //  ★ OTA QATOR YIG'INDI: fakt turkumlardan qo'shiladi, reja esa
       //  turkumlardan yig'iladi (eski oylarda ota qatorda turgan bo'lsa
@@ -3552,11 +3609,12 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       const ichi = !i.by_category ? [] : cat.rows.map((c) => {
         const r = son((turkumReja.find((p) => p.category === c.code) || {}).plan);
         const f = son((faktlar.find((x) => x.category === c.code) || {}).fakt);
+        const j = bor ? jar(i.code, c.code) : 0;
         return { code: c.code, name: c.name, reja: r, fakt: f,
                  bajarilish: r > 0 ? f / r : 0,
                  plan_bugun: r * nisbat,
                  indeks: r * nisbat > 0 ? f / (r * nisbat) : 0,
-                 prognoz: nisbat > 0 ? f / nisbat : 0 };
+                 jarayonda: j, prognoz: f + j };
       });
       //  Turkumi yo'q savdo ham yo'qolmaydi: u ota qatordagi faktga
       //  qo'shilgan, lekin ichida ko'rinmaydi — shuning uchun alohida
@@ -3569,7 +3627,8 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
                reja, fakt, bajarilish: reja > 0 ? fakt / reja : 0,
                plan_bugun: reja * nisbat,
                indeks: reja * nisbat > 0 ? fakt / (reja * nisbat) : 0,
-               prognoz: nisbat > 0 ? fakt / nisbat : 0,
+               jarayonda: bor ? jar(i.code) : 0,
+               prognoz: fakt + (bor ? jar(i.code) : 0),
                turkumsiz, ichi };
     });
 
@@ -3612,11 +3671,17 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       bajarilish: tReja > 0 ? tushum / tReja : 0,
       plan_bugun: tReja * nisbat,
       indeks: tReja * nisbat > 0 ? tushum / (tReja * nisbat) : 0,
-      prognoz: nisbat > 0 ? tushum / nisbat : 0 };
+      jarayonda: kutilganPul, prognoz: tushum + kutilganPul };
     const tushumAsosiy = !!(tushumQator && tReja > 0);
     const umumiy = tushumAsosiy ? tushumQator.bajarilish
       : (rejaJami > 0 ? savdo / rejaJami : 0);
     const foiz = umumiy * 100;
+    //  ★ OY OXIRIGA TAXMINIY FAKT (zavod qarori, 2026-10): fakt +
+    //  jarayondagi buyurtmalar, umumiy KPI bilan BIR XIL bazada — aks
+    //  holda tepadagi ikki foiz ikki xil narsani o'lchardi.
+    const taxSumma = tushumAsosiy ? tushumQator.prognoz
+      : rejali.reduce((a, c) => a + c.prognoz, 0);
+    const taxReja = tushumAsosiy ? tReja : rejaJami;
     const stavka = bonusStavka(bands.rows, foiz);
     //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
     //  Boshliqning raqami qo'l ostidagilarning yig'indisidan chiqadi
@@ -3632,6 +3697,7 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
         || (pl[0] || {}).worker_name || '',
       ostida,
       qator, umumiy: foiz, tushum, savdo, tushum_qator: tushumQator,
+      taxminiy: { summa: taxSumma, foiz: taxReja > 0 ? taxSumma / taxReja * 100 : 0 },
       umumiy_baza: tushumAsosiy ? 'tushum' : 'savdo',
       bonus_baza: tushumdan ? 'tushum' : 'savdo',
       bonus_stavka: stavka, bonus: baza * stavka / 100,

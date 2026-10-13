@@ -8453,6 +8453,84 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
                    WHERE customer_id = $1 AND note = 'sinov'`, [mij.id]);
 });
 
+test('savdo KPI: prognoz = fakt + jarayondagi buyurtmalar', async () => {
+  //  ★ ZAVOD QARORI (2026-10): prognoz sur'atdan emas, yozilgan-u hali
+  //  chiqib ketmagan buyurtmalardan — bitta umumiy raqam. Pul tushumida
+  //  esa pul kirim sanasi shu oyning qolgan kunlariga tushganlari.
+  const { db } = require('../db');
+  const d = new Date();
+  const OY = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  await db.query(`INSERT INTO workers (name) SELECT 'Sinov prognoz menejer'
+                   WHERE NOT EXISTS (SELECT 1 FROM workers
+                                      WHERE name = 'Sinov prognoz menejer')`);
+  const mgr = (await H.id(
+    `SELECT id FROM workers WHERE name = 'Sinov prognoz menejer'`)).id;
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  VALUES ($1,'sotuvchi') ON CONFLICT DO NOTHING`, [mgr]);
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Prognoz sinov mijozi', region: 'Toshkent', manager_id: mgr })).body;
+  const g = (await H.id(
+    `SELECT g.sales_category AS cat, MIN(p.id) AS pid
+       FROM product_groups g JOIN products p ON p.group_id = g.id
+      WHERE g.sales_category = 'STUL' AND g.kpi_dona GROUP BY 1`));
+  assert.ok(g, 'stul mahsuloti bor');
+
+  //  Chiqib ketgani — fakt.
+  await db.query(
+    `INSERT INTO production_units (conveyor_no, product_id, qty, status,
+                                   ship_on, unit_price, customer_id)
+     VALUES ('PRG-1', $1, 4, 'shipped', CURRENT_DATE, 100, $2)`, [g.pid, mij.id]);
+  //  Jarayondagi buyurtmalar: yangi va tayyor — bitta raqam bo'lib
+  //  qo'shiladi; bekor qilingani va chiqib ketgani sanalmaydi.
+  const buy = async (no, status, qty, narx, pay) => {
+    const o = (await db.query(
+      `INSERT INTO orders (order_no, customer_id, manager_id, status, payment_on)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [no, mij.id, mgr, status, pay])).rows[0];
+    await db.query(`INSERT INTO order_items (order_id, product_id, qty, unit_price)
+                    VALUES ($1, $2, $3, $4)`, [o.id, g.pid, qty, narx]);
+  };
+  await buy('PRG-Z1', 'new', 5, 100, null);
+  await buy('PRG-Z2', 'to_ship', 2, 150, null);
+  await buy('PRG-Z3', 'cancelled', 9, 100, null);
+  await buy('PRG-Z4', 'shipped', 7, 100, null);
+
+  await admin('POST', '/api/sales/kpi', { mon: OY, worker_id: mgr, items: [
+    { indicator: 'SEGMENT', category: 'STUL', plan: 2000 },
+    { indicator: 'DONA', category: 'STUL', plan: 20 }] });
+  const ol = async () => (await admin('GET',
+    `/api/sales/kpi?mon=${OY}&worker_id=${mgr}`)).body.varaq
+    .find((x) => x.worker_id === mgr);
+  let v = await ol();
+  const tk = (kod) => v.qator.find((y) => y.code === kod).ichi
+    .find((c) => c.code === 'STUL');
+  assert.equal(tk('SEGMENT').fakt, 400);
+  assert.equal(tk('SEGMENT').jarayonda, 800, '5×100 + 2×150');
+  assert.equal(tk('SEGMENT').prognoz, 1200);
+  assert.equal(tk('DONA').jarayonda, 7);
+  assert.equal(tk('DONA').prognoz, 11);
+  assert.equal(v.taxminiy.summa, 1200);
+  assert.equal(v.taxminiy.foiz, 60, '1200 / 2000');
+
+  //  ★ PUL TUSHUMI: pul kirim sanasi shu oyda, BUGUN yoki keyin.
+  await admin('PATCH', '/api/admin/workers/' + mgr, { kpi_bonus_tushum: true });
+  const oldin = (await ol()).tushum_qator.jarayonda;
+  await buy('PRG-Z5', 'shipped', 3, 1000, new Date().toISOString().slice(0, 10));
+  v = await ol();
+  assert.equal(v.tushum_qator.jarayonda - oldin, 3000);
+  assert.equal(Math.round(v.tushum_qator.prognoz * 100),
+    Math.round((v.tushum_qator.fakt + v.tushum_qator.jarayonda) * 100));
+  await admin('PATCH', '/api/admin/workers/' + mgr, { kpi_bonus_tushum: false });
+
+  //  O'tgan oyda prognoz — faktning o'zi.
+  const p = (await admin('GET', `/api/sales/kpi?mon=2026-01&worker_id=${mgr}`)).body;
+  for (const x of p.varaq) for (const q of x.qator)
+    assert.equal(q.prognoz, q.fakt);
+
+  await db.query(`UPDATE orders SET status = 'cancelled'
+                   WHERE order_no LIKE 'PRG-Z%'`);
+});
+
 test('konver biriktirilgan qator o\'zgarmaydi', async () => {
   //  ★ ZAVOD QARORI (2026-10). Qatorni O'CHIRISH allaqachon
   //  taqiqlangan edi, lekin uni O'ZGARTIRISH ochiq qolgandi — va

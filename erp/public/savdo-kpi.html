@@ -116,7 +116,11 @@ function draw() {
     <b>${d.otgan_kun}</b> tasi o'tgan (bugun sanalmaydi).
     <b>Bugungacha reja</b> — oylik rejaning shu kunga to'g'ri keladigan
     qismi; <b>indeks</b> — fakt shu rejaning necha foizi;
-    <b>prognoz</b> — shu sur'atda oy oxirida qancha bo'lishi.
+    <b>oy oxiriga taxminiy fakt</b> — fakt + jarayondagi buyurtmalar (yozilgan, hali
+    chiqib ketmagan: boshlanmagan, ishlab chiqarilmoqda, tayyor,
+    mijozga chiqarilsin); pul tushumida — pul kirim sanasi shu oyning
+    qolgan kunlariga tushgan buyurtmalar; yonidagi foiz — rejaning
+    necha foizi bo'lishi.
     Rang <b>indeksda</b>: 100% — sur'at joyida, undan past — orqada.
     <b>Umumiy KPI</b> — rejasi bor turkumlar summasi bo'yicha
     (og'irliksiz): ikki menejerli mijozda har kim faqat o'z turkumi
@@ -163,7 +167,9 @@ function varaq(v) {
     <td class="num">${s.reja ? pct(s.bajarilish) : '—'}</td>
     <td class="num">${f(s.plan_bugun)}</td>
     <td class="num">${s.reja ? `<span class="tag ${bajCls(s.indeks)}">${pct(s.indeks)}</span>` : '—'}</td>
-    <td class="num">${f(s.prognoz)}</td>
+    <td class="num">${f(s.prognoz)}${s.reja
+      ? ` <span class="tag ${bajCls(s.prognoz / s.reja)}">${pct(s.prognoz / s.reja)}</span>` : ''}${s.jarayonda
+      ? `<div class="muted" style="font-size:11px">fakt + ${f(s.jarayonda)} jarayonda</div>` : ''}</td>
   </tr>`;
   //  ★ FAQAT REJA QO'YILGAN TURKUM CHIZILADI (zavod qarori, 2026-10).
   //  Ikki menejerli mijozda stol-stul menejeriga korpus ham yoziladi,
@@ -180,7 +186,7 @@ function varaq(v) {
     const r = korin.map((c) => ich(q, c.code));
     const t = (k) => r.reduce((a, x) => a + Number(x[k] || 0), 0);
     const reja = t('reja'), fakt = t('fakt'), pb = t('plan_bugun');
-    return { reja, fakt, plan_bugun: pb, prognoz: t('prognoz'),
+    return { reja, fakt, plan_bugun: pb, prognoz: t('prognoz'), jarayonda: t('jarayonda'),
              bajarilish: reja ? fakt / reja : 0, indeks: pb ? fakt / pb : 0 };
   };
   const DJ = yig(D);
@@ -207,7 +213,7 @@ function varaq(v) {
         <th style="width:22%">Turkum</th>
         <th class="num">Reja</th><th class="num">Fakt</th>
         <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
-        <th class="num">Indeks</th><th class="num">Prognoz</th>
+        <th class="num">Indeks</th><th class="num">Oy oxiriga taxminiy fakt</th>
       </tr></thead>
       <tbody>${v.tushum_qator ? qator('<b>Pul tushumi</b> <span class="muted" style="font-size:11px">· barcha mijozlardan kassaga kelgan $</span>',
         v.tushum_qator, n2, false) : ''}
@@ -236,6 +242,14 @@ function varaq(v) {
           <div style="font-size:28px;font-weight:700">${n2(v.umumiy)}%</div>
           <div class="muted" style="font-size:11px">${v.umumiy_baza === 'tushum'
             ? 'pul tushumi bo\'yicha' : 'rejasi bor turkumlar summasi bo\'yicha'}</div>
+        </div>
+        <!--  ★ OY OXIRIGA TAXMINIY (zavod qarori, 2026-10): fakt +
+              jarayondagi buyurtmalar, umumiy KPI bilan bir xil bazada. -->
+        <div>
+          <div class="muted" style="font-size:12px">OY OXIRIGA TAXMINIY</div>
+          <div style="font-size:28px;font-weight:700">${n2((v.taxminiy || {}).foiz)}%</div>
+          <div class="muted" style="font-size:11px">${n2((v.taxminiy || {}).summa)} $
+            · fakt + jarayondagi</div>
         </div>
         <!--  ★ SONI HAM TEPADA (zavod qarori, 2026-10): reja summa VA
               dona bilan qo'yiladi, ya'ni ikkinchi javob ham bir qarashda

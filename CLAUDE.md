@@ -3081,8 +3081,19 @@ ikki odamni bir-biriga ham (`modules/admin.js`).
 **Reja qo'yish huquqi `sales.kpi`** — FAQAT administrator (yuqorida).
 Tugma huquqi yo'q odamda umuman chizilmaydi, tekshiruv esa serverda.
 
+**★ OY OXIRIGA TAXMINIY FAKT = FAKT + JARAYONDAGI BUYURTMALAR**
+(zavod qarori, 2026-10; ilgari «prognoz» sur'atdan edi — fakt ÷ o'tgan
+kunlar ulushi — va oy boshidagi bitta katta yuk uni o'n barobar
+qilardi). Jarayondagi — yozilgan, hali chiqib ketmagan buyurtma
+(`new`, `reserved`, `to_ship`), holat bo'yicha BO'LINMAYDI. Bog'lanish
+fakt bilan bir xil: mijozning menejeri (1 va 2), turkum guruhdan, dona
+`kpi_dona` bilan. Pul tushumida — `payment_on` shu oyning BUGUNDAN
+keyingi kunlariga tushgan buyurtmalar (butun zavod). Faqat JORIY oyda;
+o'tgan oyda taxminiy = fakt. Tepada «Oy oxiriga taxminiy» kartochkasi,
+umumiy KPI bilan bir xil bazada (`taxminiy.foiz`).
+
 Ekranda har xodim o'z varaqasi: turkum · summa (reja · fakt ·
-bajarilish · bugungacha reja · indeks · prognoz) · dona (reja · fakt
+bajarilish · bugungacha reja · indeks · oy oxiriga taxminiy fakt va %) · dona (reja · fakt
 · bajarilish). Rang **Indeksda**, bajarilishda emas: bajarilish oyning
 FAKTI, indeks esa «orqadamanmi» degan savolning javobi.
 
