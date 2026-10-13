@@ -11846,6 +11846,109 @@ test("chiqib ketgan buyurtmalar chiqqan sana bo'yicha filtrlanadi", async () => 
   assert.equal(yoq.rows.length, 0);
 });
 
+//  ── MIJOZDAN QAYTARISH ───────────────────────────────────────────────
+//
+//  Menejer yozadi, ombor mudiri qabul qiladi; qarz va ombor faqat
+//  qabulda o'zgaradi. Chiqib ketgan qator tarixda qoladi, qaytgan dona
+//  yangi bo'lak bo'ladi. Narx — sotilgan narx.
+test("mijozdan qaytarish: yozish, qabul, qarz va ombor", async () => {
+  const { db } = require('../db');
+  await db.query(`INSERT INTO customers (name) VALUES ('Sinov qaytaruvchi mijoz')
+                    ON CONFLICT (lower(name)) DO NOTHING`);
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name = 'Sinov qaytaruvchi mijoz'`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, is_opening: true, fg_on: kun(-10) }] })).body.created[0];
+  await db.query(`UPDATE production_units SET status = 'shipped', customer_id = $2,
+                    unit_price = 100, ship_on = CURRENT_DATE - 5 WHERE id = $1`, [u.id, mijoz]);
+  const balans = async () => Number((await H.id(
+    `SELECT balance AS id FROM v_customer_sales WHERE id = $1`, [mijoz])).id);
+  const b0 = await balans();
+
+  const q = await admin('GET', '/api/returns/units?customer_id=' + mijoz);
+  assert.equal(q.status, 200, q.text);
+  assert.equal(q.body.rows.find((x) => x.id === u.id).available, 10);
+
+  //  Sababsiz yozilmaydi
+  assert.equal((await admin('POST', '/api/returns',
+    { customer_id: mijoz, items: [{ unit_id: u.id, qty: 3 }] })).status, 400);
+  const r1 = await admin('POST', '/api/returns', { customer_id: mijoz, note: 'brak',
+    items: [{ unit_id: u.id, qty: 3 }] });
+  assert.equal(r1.status, 200, r1.text);
+  assert.match(r1.body.doc_no, /^R\d{2}-\d{4}$/);
+  //  Yozilgan, lekin qabul qilinmagan dona ikkinchi marta qaytmaydi
+  const ortiq = await admin('POST', '/api/returns', { customer_id: mijoz, note: 'x',
+    items: [{ unit_id: u.id, qty: 8 }] });
+  assert.equal(ortiq.status, 400);
+  assert.match(ortiq.body.error, /7 ta/);
+  assert.equal(await balans(), b0, 'yozilganda qarz o\'zgarmaydi');
+
+  //  Navbat — ro'yxat bilan bir xil
+  const kut = (await admin('GET', '/api/returns?status=new')).body.rows;
+  const nav = (await admin('GET', '/api/navbat')).body.navbat
+    .find((x) => /mijozdan qaytarish/.test(x.izoh));
+  assert.equal(nav?.n ?? 0, kut.length);
+
+  //  Savdo xodimi qabul qila olmaydi
+  const sot = await xodim('Sinov qaytarish sotuvchi', 'sotuvchi');
+  assert.equal((await sot('POST', `/api/returns/${r1.body.id}/accept`, {})).status, 403);
+
+  //  Qayerga — tanlanmasa qabul qilinmaydi
+  const it1 = kut.find((x) => x.id === r1.body.id).items[0];
+  assert.equal((await admin('POST', `/api/returns/${r1.body.id}/accept`, {})).status, 400);
+  const ok = await admin('POST', `/api/returns/${r1.body.id}/accept`,
+    { items: [{ id: it1.id, dest: 'fg' }] });
+  assert.equal(ok.status, 200, ok.text);
+
+  assert.equal(await balans(), b0 - 300, 'qarz sotilgan narxda kamaydi');
+  const asl = await H.id(`SELECT qty, returned_qty, status FROM production_units WHERE id = $1`, [u.id]);
+  assert.equal(asl.qty, 10, 'chiqqan qator tarixda o\'z sonida');
+  assert.equal(asl.returned_qty, 3);
+  const yangi = await H.id(
+    `SELECT u.qty, u.status, w.code FROM cust_return_items i
+       JOIN production_units u ON u.id = i.new_unit_id
+       JOIN warehouses w ON w.id = u.warehouse_id WHERE i.id = $1`, [it1.id]);
+  assert.equal(yangi.qty, 3); assert.equal(yangi.status, 'fg'); assert.equal(yangi.code, 'TM');
+
+  //  Lenta: chiqim o'z holicha, qaytarish alohida HAQDOR qator
+  const lenta = (await db.query(
+    `SELECT kind, debit, credit FROM v_customer_ledger WHERE customer_id = $1`, [mijoz])).rows;
+  assert.equal(Number(lenta.find((x) => x.kind === 'ship').debit), 1000);
+  assert.equal(Number(lenta.find((x) => x.kind === 'return').credit), 300);
+
+  //  Konver pasporti ikki marta sanamaydi
+  const tr = (await admin('GET', '/api/units/track?no=' + encodeURIComponent(u.conveyor_no))).body;
+  assert.equal(tr.chiqdi, 7); assert.equal(tr.omborda, 3); assert.equal(tr.total, 10);
+
+  //  Ikkinchisi: tsexga tuzatishga (bo'lim marshrutdan) va hisobdan chiqarish
+  const r2 = await admin('POST', '/api/returns', { customer_id: mijoz, note: 'tirnalgan',
+    items: [{ unit_id: u.id, qty: 2 }] });
+  const r3 = await admin('POST', '/api/returns', { customer_id: mijoz, note: 'singan',
+    items: [{ unit_id: u.id, qty: 1 }] });
+  const ro = (await admin('GET', '/api/returns?status=new')).body.rows;
+  const i2 = ro.find((x) => x.id === r2.body.id).items[0];
+  const i3 = ro.find((x) => x.id === r3.body.id).items[0];
+  assert.ok(i2.route.some((s) => s.id === ARRA), 'marshrut bo\'limlari keladi');
+  assert.equal((await admin('POST', `/api/returns/${r2.body.id}/accept`,
+    { items: [{ id: i2.id, dest: 'shop', section_id: ARRA }] })).status, 200);
+  assert.equal((await admin('POST', `/api/returns/${r3.body.id}/accept`,
+    { items: [{ id: i3.id, dest: 'writeoff' }] })).status, 200);
+  const s2 = await H.id(`SELECT u.status, u.current_section_id AS sec FROM cust_return_items i
+                           JOIN production_units u ON u.id = i.new_unit_id WHERE i.id = $1`, [i2.id]);
+  assert.equal(s2.status, 'production'); assert.equal(s2.sec, ARRA);
+  const s3 = await H.id(`SELECT u.status FROM cust_return_items i
+                           JOIN production_units u ON u.id = i.new_unit_id WHERE i.id = $1`, [i3.id]);
+  assert.equal(s3.status, 'cancelled');
+  assert.equal(await balans(), b0 - 600);
+
+  //  Bekor qilish: yozgan odam o'zi
+  const r4 = await admin('POST', '/api/returns', { customer_id: mijoz, note: 'adashdim',
+    items: [{ unit_id: u.id, qty: 1 }] });
+  assert.equal((await admin('POST', `/api/returns/${r4.body.id}/reject`, {})).status, 400);
+  const bek = await admin('POST', `/api/returns/${r4.body.id}/reject`, { note: 'xato' });
+  assert.equal(bek.body.status, 'cancelled');
+  assert.equal(await balans(), b0 - 600);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

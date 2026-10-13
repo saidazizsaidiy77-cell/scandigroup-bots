@@ -673,25 +673,36 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
 --  holda uning sotuvi hisobotdan jimgina tushib qolardi.
 DROP VIEW IF EXISTS v_pl_month CASCADE;
 CREATE VIEW v_pl_month AS
-SELECT date_trunc('month', u.ship_on)::date AS pl_month,
+SELECT date_trunc('month', x.on_date)::date AS pl_month,
        'income'::text AS kind,
        'SOTUV'::text  AS group_code,
        'Mahsulot sotuvi'::text AS group_name,
        0 AS group_sort,
        NULL::int AS item_id,
        COALESCE(sc.name, 'Turkumsiz')::text AS item_name,
-       SUM(u.total_amount)::numeric(16,2) AS amount_usd,
+       SUM(x.amount)::numeric(16,2) AS amount_usd,
        COUNT(*)::int AS ops,
        --  Tartib ZAVODNIKI, alifbo emas: mehmonxona → yotoqxona →
        --  stol → stul. Turkumsizi oxirida (99) — u javob emas,
        --  to'ldirilmagan katakning belgisi.
        COALESCE(sc.sort, 99)::int AS item_sort
-  FROM production_units u
-  JOIN products p            ON p.id = u.product_id
+  FROM (
+    SELECT u.ship_on AS on_date, u.product_id, u.total_amount AS amount
+      FROM production_units u
+     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+       AND u.total_amount IS NOT NULL
+    UNION ALL
+    --  ★ MIJOZDAN QAYTGANI — QAYTGAN OYNING savdosidan ayiriladi
+    --  (izoh: sql/warehouse.sql, «Mijozdan qaytarish»). Chiqim qatori
+    --  o'z oyida o'zgarmaydi: o'sha oyda mahsulot haqiqatan sotilgan.
+    SELECT r.ret_on, u.product_id, -(i.qty * COALESCE(i.price, 0))
+      FROM cust_return_items i
+      JOIN cust_returns r      ON r.id = i.return_id AND r.status = 'accepted'
+      JOIN production_units u  ON u.id = i.unit_id
+  ) x
+  JOIN products p            ON p.id = x.product_id
   JOIN product_groups g      ON g.id = p.group_id
   LEFT JOIN sales_categories sc ON sc.code = g.sales_category
- WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
-   AND u.total_amount IS NOT NULL
  GROUP BY 1, COALESCE(sc.name, 'Turkumsiz'), COALESCE(sc.sort, 99)
 UNION ALL
 SELECT e.pl_month, 'expense', e.group_code, e.group_name, e.group_sort,
@@ -774,7 +785,9 @@ SELECT c.id, c.name, c.country, c.region, c.phone,
        pay.paid AS paid_amount,
        (COALESCE(c.opening_debt, 0)
          + COALESCE(SUM(u.total_amount) FILTER (WHERE u.status = 'shipped'), 0)
-         - pay.paid)::numeric(16,2) AS balance
+         - pay.paid - qayt.amount)::numeric(16,2) AS balance,
+       --  ★ MIJOZDAN QAYTGANI (qabul qilingani): qarzdan ayiriladi
+       qayt.amount AS returned_amount
 FROM customers c
 LEFT JOIN customer_channels ch ON ch.code = c.channel
 LEFT JOIN workers m            ON m.id = c.manager_id
@@ -786,9 +799,15 @@ LEFT JOIN LATERAL (
   SELECT COALESCE(SUM(-f.amount_usd), 0)::numeric(16,2) AS paid
     FROM v_cash_flow f
    WHERE f.side_kind = 'customer' AND f.side_id = c.id) pay ON true
+LEFT JOIN LATERAL (
+  SELECT COALESCE(SUM(i.qty * COALESCE(i.price, 0)), 0)::numeric(16,2) AS amount
+    FROM cust_return_items i
+    JOIN cust_returns r ON r.id = i.return_id
+   WHERE r.status = 'accepted' AND r.customer_id = c.id) qayt ON true
 WHERE c.active
 GROUP BY c.id, c.name, c.country, c.region, c.phone, ch.name, c.channel,
-         c.manager_id, m.name, c.opening_debt, c.opening_debt_on, pay.paid;
+         c.manager_id, m.name, c.opening_debt, c.opening_debt_on, pay.paid,
+         qayt.amount;
 
 -- ═══════════════════════════════════════════════════ QARZDORLIK LENTASI
 --
@@ -877,7 +896,29 @@ SELECT f.side_id,
        ord.id, f.doc_no, f.op_id
   FROM v_cash_flow f
   LEFT JOIN orders ord ON ord.id = f.order_id
- WHERE f.side_kind = 'customer';
+ WHERE f.side_kind = 'customer'
+UNION ALL
+--  ★ MIJOZDAN QAYTGANI — HAQDOR: qarzi kamaydi. Chiqim qatori o'z
+--  sanasida o'zgarmaydi (mijoz o'sha kuni haqiqatan olgan), qaytgani
+--  esa O'Z kunida alohida qator — dalolatnomada ikkala hujjat ham
+--  ko'rinadi (izoh: sql/warehouse.sql).
+SELECT r.customer_id,
+       r.ret_on,
+       'return'::text,
+       ('Qaytarildi — ' || COALESCE(p.name, 'Mahsulot')
+          || COALESCE(' · ' || g.name, '')
+          || ' — ' || i.qty || ' ta')::text,
+       u.conveyor_no::text,
+       u.order_no::text,
+       GREATEST(-(i.qty * COALESCE(i.price, 0)), 0)::numeric(16,2),
+       GREATEST(i.qty * COALESCE(i.price, 0), 0)::numeric(16,2),
+       (SELECT o2.id FROM orders o2 WHERE o2.order_no = u.order_no),
+       r.doc_no, NULL::int
+  FROM cust_return_items i
+  JOIN cust_returns r        ON r.id = i.return_id AND r.status = 'accepted'
+  JOIN production_units u    ON u.id = i.unit_id
+  LEFT JOIN products p       ON p.id = u.product_id
+  LEFT JOIN product_groups g ON g.id = p.group_id;
 
 -- ════════════════════════════════════════════ KPI — OYLIK REJA
 --

@@ -73,6 +73,7 @@ async function startServer() {
   app.use('/api/import', require('../modules/import'));
   app.use('/api/warehouse', require('../modules/warehouse'));
   app.use('/api/sales', require('../modules/sales'));
+  app.use('/api/returns', require('../modules/returns'));
   app.use('/api/cash', require('../modules/cash'));
   app.use('/api/materials', require('../modules/materials'));
   app.use('/api/navbat', require('../modules/nav'));
