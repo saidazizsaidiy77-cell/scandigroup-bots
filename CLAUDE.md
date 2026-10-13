@@ -3026,7 +3026,10 @@ view'da qoladi, ko'rsatkich bo'lmasa ham.
 2026-10). «KPI bonusi tushgan puldan» belgisi bor xodimga (savdo
 bo'lim boshlig'i) reja oynasida qo'shimcha «Pul tushumi rejasi, $»
 so'raladi; rejasi qo'yilsa UMUMIY KPI va bonus kassaga KELGAN puldan
-hisoblanadi, turkum savdosi esa ma'lumot uchun qoladi. Ko'rsatkich
+hisoblanadi, turkum savdosi esa ma'lumot uchun qoladi. **Fakti —
+BARCHA mijozlardan** kassaga kelgan pul (zavod qarori, 2026-10), faqat
+o'ziga biriktirilganlardan emas: uning ishi butun zavodning pulini olib
+kirish. Ko'rsatkich
 (`TUSHUM`) bazada o'chiq turaveradi — u faqat belgili xodimniki va
 server boshqasiga uning rejasini qabul qilmaydi.
 

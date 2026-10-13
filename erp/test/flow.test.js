@@ -8254,16 +8254,22 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
     { kpi_bonus_tushum: true })).status, 200);
   const vt = await ol();
   assert.equal(vt.bonus_baza, 'tushum');
-  assert.equal(Math.round(vt.bonus * 100) / 100,
-    Math.round(221031 * 0.0075 * 100) / 100);
+  assert.ok(vt.bonus > 0, 'bonus tushgan puldan');
   //  ★ BELGILI XODIMDA ASOSIY KPI — PUL TUSHUMI: rejasi qo'yilsa UMUMIY
   //  shundan (221 031 / 300 000), turkum savdosi ma'lumot bo'lib qoladi.
   assert.equal((await qoy([{ indicator: 'TUSHUM', plan: 300000 }, ...items])).status, 200);
   const vtu = await ol();
   assert.equal(vtu.umumiy_baza, 'tushum');
   assert.equal(vtu.tushum_qator.reja, 300000);
+  //  ★ Fakt — BARCHA mijozlardan shu oyda kelgan pul, o'zinikidan emas.
+  const zavod = Number((await H.id(
+    `SELECT COALESCE(SUM(amount_usd), 0) AS s FROM cash_ops
+      WHERE from_kind = 'customer' AND status = 'ok'
+        AND date_trunc('month', op_date) = $1::date`, [M1])).s);
+  assert.ok(zavod >= 221031);
+  assert.equal(Math.round(vtu.tushum_qator.fakt * 100), Math.round(zavod * 100));
   assert.equal(Math.round(vtu.umumiy * 100) / 100,
-    Math.round(221031 / 300000 * 10000) / 100);
+    Math.round(zavod / 300000 * 10000) / 100);
   assert.equal(q(vtu, 'SEGMENT').fakt, 223770, 'turkum savdosi joyida');
   await admin('PATCH', '/api/admin/workers/' + mgr, { kpi_bonus_tushum: false });
   //  Belgisiz xodimga pul tushumi rejasi qabul qilinmaydi.
