@@ -3508,6 +3508,16 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
         ORDER BY w.name`),
   ]);
 
+  //  ★ BELGILI XODIMNING PUL TUSHUMI — BUTUN ZAVODNIKI (zavod qarori,
+  //  2026-10). Uning ishi HAMMA mijozdan pulni olib kirish, faqat
+  //  o'zinikidan emas: fakt barcha mijozdan kassaga kelgan pul (bekor
+  //  qilingani va qabul qilinmagani — `pending` — sanalmaydi; TUSHUM
+  //  shoxi bilan bir xil shart, `sql/sales-kpi.sql`).
+  const zavodTushum = Number((await db.query(
+    `SELECT COALESCE(SUM(amount_usd), 0) AS s FROM cash_ops
+      WHERE from_kind = 'customer' AND status = 'ok'
+        AND date_trunc('month', op_date)::date = $1::date`, [K.mon])).rows[0].s);
+
   const nisbat = K.jami_kun ? K.otgan_kun / K.jami_kun : 0;
   const son = (v) => Number(v || 0);
 
@@ -3585,9 +3595,9 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     //  qarori 2026-10): menejerga SAVDODAN (rejasi bor turkumlar),
     //  belgilangan xodimga TUSHGAN PULDAN. KPI eshikni ochadi, baza
     //  hajmini beradi.
-    const tushum = fk.filter((f) => f.indicator === 'TUSHUM')
-      .reduce((a, f) => a + son(f.fakt), 0);
     const tushumdan = !!(xodim.rows.find((w) => w.id === wid) || {}).kpi_bonus_tushum;
+    const tushum = tushumdan ? zavodTushum
+      : fk.filter((f) => f.indicator === 'TUSHUM').reduce((a, f) => a + son(f.fakt), 0);
     const baza = tushumdan ? tushum : savdo;
 
     //  ★ BELGILANGAN XODIMDA ASOSIY KPI — PUL TUSHUMI (zavod qarori,
@@ -3598,7 +3608,7 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     //  belgili xodimniki, qolganlar reja oynasida uni ko'rmaydi.
     const tReja = son((pl.find((p) => p.indicator === 'TUSHUM' && !p.category) || {}).plan);
     const tushumQator = !tushumdan ? null : {
-      code: 'TUSHUM', name: 'Pul tushumi', reja: tReja, fakt: tushum,
+      code: 'TUSHUM', name: 'Pul tushumi · barcha mijozlar', reja: tReja, fakt: tushum,
       bajarilish: tReja > 0 ? tushum / tReja : 0,
       plan_bugun: tReja * nisbat,
       indeks: tReja * nisbat > 0 ? tushum / (tReja * nisbat) : 0,

@@ -209,7 +209,7 @@ function varaq(v) {
         <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
         <th class="num">Indeks</th><th class="num">Prognoz</th>
       </tr></thead>
-      <tbody>${v.tushum_qator ? qator('<b>Pul tushumi</b> <span class="muted" style="font-size:11px">· kassaga kelgan $</span>',
+      <tbody>${v.tushum_qator ? qator('<b>Pul tushumi</b> <span class="muted" style="font-size:11px">· barcha mijozlardan kassaga kelgan $</span>',
         v.tushum_qator, n2, false) : ''}
       ${korin.map((c) => juft(esc(c.name), c, false)).join('')}
       ${tsizS}${tsizD}
@@ -327,7 +327,7 @@ function tushumKatak(qiymat) {
   const eski = $('pTushum') ? $('pTushum').value : '';
   $('pTushumWrap').innerHTML = w && w.kpi_bonus_tushum ? `
     <label>Pul tushumi rejasi, $ <span class="muted" style="font-size:12px">
-      · kassaga kelgan pul — bu xodimning asosiy KPI si</span></label>
+      · BARCHA mijozlardan kassaga kelgan pul — bu xodimning asosiy KPI si</span></label>
     <input id="pTushum" type="number" step="0.01" min="0"
       value="${qiymat ?? eski ?? 0}" style="max-width:200px">` : '';
 }
