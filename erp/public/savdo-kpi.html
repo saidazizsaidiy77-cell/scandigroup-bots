@@ -152,20 +152,18 @@ function varaq(v) {
   const S = ind(v, 'SEGMENT'), D = ind(v, 'DONA');
   const ich = (q, code) => q.ichi.find((c) => c.code === code)
     || { reja: 0, fakt: 0, bajarilish: 0, plan_bugun: 0, indeks: 0, prognoz: 0 };
-  const qator = (nom, s, dn, jami) => `<tr${jami ? ' style="font-weight:700"' : ''}>
+  //  ★ SUMMA VA DONA — ikki jadval, biri ostida (zavod qarori,
+  //  2026-10): yonma-yon o'n uch ustun bo'lib, ko'z qatorning oxirigacha
+  //  yetmasdi. Ustunlar ikkalasida bir xil, ya'ni bitta ko'z bilan
+  //  o'qiladi. `f` — raqamning yozilishi (summa tiyin bilan, dona butun).
+  const qator = (nom, s, f, jami) => `<tr${jami ? ' style="font-weight:700"' : ''}>
     <td>${nom}</td>
-    <td class="num">${n2(s.reja)}</td>
-    <td class="num">${n2(s.fakt)}</td>
+    <td class="num">${f(s.reja)}</td>
+    <td class="num">${f(s.fakt)}</td>
     <td class="num">${s.reja ? pct(s.bajarilish) : '—'}</td>
-    <td class="num">${n2(s.plan_bugun)}</td>
+    <td class="num">${f(s.plan_bugun)}</td>
     <td class="num">${s.reja ? `<span class="tag ${bajCls(s.indeks)}">${pct(s.indeks)}</span>` : '—'}</td>
-    <td class="num">${n2(s.prognoz)}</td>
-    <td class="num">${n0(dn.reja)}</td>
-    <td class="num">${n0(dn.fakt)}</td>
-    <td class="num">${dn.reja ? pct(dn.bajarilish) : '—'}</td>
-    <td class="num">${n0(dn.plan_bugun)}</td>
-    <td class="num">${dn.reja ? `<span class="tag ${bajCls(dn.indeks)}">${pct(dn.indeks)}</span>` : '—'}</td>
-    <td class="num">${n0(dn.prognoz)}</td>
+    <td class="num">${f(s.prognoz)}</td>
   </tr>`;
   //  ★ FAQAT REJA QO'YILGAN TURKUM CHIZILADI (zavod qarori, 2026-10).
   //  Ikki menejerli mijozda stol-stul menejeriga korpus ham yoziladi,
@@ -186,14 +184,25 @@ function varaq(v) {
              bajarilish: reja ? fakt / reja : 0, indeks: pb ? fakt / pb : 0 };
   };
   const DJ = yig(D);
-  const turkumlar = korin.map((c) =>
-    qator(esc(c.name), ich(S, c.code), ich(D, c.code), false)).join('');
+  const jadval = (q, f, sarlavha, tsiz) => `<div style="overflow-x:auto;margin-top:14px">
+    <!--  Ustunlar QOTIB turadi: ikki jadval biri ostida va raqamlar
+          bir chiziqda o'qilishi kerak. -->
+    <table style="table-layout:fixed;min-width:760px">
+      <thead><tr>
+        <th style="width:22%">${sarlavha}</th>
+        <th class="num">Reja</th><th class="num">Fakt</th>
+        <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
+        <th class="num">Indeks</th><th class="num">Prognoz</th>
+      </tr></thead>
+      <tbody>${korin.map((c) => qator(esc(c.name), ich(q, c.code), f, false)).join('')}
+      ${tsiz}
+      ${korin.length ? qator('Jami', yig(q), f, true) : ''}</tbody>
+    </table></div>`;
   //  Turkumi yo'q savdo — faqat reja umuman yo'q bo'lganda: rejasi bor
   //  varaqda u KPI ga tegishli emas.
-  const turkumsiz = !rejali.length && (S.turkumsiz || D.turkumsiz) ? `<tr class="muted">
+  const tsiz = (q, f) => !rejali.length && q.turkumsiz ? `<tr class="muted">
     <td>Turkumi qo'yilmagan</td><td class="num">—</td>
-    <td class="num">${n2(S.turkumsiz)}</td><td colspan="5"></td>
-    <td class="num">${n0(D.turkumsiz)}</td><td colspan="4"></td></tr>` : '';
+    <td class="num">${f(q.turkumsiz)}</td><td colspan="4"></td></tr>` : '';
   return `<div class="card" style="margin-top:16px">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;
          gap:16px;align-items:flex-end;margin-bottom:14px">
@@ -231,21 +240,9 @@ function varaq(v) {
         </div>
       </div>
     </div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr>
-        <th rowspan="2">Turkum</th>
-        <th class="num" colspan="6" style="text-align:center">Summa, $</th>
-        <th class="num" colspan="6" style="text-align:center">Dona</th>
-      </tr><tr>
-        <th class="num">Reja</th><th class="num">Fakt</th>
-        <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
-        <th class="num">Indeks</th><th class="num">Prognoz</th>
-        <th class="num">Reja</th><th class="num">Fakt</th>
-        <th class="num">Bajarilish</th><th class="num">Bugungacha reja</th>
-        <th class="num">Indeks</th><th class="num">Prognoz</th>
-      </tr></thead>
-      <tbody>${turkumlar}${turkumsiz}${korin.length ? qator('Jami', yig(S), yig(D), true) : ''}</tbody>
-    </table></div></div>`;
+    ${jadval(S, n2, 'Summa, $', tsiz(S, n2))}
+    ${jadval(D, n0, 'Dona', tsiz(D, n0))}
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════ REJA QO'YISH
