@@ -67,3 +67,25 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS
 --  Hujjat raqami prefiksi (zakaz raqami bilan bir xil yordamchi bo'lmasa
 --  ham, shakl bir xil: harf + yil + to'rt xonali raqam).
 --  Raqamni modul beradi (`modules/tasks.js`, advisory lock bilan).
+--  ★ IJROCHI BITTA EMAS (`task_assignees`, zavod qarori 2026-10). Ish
+--  ko'pincha ikki-uch odamga tushadi: biri katalogni tayyorlaydi,
+--  ikkinchisi mijozga yuboradi. Bitta katakka faqat bittasi sig'ardi
+--  va ikkinchisi na doskada, na Telegram eslatmasida ko'rinardi.
+--
+--  Ro'yxat — SHU jadval. `tasks.assignee_id` o'chirilmadi: u ro'yxatning
+--  BIRINCHISI bo'lib qoladi (`pos = 0`) va modul uni har saqlashda
+--  sinxron qiladi. Pastdagi to'ldirish DOIMIY qoida, bayroq emas:
+--  `assignee_id` har doim ro'yxatda turadi, ya'ni u hech narsani
+--  qaytarib qo'ymaydi — faqat ustun qo'shilgunga qadar ochilgan
+--  mavzularni ro'yxatga tushiradi.
+CREATE TABLE IF NOT EXISTS task_assignees (
+  task_id   INT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  worker_id INT NOT NULL REFERENCES workers(id),
+  pos       INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (task_id, worker_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_assignees_worker ON task_assignees(worker_id);
+
+INSERT INTO task_assignees (task_id, worker_id, pos)
+SELECT id, assignee_id, 0 FROM tasks WHERE assignee_id IS NOT NULL
+ON CONFLICT DO NOTHING;

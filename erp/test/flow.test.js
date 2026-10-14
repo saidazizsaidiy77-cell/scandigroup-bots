@@ -12292,6 +12292,65 @@ test('vazifalar: mavzu, izoh, huquq, navbat va Telegram eslatmasi', async () => 
   await db.query(`UPDATE workers SET task_watch = false`);
 });
 
+test('vazifalar: bir nechta ijrochi', async () => {
+  //  ★ ZAVOD QARORI (2026-10): ish ikki-uch odamga tushadi. Har ijrochi
+  //  uni o'z ishi kabi ko'radi: xabar, «Menga», navbat, holat, eslatma.
+  const w = async (n) => (await H.id(`SELECT id FROM workers WHERE name = $1`, [n])).id;
+  const KORPUS = await w('Korpus ustasi'), LAK = await w("Bo'yoq ustasi");
+  const OP = await w('Arra operatori');
+  const op = H.api(base, await H.sessionFor('Arra operatori'));
+  const xabar = async (kind, wid) => (await H.id(
+    `SELECT COUNT(*)::int AS n FROM notifications WHERE kind = $1 AND worker_id = $2`,
+    [kind, wid])).n;
+
+  const [l0, o0] = [await xabar('task_assigned', LAK), await xabar('task_assigned', OP)];
+  const r = await korpus('POST', '/api/tasks',
+    { title: 'Ko\'rgazmani yangilash', assignee_ids: [LAK, OP, LAK], due_on: kun(2) });
+  assert.equal(r.status, 200, r.text);
+  const t = r.body;
+  assert.equal(await xabar('task_assigned', LAK), l0 + 1);
+  assert.equal(await xabar('task_assigned', OP), o0 + 1);
+  const d = (await korpus('GET', '/api/tasks/' + t.id)).body;
+  assert.deepEqual(d.assignee_ids, [LAK, OP], 'takror olib tashlandi, tartib saqlandi');
+  assert.equal(d.assignee_id, LAK, 'birinchisi asosiy');
+  assert.match(d.assignee_name, /Bo'yoq ustasi, Arra operatori/);
+
+  //  Ikkinchi ijrochi ham «Menga» da, navbatda va holatni suradi.
+  const mine = (await op('GET', '/api/tasks?mine=open')).body.tasks;
+  assert.ok(mine.some((x) => x.id === t.id));
+  const nav = (await op('GET', '/api/navbat')).body.navbat.find((x) => x.page === '/vazifalar.html');
+  assert.equal(nav.n, mine.length);
+  assert.equal((await op('PATCH', '/api/tasks/' + t.id, { status: 'doing' })).status, 200);
+  assert.equal((await op('PATCH', '/api/tasks/' + t.id, { due_on: kun(9) })).status, 403);
+
+  //  Izoh — ikkala ijrochiga va ochganga, yozganning o'ziga emas.
+  const [lc, kc, oc] = [await xabar('task_comment', LAK), await xabar('task_comment', KORPUS),
+                        await xabar('task_comment', OP)];
+  await op('POST', `/api/tasks/${t.id}/comments`, { body: 'boshladim' });
+  assert.equal(await xabar('task_comment', LAK), lc + 1);
+  assert.equal(await xabar('task_comment', KORPUS), kc + 1);
+  assert.equal(await xabar('task_comment', OP), oc);
+
+  //  3 kun eslatmasi — har ijrochiga.
+  const { tasksYubor } = require('../modules/tasks');
+  const [l3, o3] = [await xabar('task_due3', LAK), await xabar('task_due3', OP)];
+  await tasksYubor();
+  assert.equal(await xabar('task_due3', LAK), l3 + 1);
+  assert.equal(await xabar('task_due3', OP), o3 + 1);
+
+  //  Ijrochini olib tashlash: faqat YANGI qo'shilganga xabar.
+  const k0 = await xabar('task_assigned', KORPUS);
+  const p = await korpus('PATCH', '/api/tasks/' + t.id, { assignee_ids: [OP] });
+  assert.equal(p.status, 200, p.text);
+  assert.equal(await xabar('task_assigned', OP), o0 + 1, 'qolganiga qayta xabar yo\'q');
+  assert.equal(await xabar('task_assigned', KORPUS), k0);
+  const d2 = (await lak('GET', '/api/tasks/' + t.id)).body;
+  assert.deepEqual(d2.assignee_ids, [OP]);
+  assert.equal(d2.can_move, false, 'olib tashlangan ijrochi endi surmaydi');
+  assert.ok(!(await lak('GET', '/api/tasks?mine=1')).body.tasks.some((x) => x.id === t.id));
+  assert.equal((await korpus('PATCH', '/api/tasks/' + t.id, { assignee_ids: [999999] })).status, 400);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
