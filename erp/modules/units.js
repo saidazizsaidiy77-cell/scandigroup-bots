@@ -1138,16 +1138,21 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
             --  gapini menejer BUYURTMAGA yozadi, tasdiqlovchi esa uni
             --  ko'rmasdan tasdiqlardi. Bo'limlar ekranidagi bron
             --  ro'yxati bilan bir xil ikki maydon (/:id/bron).
-            zak.order_note, zak.item_note
+            zak.order_note, zak.item_note,
+            --  ★ KIM KUTMOQDA (zavod qarori, 2026-10): zakaz raqamining
+            --  o'zi javob bermasdi — tasdiqlovchi mijozni bilish uchun
+            --  buyurtmani alohida ochishi kerak edi.
+            zak.customer_name
        FROM v_unit_requests q
        LEFT JOIN shops sh ON sh.id = q.shop_id
        LEFT JOIN LATERAL (
-         SELECT o.order_no,
+         SELECT o.order_no, cu.name AS customer_name,
                 NULLIF(TRIM(o.note), '')  AS order_note,
                 NULLIF(TRIM(oi.note), '') AS item_note
            FROM unit_requests uq
            JOIN order_items oi ON oi.id = uq.order_item_id
            JOIN orders o       ON o.id  = oi.order_id
+           LEFT JOIN customers cu ON cu.id = o.customer_id
           WHERE uq.id = q.id) zak ON true
        LEFT JOIN LATERAL muddat_zanjir(q.shop_id, q.product_id, q.started_on) z ON true
       WHERE ($1::text IS NULL OR q.status = $1)

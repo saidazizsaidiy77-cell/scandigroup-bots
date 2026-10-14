@@ -19,7 +19,7 @@ async function loadWorker(workerId) {
   const w = (await db.query(
     `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
             sees_cash, can_add_supplier,
-            can_release, can_request_unit, can_add_customer, mat_scope
+            can_release, can_release_own, can_request_unit, can_add_customer, mat_scope
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles, extra] = await Promise.all([
@@ -92,6 +92,8 @@ async function loadWorker(workerId) {
     //  kunini bitta odam nazorat qiladi — belgi XODIMDA, rolda emas:
     //  ruxsat beradigani ham `sotuvchi`, qolganlari ham.
     can_release: w.can_release === true,
+    //  Faqat O'Z buyurtmasini chiqarishga beradi (izoh: sql/sales.sql).
+    can_release_own: w.can_release_own === true,
     can_request_unit: w.can_request_unit !== false,
     //  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (izoh: sql/units.sql).
     //  Mijoz bazasi savdoning o'qi: bitta mijoz ikki nom bilan kirsa

@@ -504,7 +504,7 @@ async function load(){
     //  Katakcha ham, tugma ham FAQAT «Tayyor» qatorda: boshqa
     //  holatdagi buyurtmani chiqarishga berib bo'lmaydi va bo'sh
     //  tugma nima uchun ishlamasligini aytmasdi.
-    const berish = relOk() && o.holat === 'reserved';
+    const berish = relOk(o) && o.holat === 'reserved';
     return `<tr onclick="openOrder(${o.id})" style="cursor:pointer">
       <td class="c-sel" onclick="event.stopPropagation()">${berish
         ? `<input type="checkbox" style="width:auto" ${
@@ -552,7 +552,10 @@ async function load(){
 //  modules/sales.js): chegirma, «qayerga» va ruxsat tekshiruvlari ikki
 //  nusxada bo'lsa to'dalab yuborilgani bitta-bitta yuborilganidan
 //  boshqa qoidaga bo'ysunardi.
-const relOk = () => !!App.me()?.can_release;
+//  `can_release_own` — faqat o'z buyurtmasi (`meniki` SERVERDAN keladi,
+//  tekshiruv ham o'sha yerda: izoh `sendOne`).
+const relOk = (o) => !!App.me()?.can_release
+  || (!!App.me()?.can_release_own && (!o || !!o.meniki));
 const tanlangan = new Set();
 
 function tanla(id, on) {
@@ -1008,7 +1011,7 @@ function draw(){
                 UMUMAN chizilmaydi va sababi yozilib turadi — tugmani
                 topolmagan odam uni qidirib yurmasin. Tekshiruv
                 baribir serverda: yashirish himoya emas. -->
-          ${App.me()?.can_release
+          ${relOk(o)
             ? `<button onclick="sendToWh()">Mijozga chiqarish</button>`
             : `<span class="muted" style="font-size:13px">Mijozga
                  chiqarishga ruxsatni boshqa xodim beradi</span>`}

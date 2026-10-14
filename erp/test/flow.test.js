@@ -3069,6 +3069,13 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   assert.equal(sorov.order_no, z.order_no, 'zakaz raqami ro\'yxatda');
   //  Menejerning buyurtma izohi ham — tasdiqlovchi uni ko'rib qaror qiladi
   assert.equal(sorov.order_note, 'Oyog\'i qora');
+  //  ★ Mijozning ISMI ham — zakaz raqamining o'zi «kimga?» ga javob bermasdi.
+  const mijozNomi = (await H.id(`SELECT c.name FROM orders o JOIN customers c
+                                  ON c.id = o.customer_id WHERE o.id = $1`, [z.id])).name;
+  assert.equal(sorov.customer_name, mijozNomi);
+  const tg = (await H.id(`SELECT body FROM notifications WHERE kind = 'unit_request'
+                           ORDER BY id DESC LIMIT 1`)).body;
+  assert.ok(tg.includes(mijozNomi), 'Telegram xabarida ham mijoz');
 
   //  Tasdiqlangach konver «boshlanmagan» bo'lib ochiladi va o'sha
   //  qatorga O'ZI biriktiriladi — menejer qaytib kelib qidirmaydi.
@@ -12349,6 +12356,46 @@ test('vazifalar: bir nechta ijrochi', async () => {
   assert.equal(d2.can_move, false, 'olib tashlangan ijrochi endi surmaydi');
   assert.ok(!(await lak('GET', '/api/tasks?mine=1')).body.tasks.some((x) => x.id === t.id));
   assert.equal((await korpus('PATCH', '/api/tasks/' + t.id, { assignee_ids: [999999] })).status, 400);
+});
+
+test('mijozga chiqarish: faqat o\'z buyurtmasiga ruxsat', async () => {
+  //  ★ ZAVOD QARORI (2026-10): ba'zi menejer o'z mijozining chiqish
+  //  kunini o'zi kelishadi — `can_release_own`, faqat o'z buyurtmasi.
+  const { db } = require('../db');
+  await xodim('Sinov oz chiqaruvchi', 'sotuvchi');
+  const MEN = (await H.id(`SELECT id FROM workers WHERE name = 'Sinov oz chiqaruvchi'`)).id;
+  await db.query(`UPDATE worker_roles SET scope_own = false WHERE worker_id = $1`, [MEN]);
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + MEN,
+    { can_release_own: true })).status, 200);
+  const m = H.api(base, await H.sessionFor('Sinov oz chiqaruvchi'));
+
+  const tayyor = async (nom, manager) => {
+    const mijoz = (await admin('POST', '/api/units/customers',
+      { name: nom, channel: 'B2B', manager_id: manager })).body;
+    const z = (await admin('POST', '/api/sales/orders', {
+      customer_id: mijoz.id, ship_to: 'ZAVOD', manager_id: manager,
+      items: [{ product_id: PENAL, qty: 1, color: 'Oq' }] })).body;
+    const qator = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+    const u = (await admin('POST', '/api/units/', { items: [
+      { product_id: PENAL, qty: 1, color: 'Oq', is_opening: true,
+        fg_on: '2026-09-01' }] })).body.created[0];
+    await admin('POST', `/api/sales/orders/${z.id}/assign`,
+      { item_id: qator.id, unit_id: u.id, qty: 1 });
+    return z;
+  };
+  const ozi = await tayyor('Sinov oz mijozim', MEN);
+  const begona = await tayyor('Sinov begona mijoz', null);
+
+  //  Ekran tugmani `meniki` dan chizadi — server aytadi.
+  const ro = (await m('GET', '/api/sales/orders')).body.rows;
+  assert.equal(ro.find((r) => r.id === ozi.id).meniki, true);
+  assert.equal(ro.find((r) => r.id === begona.id).meniki, false);
+
+  const b = await m('POST', `/api/sales/orders/${begona.id}/send`);
+  assert.equal(b.status, 400, 'begona buyurtma rad etiladi');
+  assert.match(b.body.error, /ruxsat/i);
+  const ok = await m('POST', `/api/sales/orders/${ozi.id}/send`);
+  assert.equal(ok.status, 200, ok.text);
 });
 
 test('yakun', async () => {
