@@ -5890,6 +5890,12 @@ test('muddat: korpusda bosqichlar zanjiri, stulda marshrut qadamlari', async () 
   assert.equal(r1.lak_src, 'marshrut');
   assert.equal(r1.pack_src, 'marshrut');
   assert.equal(r1.fg_src, 'marshrut');
+  //  ★ MARSHRUT SANASI HAM KECHIKADI: konver hali Arrada, uchala sana
+  //  esa o'tib ketgan — jurnalda qizil turishi kerak, qo'lda reja
+  //  qo'yilmagan bo'lsa ham.
+  assert.equal(r1.lak_late, true, 'lak sanasi o\'tdi');
+  assert.equal(r1.pack_late, true, 'qadoqlash sanasi o\'tdi');
+  assert.equal(r1.fg_late, true, 'omborga tushish sanasi o\'tdi');
 
   //  Arrada turibdi, ya'ni oldinda lak tsexi turadi — «keyingi tsexga
   //  qachon beraman» degan savolning javobi o'sha zanjirdan chiqadi va
