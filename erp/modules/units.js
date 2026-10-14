@@ -2240,7 +2240,12 @@ router.post('/:id/plan',
     //  sql/register.sql). Boshlangan konverning bosh sanasi haqiqiy
     //  kun va uni bu yerdan surib bo'lmaydi.
     if (start !== undefined) {
-      if (start !== null && !/^\d{4}-\d{2}-\d{2}$/.test(start))
+      //  ★ OLIB TASHLANMAYDI, FAQAT SURILADI (zavod qarori, 2026-10):
+      //  menejer shu kunga ishonib mijozga chiqish sanasini aytgan
+      //  bo'lishi mumkin — reja jimgina yo'qolsa va'da izsiz qolardi.
+      if (start === null)
+        return res.status(400).json({ error: 'Boshlanish kunini olib tashlab bo\'lmaydi — boshqa kunga surish mumkin' });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(start))
         return res.status(400).json({ error: 'Sana noto\'g\'ri' });
       const r = await db.query(
         `UPDATE production_units

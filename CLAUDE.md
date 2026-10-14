@@ -205,8 +205,9 @@ zavod qarori 2026-10). Sanasiz konverda savdo chiqish kunini bilmasdi.
 Tsex boshlig'i «Boshlanmagan» ro'yxatida **«+ boshlanish kuni»** ni
 bosadi (`POST /api/units/:id/plan`, `start_on`, `production.plan` va
 tsex doirasi) — `started_on` o'sha kunga yoziladi va marshrut sanalari
-undan chiqadi. Faqat boshlanmagan konverga; bo'sh yuborilsa reja olib
-tashlanadi va sana yana yo'qoladi. Haqiqatda boshlanganda reja
+undan chiqadi. Faqat boshlanmagan konverga. **Olib tashlanmaydi, faqat
+suriladi**: menejer shu kunga ishonib mijozga va'da bergan bo'lishi
+mumkin va reja jimgina yo'qolsa va'da izsiz qolardi. Haqiqatda boshlanganda reja
 tozalanadi va haqiqiy kun yoziladi.
 
 **★ BOSH SANA — ISHGA TUSHGAN KUN** (`placePieces`, modules/units.js).

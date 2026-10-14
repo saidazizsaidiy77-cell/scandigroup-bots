@@ -12158,10 +12158,11 @@ test('boshlanmagan konver: sana yo\'q, ishga tushgan kun bosh sana bo\'ladi', as
                              JOIN sections sc ON sc.id = pr.section_id
                             WHERE pr.product_id = $1 ORDER BY pr.step_no LIMIT 1),
                           $1, '2026-10-03') z`, [PENAL])).d);
-  //  Olib tashlansa sana yana yo'q.
-  await korpus('POST', `/api/units/${u.id}/plan`, { start_on: null });
-  assert.equal((await ol())[0].lak_on, null);
-  await korpus('POST', `/api/units/${u.id}/plan`, { start_on: '2026-10-03' });
+  //  ★ OLIB TASHLANMAYDI — menejer shu kunga ishonib va'da bergan.
+  assert.equal((await korpus('POST', `/api/units/${u.id}/plan`, { start_on: null })).status, 400);
+  assert.ok((await ol())[0].lak_on, 'sana joyida');
+  //  Surish mumkin.
+  assert.equal((await korpus('POST', `/api/units/${u.id}/plan`, { start_on: '2026-10-03' })).status, 200);
 
   //  Bir qismi ishga tushadi — o'sha bo'lakning bosh sanasi yangilanadi,
   //  qolgani boshlanmagan va sanasiz.

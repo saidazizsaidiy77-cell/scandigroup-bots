@@ -147,20 +147,20 @@ function askStart(id, ev) {
         <input id="planVal" type="date" value="${bor}" style="font-size:18px">
         <button class="primary" style="width:100%;margin-top:16px"
           onclick="okStart(${id})">Saqlash</button>
-        ${bor ? `<button style="width:100%;margin-top:8px"
-          onclick="okStart(${id}, true)">Sanani olib tashlash</button>` : ''}
         <button style="width:100%;margin-top:8px" onclick="closePlan()">Bekor qilish</button>
       </div>
     </div>`);
 }
-async function okStart(id, ochir) {
-  const v = ochir ? null : ($('planVal').value || null);
-  if (!ochir && !v) return toast('Sana tanlanmadi', true);
+//  Olib tashlash yo'q: menejer shu kunga ishonib mijozga va'da bergan
+//  bo'lishi mumkin — faqat boshqa kunga suriladi.
+async function okStart(id) {
+  const v = $('planVal').value || null;
+  if (!v) return toast('Sana tanlanmadi', true);
   closePlan();
   try {
     await App.api(`/api/units/${id}/plan`,
       { method: 'POST', body: JSON.stringify({ start_on: v }) });
-    toast(ochir ? 'Sana olib tashlandi' : 'Boshlanish kuni qo\'yildi');
+    toast('Boshlanish kuni qo\'yildi');
     await loadBoard();
   } catch (e) { toast(e.message, true); }
 }
