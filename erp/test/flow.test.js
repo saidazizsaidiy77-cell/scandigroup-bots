@@ -5912,8 +5912,14 @@ test('muddat: korpusda bosqichlar zanjiri, stulda marshrut qadamlari', async () 
   const STOL = (await H.id(
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE g.code = 'STL' AND p.active ORDER BY p.id LIMIT 1`)).id;
+  //  Birinchi bo'limda turgan konver: boshlanmaganga marshrut sanasi
+  //  chiqarilmaydi (izoh: sql/register.sql).
+  const birinchi = async (pid) => (await H.id(
+    `SELECT section_id FROM v_product_route WHERE product_id = $1
+      ORDER BY step_no LIMIT 1`, [pid])).section_id;
   const sl = (await admin('POST', '/api/units/', { items: [{
-    product_id: STOL, qty: 1, started_on: '2026-09-19' }] })).body.created[0];
+    product_id: STOL, qty: 1, started_on: '2026-09-19',
+    section_id: await birinchi(STOL) }] })).body.created[0];
   const r5 = (await admin('GET', '/api/units/?conveyor_no=' + sl.conveyor_no)).body[0];
   assert.equal(String(r5.lak_on).slice(0, 10),  '2026-09-24', 'stol: lak');
   assert.equal(String(r5.pack_on).slice(0, 10), '2026-09-30', 'stol: qadoqlash');
@@ -5926,7 +5932,8 @@ test('muddat: korpusda bosqichlar zanjiri, stulda marshrut qadamlari', async () 
     `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE g.code = 'STU' AND p.active ORDER BY p.id LIMIT 1`)).id;
   const st = (await admin('POST', '/api/units/', { items: [{
-    product_id: STUL, qty: 2, started_on: '2026-09-19' }] })).body.created[0];
+    product_id: STUL, qty: 2, started_on: '2026-09-19',
+    section_id: await birinchi(STUL) }] })).body.created[0];
   const r2 = (await admin('GET', '/api/units/?conveyor_no=' + st.conveyor_no)).body[0];
   assert.equal(r2.fg_src, 'marshrut');
   assert.equal(r2.pack_on, null, 'stul qadoqlash tsexiga bormaydi');
@@ -6442,17 +6449,22 @@ test('zanjir avtomat, lekin qo\'lda qo\'yilgani ustun turadi', async () => {
   const ok = await admin('POST', `/api/units/requests/${q.body.created[0]}/approve`);
   assert.equal(ok.status, 200, ok.text);
 
-  //  Sanalar zanjirdan o'zi chiqdi.
+  //  ★ BOSHLANMAGAN — SANA YO'Q: hali hech bir bo'limga kirmagan.
   //  Raqamni tizim qo'ydi — tasdiqlash javobidan olinadi.
+  const r0 = (await admin('GET', '/api/units/?conveyor_no=' + ok.body.conveyor_no)).body[0];
+  assert.equal(r0.lak_on, null, 'boshlanmaganga lak sanasi yo\'q');
+  assert.equal(r0.fg_on, null, 'boshlanmaganga T/M ombor sanasi yo\'q');
+  assert.equal(r0.lak_src, null);
+
+  //  Korpus bo'ylab haydab (tuzatish — bosh sana o'zgarmaydi), sanalar
+  //  zanjirdan o'zi chiqdi.
+  const SHKUR2 = (await H.id(`SELECT id FROM sections WHERE code='KOR-SHKUR'`)).id;
+  assert.equal((await admin('PATCH', '/api/units/' + ok.body.unit_id,
+    { section_id: SHKUR2 })).status, 200);
   const r1 = (await admin('GET', '/api/units/?conveyor_no=' + ok.body.conveyor_no)).body[0];
   assert.equal(String(r1.lak_on).slice(0, 10),  '2026-09-26');
   assert.equal(String(r1.pack_on).slice(0, 10), '2026-10-03');
   assert.equal(r1.lak_src, 'marshrut');
-
-  //  Korpus bo'ylab haydab, lak tsexiga topshiramiz.
-  const SHKUR2 = (await H.id(`SELECT id FROM sections WHERE code='KOR-SHKUR'`)).id;
-  assert.equal((await admin('PATCH', '/api/units/' + ok.body.unit_id,
-    { section_id: SHKUR2 })).status, 200);
   assert.equal((await korpus('POST', '/api/units/handover',
     { items: [ok.body.unit_id] })).status, 200);
 
@@ -12109,6 +12121,54 @@ test("mijozdan qaytarish: yozish, qabul, qarz va ombor", async () => {
   const bek = await admin('POST', `/api/returns/${r4.body.id}/reject`, { note: 'xato' });
   assert.equal(bek.body.status, 'cancelled');
   assert.equal(await balans(), b0 - 600);
+});
+
+test('boshlanmagan konver: sana yo\'q, ishga tushgan kun bosh sana bo\'ladi', async () => {
+  //  ★ ZAVOD QARORI (2026-10): konver ochilgan kun emas, birinchi
+  //  bo'limga KIRGAN kun bosh sana — muddatlar shundan sanaladi.
+  const u = (await admin('POST', '/api/units/', { items: [{
+    product_id: PENAL, qty: 4, started_on: '2026-09-01' }] })).body.created[0];
+  const ol = async () => (await admin('GET', '/api/units/?conveyor_no=' + u.conveyor_no)).body;
+  let r = (await ol())[0];
+  assert.equal(r.lak_on, null);
+  assert.equal(r.pack_on, null);
+  assert.equal(r.fg_on, null);
+  assert.ok(!r.fg_late, 'sanasiz konver kechikmaydi');
+
+  //  Qo'lda qo'yilgan reja esa ko'rinaveradi.
+  await H.id(`UPDATE production_units SET fg_planned_on = '2026-12-01' WHERE id = $1
+              RETURNING id`, [u.id]);
+  r = (await ol())[0];
+  assert.equal(String(r.fg_on).slice(0, 10), '2026-12-01');
+  assert.equal(r.fg_src, 'reja');
+  await H.id(`UPDATE production_units SET fg_planned_on = NULL WHERE id = $1
+              RETURNING id`, [u.id]);
+
+  //  Bir qismi ishga tushadi — o'sha bo'lakning bosh sanasi yangilanadi,
+  //  qolgani boshlanmagan va sanasiz.
+  await xomsiz();
+  const m = await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: u.id, qty: 1, moved_on: '2026-10-05' }] });
+  assert.equal(m.status, 200, m.text);
+  const rows = await ol();
+  const bosh = rows.find((x) => x.section_id);
+  const qoldi = rows.find((x) => !x.section_id);
+  assert.equal(String(bosh.started_on).slice(0, 10), '2026-10-05');
+  assert.equal(bosh.lak_src, 'marshrut');
+  assert.equal(String(bosh.lak_on).slice(0, 10), (await H.id(
+    `SELECT to_char(lak_on, 'YYYY-MM-DD') AS d
+       FROM muddat_zanjir((SELECT shop_id FROM sections WHERE id = $1), $2, '2026-10-05')`,
+    [bosh.section_id, PENAL])).d);
+  assert.equal(qoldi.lak_on, null);
+  assert.equal(String(qoldi.started_on).slice(0, 10), '2026-09-01');
+
+  //  Qolgani ham tushadi — u ham o'z kunini oladi.
+  await korpus('POST', '/api/units/move',
+    { items: [{ unit_id: qoldi.id, moved_on: '2026-10-07' }] });
+  const hamma = await ol();
+  assert.equal(hamma.length, 1, 'bo\'laklar birlashdi');
+  //  Birlashganda allaqachon boshlangan qatorning sanasi qoladi.
+  assert.equal(String(hamma[0].started_on).slice(0, 10), '2026-10-05');
 });
 
 test('vazifalar: mavzu, izoh, huquq, navbat va Telegram eslatmasi', async () => {

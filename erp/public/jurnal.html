@@ -141,6 +141,15 @@ const dateCell = (r, s, src, late) => s
   ? dateWithSrc(s, src, late)
   : (r.is_stock ? '<span class="tag">zahira</span>' : '<span class="muted">—</span>');
 
+// ★ BOSHLANMAGAN KONVERGA SANA YO'Q (zavod qarori, 2026-10; izoh:
+// sql/register.sql): u hali hech bir bo'limga kirmagan va kun birinchi
+// bo'limga kirganda hisoblanadi. Bo'sh «—» unutilgan deb o'qilardi —
+// yozuv sababini aytadi.
+const boshlanmagan = (r) => r.status === 'production' && !r.section_id && !r.is_stock;
+const sanaKatak = (r, s, src, late) => !s && boshlanmagan(r)
+  ? '<span class="muted" style="font-size:12px">boshlanganda</span>'
+  : dateCell(r, s, src, late);
+
 const STATUS = { production:['warn','ishlab chiqarishda'], fg:['ok','T/M omborda'],
                  shipped:['','jo\'natilgan'], cancelled:['bad','bekor'] };
 
@@ -431,9 +440,10 @@ function render(){
         ? `${esc(r.section)}<div class="muted" style="font-size:11.5px">${
             r.waiting ? 'buyurtma kutilmoqda' : esc(r.shop || '')}</div>`
         : '<span class="muted">boshlanmagan</span>'}</td>
-      <td class="sep">${dateWithSrc(r.lak_on, r.lak_src, r.lak_late)}</td>
+      <td class="sep">${!r.lak_on && boshlanmagan(r) ? sanaKatak(r, null)
+        : dateWithSrc(r.lak_on, r.lak_src, r.lak_late)}</td>
       <td>${dateCell(r, r.pack_on, r.pack_src, r.pack_late)}</td>
-      <td>${dateCell(r, r.fg_on,   r.fg_src,   r.fg_late)}</td>
+      <td>${sanaKatak(r, r.fg_on,   r.fg_src,   r.fg_late)}</td>
       <td class="sep">${r.customer_id ? esc(r.customer_name)
             : '<span class="muted">T/M ombor</span>'}</td>
       <td class="act sep">
