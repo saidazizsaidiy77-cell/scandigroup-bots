@@ -41,6 +41,11 @@ const TURLAR = [
 
   { kod: 'cash_pending',   bolim: 'Kassa', nom: 'Pul topshirildi — qabul qilinmagan' },
   { kod: 'digest',         bolim: 'Rahbariyat', nom: 'Kunlik xulosa (har kuni)' },
+
+  { kod: 'task_assigned',  bolim: 'Vazifalar', nom: 'Sizga vazifa berildi' },
+  { kod: 'task_comment',   bolim: 'Vazifalar', nom: 'Vazifaga izoh / bajarildi' },
+  { kod: 'task_due3',      bolim: 'Vazifalar', nom: 'Muddatga 3 kun qoldi' },
+  { kod: 'task_due',       bolim: 'Vazifalar', nom: 'Muddat keldi — so\'rang' },
 ];
 const KODLAR = TURLAR.map((t) => t.kod);
 

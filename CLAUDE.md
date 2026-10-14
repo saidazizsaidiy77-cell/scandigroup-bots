@@ -3106,6 +3106,33 @@ FAKTI, indeks esa «orqadamanmi» degan savolning javobi.
 
 ---
 
+## Vazifalar — doska
+
+**★ ISH TELEGRAM CHATIDA YO'QOLMASIN** (zavod qarori, 2026-10;
+`sql/tasks.sql`, `modules/tasks.js`, `/vazifalar.html`). Har ish —
+MAVZU (`T26-0001`): sarlavha, tafsilot, ijrochi, muddat, holat va ostida
+izohlar. Doska Trello kabi: **Yangi · Jarayonda · Tekshiruvda ·
+Bajarildi** (bekor qilingani ham saqlanadi). Bajarilgani doskada 30 kun
+turadi.
+
+**Hamma ko'radi, hamma ochadi, hamma izoh yozadi** — huquq yo'q, faqat
+kirgan bo'lish kerak. O'zgartirish chegarasi SERVERDA: sarlavha,
+ijrochi va muddat — ochgan odam yoki administrator (`admin.users`);
+holat — ular va ijrochi; bekor qilish — faqat ochgan odam.
+
+**Telegram** (har biri `notify.TURLAR` da, xodim o'chira oladi):
+ijrochiga «sizga vazifa berildi»; izoh — ijrochi va ochgan odamga
+(yozganning o'ziga emas); bajarildi — ochgan odamga. Kunlik jadvalda
+(`TASK_AT`, 09:00): **muddatga 3 kun yoki kam qolganda IJROCHIGA**,
+**muddat kuni (yoki o'tib ketgan) OCHGAN odamga va «Vazifa nazorati»
+belgili rahbarlarga** — «bugun shu xodim bajarishi kerak edi, so'rang».
+Har biri BIR MARTA va qaysi MUDDAT uchun ketgani saqlanadi
+(`remind_for`, `due_sent_for`): muddat surilsa yana ketadi.
+
+Belgi XODIMDA (`workers.task_watch`, Xodimlar sahifasi), standarti
+`false` — 4-qoida. Menyuda navbat: menga berilgan `new`/`doing`
+(`?mine=open` bilan bir xil shart, test solishtiradi).
+
 ## Navbat — menyudagi belgi
 
 **★ NAVBAT XODIMNI O'ZI TOPADI** (zavod qarori, 2026-09).

@@ -63,6 +63,7 @@ app.use('/api/materials', require('./modules/materials'));
 // Menyudagi navbat belgisi: har bo'limda nechta ish kutayotgani.
 // Huquq tekshiruvi modul ichida — har navbat o'z egasiga ko'rinadi.
 app.use('/api/navbat', require('./modules/nav'));
+app.use('/api/tasks', require('./modules/tasks'));
 // app.use('/api/payroll',    require('./modules/payroll'));     // maosh
 
 // Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:
@@ -307,6 +308,13 @@ const KUNLIK = [
   //  chunki u ertangi kunni shu xabar bilan tuzadi.
   { nom: 'muddat', env: 'DUE_AT', vaqt: '17:00',
     ish: () => require('./modules/units').muddatYubor() },
+
+  //  ★ VAZIFALAR (izoh: modules/tasks.js): muddatga 3 kun qolganda
+  //  ijrochiga, muddat kuni ochgan odamga va «Vazifa nazorati» belgili
+  //  rahbarlarga. ERTALAB — kun shu xabar bilan boshlanadi va «so'rang»
+  //  degan savolga kun bo'yi vaqt qoladi.
+  { nom: 'vazifa', env: 'TASK_AT', vaqt: '09:00',
+    ish: () => require('./modules/tasks').tasksYubor() },
 ];
 
 function kunlikJadval() {

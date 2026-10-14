@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vazifalar · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+<style>
+/*  ★ DOSKA — TO'RT USTUN (Trello kabi). Telefonda ustunlar yonma-yon
+    siqilib qolmasin: gorizontal suriladi va har ustun ekranning deyarli
+    butun kengligini oladi. */
+.kanban{display:grid;grid-template-columns:repeat(4,minmax(260px,1fr));gap:14px;
+  overflow-x:auto;padding-bottom:6px;align-items:start}
+@media (max-width:760px){.kanban{grid-template-columns:repeat(4,86vw);scroll-snap-type:x mandatory}
+  .kanban .col{scroll-snap-align:start}}
+.kanban .col{background:var(--surface-2);border-radius:var(--radius);padding:12px;min-height:120px}
+.kanban .col.over{outline:2px dashed var(--accent);outline-offset:-4px}
+.kanban .col h2{display:flex;justify-content:space-between;margin-bottom:10px}
+.tcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:11px 12px;margin-bottom:9px;cursor:pointer}
+.tcard:hover{border-color:var(--accent)}
+.tcard .no{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.tcard .tt{font-weight:500;margin:2px 0 8px;line-height:1.35}
+.tcard .meta{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px;color:var(--muted);
+  align-items:center}
+.comment{border-bottom:1px solid var(--line);padding:10px 0}
+.comment:last-child{border-bottom:0}
+.comment .who{font-size:12px;color:var(--muted)}
+.comment .txt{white-space:pre-wrap;margin-top:3px}
+textarea{font:inherit;color:var(--text);background:var(--surface-2);width:100%;
+  border:1px solid var(--line);border-radius:10px;padding:12px 14px;resize:vertical}
+textarea:focus{outline:none;border-color:var(--accent)}
+.chips button.on{background:var(--text);color:var(--surface);border-color:var(--text)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Vazifalar</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+    <div class="row chips" style="gap:6px;flex-wrap:wrap">
+      <button data-f="" onclick="filtr('')">Hammasi</button>
+      <button data-f="mine" onclick="filtr('mine')">Menga</button>
+      <button data-f="created" onclick="filtr('created')">Men ochgan</button>
+    </div>
+    <input id="fQ" placeholder="mavzu, raqam yoki ijrochi bo'yicha qidirish"
+           style="flex:1;min-width:220px" oninput="clearTimeout(window._t);window._t=setTimeout(load,250)">
+    <button class="primary" onclick="yangi()">+ Yangi mavzu</button>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:8px">
+    Kartochkani bosing — tafsilot va izohlar ochiladi. Kompyuterda
+    kartochkani boshqa ustunga sudrab o'tkazish mumkin. Muddatga 3 kun
+    qolganda ijrochiga, muddat kuni ochgan odamga va rahbariyatga
+    Telegram xabari boradi.</p>
+</div>
+
+<div id="board" class="kanban" style="margin-top:16px"></div>
+<div id="modal"></div>
+
+<script>
+//  ═══════════════════════════════════════════════ VAZIFALAR DOSKASI
+//
+//  Izoh: sql/tasks.sql va modules/tasks.js. Qoida SERVERDA: kim nimani
+//  o'zgartira olishi u yerda tekshiriladi, sahifa faqat tugmani
+//  chizmaydi — chizmaslik himoya emas.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const d8 = (s) => !s ? '' : new Date(s).toLocaleDateString('ru-RU',
+  { day: '2-digit', month: '2-digit', year: '2-digit' });
+const dt = (s) => !s ? '' : new Date(s).toLocaleString('ru-RU',
+  { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const isoKun = (s) => !s ? '' : String(s).slice(0, 10);
+
+const USTUNLAR = [
+  { k: 'new',    t: 'Yangi' },
+  { k: 'doing',  t: 'Jarayonda' },
+  { k: 'review', t: 'Tekshiruvda' },
+  { k: 'done',   t: 'Bajarildi' },
+];
+let d = { tasks: [], workers: [] }, f = '';
+
+function filtr(k) {
+  f = k;
+  document.querySelectorAll('.chips button').forEach(b =>
+    b.classList.toggle('on', b.dataset.f === f));
+  load();
+}
+
+//  Muddat yorlig'i: o'tib ketgani QIZIL, 3 kun va kami SARIQ — xabar
+//  ham aynan shu chegarada ketadi.
+function muddat(t) {
+  if (!t.due_on) return '';
+  const q = Number(t.days_left);
+  const ochiq = ['new', 'doing', 'review'].includes(t.status);
+  const cls = !ochiq ? '' : q < 0 ? 'bad' : q <= 3 ? 'warn' : '';
+  const yoz = !ochiq ? d8(t.due_on)
+    : q < 0 ? `${d8(t.due_on)} · ${-q} kun kechikdi`
+    : q === 0 ? `${d8(t.due_on)} · bugun`
+    : `${d8(t.due_on)} · ${q} kun`;
+  return `<span class="tag ${cls}">⏱ ${yoz}</span>`;
+}
+
+function draw() {
+  $('board').innerHTML = USTUNLAR.map(u => {
+    const ro = d.tasks.filter(t => t.status === u.k);
+    return `<div class="col" data-s="${u.k}"
+                 ondragover="event.preventDefault();this.classList.add('over')"
+                 ondragleave="this.classList.remove('over')"
+                 ondrop="tashla(event,'${u.k}')">
+      <h2><span>${u.t}</span><span>${ro.length}</span></h2>
+      ${ro.map(t => `<div class="tcard" draggable="true"
+            ondragstart="event.dataTransfer.setData('text/plain','${t.id}')"
+            onclick="och(${t.id})">
+          <div class="no">${esc(t.task_no)}</div>
+          <div class="tt">${esc(t.title)}</div>
+          <div class="meta">
+            <span>👤 ${t.assignee_name ? esc(t.assignee_name) : '<i>ijrochi yo\'q</i>'}</span>
+            ${muddat(t)}
+            ${t.comments ? `<span>💬 ${t.comments}</span>` : ''}
+          </div></div>`).join('') || '<p class="muted" style="font-size:13px">bo\'sh</p>'}
+    </div>`;
+  }).join('');
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if (f === 'mine') q.set('mine', '1');
+  if (f === 'created') q.set('created', '1');
+  if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
+  d = await App.api('/api/tasks?' + q);
+  draw();
+}
+
+async function tashla(e, s) {
+  e.preventDefault();
+  document.querySelectorAll('.col').forEach(c => c.classList.remove('over'));
+  const id = Number(e.dataTransfer.getData('text/plain'));
+  const t = d.tasks.find(x => x.id === id);
+  if (!t || t.status === s) return;
+  try { await App.api('/api/tasks/' + id, { method: 'PATCH', body: { status: s } }); }
+  catch (er) { alert(er.message); }
+  load();
+}
+
+const yop = () => { $('modal').innerHTML = ''; };
+
+function ijrochiSelect(id, tanlangan) {
+  return `<select id="${id}"><option value="">— ijrochi tanlanmagan —</option>${
+    d.workers.map(w => `<option value="${w.id}"${w.id === tanlangan ? ' selected' : ''}>${
+      esc(w.name)}${w.position ? ' · ' + esc(w.position) : ''}${w.has_tg ? '' : ' (Telegram yo\'q)'}</option>`).join('')}
+  </select>`;
+}
+
+function yangi() {
+  $('modal').innerHTML = `<div class="overlay" onclick="if(event.target===this)yop()">
+    <div class="modal" style="max-width:620px">
+      <h2>Yangi mavzu</h2>
+      <label>Mavzu</label><input id="nTitle" placeholder="masalan: Qarshi Husanga yangi katalog yuborish">
+      <label style="margin-top:10px">Tafsilot</label>
+      <textarea id="nBody" rows="4" placeholder="nima qilish kerak, qanday natija kutilmoqda"></textarea>
+      <div class="row" style="gap:12px;margin-top:10px;flex-wrap:wrap">
+        <div style="flex:2;min-width:220px"><label>Ijrochi</label>${ijrochiSelect('nAs', null)}</div>
+        <div style="flex:1;min-width:150px"><label>Muddat</label><input id="nDue" type="date"></div>
+      </div>
+      <div class="row" style="gap:10px;margin-top:16px;justify-content:flex-end">
+        <button onclick="yop()">Bekor</button>
+        <button class="primary" onclick="yarat()">Ochish</button>
+      </div></div></div>`;
+  $('nTitle').focus();
+}
+
+async function yarat() {
+  try {
+    await App.api('/api/tasks', { method: 'POST', body: {
+      title: $('nTitle').value, body: $('nBody').value,
+      assignee_id: $('nAs').value || null, due_on: $('nDue').value || null } });
+    yop(); load();
+  } catch (e) { alert(e.message); }
+}
+
+//  Mavzu oynasi: tepada tafsilot (huquqi borga tahrirlanadi), holat
+//  tugmalari, ostida izohlar lentasi va yozish katagi.
+async function och(id) {
+  const t = await App.api('/api/tasks/' + id);
+  const holatTugma = USTUNLAR.concat(t.can_edit ? [{ k: 'cancelled', t: 'Bekor qilish' }] : [])
+    .map(u => `<button ${u.k === t.status ? 'class="primary"' : ''}
+        ${t.can_move ? `onclick="holat(${t.id},'${u.k}')"` : 'disabled'}>${u.t}</button>`).join('');
+  $('modal').innerHTML = `<div class="overlay" onclick="if(event.target===this){yop();load()}">
+    <div class="modal">
+      <div class="muted" style="font-size:12px">${esc(t.task_no)} · ochgan: ${
+        esc(t.creator_name || '—')} · ${dt(t.created_at)}${
+        t.status === 'cancelled' ? ' · <b>bekor qilingan</b>' : ''}</div>
+      ${t.can_edit ? `
+        <input id="eTitle" value="${esc(t.title)}" style="font-size:18px;font-weight:600;margin-top:6px">
+        <textarea id="eBody" rows="3" style="margin-top:8px" placeholder="tafsilot">${esc(t.body || '')}</textarea>
+        <div class="row" style="gap:12px;margin-top:8px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:2;min-width:220px"><label>Ijrochi</label>${ijrochiSelect('eAs', t.assignee_id)}</div>
+          <div style="flex:1;min-width:150px"><label>Muddat</label>
+            <input id="eDue" type="date" value="${isoKun(t.due_on)}"></div>
+          <button onclick="saqla(${t.id})">Saqlash</button>
+        </div>`
+      : `<h2 style="text-transform:none;letter-spacing:0;font-size:18px;color:var(--text);margin:6px 0">${esc(t.title)}</h2>
+         ${t.body ? `<p style="white-space:pre-wrap">${esc(t.body)}</p>` : ''}
+         <p class="muted" style="margin-top:8px">👤 ${esc(t.assignee_name || 'ijrochi yo\'q')}
+           ${t.due_on ? ' · ' + muddat(t) : ''}</p>`}
+      <div class="row" style="gap:6px;margin-top:14px;flex-wrap:wrap">${holatTugma}</div>
+      ${t.done_at ? `<p class="muted" style="font-size:12px;margin-top:6px">Bajarildi: ${
+        dt(t.done_at)}${t.done_by_name ? ' · ' + esc(t.done_by_name) : ''}</p>` : ''}
+
+      <h2 style="margin-top:20px">Izohlar (${t.comment_list.length})</h2>
+      <div>${t.comment_list.map(c => `<div class="comment">
+          <div class="who"><b>${esc(c.worker_name || '—')}</b> · ${dt(c.created_at)}</div>
+          <div class="txt">${esc(c.body)}</div></div>`).join('')
+        || '<p class="muted" style="font-size:13px">Hali izoh yo\'q</p>'}</div>
+      <textarea id="cBody" rows="3" style="margin-top:10px" placeholder="izoh yozing…"></textarea>
+      <div class="row" style="gap:10px;margin-top:10px;justify-content:flex-end">
+        <button onclick="yop();load()">Yopish</button>
+        <button class="primary" onclick="izoh(${t.id})">Izoh yuborish</button>
+      </div></div></div>`;
+}
+
+async function saqla(id) {
+  try {
+    await App.api('/api/tasks/' + id, { method: 'PATCH', body: {
+      title: $('eTitle').value, body: $('eBody').value,
+      assignee_id: $('eAs').value || null, due_on: $('eDue').value || null } });
+    och(id); load();
+  } catch (e) { alert(e.message); }
+}
+
+async function holat(id, s) {
+  if (s === 'cancelled' && !confirm('Mavzu bekor qilinsinmi?')) return;
+  try { await App.api('/api/tasks/' + id, { method: 'PATCH', body: { status: s } }); och(id); load(); }
+  catch (e) { alert(e.message); }
+}
+
+async function izoh(id) {
+  const body = $('cBody').value.trim();
+  if (!body) return;
+  try { await App.api(`/api/tasks/${id}/comments`, { method: 'POST', body: { body } }); och(id); load(); }
+  catch (e) { alert(e.message); }
+}
+
+App.start(() => {
+  filtr('');
+  //  Havola orqali bitta mavzu ochiladi: /vazifalar.html?id=12
+  const id = new URLSearchParams(location.search).get('id');
+  if (id) och(Number(id));
+});
+</script>
+</body>
+</html>

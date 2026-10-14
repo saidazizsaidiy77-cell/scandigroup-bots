@@ -12111,6 +12111,102 @@ test("mijozdan qaytarish: yozish, qabul, qarz va ombor", async () => {
   assert.equal(await balans(), b0 - 600);
 });
 
+test('vazifalar: mavzu, izoh, huquq, navbat va Telegram eslatmasi', async () => {
+  //  ★ ZAVOD QARORI (2026-10): ish Telegram chatida yo'qolmasin.
+  //  Hamma ochadi va izoh yozadi; sarlavha, ijrochi va muddatni ochgan
+  //  odam tuzatadi, holatni ijrochi ham suradi.
+  const { db } = require('../db');
+  const w = async (n) => (await H.id(`SELECT id FROM workers WHERE name = $1`, [n])).id;
+  const KORPUS = await w('Korpus ustasi'), LAK = await w("Bo'yoq ustasi");
+  const ADMIN = await w('Administrator');
+  const xabar = async (kind, wid) => (await H.id(
+    `SELECT COUNT(*)::int AS n FROM notifications WHERE kind = $1 AND worker_id = $2`,
+    [kind, wid])).n;
+
+  //  Korpus ustasi ochadi (huquq kerak emas), ijrochi — bo'yoq ustasi.
+  const bo = await xabar('task_assigned', LAK);
+  const r = await korpus('POST', '/api/tasks', { title: '  ', assignee_id: LAK });
+  assert.equal(r.status, 400, 'nomsiz mavzu ochilmaydi');
+  const t = (await korpus('POST', '/api/tasks',
+    { title: 'Katalogni yangilash', body: 'yangi ranglar', assignee_id: LAK,
+      due_on: kun(10) })).body;
+  assert.match(t.task_no, /^T\d{2}-\d{4}$/);
+  assert.equal(await xabar('task_assigned', LAK), bo + 1, 'ijrochiga xabar ketdi');
+
+  //  Hamma ko'radi.
+  const l = (await lak('GET', '/api/tasks')).body;
+  assert.ok(l.tasks.some((x) => x.id === t.id));
+
+  //  Ijrochi sarlavha va muddatni o'zgartira olmaydi, holatni suradi.
+  assert.equal((await lak('PATCH', '/api/tasks/' + t.id, { due_on: kun(20) })).status, 403);
+  assert.equal((await lak('PATCH', '/api/tasks/' + t.id, { status: 'cancelled' })).status, 403);
+  const s = await lak('PATCH', '/api/tasks/' + t.id, { status: 'doing' });
+  assert.equal(s.status, 200, s.text);
+  assert.equal(s.body.status, 'doing');
+
+  //  ★ NAVBAT BELGISI RO'YXAT BILAN BIR XIL: menga berilgan, ochiq.
+  const nav = (await lak('GET', '/api/navbat')).body.navbat
+    .find((x) => x.page === '/vazifalar.html');
+  const mine = (await lak('GET', '/api/tasks?mine=open')).body.tasks;
+  assert.equal(nav.n, mine.length);
+  assert.ok(mine.some((x) => x.id === t.id));
+
+  //  Izoh — hamma yozadi; ochgan va ijrochiga xabar, yozganning o'ziga emas.
+  const ko = await xabar('task_comment', KORPUS);
+  const c = await admin('POST', `/api/tasks/${t.id}/comments`, { body: 'qachon tayyor?' });
+  assert.equal(c.status, 200, c.text);
+  assert.equal(await xabar('task_comment', KORPUS), ko + 1);
+  const d1 = (await admin('GET', '/api/tasks/' + t.id)).body;
+  assert.equal(d1.comment_list.length, 1);
+  assert.equal(d1.comments, 1);
+
+  //  ── ESLATMALAR ────────────────────────────────────────────────
+  const { tasksYubor } = require('../modules/tasks');
+  await db.query(`UPDATE workers SET task_watch = false`);
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + ADMIN, { task_watch: true })).status, 200);
+
+  //  3 kun qoldi — ijrochiga, BIR marta.
+  await korpus('PATCH', '/api/tasks/' + t.id, { due_on: kun(3) });
+  const d3 = await xabar('task_due3', LAK);
+  await tasksYubor();
+  assert.equal(await xabar('task_due3', LAK), d3 + 1);
+  await tasksYubor();
+  assert.equal(await xabar('task_due3', LAK), d3 + 1, 'ikkinchi marta ketmaydi');
+
+  //  Muddat keldi — ochgan odamga va nazorat belgilisiga, ijrochiga emas.
+  await korpus('PATCH', '/api/tasks/' + t.id, { due_on: kun(0) });
+  const [k0, a0, l0] = [await xabar('task_due', KORPUS), await xabar('task_due', ADMIN),
+                        await xabar('task_due', LAK)];
+  await tasksYubor();
+  assert.equal(await xabar('task_due', KORPUS), k0 + 1);
+  assert.equal(await xabar('task_due', ADMIN), a0 + 1);
+  assert.equal(await xabar('task_due', LAK), l0);
+  const body = (await H.id(`SELECT body FROM notifications WHERE kind = 'task_due'
+                             ORDER BY id DESC LIMIT 1`)).body;
+  assert.match(body, /Bo'yoq ustasi/);
+  assert.match(body, /Katalogni yangilash/);
+  await tasksYubor();
+  assert.equal(await xabar('task_due', KORPUS), k0 + 1, 'bir marta');
+
+  //  Muddat surilsa — yangi muddat uchun yana ketadi.
+  await korpus('PATCH', '/api/tasks/' + t.id, { due_on: kun(2) });
+  await tasksYubor();
+  assert.equal(await xabar('task_due3', LAK), d3 + 2);
+
+  //  Bajarildi — eslatma ketmaydi, ochgan odamga xabar.
+  const kd = await xabar('task_comment', KORPUS);
+  assert.equal((await lak('PATCH', '/api/tasks/' + t.id, { status: 'done' })).status, 200);
+  assert.equal(await xabar('task_comment', KORPUS), kd + 1);
+  await korpus('PATCH', '/api/tasks/' + t.id, { due_on: kun(-1) });
+  const kk = await xabar('task_due', KORPUS);
+  await tasksYubor();
+  assert.equal(await xabar('task_due', KORPUS), kk, 'bajarilganiga eslatma yo\'q');
+  const nav2 = (await lak('GET', '/api/navbat')).body.navbat
+    .find((x) => x.page === '/vazifalar.html');
+  assert.equal(nav2.n, (await lak('GET', '/api/tasks?mine=open')).body.tasks.length);
+  await db.query(`UPDATE workers SET task_watch = false`);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

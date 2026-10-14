@@ -52,6 +52,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
             w.sales_head_id, w.sees_cash, w.can_add_supplier, w.kpi_bonus_tushum,
+            w.task_watch,
             w.can_release, w.can_request_unit, w.can_add_customer,
             w.supply_reports, w.daily_digest,
             w.mat_scope,
@@ -328,7 +329,7 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
           can_spend_cash, sees_warehouse, can_release,
           can_request_unit, can_add_customer, supply_reports, daily_digest,
           mat_scope, sales_head_id, sees_cash, can_add_supplier,
-          kpi_bonus_tushum, roles } = req.body;
+          kpi_bonus_tushum, task_watch, roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -415,7 +416,10 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          can_add_supplier = COALESCE($28, can_add_supplier),
          --  KPI bonusi bazasi (izoh: sql/sales-kpi.sql) — yuborilmasa
          --  tegilmaydi.
-         kpi_bonus_tushum = COALESCE($29, kpi_bonus_tushum)
+         kpi_bonus_tushum = COALESCE($29, kpi_bonus_tushum),
+         --  Vazifa muddati kelganda xabar oladimi (izoh: sql/tasks.sql)
+         --  — yuborilmasa tegilmaydi.
+         task_watch = COALESCE($30, task_watch)
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -440,7 +444,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        sales_head_id === undefined ? null : (Number(sales_head_id) || 0),
        typeof sees_cash === 'boolean' ? sees_cash : null,
        typeof can_add_supplier === 'boolean' ? can_add_supplier : null,
-       typeof kpi_bonus_tushum === 'boolean' ? kpi_bonus_tushum : null]);
+       typeof kpi_bonus_tushum === 'boolean' ? kpi_bonus_tushum : null,
+       typeof task_watch === 'boolean' ? task_watch : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
