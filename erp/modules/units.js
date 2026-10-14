@@ -2491,6 +2491,13 @@ async function birlashtir(client, eski, tirik) {
 }
 
 async function placePieces(client, req, u, toSection, n, movedOn) {
+  //  ★ BOSH SANA — ISHGA TUSHGAN KUN (zavod qarori, 2026-10). Konver
+  //  «boshlanmagan» bo'lib ochiladi va bosh sana ochilgan kun bo'lib
+  //  qolardi: tsex uni bir hafta keyin boshlasa ham muddatlar o'sha
+  //  kundan sanalardi va lak, qadoqlash, T/M ombor sanalari haqiqatdan
+  //  oldinda turardi. Endi birinchi bo'limga kirgan kun — bosh sana,
+  //  va marshrut sanalari shundan hisoblanadi (izoh: sql/register.sql).
+  const boshlanmoqda = !!toSection && u.status === 'production' && !u.current_section_id;
   const sibling = toSection ? (await client.query(
     `SELECT id FROM production_units
       WHERE conveyor_no = $1 AND id <> $2 AND status = 'production'
@@ -2520,8 +2527,10 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
     await client.query(
       `UPDATE production_units
           SET current_section_id = $2::int,
-              entered_section_on = $3::date
-        WHERE id = $1`, [u.id, toSection, movedOn || null]);
+              entered_section_on = $3::date,
+              started_on = CASE WHEN $4 THEN COALESCE($3::date, CURRENT_DATE)
+                                ELSE started_on END
+        WHERE id = $1`, [u.id, toSection, movedOn || null, boshlanmoqda]);
     return u.id;
   }
 
@@ -2531,6 +2540,12 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
   //  funksiyadan o'tadi va u yerda bron ESKI qatorda qolishi kerak
   //  (izoh: `handoverOne`).
   const yangi = await clonePart(client, req, u, n, { toSection, movedOn });
+  //  Boshlangani YANGI bo'lak; qolgani hali boshlanmagan va o'z
+  //  sanasini kutadi.
+  if (boshlanmoqda)
+    await client.query(
+      `UPDATE production_units SET started_on = COALESCE($2::date, CURRENT_DATE)
+        WHERE id = $1`, [yangi, movedOn || null]);
   await bronKochir(client, u.id, yangi, n);
   return yangi;
 }

@@ -192,9 +192,20 @@ bo'limlar ekranidagi orqaga sanash bilan BIR manbadan chiqadi, aks
 holda boshliq qo'ygan kun o'sha ekranda ko'rinmasdi. Bo'sh yuborilgani
 «tegma» emas, «yo'q» degani — xato sana olib tashlanadi.
 
-Bo'limsiz kiritilgan konverda keyingi tsex yo'q, lekin **T/M ombor
-sanasi bor**: u marshrutning to'liq uzunligidan chiqadi va konver
-qayerda turganini bilishni talab qilmaydi.
+**★ BOSHLANMAGAN KONVERGA SANA CHIQARILMAYDI** (zavod qarori,
+2026-10; `v_unit_register` dagi `pl` join sharti). Ilgari bo'limsiz
+konverga ham lak va T/M ombor sanasi chiqardi — bosh sanadan, ya'ni
+konver OCHILGAN kundan sanab. Konver esa hali hech bir bo'limga
+kirmagan: sana yolg'on va'da edi va savdo uni mijozga aytib qo'yardi.
+Endi marshrut sanasi yo'q, jurnalda «boshlanganda» yoziladi; tsex
+boshlig'i QO'LDA qo'ygan reja esa ko'rinaveradi.
+
+**★ BOSH SANA — ISHGA TUSHGAN KUN** (`placePieces`, modules/units.js).
+Boshlanmagan konver birinchi bo'limga kirgan kuni `started_on` o'sha
+kunga yangilanadi va marshrut sanalari shundan sanaladi. Bir qismi
+tushsa faqat o'sha bo'lak yangilanadi; boshlangan qatorga qo'shilsa
+uning sanasi qoladi. Jurnaldagi tuzatish (`PATCH`, bo'lim qo'lda)
+bosh sanaga tegmaydi — u tarixni to'g'rilash.
 
 Zavod ko'rinishidagi (`/zavod.html`) jamlanma muddat hali ham
 quvvatdan hisoblanadi (`v_position_eta`, `v_section_rate`) — u boshqa

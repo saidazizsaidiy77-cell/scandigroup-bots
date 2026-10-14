@@ -545,5 +545,13 @@ JOIN product_groups g  ON g.id = p.group_id
 -- Konver hozir turgan bo'lim: kutish nuqtasimi yoki yo'q
 LEFT JOIN sections cur ON cur.id = u.current_section_id
 LEFT JOIN v_unit_place pp ON pp.unit_id = u.id
+--  ★ BOSHLANMAGAN KONVERGA MARSHRUT SANASI CHIQARILMAYDI (zavod
+--  qarori, 2026-10). U hech bir bo'limga kirmagan, ya'ni lak, qadoqlash
+--  va T/M ombor kuni NOMA'LUM: bosh sanadan sanalgan kun yolg'on va'da
+--  bo'lardi va savdo uni mijozga aytib qo'yardi. Sana konver birinchi
+--  bo'limga kirgan kuni paydo bo'ladi — bosh sana o'sha kun bo'ladi
+--  (`placePieces`, modules/units.js). Tsex boshlig'i QO'LDA qo'ygan
+--  reja esa ko'rinaveradi: u haqiqiy va'da.
 LEFT JOIN v_unit_plan pl  ON pl.unit_id = u.id
+                         AND NOT (u.status = 'production' AND u.current_section_id IS NULL)
 LEFT JOIN customers c     ON c.id = u.customer_id;
