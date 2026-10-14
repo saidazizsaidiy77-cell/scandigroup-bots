@@ -118,3 +118,12 @@ CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id);
 --  Izoh faqat rasmdan iborat bo'lishi mumkin («mana, ko'ring») — matn
 --  sharti olib tashlandi; bo'sh izohni (na matn, na rasm) modul tutadi.
 ALTER TABLE task_comments DROP CONSTRAINT IF EXISTS task_comments_body_check;
+
+--  ★ RASM TELEGRAMGA HAM KETADI (zavod qarori, 2026-10). Xabarda
+--  «📷 2 ta rasm» deb turardi va rasmni ko'rish uchun saytni ochish
+--  kerak edi — telefonda o'tirgan rahbar esa aynan rasmni ko'rib qaror
+--  qiladi. Navbat qatoriga RASMNING o'zi emas, havolasi yoziladi:
+--  rasm bazada bitta nusxa bo'lib turadi, yuboruvchi uni o'qiydi.
+--  Rasm o'chirilsa xabar matn bo'lib ketaveradi (`SET NULL`).
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS
+  task_file_id INT REFERENCES task_files(id) ON DELETE SET NULL;

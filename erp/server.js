@@ -205,11 +205,27 @@ function xabarJadvali() {
     if (!r.ok) throw new Error(`Telegram ${r.status}: ${await r.text()}`);
   };
 
-  const send = async (chatId, text) => {
-    try { await yubor(chatId, text, true); }
+  //  ★ RASM (izoh: sql/tasks.sql) — `sendPhoto`, matn esa uning
+  //  izohi (caption, Telegram 1024 belgigacha oladi).
+  const rasm = async (chatId, text, photo, md) => {
+    const f = new FormData();
+    f.append('chat_id', String(chatId));
+    f.append('caption', text.slice(0, 1000));
+    if (md) f.append('parse_mode', 'Markdown');
+    f.append('photo', new Blob([photo.data], { type: photo.mime }),
+      'rasm.' + (photo.mime.split('/')[1] || 'jpg'));
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`,
+      { method: 'POST', body: f });
+    if (!r.ok) throw new Error(`Telegram ${r.status}: ${await r.text()}`);
+  };
+
+  const send = async (chatId, text, photo) => {
+    const bir = photo ? (t, md) => rasm(chatId, t, photo, md)
+                      : (t, md) => yubor(chatId, t, md);
+    try { await bir(text, true); }
     catch (e) {
       if (!/Telegram 400/.test(String(e.message))) throw e;
-      await yubor(chatId, text.replace(/[*_`]/g, ''), false);
+      await bir(text.replace(/[*_`]/g, ''), false);
     }
   };
 

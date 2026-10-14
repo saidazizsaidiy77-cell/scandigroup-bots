@@ -3186,9 +3186,17 @@ oladi. Sahifa kichraytiradi (1600 px, JPEG, `kichrayt`), server faqat
 rasm turini va 5 MB gacha qabul qiladi. Mavzuning O'ZIGA — ochgan odam
 yoki administrator, izohga — o'sha izohni yozgan odam; olib tashlash —
 qo'ygan odam yoki administrator. Izoh faqat rasmdan iborat bo'lishi
-mumkin; Telegram xabarida «📷 N ta rasm» yoziladi (rasmning o'zi
-yuborilmaydi — navbat matn). Token sarlavhada, shuning uchun rasm
-`App.blob()` bilan olinadi, `<img src>` bilan emas.
+mumkin; Telegram xabarida «📷 N ta rasm» yoziladi. Token sarlavhada,
+shuning uchun rasm `App.blob()` bilan olinadi, `<img src>` bilan emas.
+
+**★ RASMNING O'ZI TELEGRAMGA HAM KETADI** (zavod qarori, 2026-10;
+`notifications.task_file_id`). Har yuklangan rasm ALOHIDA navbat
+qatori bo'ladi va `sendPhoto` bilan ketadi (matn — uning izohi). Kimga
+— matnli xabar bilan bir xil: izoh rasmi ijrochilar va ochgan odamga,
+mavzuning o'z rasmi ijrochilarga, yuklaganning o'ziga emas. Navbatga
+rasmning HAVOLASI yoziladi, nusxasi emas; yuboruvchi uni faqat o'sha
+qator uchun o'qiydi. Navbat id bo'yicha yuradi — rasm o'z matnidan
+keyin keladi.
 
 ## Navbat — menyudagi belgi
 
