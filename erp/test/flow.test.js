@@ -12398,6 +12398,54 @@ test('mijozga chiqarish: faqat o\'z buyurtmasiga ruxsat', async () => {
   assert.equal(ok.status, 200, ok.text);
 });
 
+test('vazifalar: rasm mavzuda va izohda', async () => {
+  //  ★ ZAVOD QARORI (2026-10): Telegramdagi gapning yarmi rasm.
+  const tKor = await H.sessionFor('Korpus ustasi');
+  const tLak = await H.sessionFor("Bo'yoq ustasi");
+  const korpusA = H.api(base, tKor), lakA = H.api(base, tLak);
+  const yukla = (token, path, buf, type = 'image/png') => fetch(base + path, {
+    method: 'POST', body: buf,
+    headers: { 'Content-Type': type, Authorization: 'Bearer ' + token } });
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
+    '1f15c4890000000d49444154789c6360000000020001e221bc330000000049454e44ae426082', 'hex');
+
+  const t = (await korpusA('POST', '/api/tasks', { title: 'Rasmli mavzu' })).body;
+  //  Mavzuga rasmni ochgan odam qo'shadi; boshqasi — izohga.
+  const r1 = await yukla(tKor, `/api/tasks/${t.id}/files`, PNG);
+  assert.equal(r1.status, 200, await r1.text());
+  assert.equal((await yukla(tLak, `/api/tasks/${t.id}/files`, PNG)).status, 403);
+  //  Faqat rasm.
+  assert.equal((await yukla(tKor, `/api/tasks/${t.id}/files`,
+    Buffer.from('salom'), 'text/plain')).status, 400);
+
+  //  Faqat rasmdan iborat izoh: matn bo'sh, rasm bor.
+  assert.equal((await lakA('POST', `/api/tasks/${t.id}/comments`, { body: '' })).status, 400);
+  const c = await lakA('POST', `/api/tasks/${t.id}/comments`, { body: '', files: 1 });
+  assert.equal(c.status, 200, c.text);
+  assert.equal((await yukla(tKor, `/api/tasks/${t.id}/files?comment_id=${c.body.id}`, PNG)).status,
+    403, 'boshqaning izohiga emas');
+  assert.equal((await yukla(tLak, `/api/tasks/${t.id}/files?comment_id=${c.body.id}`, PNG)).status, 200);
+  const xb = (await H.id(`SELECT body FROM notifications WHERE kind = 'task_comment'
+                           ORDER BY id DESC LIMIT 1`)).body;
+  assert.match(xb, /📷 1 ta rasm/);
+
+  const d = (await korpusA('GET', '/api/tasks/' + t.id)).body;
+  assert.equal(d.file_list.length, 2);
+  assert.equal(d.file_list.filter((x) => x.comment_id === c.body.id).length, 1);
+  assert.equal((await korpusA('GET', '/api/tasks')).body.tasks.find((x) => x.id === t.id).files, 2);
+
+  //  Rasmning o'zi — xuddi yuklangani.
+  const fid = d.file_list[0].id;
+  const g = await fetch(base + '/api/tasks/files/' + fid,
+    { headers: { Authorization: 'Bearer ' + tLak } });
+  assert.equal(g.headers.get('content-type'), 'image/png');
+  assert.ok(Buffer.from(await g.arrayBuffer()).equals(PNG));
+
+  //  Olib tashlash — qo'ygan odam.
+  assert.equal((await lakA('DELETE', '/api/tasks/files/' + fid)).status, 403);
+  assert.equal((await korpusA('DELETE', '/api/tasks/files/' + fid)).status, 200);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

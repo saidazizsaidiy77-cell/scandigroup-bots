@@ -3179,6 +3179,17 @@ o'chirilmadi — ro'yxatning BIRINCHISI bo'lib sinxron qoladi;
 to'ldirish doimiy qoida (u har doim ro'yxatda turadi). Ro'yxat
 o'zgarganda xabar faqat YANGI qo'shilganga ketadi.
 
+**★ RASM — MAVZUDA HAM, IZOHDA HAM** (`task_files`, zavod qarori
+2026-10). Telegramdagi gapning yarmi rasm. **BAZADA** saqlanadi
+(`BYTEA`): Railway diski har deployda tozalanadi, zaxira esa bazani
+oladi. Sahifa kichraytiradi (1600 px, JPEG, `kichrayt`), server faqat
+rasm turini va 5 MB gacha qabul qiladi. Mavzuning O'ZIGA — ochgan odam
+yoki administrator, izohga — o'sha izohni yozgan odam; olib tashlash —
+qo'ygan odam yoki administrator. Izoh faqat rasmdan iborat bo'lishi
+mumkin; Telegram xabarida «📷 N ta rasm» yoziladi (rasmning o'zi
+yuborilmaydi — navbat matn). Token sarlavhada, shuning uchun rasm
+`App.blob()` bilan olinadi, `<img src>` bilan emas.
+
 ## Navbat — menyudagi belgi
 
 **★ NAVBAT XODIMNI O'ZI TOPADI** (zavod qarori, 2026-09).
