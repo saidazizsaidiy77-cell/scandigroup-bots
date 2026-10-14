@@ -418,6 +418,16 @@ SELECT o.unit_id, o.steps,
 -- olib tashlab ham bo'lmaydi. Ustun tartibi kelajakda erkin o'zgarishi
 -- uchun view har migratsiyada qaytadan quriladi. Unga bog'liq boshqa view
 -- yo'q, shuning uchun DROP xavfsiz.
+--  ★ REJADAGI BOSHLANISH KUNI (`start_planned_on`, zavod qarori
+--  2026-10). Boshlanmagan konverga marshrut sanasi chiqarilmaydi —
+--  lekin tsex boshlig'i «shu kuni boshlayman» desa, savdo chiqish
+--  kunini bilishi kerak. Kun bo'limlar ekranidan qo'yiladi
+--  (`POST /api/units/:id/plan`, `start_on`) va `started_on` ham o'sha
+--  kunga yoziladi: marshrut sanalari shundan sanaladi. Haqiqatda
+--  birinchi bo'limga kirgan kuni bosh sana yana o'zgaradi
+--  (`placePieces`) va belgi tozalanadi.
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS start_planned_on DATE;
+
 DROP VIEW IF EXISTS v_unit_register;
 CREATE VIEW v_unit_register AS
 SELECT
@@ -538,7 +548,8 @@ SELECT
   -- Zahirami va kutish nuqtasida turibdimi — jurnal shu ikki belgiga
   -- qarab "buyurtma kutilmoqda" deb ko'rsatadi.
   u.is_stock,
-  (u.is_stock AND COALESCE(cur.is_hold, false)) AS waiting
+  (u.is_stock AND COALESCE(cur.is_hold, false)) AS waiting,
+  u.start_planned_on
 FROM production_units u
 JOIN products p        ON p.id = u.product_id
 JOIN product_groups g  ON g.id = p.group_id
@@ -553,5 +564,6 @@ LEFT JOIN v_unit_place pp ON pp.unit_id = u.id
 --  (`placePieces`, modules/units.js). Tsex boshlig'i QO'LDA qo'ygan
 --  reja esa ko'rinaveradi: u haqiqiy va'da.
 LEFT JOIN v_unit_plan pl  ON pl.unit_id = u.id
-                         AND NOT (u.status = 'production' AND u.current_section_id IS NULL)
+                         AND NOT (u.status = 'production' AND u.current_section_id IS NULL
+                                  AND u.start_planned_on IS NULL)
 LEFT JOIN customers c     ON c.id = u.customer_id;

@@ -200,6 +200,16 @@ kirmagan: sana yolg'on va'da edi va savdo uni mijozga aytib qo'yardi.
 Endi marshrut sanasi yo'q, jurnalda «boshlanganda» yoziladi; tsex
 boshlig'i QO'LDA qo'ygan reja esa ko'rinaveradi.
 
+**★ BOSHLANISH KUNI REJADA** (`production_units.start_planned_on`,
+zavod qarori 2026-10). Sanasiz konverda savdo chiqish kunini bilmasdi.
+Tsex boshlig'i «Boshlanmagan» ro'yxatida **«+ boshlanish kuni»** ni
+bosadi (`POST /api/units/:id/plan`, `start_on`, `production.plan` va
+tsex doirasi) — `started_on` o'sha kunga yoziladi va marshrut sanalari
+undan chiqadi. Faqat boshlanmagan konverga. **Olib tashlanmaydi, faqat
+suriladi**: menejer shu kunga ishonib mijozga va'da bergan bo'lishi
+mumkin va reja jimgina yo'qolsa va'da izsiz qolardi. Haqiqatda boshlanganda reja
+tozalanadi va haqiqiy kun yoziladi.
+
 **★ BOSH SANA — ISHGA TUSHGAN KUN** (`placePieces`, modules/units.js).
 Boshlanmagan konver birinchi bo'limga kirgan kuni `started_on` o'sha
 kunga yangilanadi va marshrut sanalari shundan sanaladi. Bir qismi
