@@ -64,11 +64,12 @@ const App = (() => {
 
   // Fayl yuborish. Xom bayt bilan ketadi — JSON ichida base64 qilish
   // hajmni uchdan bir baravar oshiradi va hech qanday foyda bermaydi.
-  async function upload(path, file) {
+  async function upload(path, file, type) {
     const r = await fetch(path, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/octet-stream',
+        //  Rasmda turi kerak (izoh: modules/tasks.js), qolganda xom bayt.
+        'Content-Type': type || 'application/octet-stream',
         ...(token() ? { Authorization: 'Bearer ' + token() } : {}),
       },
       body: file,
@@ -77,6 +78,16 @@ const App = (() => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'Xato');
     return j;
+  }
+
+  // Rasmni ko'rsatish. Token sarlavhada, ya'ni `<img src>` o'zi
+  // ololmaydi — so'rov shu yerdan ketadi va brauzerga havola qaytadi.
+  async function blob(path) {
+    const r = await fetch(path, {
+      headers: token() ? { Authorization: 'Bearer ' + token() } : {},
+    });
+    if (!r.ok) throw new Error('Rasm ochilmadi');
+    return URL.createObjectURL(await r.blob());
   }
 
   const can = (...p) => !!me && p.some((x) => me.permissions.includes(x));
@@ -912,7 +923,7 @@ const App = (() => {
     catch (e) { el.checked = !yangi; alert(e.message || 'Saqlanmadi'); }
   }
 
-  return { api, download, upload, can, start, logout, me: () => me, pages, inMod, hrefFor,
+  return { api, download, upload, blob, can, start, logout, me: () => me, pages, inMod, hrefFor,
            kalitlar, kalitYoz,
            modules: () => MODULES
              .filter((m) => !m.perm.length || can(...m.perm))

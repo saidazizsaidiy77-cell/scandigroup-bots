@@ -293,7 +293,8 @@ function draw() {
             turardi. Alohida ustun qilinmadi: ro'yxatda to'qqizta ustun
             bor va o'ninchisi telefonga sig'masdi. -->
       <td><b>${esc(r.conveyor_no || '—')}</b>${r.order_no
-        ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}</div>` : ''}${
+        ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}${
+            r.customer_name ? ' · ' + esc(r.customer_name) : ''}</div>` : ''}${
         r.is_stock ? '<div><span class="tag">zahira</span></div>' : ''}</td>
       <!--  ★ SO'ROVCHINING IZOHI KO'RINADI (zavod qarori, 2026-10).
             Izoh BAZAGA yozilardi-yu, hech qayerda chizilmasdi: xodim

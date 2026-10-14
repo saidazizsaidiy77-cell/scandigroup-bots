@@ -116,6 +116,7 @@ const QATOR = `
          COALESCE(ij.names, '') AS assignee_name,
          db.name AS done_by_name,
          (SELECT COUNT(*)::int FROM task_comments c WHERE c.task_id = t.id) AS comments,
+         (SELECT COUNT(*)::int FROM task_files f WHERE f.task_id = t.id) AS files,
          (SELECT MAX(c.created_at) FROM task_comments c WHERE c.task_id = t.id) AS last_comment_at,
          (t.status IN ('new', 'doing', 'review') AND t.due_on < CURRENT_DATE) AS late,
          (t.due_on - CURRENT_DATE) AS days_left
@@ -171,7 +172,11 @@ router.get('/:id', wrap(async (req, res) => {
     `SELECT c.id, c.body, c.created_at, c.worker_id, w.name AS worker_name
        FROM task_comments c LEFT JOIN workers w ON w.id = c.worker_id
       WHERE c.task_id = $1 ORDER BY c.created_at, c.id`, [t.id])).rows;
-  res.json({ ...t, comment_list: comments,
+  //  Rasmlarning O'ZI emas, ro'yxati: sahifa har birini alohida so'raydi.
+  const files = (await db.query(
+    `SELECT id, comment_id, size, created_by FROM task_files
+      WHERE task_id = $1 ORDER BY id`, [t.id])).rows;
+  res.json({ ...t, comment_list: comments, file_list: files,
              can_edit: admin(req) || t.created_by === req.user.id,
              can_move: admin(req) || t.created_by === req.user.id
                        || (t.assignee_ids || []).includes(req.user.id) });
@@ -290,7 +295,10 @@ router.patch('/:id', wrap(async (req, res) => {
 //  (yozgan odamning o'ziga emas): izoh ko'pincha savol va javob kutadi.
 router.post('/:id/comments', wrap(async (req, res) => {
   const body = String(req.body.body || '').trim();
-  if (!body) throw xato('Izoh bo\'sh');
+  //  Faqat rasmdan iborat izoh ham bo'ladi: rasmlar shu javobdagi
+  //  `id` bilan keyin yuklanadi (`/:id/files?comment_id=`).
+  const rasm = Math.max(0, Number(req.body.files) || 0);
+  if (!body && !rasm) throw xato('Izoh bo\'sh');
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -307,13 +315,73 @@ router.post('/:id/comments', wrap(async (req, res) => {
       await notify.queue({
         worker_id: w, module: 'tasks', kind: 'task_comment',
         title: `Yangi izoh — ${t.task_no}`,
-        body: `${t.title}\n${req.user.name || ''}: ${body.slice(0, 500)}` }, client);
+        body: `${t.title}\n${req.user.name || ''}: ${body.slice(0, 500)}`
+            + (rasm ? `${body ? '\n' : ''}📷 ${rasm} ta rasm` : '') }, client);
     await client.query('COMMIT');
     res.json(c);
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
   } finally { client.release(); }
+}));
+
+//  ═══════════════════════════════════════════════ RASM
+//
+//  Xom bayt bilan keladi (`import.js` dagi fayl yuklash bilan bir xil
+//  idiom — base64 hajmni uchdan biriga oshirardi). Faqat RASM: boshqa
+//  fayl brauzerda ochilmaydi va bazani bekorga to'ldirardi. Hajmni
+//  sahifa kichraytiradi; chegara esa serverda (izoh: sql/tasks.sql).
+const RASM_TUR = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const RASM_MAX = 5 * 1024 * 1024;
+
+router.post('/:id/files',
+  express.raw({ type: () => true, limit: RASM_MAX }),
+  wrap(async (req, res) => {
+    const mime = String(req.headers['content-type'] || '').split(';')[0].trim();
+    if (!RASM_TUR.includes(mime)) throw xato('Faqat rasm yuklanadi (JPEG, PNG, WebP)');
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw xato('Fayl bo\'sh');
+    const t = (await db.query(`SELECT id, created_by FROM tasks WHERE id = $1`,
+      [Number(req.params.id)])).rows[0];
+    if (!t) throw xato('Mavzu topilmadi', 404);
+    //  Mavzuning O'ZIGA — ochgan odam yoki administrator (sarlavha bilan
+    //  bir xil chegara); izohga — o'sha izohni yozgan odam.
+    if (!req.query.comment_id && !admin(req) && t.created_by !== req.user.id)
+      throw xato('Mavzuga rasmni ochgan odam qo\'shadi — siz izohga qo\'shing', 403);
+    //  Izohga tegishli bo'lsa — o'sha mavzuning izohi bo'lishi shart.
+    const cid = req.query.comment_id ? Number(req.query.comment_id) : null;
+    if (cid) {
+      const c = (await db.query(
+        `SELECT worker_id FROM task_comments WHERE id = $1 AND task_id = $2`,
+        [cid, t.id])).rows[0];
+      if (!c) throw xato('Izoh topilmadi', 404);
+      if (c.worker_id !== req.user.id) throw xato('Rasmni izoh yozgan odam qo\'shadi', 403);
+    }
+    const f = (await db.query(
+      `INSERT INTO task_files (task_id, comment_id, mime, size, data, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, comment_id, size`,
+      [t.id, cid, mime, req.body.length, req.body, req.user.id])).rows[0];
+    await db.query(`UPDATE tasks SET updated_at = NOW() WHERE id = $1`, [t.id]);
+    res.json(f);
+  }));
+
+router.get('/files/:fid', wrap(async (req, res) => {
+  const f = (await db.query(`SELECT mime, data FROM task_files WHERE id = $1`,
+    [Number(req.params.fid)])).rows[0];
+  if (!f) throw xato('Rasm topilmadi', 404);
+  res.set('Content-Type', f.mime);
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.send(f.data);
+}));
+
+//  Adashib qo'yilgan rasmni QO'YGAN odam yoki administrator olib tashlaydi.
+router.delete('/files/:fid', wrap(async (req, res) => {
+  const f = (await db.query(`SELECT id, created_by FROM task_files WHERE id = $1`,
+    [Number(req.params.fid)])).rows[0];
+  if (!f) throw xato('Rasm topilmadi', 404);
+  if (!admin(req) && f.created_by !== req.user.id)
+    throw xato('Rasmni qo\'ygan odam olib tashlaydi', 403);
+  await db.query(`DELETE FROM task_files WHERE id = $1`, [f.id]);
+  res.json({ ok: true });
 }));
 
 //  ═══════════════════════════════════════════════ KUNLIK ESLATMA

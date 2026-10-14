@@ -730,7 +730,12 @@ Endi izoh UCHALA ekranda mahsulot nomining OSTIDA, mayda yozuvda
 (`.izoh`, `style.css`): so'rovlar ro'yxatida, jurnalda va bo'limlar
 ekranida. Alohida ustun qilinmadi — telefonda qator panjaraga
 aylanadi va yettinchi ustunga joy yo'q (bron soni bilan bir xil
-sabab). **Telegram xabariga ham qo'shiladi** (`requestOne` izohni
+sabab). **Mijoz ismi ham** (zavod qarori, 2026-10): savdo yozgan so'rovda
+zakaz raqami yonida mijoz turadi — so'rovlar ro'yxatida ham, Telegram
+xabarida ham («Z26-0758 · Qarshi Husan»): tasdiqlovchining birinchi
+savoli «bu kimga?».
+
+**Telegram xabariga ham qo'shiladi** (`requestOne` izohni
 qaytaradi): tasdiqlovchi ko'pincha javobni o'sha yerda beradi va
 sahifani umuman ochmaydi.
 
@@ -1366,6 +1371,14 @@ buyurtmadan birida chegirma tasdiqlanmagan bo'lsa, qolgan to'qqiztasini
 ham rad etish kunni to'xtatardi. Yiqilgani **NOMI va SABABI** bilan
 qaytariladi — «bittasi o'tmadi» degan xabar qaysi biri ekanini aytmasdi
 va odam ro'yxatni qaytadan ko'zdan kechirardi.
+
+**★ O'Z BUYURTMASIGA RUXSAT** (`workers.can_release_own`, zavod
+qarori 2026-10). Ba'zi menejer o'z mijozining chiqish kunini o'zi
+kelishadi. Belgi `can_release` dan TOR: faqat o'zi yozgan yoki o'z
+mijozining (1- yoki 2-menejer) buyurtmasi — `assertOwn` bilan bir xil
+uch maydon. Ekran tugmani `meniki` dan chizadi (`/orders` va
+`/orders/:id` javobida, SERVER hisoblaydi), tekshiruv `sendOne` da.
+Belgi Xodimlar sahifasida, standarti `false` (4-qoida).
 
 **«Qaytarib olish»** esa `sales.manage` da qolaveradi va mudir
 chiqarmaguncha ochiq: xato bergan menejer o'zi orqaga oladi.
@@ -3165,6 +3178,17 @@ yoziladi. «Mening ishim» sharti BITTA joyda (`MENIKI`,
 o'chirilmadi — ro'yxatning BIRINCHISI bo'lib sinxron qoladi;
 to'ldirish doimiy qoida (u har doim ro'yxatda turadi). Ro'yxat
 o'zgarganda xabar faqat YANGI qo'shilganga ketadi.
+
+**★ RASM — MAVZUDA HAM, IZOHDA HAM** (`task_files`, zavod qarori
+2026-10). Telegramdagi gapning yarmi rasm. **BAZADA** saqlanadi
+(`BYTEA`): Railway diski har deployda tozalanadi, zaxira esa bazani
+oladi. Sahifa kichraytiradi (1600 px, JPEG, `kichrayt`), server faqat
+rasm turini va 5 MB gacha qabul qiladi. Mavzuning O'ZIGA — ochgan odam
+yoki administrator, izohga — o'sha izohni yozgan odam; olib tashlash —
+qo'ygan odam yoki administrator. Izoh faqat rasmdan iborat bo'lishi
+mumkin; Telegram xabarida «📷 N ta rasm» yoziladi (rasmning o'zi
+yuborilmaydi — navbat matn). Token sarlavhada, shuning uchun rasm
+`App.blob()` bilan olinadi, `<img src>` bilan emas.
 
 ## Navbat — menyudagi belgi
 

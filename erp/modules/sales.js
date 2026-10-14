@@ -37,6 +37,14 @@ const channelsOf = (req) => {
 //  mijoz, izoh: sql/units.sql): ikkalasi ham mijozning hamma
 //  buyurtmasini ko'radi va yuritadi. `mijoz_m1/m2` buyurtmani o'qigan
 //  so'rovning o'zidan keladi.
+//  Ekranga «bu buyurtma menikimi» degan javob — «Mijozga chiqarish»
+//  tugmasi `can_release_own` xodimda shundan chiziladi. Shart
+//  `assertOwn` bilan bir xil; id raqam bo'lib qo'yiladi (sessiyadan).
+const MENIKI = (req) => {
+  const me = Number(req.user.id) | 0;
+  return `(o.manager_id = ${me} OR mijoz_meniki(o.customer_id, ${me})) AS meniki`;
+};
+
 function assertOwn(req, o) {
   const own = ownOf(req);
   if (own && ![o.manager_id, o.mijoz_m1, o.mijoz_m2].includes(own))
@@ -381,7 +389,7 @@ router.get('/orders', need(...READ), wrap(async (req, res) => {
   //  qoldig'i va xodimlar ro'yxati bilan bir xil qoida): chiqish
   //  sanasi yozilmagan o'nta buyurtma tepaga chiqsa javob ko'rinmasdi.
   const { rows } = await db.query(
-    `SELECT o.*, ${HOLAT} AS holat FROM v_sales_orders o
+    `SELECT o.*, ${HOLAT} AS holat, ${MENIKI(req)} FROM v_sales_orders o
       WHERE ($1::text[] IS NULL OR channel = ANY($1))
         AND ($2::text IS NULL OR ${HOLAT} = $2)
         AND ($3::int  IS NULL OR customer_id = $3)
@@ -496,7 +504,7 @@ router.get('/orders/:id', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   //  Kartochkadagi yozuv ham ro'yxatdagi bilan BIR manbadan chiqadi.
   const o = (await db.query(
-    `SELECT o.*, ${HOLAT} AS holat FROM v_sales_orders o
+    `SELECT o.*, ${HOLAT} AS holat, ${MENIKI(req)} FROM v_sales_orders o
       WHERE id = $1 AND ($2::text[] IS NULL OR channel = ANY($2))
         AND ($3::int IS NULL OR manager_id = $3 OR mijoz_meniki(customer_id, $3))`,
     [req.params.id, chans, ownOf(req)])).rows[0];
@@ -1488,7 +1496,7 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
 
     const o = (await client.query(
-      `SELECT o.*, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
+      `SELECT o.*, c.name AS customer_name, c.channel, c.manager_id AS mijoz_m1, c.manager2_id AS mijoz_m2
        FROM orders o JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1 FOR UPDATE OF o`, [req.params.id])).rows[0];
     if (!o) throw new Error('Buyurtma topilmadi');
@@ -1563,7 +1571,7 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
       module: 'production', kind: 'unit_request',
       title: '1 ta konver tasdiq kutmoqda — buyurtmadan',
       body: `${q.no} · ${qty} ta · ${it.product}`
-            + `\nBuyurtma: ${o.order_no}`
+            + `\nBuyurtma: ${o.order_no} · ${o.customer_name}`
             + `\n\nKim so'radi: ${req.user.name}`,
     }, client);
     await audit(req, { module: 'sales', action: 'request-unit', entity: 'order',
@@ -2199,7 +2207,10 @@ async function sendOne(req, id) {
     //  Tekshiruv SERVERDA: sahifada tugmani yashirish himoya emas.
     //  Belgi XODIMDA va Xodimlar sahifasida qo'yiladi — kodga na ism,
     //  na lavozim yoziladi (4-qoida).
-    if (!req.user.can_release) throw new Error(
+    //  `can_release_own` — faqat o'zi yozgan yoki o'z mijozining
+    //  buyurtmasi (`assertOwn` bilan bir xil uch maydon).
+    const ozimniki = [o.manager_id, o.mijoz_m1, o.mijoz_m2].includes(req.user.id);
+    if (!req.user.can_release && !(req.user.can_release_own && ozimniki)) throw new Error(
       "Mijozga chiqarishga ruxsat berish sizda yo'q — Xodimlar "
       + "sahifasida «Mijozga chiqarishga ruxsat beradi» katagi belgilanadi");
 

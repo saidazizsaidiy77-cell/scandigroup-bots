@@ -89,3 +89,32 @@ CREATE INDEX IF NOT EXISTS idx_task_assignees_worker ON task_assignees(worker_id
 INSERT INTO task_assignees (task_id, worker_id, pos)
 SELECT id, assignee_id, 0 FROM tasks WHERE assignee_id IS NOT NULL
 ON CONFLICT DO NOTHING;
+
+--  ★ RASM — MAVZUDA HAM, IZOHDA HAM (`task_files`, zavod qarori 2026-10).
+--  Telegramdagi gapning yarmi rasm: buzilgan detal, chizma, mijozning
+--  surati. Rasmsiz mavzu so'z bilan tushuntirishni talab qilardi va ish
+--  yana chatga qaytib ketardi.
+--
+--  BAZADA saqlanadi (`BYTEA`), diskda emas: Railway konteynerining
+--  diski har deployda tozalanadi va rasm jimgina yo'qolardi; zaxira ham
+--  (`erp/backup.js`) bazani oladi, ya'ni rasm u bilan birga ketadi.
+--  Hajmni sahifa kichraytiradi (eng uzun tomoni 1600 px, JPEG) — telefon
+--  surati 4–8 MB, kichraytirilgani 200–400 KB.
+--
+--  `comment_id` bo'sh — rasm mavzuning O'ZIGA tegishli (ochilganda
+--  qo'yilgan), to'ldirilgan — o'sha izohga.
+CREATE TABLE IF NOT EXISTS task_files (
+  id         SERIAL PRIMARY KEY,
+  task_id    INT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  comment_id INT REFERENCES task_comments(id) ON DELETE CASCADE,
+  mime       TEXT NOT NULL,
+  size       INT  NOT NULL,
+  data       BYTEA NOT NULL,
+  created_by INT REFERENCES workers(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id);
+
+--  Izoh faqat rasmdan iborat bo'lishi mumkin («mana, ko'ring») — matn
+--  sharti olib tashlandi; bo'sh izohni (na matn, na rasm) modul tutadi.
+ALTER TABLE task_comments DROP CONSTRAINT IF EXISTS task_comments_body_check;

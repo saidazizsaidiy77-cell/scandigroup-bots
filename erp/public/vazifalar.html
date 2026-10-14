@@ -33,6 +33,14 @@
 textarea{font:inherit;color:var(--text);background:var(--surface-2);width:100%;
   border:1px solid var(--line);border-radius:10px;padding:12px 14px;resize:vertical}
 textarea:focus{outline:none;border-color:var(--accent)}
+.rasmlar{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.rasmlar .r{position:relative;width:96px;height:96px;border-radius:8px;overflow:hidden;
+  background:var(--surface-2);border:1px solid var(--line);cursor:zoom-in}
+.rasmlar .r img{width:100%;height:100%;object-fit:cover;display:block}
+.rasmlar .r .x{position:absolute;top:3px;right:3px;width:22px;height:22px;padding:0;
+  border-radius:50%;font-size:13px;line-height:20px;background:rgba(0,0,0,.55);color:#fff;border:0}
+.rasm-tanla{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.rasm-tanla input{display:none}
 .chips button.on{background:var(--text);color:var(--surface);border-color:var(--text)}
 </style>
 </head>
@@ -78,6 +86,78 @@ const d8 = (s) => !s ? '' : new Date(s).toLocaleDateString('ru-RU',
 const dt = (s) => !s ? '' : new Date(s).toLocaleString('ru-RU',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const isoKun = (s) => !s ? '' : String(s).slice(0, 10);
+
+//  ═══════════════════════════════════════════════ RASM
+//
+//  Telefon surati 4–8 MB — bazaga shundayligicha yozilmaydi: eng uzun
+//  tomoni 1600 px gacha kichraytirilib, JPEG bo'lib ketadi (200–400 KB).
+//  Matn o'qiladigan sifatda qoladi (chizma, yorliq).
+async function kichrayt(file) {
+  if (!file.type.startsWith('image/')) throw new Error('Faqat rasm');
+  const img = await createImageBitmap(file).catch(() => null);
+  if (!img) return { blob: file, type: file.type };
+  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = Object.assign(document.createElement('canvas'),
+    { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+  return { blob, type: 'image/jpeg' };
+}
+
+//  Tanlangan, hali yuborilmagan rasmlar — oynadagi ko'rinishi bilan.
+const navbat = { n: [], c: [] };
+function rasmTanla(k, input) {
+  for (const f of input.files) navbat[k].push(f);
+  input.value = '';
+  navbatChiz(k);
+}
+function navbatChiz(k) {
+  const el = $('rq-' + k);
+  if (!el) return;
+  el.innerHTML = navbat[k].map((f, i) => `<div class="r">
+      <img src="${URL.createObjectURL(f)}">
+      <button class="x" onclick="navbat['${k}'].splice(${i},1);navbatChiz('${k}')">×</button>
+    </div>`).join('');
+}
+const tanlaTugma = (k) => `<label class="rasm-tanla"><button type="button"
+    onclick="this.nextElementSibling.click()">📷 Rasm</button><input type="file"
+    accept="image/*" multiple onchange="rasmTanla('${k}', this)"></label>`;
+
+async function yukla(taskId, files, commentId) {
+  for (const f of files) {
+    const { blob, type } = await kichrayt(f);
+    await App.upload(`/api/tasks/${taskId}/files${commentId ? '?comment_id=' + commentId : ''}`,
+      blob, type);
+  }
+}
+
+//  Rasm ro'yxati: har biri alohida so'rov bilan keladi (token sarlavhada).
+//  Bosilsa to'liq o'lchamda yangi oynada ochiladi.
+function rasmGrid(files, t) {
+  if (!files.length) return '';
+  return `<div class="rasmlar">${files.map(x => `<div class="r" data-fid="${x.id}"
+      onclick="rasmOch(${x.id})"><img alt="">${
+      (t.admin || x.created_by === d.me)
+        ? `<button class="x" title="olib tashlash"
+             onclick="event.stopPropagation();rasmOchir(${x.id},${t.id})">×</button>` : ''}
+    </div>`).join('')}</div>`;
+}
+const urlKesh = {};
+async function rasmlarniYukla() {
+  for (const el of document.querySelectorAll('.rasmlar .r[data-fid]')) {
+    const id = el.dataset.fid;
+    try {
+      urlKesh[id] = urlKesh[id] || await App.blob('/api/tasks/files/' + id);
+      el.querySelector('img').src = urlKesh[id];
+    } catch {}
+  }
+}
+function rasmOch(id) { if (urlKesh[id]) window.open(urlKesh[id], '_blank'); }
+async function rasmOchir(fid, tid) {
+  if (!confirm('Rasm olib tashlansinmi?')) return;
+  try { await App.api('/api/tasks/files/' + fid, { method: 'DELETE' }); och(tid); }
+  catch (e) { alert(e.message); }
+}
 
 const USTUNLAR = [
   { k: 'new',    t: 'Yangi' },
@@ -125,6 +205,7 @@ function draw() {
             <span>👤 ${t.assignee_name ? esc(t.assignee_name) : '<i>ijrochi yo\'q</i>'}</span>
             ${muddat(t)}
             ${t.comments ? `<span>💬 ${t.comments}</span>` : ''}
+            ${t.files ? `<span>📷 ${t.files}</span>` : ''}
           </div></div>`).join('') || '<p class="muted" style="font-size:13px">bo\'sh</p>'}
     </div>`;
   }).join('');
@@ -169,12 +250,15 @@ const ijrochiOqi = (id) => [...new Set([...$(id).querySelectorAll('select')]
   .map(x => Number(x.value)).filter(Boolean))];
 
 function yangi() {
+  navbat.n = [];
   $('modal').innerHTML = `<div class="overlay" onclick="if(event.target===this)yop()">
     <div class="modal" style="max-width:620px">
       <h2>Yangi mavzu</h2>
       <label>Mavzu</label><input id="nTitle" placeholder="masalan: Qarshi Husanga yangi katalog yuborish">
       <label style="margin-top:10px">Tafsilot</label>
       <textarea id="nBody" rows="4" placeholder="nima qilish kerak, qanday natija kutilmoqda"></textarea>
+      <div style="margin-top:8px">${tanlaTugma('n')}</div>
+      <div class="rasmlar" id="rq-n"></div>
       <div class="row" style="gap:12px;margin-top:10px;flex-wrap:wrap">
         <div style="flex:2;min-width:220px"><label>Ijrochilar</label>${ijrochiKatak('nAs', [])}</div>
         <div style="flex:1;min-width:150px"><label>Muddat</label><input id="nDue" type="date"></div>
@@ -188,9 +272,13 @@ function yangi() {
 
 async function yarat() {
   try {
-    await App.api('/api/tasks', { method: 'POST', body: {
+    const t = await App.api('/api/tasks', { method: 'POST', body: {
       title: $('nTitle').value, body: $('nBody').value,
       assignee_ids: ijrochiOqi('nAs'), due_on: $('nDue').value || null } });
+    //  Mavzu ochildi — rasm yiqilsa ham u yo'qolmaydi, xato aytiladi.
+    try { await yukla(t.id, navbat.n); }
+    catch (e) { alert('Mavzu ochildi, lekin rasm yuklanmadi: ' + e.message); }
+    navbat.n = [];
     yop(); load();
   } catch (e) { alert(e.message); }
 }
@@ -199,6 +287,8 @@ async function yarat() {
 //  tugmalari, ostida izohlar lentasi va yozish katagi.
 async function och(id) {
   const t = await App.api('/api/tasks/' + id);
+  t.admin = d.admin;
+  navbat.c = [];
   const holatTugma = USTUNLAR.concat(t.can_edit ? [{ k: 'cancelled', t: 'Bekor qilish' }] : [])
     .map(u => `<button ${u.k === t.status ? 'class="primary"' : ''}
         ${t.can_move ? `onclick="holat(${t.id},'${u.k}')"` : 'disabled'}>${u.t}</button>`).join('');
@@ -215,9 +305,14 @@ async function och(id) {
           <div style="flex:1;min-width:150px"><label>Muddat</label>
             <input id="eDue" type="date" value="${isoKun(t.due_on)}"></div>
           <button onclick="saqla(${t.id})">Saqlash</button>
+          <label class="rasm-tanla"><button type="button"
+            onclick="this.nextElementSibling.click()">📷 Rasm qo'shish</button><input
+            type="file" accept="image/*" multiple onchange="mavzuRasm(${t.id}, this)"></label>
         </div>`
       : `<h2 style="text-transform:none;letter-spacing:0;font-size:18px;color:var(--text);margin:6px 0">${esc(t.title)}</h2>
-         ${t.body ? `<p style="white-space:pre-wrap">${esc(t.body)}</p>` : ''}
+         ${t.body ? `<p style="white-space:pre-wrap">${esc(t.body)}</p>` : ''}`}
+      ${rasmGrid(t.file_list.filter(x => !x.comment_id), t)}
+      ${t.can_edit ? '' : `
          <p class="muted" style="margin-top:8px">👤 ${esc(t.assignee_name || 'ijrochi yo\'q')}
            ${t.due_on ? ' · ' + muddat(t) : ''}</p>`}
       <div class="row" style="gap:6px;margin-top:14px;flex-wrap:wrap">${holatTugma}</div>
@@ -227,13 +322,25 @@ async function och(id) {
       <h2 style="margin-top:20px">Izohlar (${t.comment_list.length})</h2>
       <div>${t.comment_list.map(c => `<div class="comment">
           <div class="who"><b>${esc(c.worker_name || '—')}</b> · ${dt(c.created_at)}</div>
-          <div class="txt">${esc(c.body)}</div></div>`).join('')
+          ${c.body ? `<div class="txt">${esc(c.body)}</div>` : ''}
+          ${rasmGrid(t.file_list.filter(x => x.comment_id === c.id), t)}</div>`).join('')
         || '<p class="muted" style="font-size:13px">Hali izoh yo\'q</p>'}</div>
       <textarea id="cBody" rows="3" style="margin-top:10px" placeholder="izoh yozing…"></textarea>
+      <div class="rasmlar" id="rq-c"></div>
       <div class="row" style="gap:10px;margin-top:10px;justify-content:flex-end">
+        <span style="margin-right:auto">${tanlaTugma('c')}</span>
         <button onclick="yop();load()">Yopish</button>
         <button class="primary" onclick="izoh(${t.id})">Izoh yuborish</button>
       </div></div></div>`;
+  rasmlarniYukla();
+}
+
+//  Mavzuning O'ZIGA rasm (ochgan odam va administrator) — darrov yuklanadi.
+async function mavzuRasm(id, input) {
+  const fayllar = [...input.files];
+  input.value = '';
+  try { await yukla(id, fayllar); och(id); load(); }
+  catch (e) { alert(e.message); }
 }
 
 async function saqla(id) {
@@ -253,9 +360,15 @@ async function holat(id, s) {
 
 async function izoh(id) {
   const body = $('cBody').value.trim();
-  if (!body) return;
-  try { await App.api(`/api/tasks/${id}/comments`, { method: 'POST', body: { body } }); och(id); load(); }
-  catch (e) { alert(e.message); }
+  const fayllar = navbat.c.slice();
+  if (!body && !fayllar.length) return;
+  try {
+    const c = await App.api(`/api/tasks/${id}/comments`,
+      { method: 'POST', body: { body, files: fayllar.length } });
+    await yukla(id, fayllar, c.id);
+    navbat.c = [];
+    och(id); load();
+  } catch (e) { alert(e.message); }
 }
 
 App.start(() => {

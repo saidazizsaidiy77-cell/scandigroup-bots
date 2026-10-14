@@ -612,6 +612,14 @@ ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price_floor NUMERIC(14,2);
 --  yozilib turadi: tugmani topolmagan odam uni qidirib yurmasin.
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_release BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ O'Z BUYURTMASIGA RUXSAT (`can_release_own`, zavod qarori 2026-10).
+--  Ba'zi menejer o'z mijozining chiqish kunini O'ZI kelishadi va har
+--  safar ruxsat beradigan odamni kutib o'tirmasligi kerak. Belgi
+--  `can_release` dan TOR: faqat o'zi yozgan yoki o'z mijozining
+--  (1- yoki 2-menejer) buyurtmasi. Standarti `false` — xuddi
+--  `can_release` dagi sabab bilan. Kodga ism yozilmaydi (4-qoida).
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS can_release_own BOOLEAN NOT NULL DEFAULT false;
+
 --  ★ TURGAN BUYURTMALAR «TAYYOR» GA QAYTARILADI (zavod qarori,
 --  2026-09). Qoida ishga tushgan kuni «Mijozga chiqarilsin» da turgan
 --  buyurtmalarni ESKI tartib yuborgan edi — ularni hech kim yangi
