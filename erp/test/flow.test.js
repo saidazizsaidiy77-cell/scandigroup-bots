@@ -12144,6 +12144,25 @@ test('boshlanmagan konver: sana yo\'q, ishga tushgan kun bosh sana bo\'ladi', as
   await H.id(`UPDATE production_units SET fg_planned_on = NULL WHERE id = $1
               RETURNING id`, [u.id]);
 
+  //  ★ BOSHLANISH KUNI REJADA: tsex boshlig'i «shu kuni boshlayman»
+  //  deydi — marshrut sanalari undan hisoblanadi va savdo ko'radi.
+  const sb = await korpus('POST', `/api/units/${u.id}/plan`, { start_on: '2026-10-03' });
+  assert.equal(sb.status, 200, sb.text);
+  r = (await ol())[0];
+  assert.equal(String(r.start_planned_on).slice(0, 10), '2026-10-03');
+  assert.equal(String(r.started_on).slice(0, 10), '2026-10-03');
+  assert.equal(r.lak_src, 'marshrut');
+  assert.equal(String(r.lak_on).slice(0, 10), (await H.id(
+    `SELECT to_char(z.lak_on, 'YYYY-MM-DD') AS d
+       FROM muddat_zanjir((SELECT sc.shop_id FROM v_product_route pr
+                             JOIN sections sc ON sc.id = pr.section_id
+                            WHERE pr.product_id = $1 ORDER BY pr.step_no LIMIT 1),
+                          $1, '2026-10-03') z`, [PENAL])).d);
+  //  Olib tashlansa sana yana yo'q.
+  await korpus('POST', `/api/units/${u.id}/plan`, { start_on: null });
+  assert.equal((await ol())[0].lak_on, null);
+  await korpus('POST', `/api/units/${u.id}/plan`, { start_on: '2026-10-03' });
+
   //  Bir qismi ishga tushadi — o'sha bo'lakning bosh sanasi yangilanadi,
   //  qolgani boshlanmagan va sanasiz.
   await xomsiz();
@@ -12159,8 +12178,13 @@ test('boshlanmagan konver: sana yo\'q, ishga tushgan kun bosh sana bo\'ladi', as
     `SELECT to_char(lak_on, 'YYYY-MM-DD') AS d
        FROM muddat_zanjir((SELECT shop_id FROM sections WHERE id = $1), $2, '2026-10-05')`,
     [bosh.section_id, PENAL])).d);
-  assert.equal(qoldi.lak_on, null);
-  assert.equal(String(qoldi.started_on).slice(0, 10), '2026-09-01');
+  assert.equal(bosh.start_planned_on, null, 'boshlangach reja tozalanadi');
+  //  Qolgani hali boshlanmagan va o'z rejasini saqlaydi.
+  assert.equal(String(qoldi.start_planned_on).slice(0, 10), '2026-10-03');
+  assert.equal(qoldi.lak_src, 'marshrut');
+  //  Boshlangan konverning boshlanish kuni bu yo'ldan o'zgarmaydi.
+  assert.equal((await korpus('POST', `/api/units/${bosh.id}/plan`,
+    { start_on: '2026-10-09' })).status, 400);
 
   //  Qolgani ham tushadi — u ham o'z kunini oladi.
   await korpus('POST', '/api/units/move',

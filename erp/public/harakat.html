@@ -102,6 +102,10 @@ async function go(k) {
 //  bo'sh chiziqcha unutilgandek turardi va hech kim bosmasdi.
 function due(u) {
   if (u.waiting) return `<span class="tag">zahira</span>`;
+  //  Boshlanmagan konverda savol boshqa: «qachon BOSHLAYMAN». Shu kun
+  //  qo'yilsa marshrut sanalari undan hisoblanadi va savdo chiqish
+  //  kunini ko'radi (izoh: sql/register.sql).
+  if (!u.section_id) return boshKatak(u);
   const tug = (ich, cls) => canPlan
     ? `<button class="ic ${cls || ''}" style="font:inherit;padding:2px 8px"
          title="Muddatni qo'yish" onclick="askPlan(${u.id}, event)">${ich}</button>`
@@ -113,6 +117,52 @@ function due(u) {
     : d === 0     ? `<span class="tag warn">Bugun</span>`
     : `<span class="tag ${d <= 2 ? 'warn' : 'ok'}">${d} kun</span>`;
   return tug(t);
+}
+
+//  ── BOSHLANISH KUNI (boshlanmagan konver) ──────────────────────────
+const kunOy = (s) => !s ? '' : new Date(s).toLocaleDateString('ru-RU',
+  { day: '2-digit', month: '2-digit' });
+function boshKatak(u) {
+  const bor = u.start_planned_on;
+  const ich = bor ? `<span class="tag ok">▶ ${kunOy(bor)}</span>`
+    : (canPlan ? '+ boshlanish kuni' : '<span class="muted">—</span>');
+  return canPlan
+    ? `<button class="ic" style="font:inherit;padding:2px 8px"
+         title="Qachon boshlanadi" onclick="askStart(${u.id}, event)">${ich}</button>`
+    : ich;
+}
+function askStart(id, ev) {
+  if (ev) ev.stopPropagation();
+  const u = unitById(id);
+  if (!u) return;
+  const bor = u.start_planned_on ? String(u.start_planned_on).slice(0, 10) : '';
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="planBox" onclick="if(event.target===this)closePlan()">
+      <div class="modal" style="max-width:360px">
+        <h2 style="margin-bottom:4px">${esc(u.conveyor_no)}</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">${esc(u.product)} ·
+          qachon boshlanadi? Shu kundan lak, qadoqlash va T/M ombor
+          sanalari hisoblanadi — savdo chiqish kunini ko'radi.</p>
+        <label>Boshlanish kuni</label>
+        <input id="planVal" type="date" value="${bor}" style="font-size:18px">
+        <button class="primary" style="width:100%;margin-top:16px"
+          onclick="okStart(${id})">Saqlash</button>
+        ${bor ? `<button style="width:100%;margin-top:8px"
+          onclick="okStart(${id}, true)">Sanani olib tashlash</button>` : ''}
+        <button style="width:100%;margin-top:8px" onclick="closePlan()">Bekor qilish</button>
+      </div>
+    </div>`);
+}
+async function okStart(id, ochir) {
+  const v = ochir ? null : ($('planVal').value || null);
+  if (!ochir && !v) return toast('Sana tanlanmadi', true);
+  closePlan();
+  try {
+    await App.api(`/api/units/${id}/plan`,
+      { method: 'POST', body: JSON.stringify({ start_on: v }) });
+    toast(ochir ? 'Sana olib tashlandi' : 'Boshlanish kuni qo\'yildi');
+    await loadBoard();
+  } catch (e) { toast(e.message, true); }
 }
 
 //  ── MUDDATNI QO'YISH ──────────────────────────────────────────────────

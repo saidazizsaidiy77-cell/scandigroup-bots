@@ -2234,6 +2234,26 @@ router.post('/:id/plan',
       : (v === null || String(v).trim() === '' ? null : String(v)));
     const due = kun(req.body.due_on);
     const fg  = kun(req.body.fg_on);
+    const start = kun(req.body.start_on);
+
+    //  ★ BOSHLANISH KUNI — faqat BOSHLANMAGAN konverga (izoh:
+    //  sql/register.sql). Boshlangan konverning bosh sanasi haqiqiy
+    //  kun va uni bu yerdan surib bo'lmaydi.
+    if (start !== undefined) {
+      if (start !== null && !/^\d{4}-\d{2}-\d{2}$/.test(start))
+        return res.status(400).json({ error: 'Sana noto\'g\'ri' });
+      const r = await db.query(
+        `UPDATE production_units
+            SET start_planned_on = $2::date,
+                started_on = COALESCE($2::date, started_on)
+          WHERE id = $1 AND status = 'production' AND current_section_id IS NULL
+          RETURNING id`, [id, start]);
+      if (!r.rowCount)
+        return res.status(400).json({ error: 'Konver allaqachon boshlangan — boshlanish kuni o\'zgarmaydi' });
+      await audit(req, { module: 'production', action: 'plan', entity: 'unit',
+                         entity_id: id, payload: { start_on: start } });
+      if (due === undefined && fg === undefined) return res.json({ ok: true });
+    }
 
     const set = [];
     //  Oldinda tsex bo'lmasa (qadoqlashdan keyin) topshirish OMBORGA
@@ -2529,7 +2549,9 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
           SET current_section_id = $2::int,
               entered_section_on = $3::date,
               started_on = CASE WHEN $4 THEN COALESCE($3::date, CURRENT_DATE)
-                                ELSE started_on END
+                                ELSE started_on END,
+              --  Reja bajarildi — endi haqiqiy kun bor.
+              start_planned_on = CASE WHEN $4 THEN NULL ELSE start_planned_on END
         WHERE id = $1`, [u.id, toSection, movedOn || null, boshlanmoqda]);
     return u.id;
   }
@@ -3884,7 +3906,7 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
             -- ko'rinmay qolardi va uni boshlab bo'lmasdi.
             COALESCE(r.owner_shop_id, ns.shop_id) AS owner_shop_id,
             r.section, r.section_id, r.entered_section_on,
-            r.is_stock, r.waiting,
+            r.is_stock, r.waiting, r.start_planned_on,
             -- Konver marshrutida YO'Q bo'limda turibdimi. Marshrut
             -- o'zgartirilganda shunday konver qolib ketishi mumkin, va
             -- unga keyingi qadamni hisoblab bo'lmaydi: "marshrut tugadi"
