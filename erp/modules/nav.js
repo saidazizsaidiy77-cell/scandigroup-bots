@@ -327,13 +327,15 @@ const NAVBATLAR = [
 //  qaytadi — klient o'zi ajratadi va kelasi safar raqam paydo
 //  bo'lganda sahifa yangilanishini kutmaydi.
 //  VAZIFALAR — ijrochining navbati: menga berilgan va hali boshlanmagan
-//  yoki ishlanayotgan mavzu. «Tekshiruvda» sanalmaydi — u endi ochgan
+//  yoki ishlanayotgan mavzu (ijrochilar ro'yxatida men bor). «Tekshiruvda» sanalmaydi — u endi ochgan
 //  odamning qo'lida. Shart `modules/tasks.js` dagi `?mine=open` bilan
 //  AYNAN bir xil.
 NAVBATLAR.push(async (req) => {
   const n = await son(
     `SELECT COUNT(*)::int AS n FROM tasks
-      WHERE assignee_id = $1 AND status IN ('new', 'doing')`, [req.user.id]);
+      WHERE EXISTS (SELECT 1 FROM task_assignees ta
+                     WHERE ta.task_id = tasks.id AND ta.worker_id = $1)
+        AND status IN ('new', 'doing')`, [req.user.id]);
   return [{ page: '/vazifalar.html', mod: 'tasks', n,
             izoh: `${n} ta vazifa sizni kutmoqda` }];
 });

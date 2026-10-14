@@ -3154,6 +3154,18 @@ Belgi XODIMDA (`workers.task_watch`, Xodimlar sahifasi), standarti
 `false` — 4-qoida. Menyuda navbat: menga berilgan `new`/`doing`
 (`?mine=open` bilan bir xil shart, test solishtiradi).
 
+**★ IJROCHI BIR NECHTA** (`task_assignees`, zavod qarori 2026-10). Ish
+ko'pincha ikki-uch odamga tushadi va bitta katakka faqat bittasi
+sig'ardi. Oynada «+ ijrochi» yana bitta katak qo'shadi. Har ijrochi
+uni o'z ishi kabi ko'radi: «sizga vazifa berildi», «Menga» filtri,
+menyudagi navbat, holatni surish, izoh va 3 kunlik eslatma —
+HAMMASIGA; muddat kuni rahbarga ketadigan xabarda ismlarning hammasi
+yoziladi. «Mening ishim» sharti BITTA joyda (`MENIKI`,
+`modules/tasks.js`) va navbat uni takrorlaydi. `tasks.assignee_id`
+o'chirilmadi — ro'yxatning BIRINCHISI bo'lib sinxron qoladi;
+to'ldirish doimiy qoida (u har doim ro'yxatda turadi). Ro'yxat
+o'zgarganda xabar faqat YANGI qo'shilganga ketadi.
+
 ## Navbat — menyudagi belgi
 
 **★ NAVBAT XODIMNI O'ZI TOPADI** (zavod qarori, 2026-09).

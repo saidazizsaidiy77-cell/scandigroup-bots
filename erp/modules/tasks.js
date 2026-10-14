@@ -11,6 +11,11 @@
 //  O'ZGARTIRISH esa chegaralangan va chegara SERVERDA:
 //    sarlavha, tafsilot, ijrochi, muddat   ochgan odam yoki administrator
 //    holat (doskada surish)                ochgan odam, ijrochi, administrator
+//
+//  ★ IJROCHI BIR NECHTA (`task_assignees`, zavod qarori 2026-10). Har
+//  ijrochi o'z ishi kabi ko'radi: «Menga» filtri, menyudagi navbat,
+//  holatni surish, izoh va eslatma xabarlari — HAMMASIGA. Muddat kuni
+//  rahbarga ketadigan xabarda ismlarning hammasi yoziladi.
 //  Ijrochi o'z ishini «Jarayonda» va «Tekshiruvda» ga suradi; muddatni
 //  esa o'zi suza olmaydi — aks holda eslatma ham, nazorat ham ma'nosiz
 //  bo'lardi. «Administrator» — `admin.users` huquqi (xodimlarni
@@ -66,27 +71,65 @@ async function nextNo(c) {
   return prefix + String(rows[0].n).padStart(4, '0');
 }
 
-async function ishchi(c, id) {
-  if (id == null || id === '') return null;
-  const w = (await c.query(`SELECT id, name FROM workers WHERE id = $1 AND active`,
-    [Number(id)])).rows[0];
-  if (!w) throw xato('Ijrochi topilmadi yoki faol emas');
-  return w;
+//  Kelgan ijrochilar: `assignee_ids` (ro'yxat) yoki eski `assignee_id`.
+//  Tartib saqlanadi (birinchisi — `tasks.assignee_id`), takror olib
+//  tashlanadi, har biri FAOL xodim bo'lishi shart.
+async function ijrochilar(c, b) {
+  const xom = Array.isArray(b.assignee_ids) ? b.assignee_ids
+    : (b.assignee_id == null || b.assignee_id === '' ? [] : [b.assignee_id]);
+  const ids = [...new Set(xom.filter((x) => x != null && x !== '').map(Number))];
+  if (ids.some((x) => !Number.isInteger(x))) throw xato('Ijrochi noto\'g\'ri');
+  if (!ids.length) return [];
+  const { rows } = await c.query(
+    `SELECT id FROM workers WHERE id = ANY($1::int[]) AND active`, [ids]);
+  if (rows.length !== ids.length) throw xato('Ijrochi topilmadi yoki faol emas');
+  return ids;
 }
 
+//  Ro'yxatni yozadi va `assignee_id` ni birinchisiga tenglaydi. YANGI
+//  qo'shilganlarni qaytaradi — «sizga vazifa berildi» faqat ularga.
+async function ijrochiYoz(c, taskId, ids) {
+  const eski = (await c.query(`SELECT worker_id FROM task_assignees WHERE task_id = $1`,
+    [taskId])).rows.map((r) => r.worker_id);
+  await c.query(`DELETE FROM task_assignees WHERE task_id = $1 AND NOT (worker_id = ANY($2::int[]))`,
+    [taskId, ids]);
+  for (const [i, w] of ids.entries())
+    await c.query(
+      `INSERT INTO task_assignees (task_id, worker_id, pos) VALUES ($1,$2,$3)
+       ON CONFLICT (task_id, worker_id) DO UPDATE SET pos = EXCLUDED.pos`, [taskId, w, i]);
+  await c.query(`UPDATE tasks SET assignee_id = $2 WHERE id = $1`, [taskId, ids[0] || null]);
+  return ids.filter((w) => !eski.includes(w));
+}
+
+const ijrochiIds = async (c, taskId) => (await c.query(
+  `SELECT worker_id FROM task_assignees WHERE task_id = $1 ORDER BY pos`, [taskId]))
+  .rows.map((r) => r.worker_id);
+
+//  «Mening ishim» sharti BITTA joyda: ro'yxat (`?mine`), navbat
+//  (`modules/nav.js`) va holatni surish huquqi shundan.
+const MENIKI = (n) => `EXISTS (SELECT 1 FROM task_assignees ta
+                                WHERE ta.task_id = t.id AND ta.worker_id = $${n})`;
+
 const QATOR = `
-  SELECT t.*, a.name AS assignee_name, cr.name AS creator_name,
+  SELECT t.*, cr.name AS creator_name,
+         ij.assignees, ij.assignee_ids,
+         COALESCE(ij.names, '') AS assignee_name,
          db.name AS done_by_name,
          (SELECT COUNT(*)::int FROM task_comments c WHERE c.task_id = t.id) AS comments,
          (SELECT MAX(c.created_at) FROM task_comments c WHERE c.task_id = t.id) AS last_comment_at,
          (t.status IN ('new', 'doing', 'review') AND t.due_on < CURRENT_DATE) AS late,
          (t.due_on - CURRENT_DATE) AS days_left
     FROM tasks t
-    LEFT JOIN workers a  ON a.id  = t.assignee_id
+    LEFT JOIN LATERAL (
+      SELECT json_agg(json_build_object('id', w.id, 'name', w.name) ORDER BY ta.pos) AS assignees,
+             array_agg(w.id ORDER BY ta.pos) AS assignee_ids,
+             string_agg(w.name, ', ' ORDER BY ta.pos) AS names
+        FROM task_assignees ta JOIN workers w ON w.id = ta.worker_id
+       WHERE ta.task_id = t.id) ij ON true
     LEFT JOIN workers cr ON cr.id = t.created_by
     LEFT JOIN workers db ON db.id = t.done_by`;
 
-//  ★ MENGA — `assignee_id = men`, ochiq holatda. Menyudagi navbat
+//  ★ MENGA — ijrochilar orasida men bor, ochiq holatda. Menyudagi navbat
 //  belgisi AYNAN shu shartni sanaydi (`modules/nav.js`) va test raqamni
 //  shu ro'yxatning uzunligi bilan solishtiradi.
 router.get('/', wrap(async (req, res) => {
@@ -97,17 +140,17 @@ router.get('/', wrap(async (req, res) => {
   if (!req.query.all)
     shart.push(`(t.status IN ('new', 'doing', 'review')
                  OR COALESCE(t.done_at, t.updated_at) > NOW() - INTERVAL '30 days')`);
-  if (req.query.mine === '1') { p.push(req.user.id); shart.push(`t.assignee_id = $${p.length}`); }
+  if (req.query.mine === '1') { p.push(req.user.id); shart.push(MENIKI(p.length)); }
   if (req.query.mine === 'open') {
     p.push(req.user.id);
-    shart.push(`t.assignee_id = $${p.length} AND t.status IN ('new', 'doing')`);
+    shart.push(`${MENIKI(p.length)} AND t.status IN ('new', 'doing')`);
   }
   if (req.query.created === '1') { p.push(req.user.id); shart.push(`t.created_by = $${p.length}`); }
   const q = String(req.query.q || '').trim();
   if (q) {
     p.push(`%${q}%`);
     shart.push(`(t.title ILIKE $${p.length} OR t.task_no ILIKE $${p.length}
-                 OR t.body ILIKE $${p.length} OR a.name ILIKE $${p.length})`);
+                 OR t.body ILIKE $${p.length} OR ij.names ILIKE $${p.length})`);
   }
   const { rows } = await db.query(
     `${QATOR} ${shart.length ? 'WHERE ' + shart.join(' AND ') : ''}
@@ -131,17 +174,17 @@ router.get('/:id', wrap(async (req, res) => {
   res.json({ ...t, comment_list: comments,
              can_edit: admin(req) || t.created_by === req.user.id,
              can_move: admin(req) || t.created_by === req.user.id
-                       || t.assignee_id === req.user.id });
+                       || (t.assignee_ids || []).includes(req.user.id) });
 }));
 
-//  Ijrochiga «sizga yangi ish» xabari. O'zi o'ziga yozganida yuborilmaydi.
-async function ijrochigaAyt(c, req, t, sarlavha) {
-  if (!t.assignee_id || t.assignee_id === req.user.id) return;
-  await notify.queue({
-    worker_id: t.assignee_id, module: 'tasks', kind: 'task_assigned',
-    title: `${sarlavha} — ${t.task_no}`,
-    body: `${t.title}${t.due_on ? `\nMuddat: ${kunYoz(t.due_on)}` : ''}`
-        + `\nOchgan: ${req.user.name || ''}` }, c);
+//  Ijrochilarga «sizga yangi ish» xabari. O'zi o'ziga yozganida yuborilmaydi.
+async function ijrochigaAyt(c, req, t, kimlar, sarlavha) {
+  for (const w of kimlar.filter((x) => x !== req.user.id))
+    await notify.queue({
+      worker_id: w, module: 'tasks', kind: 'task_assigned',
+      title: `${sarlavha} — ${t.task_no}`,
+      body: `${t.title}${t.due_on ? `\nMuddat: ${kunYoz(t.due_on)}` : ''}`
+          + `\nOchgan: ${req.user.name || ''}` }, c);
 }
 
 router.post('/', wrap(async (req, res) => {
@@ -153,13 +196,15 @@ router.post('/', wrap(async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const a = await ishchi(client, req.body.assignee_id);
+    const ids = await ijrochilar(client, req.body);
     const no = await nextNo(client);
     const t = (await client.query(
       `INSERT INTO tasks (task_no, title, body, assignee_id, due_on, created_by)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [no, title, body, a?.id || null, due, req.user.id])).rows[0];
-    await ijrochigaAyt(client, req, t, 'Sizga yangi vazifa');
+      [no, title, body, ids[0] || null, due, req.user.id])).rows[0];
+    await ijrochiYoz(client, t.id, ids);
+    t.assignee_ids = ids;
+    await ijrochigaAyt(client, req, t, ids, 'Sizga yangi vazifa');
     await audit(req, { module: 'tasks', action: 'create', entity: 'tasks',
                        entity_id: t.id, payload: { task_no: no } }, client);
     await client.query('COMMIT');
@@ -178,11 +223,12 @@ router.patch('/:id', wrap(async (req, res) => {
       [Number(req.params.id)])).rows[0];
     if (!t) throw xato('Mavzu topilmadi', 404);
     const egasi = admin(req) || t.created_by === req.user.id;
-    const suradi = egasi || t.assignee_id === req.user.id;
+    const eskiIds = await ijrochiIds(client, t.id);
+    const suradi = egasi || eskiIds.includes(req.user.id);
     const b = req.body;
     const yangi = { ...t };
 
-    const tahrir = ['title', 'body', 'assignee_id', 'due_on'].filter((k) => k in b);
+    const tahrir = ['title', 'body', 'assignee_id', 'assignee_ids', 'due_on'].filter((k) => k in b);
     if (tahrir.length && !egasi)
       throw xato('Sarlavha, ijrochi va muddatni mavzuni ochgan odam o\'zgartiradi', 403);
     if ('title' in b) {
@@ -190,7 +236,8 @@ router.patch('/:id', wrap(async (req, res) => {
       if (!yangi.title) throw xato('Mavzu nomini yozing');
     }
     if ('body' in b) yangi.body = String(b.body || '').trim() || null;
-    if ('assignee_id' in b) yangi.assignee_id = (await ishchi(client, b.assignee_id))?.id || null;
+    const ijTegildi = 'assignee_ids' in b || 'assignee_id' in b;
+    const ids = ijTegildi ? await ijrochilar(client, b) : eskiIds;
     //  Bo'sh yuborilgani «tegma» emas, «yo'q» degani — muddat olib
     //  tashlanadi (reja sanasi bilan bir xil idiom).
     if ('due_on' in b) {
@@ -208,15 +255,19 @@ router.patch('/:id', wrap(async (req, res) => {
     }
     const tugadi = yangi.status === 'done' && t.status !== 'done';
     const u = (await client.query(
-      `UPDATE tasks SET title = $2, body = $3, assignee_id = $4, due_on = $5,
-              status = $6, updated_at = NOW(),
-              done_at = CASE WHEN $6 = 'done' THEN COALESCE(done_at, NOW()) END,
-              done_by = CASE WHEN $6 = 'done' THEN COALESCE(done_by, $7) END
+      `UPDATE tasks SET title = $2, body = $3, due_on = $4,
+              status = $5, updated_at = NOW(),
+              done_at = CASE WHEN $5 = 'done' THEN COALESCE(done_at, NOW()) END,
+              done_by = CASE WHEN $5 = 'done' THEN COALESCE(done_by, $6) END
         WHERE id = $1 RETURNING *`,
-      [t.id, yangi.title, yangi.body, yangi.assignee_id, isoKun(yangi.due_on),
+      [t.id, yangi.title, yangi.body, isoKun(yangi.due_on),
        yangi.status, req.user.id])).rows[0];
-    if (u.assignee_id && u.assignee_id !== t.assignee_id)
-      await ijrochigaAyt(client, req, u, 'Sizga vazifa berildi');
+    if (ijTegildi) {
+      const qoshildi = await ijrochiYoz(client, t.id, ids);
+      u.assignee_id = ids[0] || null;
+      await ijrochigaAyt(client, req, u, qoshildi, 'Sizga vazifa berildi');
+    }
+    u.assignee_ids = ids;
     //  Bajarildi — ochgan odamga aytiladi: u ishni bergan va natijani
     //  kutadi. O'zi bosgan bo'lsa yuborilmaydi.
     if (tugadi && t.created_by && t.created_by !== req.user.id)
@@ -250,7 +301,7 @@ router.post('/:id/comments', wrap(async (req, res) => {
       `INSERT INTO task_comments (task_id, worker_id, body) VALUES ($1,$2,$3) RETURNING *`,
       [t.id, req.user.id, body])).rows[0];
     await client.query(`UPDATE tasks SET updated_at = NOW() WHERE id = $1`, [t.id]);
-    const kimga = [...new Set([t.assignee_id, t.created_by])]
+    const kimga = [...new Set([...await ijrochiIds(client, t.id), t.created_by])]
       .filter((x) => x && x !== req.user.id);
     for (const w of kimga)
       await notify.queue({
@@ -272,25 +323,29 @@ router.post('/:id/comments', wrap(async (req, res) => {
 //  buzilmaydi). Qaytaradigan raqam — navbatga qo'yilgan xabarlar soni.
 async function tasksYubor() {
   let n = 0;
-  //  1. Muddatga 3 kun yoki kam qoldi — IJROCHIGA, bir muddatga bir marta.
+  //  1. Muddatga 3 kun yoki kam qoldi — HAR IJROCHIGA, bir muddatga bir marta.
   const yaqin = (await db.query(
     `SELECT t.*, (t.due_on - CURRENT_DATE) AS qoldi FROM tasks t
-      WHERE t.status IN ('new', 'doing', 'review') AND t.assignee_id IS NOT NULL
+      WHERE t.status IN ('new', 'doing', 'review')
+        AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)
         AND t.due_on BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3
         AND t.remind_for IS DISTINCT FROM t.due_on`)).rows;
   for (const t of yaqin) {
-    if (await notify.queue({
-      worker_id: t.assignee_id, module: 'tasks', kind: 'task_due3',
-      title: `Muddatga ${t.qoldi} kun qoldi — ${t.task_no}`,
-      body: `${t.title}\nMuddat: ${kunYoz(t.due_on)}` })) n++;
+    for (const w of await ijrochiIds(db, t.id))
+      if (await notify.queue({
+        worker_id: w, module: 'tasks', kind: 'task_due3',
+        title: `Muddatga ${t.qoldi} kun qoldi — ${t.task_no}`,
+        body: `${t.title}\nMuddat: ${kunYoz(t.due_on)}` })) n++;
     await db.query(`UPDATE tasks SET remind_for = due_on WHERE id = $1`, [t.id]);
   }
 
   //  2. Muddat keldi (yoki o'tib ketgan, lekin hali aytilmagan) —
   //  OCHGAN odamga va «Vazifa nazorati» belgili rahbarlarga.
   const kelgan = (await db.query(
-    `SELECT t.*, a.name AS assignee_name FROM tasks t
-       LEFT JOIN workers a ON a.id = t.assignee_id
+    `SELECT t.*, (SELECT string_agg(w.name, ', ' ORDER BY ta.pos)
+                    FROM task_assignees ta JOIN workers w ON w.id = ta.worker_id
+                   WHERE ta.task_id = t.id) AS assignee_name
+       FROM tasks t
       WHERE t.status IN ('new', 'doing', 'review') AND t.due_on <= CURRENT_DATE
         AND t.due_sent_for IS DISTINCT FROM t.due_on`)).rows;
   if (kelgan.length) {
