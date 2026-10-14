@@ -208,6 +208,9 @@ const App = (() => {
   // qarama-qarshi bo'lmaydi: kulrang modul kartochkada ham "rejada" turadi.
   const MODULES = [
     { code: 'main',       name: 'Bosh sahifa',          perm: [] },
+    //  ★ VAZIFALAR (izoh: sql/tasks.sql) — hammaga ochiq: zavodning
+    //  umumiy stoli, ish Telegram chatida yo'qolmasin.
+    { code: 'tasks',      name: 'Vazifalar',            perm: [] },
     { code: 'cash',       name: 'Bank va kassa',        perm: ['cash.view', 'cash.entry', 'cash.manage'] },
     { code: 'sales',      name: 'Savdo',                perm: ['sales.view', 'sales.manage'] },
     //  ★ TA'MINOT VA XOM ASHYO — BITTA BO'LIM (zavod qarori, 2026-10).
@@ -241,6 +244,10 @@ const App = (() => {
   // huquqlardan bittasi yetarli.
   const PAGES = [
     { href: '/', mod: 'main', nav: 'Bosh sahifa', perm: [] },
+    { href: '/vazifalar.html', mod: 'tasks', nav: 'Vazifalar doskasi',
+      title: 'Vazifalar', lead: 'Mavzu · ijrochi · muddat',
+      text: "Har ish alohida mavzu: kim bajaradi, qachongacha va izohlar \u00b7 muddatga 3 kun qolganda ijrochiga, muddat kuni rahbariyatga Telegram xabari",
+      perm: [] },
     { href: '/harakat.html', mod: 'production', nav: "Bo'limlar aro harakat",
       title: "Bo'limlar aro harakat", lead: 'Tsex ekrani',
       text: "Konverlar bo'limlar bo'yicha \u00b7 bitta bosishda keyingi bo'limga \u00b7 keyingi tsexga topshirishga qancha qolgani \u00b7 bugungi harakatlar lentasi",

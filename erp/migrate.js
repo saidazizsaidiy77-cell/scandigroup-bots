@@ -39,6 +39,9 @@ const FILES = [
   //  turkumini ham (`sales_categories`) o'qiydi — ikkalasi ham
   //  undan oldin yaratiladi.
   'sales-kpi.sql',             // savdo KPI: ko'rsatkichlar, reja va bonus shkalasi
+  //  Vazifalar doskasi: faqat `workers` ga tayanadi, eng oxirida turishi
+  //  shart emas, lekin yangi modul oldingilarni qimirlatmasin.
+  'tasks.sql',                 // vazifalar: mavzu, izoh, ijrochi, muddat
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

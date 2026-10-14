@@ -326,6 +326,18 @@ const NAVBATLAR = [
 //  (izoh: `public/app.js`, `navbatTick`). Nol bo'lgan navbat ham
 //  qaytadi — klient o'zi ajratadi va kelasi safar raqam paydo
 //  bo'lganda sahifa yangilanishini kutmaydi.
+//  VAZIFALAR — ijrochining navbati: menga berilgan va hali boshlanmagan
+//  yoki ishlanayotgan mavzu. «Tekshiruvda» sanalmaydi — u endi ochgan
+//  odamning qo'lida. Shart `modules/tasks.js` dagi `?mine=open` bilan
+//  AYNAN bir xil.
+NAVBATLAR.push(async (req) => {
+  const n = await son(
+    `SELECT COUNT(*)::int AS n FROM tasks
+      WHERE assignee_id = $1 AND status IN ('new', 'doing')`, [req.user.id]);
+  return [{ page: '/vazifalar.html', mod: 'tasks', n,
+            izoh: `${n} ta vazifa sizni kutmoqda` }];
+});
+
 router.get('/', wrap(async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Kirish kerak' });
   const navbat = (await Promise.all(NAVBATLAR.map((f) => f(req)))).flat();

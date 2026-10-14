@@ -201,6 +201,7 @@ async function tgSoglik(){
 const XABAR = [
   { k: 'daily_digest',   t: 'xulosa' },
   { k: 'supply_reports', t: 'saldo' },
+  { k: 'task_watch',     t: 'vazifa' },
 ];
 
 const USTUN = [
@@ -684,6 +685,18 @@ function openForm(id){
                     w && !w.tg_id
                       ? ' — <b>Telegram ID yozilmagan</b>, xabar bormaydi'
                       : ''}</span></span>
+            </div>
+            <!--  ★ VAZIFA NAZORATI (izoh: sql/tasks.sql): muddat kelgan
+                  kuni «bugun shu xodim bajarishi kerak edi, so'rang»
+                  xabari mavzuni ochgan odamga va shu belgili
+                  rahbarlarga boradi. Kodga ism yozilmaydi (4-qoida). -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="wTaskWatch" style="width:auto"
+                     ${w?.task_watch ? 'checked' : ''}>
+              <span style="flex:1">Vazifa nazorati
+                <span class="muted" style="font-size:12px">· vazifa muddati
+                  kelgan kuni «bugun shu xodim bajarishi kerak edi,
+                  so'rang» xabari keladi (har qanday mavzu bo'yicha)</span></span>
             </div></div>
 
           <!--  ★ QAYSI TELEGRAM XABARI KELADI (izoh: sql/core.sql).
@@ -844,6 +857,7 @@ async function save(id){
     //  chiqarish uchun boshqa yo'l qolmasdi.
     sales_head_id: Number($('wSalesHead').value) || 0,
     kpi_bonus_tushum: $('wBonusTushum').checked,
+    task_watch: $('wTaskWatch').checked,
     sees_cash: $('wCashSee').checked,
     can_add_supplier: $('wSupAdd').checked,
     can_request_unit: $('wReq').checked,
