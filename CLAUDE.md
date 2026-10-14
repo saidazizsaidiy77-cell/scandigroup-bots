@@ -95,6 +95,13 @@ bo'lardi va kechikish hech qachon ko'rinmasdi. Yangi formulada sana
 QOTIB turadi — konver kechiksa reja o'tmishda qoladi va `fg_late`,
 `lak_late`, `pack_late` ustunlari aynan shuni ko'rsatadi.
 
+**★ MARSHRUT SANASI HAM KECHIKADI** (zavod qarori, 2026-10). Ilgari
+`*_late` faqat QO'LDA qo'yilgan rejani tekshirardi va marshrutdan
+chiqqan sana o'tib ketsa ham jurnalda qora turardi — sana qotib
+turishining butun ma'nosi yo'qolardi. Endi ekrandagi sananing O'ZI
+(reja → marshrut) bugundan oldin, fakti yo'q va konver hali ishlab
+chiqarishda bo'lsa — qizil «kechikdi».
+
 Manba belgisi uchta: **fakt** (bo'lib bo'lgan) → **reja** (tsex
 boshlig'i qo'lda qo'ygan, formuladan USTUN) → **marshrut** (formula).
 Zahiraga marshrut sanasi chiqarilmaydi: u buyurtma kutadi, marshrut

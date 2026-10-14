@@ -507,10 +507,28 @@ SELECT
        WHEN pl.auto AND pl.pack_on IS NOT NULL AND NOT u.is_stock THEN 'marshrut'
        ELSE NULL END AS pack_src,
 
-  -- Reja bor, fakt yo'q va muddat o'tib ketgan — nazorat shu ustunda
-  (u.lak_on  IS NULL AND u.lak_planned_on  < CURRENT_DATE) AS lak_late,
-  (u.pack_on IS NULL AND u.pack_planned_on < CURRENT_DATE) AS pack_late,
-  (u.fg_on   IS NULL AND u.fg_planned_on   < CURRENT_DATE) AS fg_late,
+  -- Reja bor, fakt yo'q va muddat o'tib ketgan — nazorat shu ustunda.
+  --
+  -- ★ MARSHRUT SANASI HAM KECHIKADI (zavod qarori, 2026-10). Ilgari
+  -- faqat QO'LDA qo'yilgan reja tekshirilardi va marshrutdan chiqqan
+  -- sana o'tib ketsa ham jurnalda qora turardi — holbuki sana QOTIB
+  -- turishining butun ma'nosi kechikishni ko'rsatish edi (izoh:
+  -- CLAUDE.md, «Muddat marshrutdan hisoblanadi»). Taqqoslanadigan sana
+  -- EKRANDAGINING O'ZI: reja → marshrut, yuqoridagi COALESCE bilan bir
+  -- xil shart. Faqat ishlab chiqarishdagi konver: omborga tushgan yoki
+  -- chiqib ketganida kechikish savoli yopilgan.
+  (u.status = 'production' AND u.lak_on IS NULL
+   AND COALESCE(u.lak_planned_on,
+                CASE WHEN pl.auto AND NOT u.is_stock THEN pl.lak_on END)
+       < CURRENT_DATE) AS lak_late,
+  (u.status = 'production' AND u.pack_on IS NULL
+   AND COALESCE(u.pack_planned_on,
+                CASE WHEN pl.auto AND NOT u.is_stock THEN pl.pack_on END)
+       < CURRENT_DATE) AS pack_late,
+  (u.status = 'production' AND u.fg_on IS NULL
+   AND COALESCE(u.fg_planned_on,
+                CASE WHEN pl.auto AND NOT u.is_stock THEN pl.fg_on END)
+       < CURRENT_DATE) AS fg_late,
 
   -- Reja sanalarining o'zi: tahrirlashda kiritilgan qiymat kerak bo'ladi
   u.lak_planned_on,
