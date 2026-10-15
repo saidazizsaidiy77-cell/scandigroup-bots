@@ -3186,9 +3186,17 @@ oladi. Sahifa kichraytiradi (1600 px, JPEG, `kichrayt`), server faqat
 rasm turini va 5 MB gacha qabul qiladi. Mavzuning O'ZIGA — ochgan odam
 yoki administrator, izohga — o'sha izohni yozgan odam; olib tashlash —
 qo'ygan odam yoki administrator. Izoh faqat rasmdan iborat bo'lishi
-mumkin; Telegram xabarida «📷 N ta rasm» yoziladi (rasmning o'zi
-yuborilmaydi — navbat matn). Token sarlavhada, shuning uchun rasm
-`App.blob()` bilan olinadi, `<img src>` bilan emas.
+mumkin; Telegram xabarida «📷 N ta rasm» yoziladi. Token sarlavhada,
+shuning uchun rasm `App.blob()` bilan olinadi, `<img src>` bilan emas.
+
+**★ RASMNING O'ZI TELEGRAMGA HAM KETADI** (zavod qarori, 2026-10;
+`notifications.task_file_id`). Har yuklangan rasm ALOHIDA navbat
+qatori bo'ladi va `sendPhoto` bilan ketadi (matn — uning izohi). Kimga
+— matnli xabar bilan bir xil: izoh rasmi ijrochilar va ochgan odamga,
+mavzuning o'z rasmi ijrochilarga, yuklaganning o'ziga emas. Navbatga
+rasmning HAVOLASI yoziladi, nusxasi emas; yuboruvchi uni faqat o'sha
+qator uchun o'qiydi. Navbat id bo'yicha yuradi — rasm o'z matnidan
+keyin keladi.
 
 ## Navbat — menyudagi belgi
 
@@ -5362,6 +5370,28 @@ turadi va bitta http so'rovi sessiya tokenini ko'chaga chiqarardi. Shart
 SO'ROVDAN o'qiladi (`req.secure` yoki `x-forwarded-proto`), muhitdan
 emas — lokalda `http://localhost` bilan ishlaganda sarlavha qo'yilsa
 brauzer saytni bir yil davomida https'ga majburlab, ochilmay qolardi.
+
+---
+
+## Sekin so'rov jurnali
+
+**★ «SEKINLASHDI» DEGAN SAVOLGA RAQAM BILAN JAVOB** (zavod qarori,
+2026-10; `ERP_SLOW_MS`, standart 500, `0` — o'chiq). Chegaradan uzoq
+ishlagan har API so'rovi server jurnaliga bitta qator bo'lib tushadi:
+
+    [sekin] 812ms GET /api/sales/orders 200 w=12
+    [sekin-sql] 640ms SELECT o.*, ... FROM v_sales_orders o ...
+
+Birinchisi QAYSI SAHIFA, ikkinchisi QAYSI SO'ROV (bitta yo'lda o'nta
+so'rov bo'ladi). Yo'lning `?q=` qismi va SQL parametrlari YOZILMAYDI —
+ularda mijoz ismi turadi (4-qoida). Faqat hovuzning `query` si
+o'lchanadi (`erp/db.js`); tranzaksiya `client` lariga tegilmaydi.
+
+Railway → Deployments → Logs da `[sekin` deb qidiriladi.
+
+**Buyurtmalar ro'yxatidagi `meniki`** faqat `can_release_own` belgisi
+bor xodimga hisoblanadi: qolganlarida ekran uni o'qimaydi, ro'yxat esa
+500 qatorgacha va har qatorda `mijoz_meniki` chaqirilardi.
 
 ---
 

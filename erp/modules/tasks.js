@@ -340,7 +340,7 @@ router.post('/:id/files',
     const mime = String(req.headers['content-type'] || '').split(';')[0].trim();
     if (!RASM_TUR.includes(mime)) throw xato('Faqat rasm yuklanadi (JPEG, PNG, WebP)');
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw xato('Fayl bo\'sh');
-    const t = (await db.query(`SELECT id, created_by FROM tasks WHERE id = $1`,
+    const t = (await db.query(`SELECT id, created_by, task_no, title FROM tasks WHERE id = $1`,
       [Number(req.params.id)])).rows[0];
     if (!t) throw xato('Mavzu topilmadi', 404);
     //  Mavzuning O'ZIGA — ochgan odam yoki administrator (sarlavha bilan
@@ -356,12 +356,32 @@ router.post('/:id/files',
       if (!c) throw xato('Izoh topilmadi', 404);
       if (c.worker_id !== req.user.id) throw xato('Rasmni izoh yozgan odam qo\'shadi', 403);
     }
-    const f = (await db.query(
-      `INSERT INTO task_files (task_id, comment_id, mime, size, data, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, comment_id, size`,
-      [t.id, cid, mime, req.body.length, req.body, req.user.id])).rows[0];
-    await db.query(`UPDATE tasks SET updated_at = NOW() WHERE id = $1`, [t.id]);
-    res.json(f);
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const f = (await client.query(
+        `INSERT INTO task_files (task_id, comment_id, mime, size, data, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, comment_id, size`,
+        [t.id, cid, mime, req.body.length, req.body, req.user.id])).rows[0];
+      await client.query(`UPDATE tasks SET updated_at = NOW() WHERE id = $1`, [t.id]);
+      //  ★ RASM TELEGRAMGA HAM (izoh: sql/tasks.sql). Kimga — matnli
+      //  xabar bilan bir xil: izoh rasmi ijrochilar va ochgan odamga,
+      //  mavzuning o'z rasmi ijrochilarga; yuklagan odamning o'ziga emas.
+      //  Navbat id bo'yicha yuradi, ya'ni rasm o'z matnidan KEYIN keladi.
+      const ijr = await ijrochiIds(client, t.id);
+      const kimga = [...new Set(cid ? [...ijr, t.created_by] : ijr)]
+        .filter((x) => x && x !== req.user.id);
+      for (const w of kimga)
+        await notify.queue({
+          worker_id: w, module: 'tasks', kind: cid ? 'task_comment' : 'task_assigned',
+          title: `📷 ${t.task_no}`,
+          body: `${t.title}\n${req.user.name || ''}`, task_file_id: f.id }, client);
+      await client.query('COMMIT');
+      res.json(f);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally { client.release(); }
   }));
 
 router.get('/files/:fid', wrap(async (req, res) => {

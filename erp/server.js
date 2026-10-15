@@ -17,6 +17,25 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 
+//  ★ SEKIN SO'ROV JURNALI (zavod qarori, 2026-10). «Dastur sekinlashdi»
+//  degan savolga raqamsiz javob yo'q edi: qaysi sahifa, qaysi so'rov va
+//  necha millisekund. Endi chegaradan (`ERP_SLOW_MS`, standart 500)
+//  uzoq ishlagan har API so'rovi server jurnaliga bitta qator bo'lib
+//  tushadi — yo'li, holati, vaqti va kim. `0` butunlay o'chiradi.
+//  Yo'lning faqat o'zi yoziladi, `?q=` emas: qidiruv matnida mijoz ismi
+//  turadi.
+const SEKIN = Number(process.env.ERP_SLOW_MS ?? 500);
+if (SEKIN > 0) app.use('/api', (req, res, next) => {
+  const t0 = process.hrtime.bigint();
+  res.on('finish', () => {
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    if (ms >= SEKIN)
+      console.warn(`[sekin] ${Math.round(ms)}ms ${req.method} ${req.baseUrl}${req.path} ` +
+        `${res.statusCode} w=${req.user?.id ?? '-'}`);
+  });
+  next();
+});
+
 //  HTTPS ustida ochilgan bo'lsa brauzerga «bu saytga boshqa hech qachon
 //  http bilan borma» deyiladi. Tsexdagi telefon ochiq Wi-Fi'da turadi va
 //  bitta http so'rovi sessiya tokenini ko'chaga chiqarardi.
@@ -205,11 +224,27 @@ function xabarJadvali() {
     if (!r.ok) throw new Error(`Telegram ${r.status}: ${await r.text()}`);
   };
 
-  const send = async (chatId, text) => {
-    try { await yubor(chatId, text, true); }
+  //  ★ RASM (izoh: sql/tasks.sql) — `sendPhoto`, matn esa uning
+  //  izohi (caption, Telegram 1024 belgigacha oladi).
+  const rasm = async (chatId, text, photo, md) => {
+    const f = new FormData();
+    f.append('chat_id', String(chatId));
+    f.append('caption', text.slice(0, 1000));
+    if (md) f.append('parse_mode', 'Markdown');
+    f.append('photo', new Blob([photo.data], { type: photo.mime }),
+      'rasm.' + (photo.mime.split('/')[1] || 'jpg'));
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`,
+      { method: 'POST', body: f });
+    if (!r.ok) throw new Error(`Telegram ${r.status}: ${await r.text()}`);
+  };
+
+  const send = async (chatId, text, photo) => {
+    const bir = photo ? (t, md) => rasm(chatId, t, photo, md)
+                      : (t, md) => yubor(chatId, t, md);
+    try { await bir(text, true); }
     catch (e) {
       if (!/Telegram 400/.test(String(e.message))) throw e;
-      await yubor(chatId, text.replace(/[*_`]/g, ''), false);
+      await bir(text.replace(/[*_`]/g, ''), false);
     }
   };
 

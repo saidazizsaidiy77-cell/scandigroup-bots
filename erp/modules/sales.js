@@ -40,7 +40,11 @@ const channelsOf = (req) => {
 //  Ekranga «bu buyurtma menikimi» degan javob — «Mijozga chiqarish»
 //  tugmasi `can_release_own` xodimda shundan chiziladi. Shart
 //  `assertOwn` bilan bir xil; id raqam bo'lib qo'yiladi (sessiyadan).
+//  Faqat belgisi bor xodimga hisoblanadi: qolganlarida ekran bu
+//  javobni o'qimaydi, ro'yxat esa 500 qatorgacha boradi va har qator
+//  uchun `mijoz_meniki` bekorga chaqirilardi.
 const MENIKI = (req) => {
+  if (!req.user.can_release_own) return 'false AS meniki';
   const me = Number(req.user.id) | 0;
   return `(o.manager_id = ${me} OR mijoz_meniki(o.customer_id, ${me})) AS meniki`;
 };

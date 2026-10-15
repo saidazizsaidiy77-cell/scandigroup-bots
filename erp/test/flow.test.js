@@ -12426,8 +12426,27 @@ test('vazifalar: rasm mavzuda va izohda', async () => {
     403, 'boshqaning izohiga emas');
   assert.equal((await yukla(tLak, `/api/tasks/${t.id}/files?comment_id=${c.body.id}`, PNG)).status, 200);
   const xb = (await H.id(`SELECT body FROM notifications WHERE kind = 'task_comment'
-                           ORDER BY id DESC LIMIT 1`)).body;
+                           AND task_file_id IS NULL ORDER BY id DESC LIMIT 1`)).body;
   assert.match(xb, /📷 1 ta rasm/);
+
+  //  ★ Rasmning O'ZI ham Telegramga: ochgan odamga, yuklaganga emas.
+  const KOR = (await H.id(`SELECT id FROM workers WHERE name = 'Korpus ustasi'`)).id;
+  const LAKW = (await H.id(`SELECT id FROM workers WHERE name = $1`, ["Bo'yoq ustasi"])).id;
+  const rq = await H.id(`SELECT id, task_file_id FROM notifications
+                          WHERE worker_id = $1 AND task_file_id IS NOT NULL
+                          ORDER BY id DESC LIMIT 1`, [KOR]);
+  assert.ok(rq && rq.task_file_id, 'rasmli xabar navbatda');
+  assert.equal((await H.id(`SELECT COUNT(*)::int AS n FROM notifications
+                             WHERE worker_id = $1 AND task_file_id = $2`,
+                            [LAKW, rq.task_file_id])).n, 0, 'yuklaganning o\'ziga emas');
+  const notify = require('../notify');
+  const { db } = require('../db');
+  await db.query(`UPDATE workers SET tg_id = 777001 WHERE id = $1 AND tg_id IS NULL`, [KOR]);
+  await db.query(`UPDATE notifications SET sent_at = NOW() WHERE sent_at IS NULL AND id <> $1`, [rq.id]);
+  const ketdi = [];
+  await notify.sendPending(async (tg, text, photo) => { ketdi.push({ tg, photo }); });
+  assert.ok(ketdi.some((x) => x.photo && x.photo.mime === 'image/png'
+    && Buffer.from(x.photo.data).equals(PNG)), 'rasm yuboruvchiga yetib keldi');
 
   const d = (await korpusA('GET', '/api/tasks/' + t.id)).body;
   assert.equal(d.file_list.length, 2);

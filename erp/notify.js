@@ -64,7 +64,7 @@ const KODLAR = TURLAR.map((t) => t.kod);
 // ketadigan xabarda esa kimga borishi YUBORISH paytida hal qilinadi,
 // shuning uchun filtr `sendPending` da ham bor — ikkalasi bitta
 // jadvaldan o'qiydi.
-async function queue({ worker_id, permission_code, module, kind, title, body }, client) {
+async function queue({ worker_id, permission_code, module, kind, title, body, task_file_id }, client) {
   const c = client || db;
   if (worker_id && kind) {
     const { rowCount } = await c.query(
@@ -73,10 +73,11 @@ async function queue({ worker_id, permission_code, module, kind, title, body }, 
     if (rowCount) return false;
   }
   await c.query(
-    `INSERT INTO notifications (worker_id, permission_code, module, kind, title, body)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
+    `INSERT INTO notifications (worker_id, permission_code, module, kind, title, body,
+                                task_file_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [worker_id || null, permission_code || null, module, kind || null,
-     title, body || null]);
+     title, body || null, task_file_id || null]);
   return true;
 }
 
@@ -181,7 +182,7 @@ async function queueDigest({ module, kind, title, body }, client) {
 // Bot jarayoni shuni chaqiradi. send(tg_id, text) — Telegram yuboruvchi funksiya.
 async function sendPending(send, limit = 50) {
   const { rows } = await db.query(
-    `SELECT n.id, n.title, n.body,
+    `SELECT n.id, n.title, n.body, n.task_file_id,
             COALESCE(
               ARRAY(SELECT w.tg_id FROM workers w WHERE w.id = n.worker_id AND w.tg_id IS NOT NULL),
               '{}'
@@ -208,6 +209,11 @@ async function sendPending(send, limit = 50) {
   for (const n of rows) {
     const text = n.body ? `*${n.title}*\n${n.body}` : n.title;
     const manzil = [...new Set(n.targets)];
+    //  Rasm (izoh: sql/tasks.sql) — faqat SHU qator uchun o'qiladi:
+    //  ellikta qatorning rasmini bitta so'rovda olish xotirani bekorga
+    //  to'ldirardi. Rasmi o'chirilgan qator matn bo'lib ketadi.
+    const photo = n.task_file_id ? (await db.query(
+      `SELECT mime, data FROM task_files WHERE id = $1`, [n.task_file_id])).rows[0] : null;
 
     //  ★ MANZIL YO'QLIGI HAM JAVOB (zavod qarori, 2026-10). Xodimning
     //  `tg_id` si yozilmagan bo'lsa yuboradigan joy yo'q — qaytadan
@@ -237,7 +243,7 @@ async function sendPending(send, limit = 50) {
     let ketdi = 0;
     const xato = [];
     for (const tgId of manzil) {
-      try { await send(tgId, text); ketdi++; }
+      try { await send(tgId, text, photo); ketdi++; }
       catch (e) { xato.push(`${tgId}: ${e.message}`); }
     }
 
