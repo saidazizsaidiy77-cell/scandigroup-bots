@@ -50,6 +50,28 @@ const db = new Pool({
   ...(mintaqa ? { options: `-c timezone=${mintaqa}` } : {}),
 });
 
+//  ★ SEKIN SQL HAM YOZILADI (sekin so'rov jurnalining ikkinchi yarmi,
+//  izoh: server.js). API so'rovi «qaysi sahifa» deydi, bu esa «qaysi
+//  SO'ROV» — bitta yo'lda o'nta so'rov bo'ladi. Faqat hovuzning o'z
+//  `query` si o'lchanadi; tranzaksiya `client` lari tegilmaydi.
+//  Parametrlar yozilmaydi — ularda mijoz ma'lumoti turadi.
+const SEKIN_SQL = Number(process.env.ERP_SLOW_MS ?? 500);
+if (SEKIN_SQL > 0) {
+  const asl = db.query.bind(db);
+  db.query = (...a) => {
+    if (typeof a[a.length - 1] === 'function') return asl(...a);
+    const t0 = Date.now();
+    return asl(...a).finally(() => {
+      const ms = Date.now() - t0;
+      if (ms >= SEKIN_SQL) {
+        const sql = String(typeof a[0] === 'string' ? a[0] : a[0]?.text || '')
+          .replace(/\s+/g, ' ').trim().slice(0, 160);
+        console.warn(`[sekin-sql] ${ms}ms ${sql}`);
+      }
+    });
+  };
+}
+
 // Har modul shu yordamchilarni ishlatadi — xatolikni bir joyda ushlash uchun.
 // Xatoni javobga aylantiradi. `e.status` qo'yilgan bo'lsa — bu xodimga
 // atay yozilgan xabar (masalan "PIN 4-6 raqam"), server nosozligi emas:

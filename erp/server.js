@@ -17,6 +17,25 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 
+//  ★ SEKIN SO'ROV JURNALI (zavod qarori, 2026-10). «Dastur sekinlashdi»
+//  degan savolga raqamsiz javob yo'q edi: qaysi sahifa, qaysi so'rov va
+//  necha millisekund. Endi chegaradan (`ERP_SLOW_MS`, standart 500)
+//  uzoq ishlagan har API so'rovi server jurnaliga bitta qator bo'lib
+//  tushadi — yo'li, holati, vaqti va kim. `0` butunlay o'chiradi.
+//  Yo'lning faqat o'zi yoziladi, `?q=` emas: qidiruv matnida mijoz ismi
+//  turadi.
+const SEKIN = Number(process.env.ERP_SLOW_MS ?? 500);
+if (SEKIN > 0) app.use('/api', (req, res, next) => {
+  const t0 = process.hrtime.bigint();
+  res.on('finish', () => {
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    if (ms >= SEKIN)
+      console.warn(`[sekin] ${Math.round(ms)}ms ${req.method} ${req.baseUrl}${req.path} ` +
+        `${res.statusCode} w=${req.user?.id ?? '-'}`);
+  });
+  next();
+});
+
 //  HTTPS ustida ochilgan bo'lsa brauzerga «bu saytga boshqa hech qachon
 //  http bilan borma» deyiladi. Tsexdagi telefon ochiq Wi-Fi'da turadi va
 //  bitta http so'rovi sessiya tokenini ko'chaga chiqarardi.

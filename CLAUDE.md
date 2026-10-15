@@ -5373,6 +5373,28 @@ brauzer saytni bir yil davomida https'ga majburlab, ochilmay qolardi.
 
 ---
 
+## Sekin so'rov jurnali
+
+**★ «SEKINLASHDI» DEGAN SAVOLGA RAQAM BILAN JAVOB** (zavod qarori,
+2026-10; `ERP_SLOW_MS`, standart 500, `0` — o'chiq). Chegaradan uzoq
+ishlagan har API so'rovi server jurnaliga bitta qator bo'lib tushadi:
+
+    [sekin] 812ms GET /api/sales/orders 200 w=12
+    [sekin-sql] 640ms SELECT o.*, ... FROM v_sales_orders o ...
+
+Birinchisi QAYSI SAHIFA, ikkinchisi QAYSI SO'ROV (bitta yo'lda o'nta
+so'rov bo'ladi). Yo'lning `?q=` qismi va SQL parametrlari YOZILMAYDI —
+ularda mijoz ismi turadi (4-qoida). Faqat hovuzning `query` si
+o'lchanadi (`erp/db.js`); tranzaksiya `client` lariga tegilmaydi.
+
+Railway → Deployments → Logs da `[sekin` deb qidiriladi.
+
+**Buyurtmalar ro'yxatidagi `meniki`** faqat `can_release_own` belgisi
+bor xodimga hisoblanadi: qolganlarida ekran uni o'qimaydi, ro'yxat esa
+500 qatorgacha va har qatorda `mijoz_meniki` chaqirilardi.
+
+---
+
 ## Zaxira
 
 `npm run erp:backup` — butun bazani bitta faylga tushiradi
