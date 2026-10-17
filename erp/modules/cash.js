@@ -96,8 +96,15 @@ router.get('/refs', need(...ANY), wrap(async (req, res) => {
     //  ta'minotchiga to'lov qiladi (ombor mudiri bozorda naqd
     //  to'laydi) va uchinchi bosqichda uni tanlashi kerak. Ilgari
     //  ro'yxat faqat kassirga kelardi va xodimda bo'sh chiqardi.
-    //  Bu SPRAVOCHNIK — qarz ham, to'lov ham unda yo'q.
-    db.query(`SELECT id, name FROM suppliers WHERE active ORDER BY name`),
+    //  ★ QARZI HAM KELADI (zavod qarori, 2026-10): pul berayotgan
+    //  odamning birinchi savoli «unga qancha qarzmiz» — buyurtmada
+    //  mijoz tanlanganda balansi chiqqani bilan bir xil sabab. Raqam
+    //  `v_supplier_debt.balance` dan, ta'minot hisoboti bilan BITTA
+    //  manba: musbat — biz qarzdormiz, manfiy — avans.
+    db.query(`SELECT s.id, s.name, COALESCE(d.balance, 0) AS balance
+                FROM suppliers s
+                LEFT JOIN v_supplier_debt d ON d.id = s.id
+               WHERE s.active ORDER BY s.name`),
     //  ★ OYLIK KIMGA BERILDI. Ta'minotchilar ro'yxati bilan bir xil
     //  sabab: bu SPRAVOCHNIK, unda na qoldiq bor, na qarz — shuning
     //  uchun HAMMAGA keladi. Tsex boshlig'i faqat oylik guruhiga

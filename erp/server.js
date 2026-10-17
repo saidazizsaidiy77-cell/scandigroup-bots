@@ -83,7 +83,7 @@ app.use('/api/materials', require('./modules/materials'));
 // Huquq tekshiruvi modul ichida — har navbat o'z egasiga ko'rinadi.
 app.use('/api/navbat', require('./modules/nav'));
 app.use('/api/tasks', require('./modules/tasks'));
-// app.use('/api/payroll',    require('./modules/payroll'));     // maosh
+app.use('/api/payroll', require('./modules/payroll'));
 
 // Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:
 // menyu sahifa ochilishi bilan chiziladi, ya'ni nom klientda baribir kerak.

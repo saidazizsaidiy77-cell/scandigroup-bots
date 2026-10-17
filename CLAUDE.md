@@ -2898,6 +2898,46 @@ yo'q jadvalni izlab yiqilardi, ya'ni sayt ko'tarilmasdi.
 
 ---
 
+## Ish haqi
+
+**★ BITTA RO'YXAT, OYMA-OY: HISOBLANDI · TO'LANDI** (zavod qarori,
+2026-10; `payroll_accruals`, `modules/payroll.js`, `/ish-haqi.html`).
+Oylik kassadan chiqardi va kimga berilgani yozilardi (`staff_id`),
+lekin QANCHA berilishi kerak edi degan raqam hech qayerda yo'q edi.
+Endi har xodim bitta qatorda:
+
+    boshiga + hisoblandi − to'landi = oxiriga
+
+**Hisoblandi** — buxgalter oyma-oy yozadi (`payroll.manage`); qator
+bosilsa so'm, dollar va izoh katagi ochiladi. Bo'sh — «yo'q», qatori
+o'chadi. **«O'tgan oydan ko'chirish»** — oyliklar ko'pincha bir xil:
+faqat shu oyda HALI YOZILMAGANLAR to'ladi, qo'lda tuzatilgani ustiga
+yozilmaydi.
+
+**To'landi KASSADAN o'qiladi**, alohida yozilmaydi: `staff_id` bilan
+yozilgan har `ok` operatsiya (oylik, avans, sarmoya — xodimga berilgan
+HAMMA pul), foyda-zarar oyi bo'yicha (`pl_month`, bo'lmasa to'lov
+kuni). Ikkinchi nusxa bir kun kassadan ajralib ketardi. Qator ochilsa
+o'sha oyning to'lov HUJJATLARI ko'rinadi. Kassada «Kimga — xodim»
+tanlanmagan to'lov bu yerga TUSHMAYDI.
+
+**So'm va dollar ALOHIDA, kurs yo'q**: so'mda hisoblangan oylik so'mda
+to'lanadi, dollarga aylantirish kurs farqidan yolg'on qoldiq chiqarardi.
+Oxiriga musbat — korxona qarzdor, manfiy (qizil) — ortiqcha berilgan.
+Ishdan ketgan xodim hisobi yopilmaguncha ro'yxatda turadi.
+
+Huquqi: ko'rish `payroll.view` (direktor `%.view` bilan oladi),
+yozish `payroll.manage` (buxgalter, administrator).
+
+**★ TA'MINOTCHIGA PUL BERAYOTGANDA QARZI KO'RINADI** (zavod qarori,
+2026-10; `/api/cash/refs` dagi `suppliers.balance`). Buyurtmada
+mijozning balansi chiqqani bilan bir xil sabab: «unga qancha
+qarzmiz». Ro'yxatda har nom yonida, tanlangach esa ostida —
+summa yozilsa «to'lovdan keyin» ham. Manba `v_supplier_debt`,
+ta'minot hisoboti bilan BITTA.
+
+---
+
 ## Moliyaviy hisobotlar
 
 Kassaga yozilgan harajat IKKI hisobotga boradi va ikkalasi bir xil

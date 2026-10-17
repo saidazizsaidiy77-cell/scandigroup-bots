@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ish haqi · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Ish haqi</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div id="printHead" class="print-only print-head"></div>
+
+<!--  ★ BITTA RO'YXAT, OYMA-OY (zavod qarori, 2026-10). Har xodim bitta
+      qatorda: boshiga + hisoblandi − to'landi = oxiriga. To'landi
+      KASSADAN o'qiladi (xodimga berilgan har pul, foyda-zarar oyi
+      bo'yicha) — bu yerda yozilmaydi (izoh: modules/payroll.js). -->
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <button onclick="surish(-1)">◀</button>
+    <div><label>Oy</label><input id="fMonth" type="month" onchange="load()"></div>
+    <button onclick="surish(1)">▶</button>
+    <div style="flex:1;min-width:180px"><label>Qidiruv</label>
+      <input id="fQ" placeholder="ism, lavozim, bo'lim yoki tsex" oninput="render()"></div>
+    <label class="row" style="gap:6px;align-items:center;margin:0">
+      <input type="checkbox" id="fDebt" onchange="render()" style="width:auto"> Faqat qarzi borlar</label>
+    <button id="copyBtn" hidden onclick="kochir()">O'tgan oydan ko'chirish</button>
+    <button onclick="printPage()">Chop etish</button>
+    <button onclick="exportCsv()">Excelga yuklash</button>
+  </div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Oy boshiga qarzimiz</h2><div class="kpi" id="kOpen">—</div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kOpenB"></p></div>
+  <div class="card"><h2>Hisoblandi</h2><div class="kpi" id="kAcc">—</div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kAccB"></p></div>
+  <div class="card"><h2>To'landi</h2><div class="kpi" id="kPaid">—</div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kPaidB"></p></div>
+  <div class="card"><h2>Oy oxiriga qarzimiz</h2><div class="kpi" id="kClo">—</div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kCloB"></p></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h2 style="margin:0" id="tHead">Xodimlar</h2>
+    <span class="muted no-print" style="font-size:12px">qatorni bossangiz hisoblash va to'lov hujjatlari ochiladi</span>
+  </div>
+  <div class="tbox"><table>
+    <thead><tr>
+      <th>Xodim</th><th>Tsex · bo'lim</th>
+      <th class="num">Oy boshiga</th><th class="num">Hisoblandi</th>
+      <th class="num">To'landi</th><th class="num">Oy oxiriga</th>
+    </tr></thead>
+    <tbody id="tB"></tbody>
+    <tfoot id="tF"></tfoot>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin-top:12px">
+    <b>To'landi</b> — kassadan shu xodimga yozilgan har pul (oylik, avans,
+    sarmoya…) o'sha oyning foyda-zarari bo'yicha. Kassada «Kimga — xodim»
+    tanlanmagan to'lov bu yerga tushmaydi.<br>
+    <b>Oy oxiriga</b> musbat — korxona xodimga qarzdor, manfiy (qizil) —
+    ortiqcha berilgan. So'm va dollar alohida: kurs aralashmaydi.<br>
+    boshiga + hisoblandi − to'landi = oxiriga</p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = (v) => {
+  const x = Number(v) || 0;
+  const [i, f] = Math.abs(x).toFixed(2).split('.');
+  const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (x < 0 ? '−' : '') + (f !== '00' ? `${g},${f}` : g);
+};
+//  Ikki valyuta bitta katakda: so'm tepada, dollar ostida — faqat
+//  noldan farqli bo'lsa. Ikkalasi nol — «—».
+const pul = (uzs, usd, qizil) => {
+  const t = [];
+  const k = (v, s) => `<span class="${qizil && Number(v) < 0 ? 'late' : ''}">${money(v)} ${s}</span>`;
+  if (Number(uzs)) t.push(k(uzs, "so'm"));
+  if (Number(usd)) t.push(k(usd, '$'));
+  return t.length ? t.join('<br>') : '<span class="muted">—</span>';
+};
+const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+
+let data = { rows: [], total: {} };
+const open = new Map();
+
+function surish(n) {
+  const [y, m] = ($('fMonth').value || data.month).split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  $('fMonth').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  load();
+}
+
+async function load() {
+  const p = new URLSearchParams();
+  if ($('fMonth').value) p.set('month', $('fMonth').value);
+  open.clear();
+  data = await App.api('/api/payroll?' + p);
+  $('fMonth').value = data.month;
+  $('copyBtn').hidden = !data.can_edit;
+  render();
+}
+
+function korinadi() {
+  const q = $('fQ').value.trim().toLowerCase();
+  return data.rows.filter(r =>
+    (!q || [r.name, r.position, r.dept, r.shop].some(v => String(v || '').toLowerCase().includes(q)))
+    && (!$('fDebt').checked || Number(r.close_uzs) || Number(r.close_usd)));
+}
+
+function render() {
+  const t = data.total;
+  const kp = (id, uzs, usd) => {
+    $(id).innerHTML = `${money(uzs)}<small> so'm</small>`;
+    $(id + 'B').textContent = Number(usd) ? `+ ${money(usd)} $` : '';
+  };
+  kp('kOpen', t.open_uzs, t.open_usd);
+  kp('kAcc', t.acc_uzs, t.acc_usd);
+  kp('kPaid', t.paid_uzs, t.paid_usd);
+  kp('kClo', t.close_uzs, t.close_usd);
+  const list = korinadi();
+  $('tHead').textContent = `Xodimlar (${list.length})`;
+  $('tB').innerHTML = list.length ? list.map(r => `
+    <tr onclick="toggle(${r.id})" style="cursor:pointer">
+      <td><strong>${esc(r.name)}</strong>${r.active ? '' : ' <span class="tag">ishdan ketgan</span>'}
+        ${r.position ? `<div class="muted" style="font-size:12px">${esc(r.position)}</div>` : ''}
+        ${r.note ? `<div class="izoh">${esc(r.note)}</div>` : ''}</td>
+      <td class="muted" style="font-size:13px">${esc([r.shop, r.dept].filter(Boolean).join(' · ')) || '—'}</td>
+      <td class="num">${pul(r.open_uzs, r.open_usd, true)}</td>
+      <td class="num">${pul(r.acc_uzs, r.acc_usd)}</td>
+      <td class="num">${pul(r.paid_uzs, r.paid_usd)}</td>
+      <td class="num"><b>${pul(r.close_uzs, r.close_usd, true)}</b></td>
+    </tr>${open.has(r.id) ? `<tr><td colspan="6" style="background:var(--bg2,#f7f6f3)">${detail(r)}</td></tr>` : ''}`).join('')
+    : `<tr><td class="muted" colspan="6">Xodim topilmadi</td></tr>`;
+  $('tF').innerHTML = list.length ? `<tr><td colspan="2"><b>Jami</b></td>
+    <td class="num"><b>${pul(sumOf(list, 'open_uzs'), sumOf(list, 'open_usd'), true)}</b></td>
+    <td class="num"><b>${pul(sumOf(list, 'acc_uzs'), sumOf(list, 'acc_usd'))}</b></td>
+    <td class="num"><b>${pul(sumOf(list, 'paid_uzs'), sumOf(list, 'paid_usd'))}</b></td>
+    <td class="num"><b>${pul(sumOf(list, 'close_uzs'), sumOf(list, 'close_usd'), true)}</b></td></tr>` : '';
+}
+const sumOf = (list, k) => list.reduce((a, r) => a + Number(r[k]), 0);
+
+async function toggle(id) {
+  if (open.has(id)) { open.delete(id); return render(); }
+  open.set(id, null);
+  render();
+  open.set(id, await App.api(`/api/payroll/worker/${id}?month=${data.month}`));
+  render();
+}
+
+//  Ochilgan qator: hisoblangani (tahrirlanadi) va to'lov hujjatlari.
+function detail(r) {
+  const d = open.get(r.id);
+  if (!d) return '<span class="muted">Yuklanmoqda…</span>';
+  const acc = c => (d.accruals.find(a => a.currency === c) || {}).amount || '';
+  const note = (d.accruals[0] || {}).note || '';
+  const tahrir = data.can_edit ? `
+    <div class="row" style="flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">
+      <div><label>Hisoblandi, so'm</label>
+        <input id="aU${r.id}" type="number" min="0" step="0.01" value="${acc('UZS')}" style="width:150px"></div>
+      <div><label>Hisoblandi, $</label>
+        <input id="aD${r.id}" type="number" min="0" step="0.01" value="${acc('USD')}" style="width:110px"></div>
+      <div style="flex:1;min-width:160px"><label>Izoh</label>
+        <input id="aN${r.id}" value="${esc(note)}" placeholder="masalan: 26 kun, ishbay"></div>
+      <button class="primary" onclick="saqla(${r.id})">Saqlash</button>
+    </div>` : '';
+  const pays = d.payments.length ? `<table style="font-size:13px">
+      <thead><tr><th>Sana</th><th>Hujjat</th><th>Modda</th><th>Izoh</th><th class="num">Summa</th></tr></thead>
+      <tbody>${d.payments.map(p => `<tr>
+        <td>${d8(p.op_date)}</td>
+        <td>${esc(p.doc_no || '#' + p.id)}</td>
+        <td>${esc(p.item || '—')}</td><td class="muted">${esc(p.note || '')}</td>
+        <td class="num">${money(p.amount)} ${p.currency === 'USD' ? '$' : "so'm"}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted" style="font-size:13px">Shu oyda kassadan to\'lov yozilmagan.</p>';
+  return tahrir + pays;
+}
+
+async function saqla(id) {
+  try {
+    const note = $('aN' + id).value;
+    for (const [cur, el] of [['UZS', 'aU'], ['USD', 'aD']])
+      await App.api('/api/payroll/accrual', { method: 'PUT', body: JSON.stringify({
+        worker_id: id, month: data.month, currency: cur, amount: $(el + id).value, note }) });
+    const keep = [...open.keys()];
+    await load();
+    for (const k of keep) open.set(k, await App.api(`/api/payroll/worker/${k}?month=${data.month}`));
+    render();
+  } catch (e) { alert(e.message); }
+}
+
+async function kochir() {
+  if (!confirm("O'tgan oyning hisoblanganlari shu oyga ko'chirilsinmi? Shu oyda yozilganlarga tegilmaydi.")) return;
+  try {
+    const r = await App.api('/api/payroll/copy', { method: 'POST',
+      body: JSON.stringify({ month: data.month }) });
+    alert(`${r.count} ta qator ko'chirildi`);
+    load();
+  } catch (e) { alert(e.message); }
+}
+
+function printPage() {
+  const now = new Date();
+  const ikki = n => String(n).padStart(2, '0');
+  const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
+  $('printHead').innerHTML = `<h1>Ish haqi · ${esc(data.month)}</h1>
+    <div class="meta">${korinadi().length} ta xodim · chop etildi ${ikki(now.getDate())}.${
+      ikki(now.getMonth() + 1)}.${now.getFullYear()} ${ikki(now.getHours())}:${ikki(now.getMinutes())}${xodim}</div>`;
+  window.print();
+}
+
+function exportCsv() {
+  const head = ['Xodim', 'Lavozim', 'Tsex', "Bo'lim",
+    "Boshiga so'm", 'Boshiga $', "Hisoblandi so'm", 'Hisoblandi $',
+    "To'landi so'm", "To'landi $", "Oxiriga so'm", 'Oxiriga $'];
+  const rows = korinadi().map(r => [r.name, r.position || '', r.shop || '', r.dept || '',
+    r.open_uzs, r.open_usd, r.acc_uzs, r.acc_usd, r.paid_uzs, r.paid_usd, r.close_uzs, r.close_usd]
+    .map(v => `"${String(v).replace(/"/g, '""')}"`));
+  const csv = '﻿' + [head.map(h => `"${h}"`), ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `ish-haqi-${data.month}.csv` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+App.start(load, 'payroll.view', 'payroll.manage');
+</script>
+</body>
+</html>
