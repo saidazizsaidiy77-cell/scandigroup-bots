@@ -12465,6 +12465,83 @@ test('vazifalar: rasm mavzuda va izohda', async () => {
   assert.equal((await korpusA('DELETE', '/api/tasks/files/' + fid)).status, 200);
 });
 
+test('ish haqi: hisoblandi kassadan to\'langani bilan oyma-oy', async () => {
+  //  ★ ZAVOD QARORI (2026-10): har xodim bitta qatorda,
+  //  boshiga + hisoblandi − to'landi = oxiriga. To'landi KASSADAN.
+  const { db } = require('../db');
+  const w = (await H.id(`INSERT INTO workers (name) VALUES ('Ish haqi sinov xodimi')
+                          RETURNING id`)).id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const modda = (await H.id(`SELECT id FROM expense_items WHERE name='Oylik lak'`)).id;
+  const yoz = (month, amount, currency = 'UZS') => admin('PUT', '/api/payroll/accrual',
+    { worker_id: w, month, currency, amount, note: '26 kun' });
+  assert.equal((await yoz('2026-09', 3000000)).status, 200);
+  assert.equal((await yoz('2026-09', 50, 'USD')).status, 200);
+  //  To'lov — kassaning o'z operatsiyasi, foyda-zarar oyi sentabr
+  await db.query(
+    `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind,
+                           currency, amount, rate, status, staff_id,
+                           expense_item_id, pl_month)
+     VALUES ('P26-9701', '2026-10-03', 'account', $1, 'expense',
+             'UZS', 1000000, 12000, 'ok', $2, $3, '2026-09-01')`, [kassa, w, modda]);
+  //  Bekor qilingani sanalmaydi
+  await db.query(
+    `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind,
+                           currency, amount, rate, status, staff_id,
+                           expense_item_id, pl_month)
+     VALUES ('P26-9702', '2026-10-03', 'account', $1, 'expense',
+             'UZS', 777, 12000, 'cancelled', $2, $3, '2026-09-01')`, [kassa, w, modda]);
+
+  const sen = (await admin('GET', '/api/payroll?month=2026-09')).body;
+  const r = sen.rows.find(x => x.id === w);
+  assert.equal(Number(r.acc_uzs), 3000000);
+  assert.equal(Number(r.acc_usd), 50);
+  assert.equal(Number(r.paid_uzs), 1000000, 'to\'langani kassadan, bekor qilingani yo\'q');
+  assert.equal(Number(r.close_uzs), 2000000);
+  assert.equal(Number(r.close_usd), 50, 'dollar alohida, kurs aralashmaydi');
+  assert.equal(r.note, '26 kun');
+  //  Jami RO'YXATNING o'zidan
+  assert.equal(Number(sen.total.close_uzs),
+    sen.rows.reduce((a, x) => a + Number(x.close_uzs), 0));
+
+  const det = (await admin('GET', `/api/payroll/worker/${w}?month=2026-09`)).body;
+  assert.deepEqual(det.payments.map(p => p.doc_no), ['P26-9701']);
+
+  //  Oktyabr: boshiga — sentabr qarzi; o'tgan oydan ko'chirish
+  const cp = await admin('POST', '/api/payroll/copy', { month: '2026-10' });
+  assert.equal(cp.status, 200, cp.text);
+  assert.ok(cp.body.count >= 2);
+  //  Ikkinchi marta — ustiga yozilmaydi
+  assert.equal((await admin('POST', '/api/payroll/copy', { month: '2026-10' })).body.count, 0);
+  const okt = (await admin('GET', '/api/payroll?month=2026-10')).body.rows.find(x => x.id === w);
+  assert.equal(Number(okt.open_uzs), 2000000);
+  assert.equal(Number(okt.acc_uzs), 3000000);
+  assert.equal(Number(okt.close_uzs), 5000000);
+
+  //  Bo'sh — «yo'q»: qatori o'chadi
+  assert.equal((await admin('PUT', '/api/payroll/accrual',
+    { worker_id: w, month: '2026-10', currency: 'USD', amount: '' })).status, 200);
+  assert.equal(Number((await admin('GET', '/api/payroll?month=2026-10'))
+    .body.rows.find(x => x.id === w).acc_usd), 0);
+
+  //  Huquqsiz — yopiq
+  assert.equal((await sotuvchi('GET', '/api/payroll')).status, 403);
+  assert.equal((await sotuvchi('PUT', '/api/payroll/accrual',
+    { worker_id: w, month: '2026-10', amount: 1 })).status, 403);
+});
+
+test('kassa: ta\'minotchi tanlanganda qarzi ko\'rinadi', async () => {
+  const { db } = require('../db');
+  const sid = (await H.id(`INSERT INTO suppliers (name, opening_debt)
+                            VALUES ('Qarz sinov ta''minotchisi', 1234) RETURNING id`)).id;
+  const refs = (await admin('GET', '/api/cash/refs')).body;
+  assert.equal(Number(refs.suppliers.find(x => x.id === sid).balance), 1234);
+  assert.ok(refs.suppliers.length, 'ta\'minotchi bor');
+  const s = refs.suppliers[0];
+  const d = (await db.query(`SELECT balance FROM v_supplier_debt WHERE id=$1`, [s.id])).rows[0];
+  assert.equal(Number(s.balance), Number(d ? d.balance : 0), 'hisobot bilan bitta manba');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

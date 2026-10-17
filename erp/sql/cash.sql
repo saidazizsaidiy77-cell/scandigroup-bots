@@ -960,3 +960,33 @@ CREATE TABLE IF NOT EXISTS kpi_targets (
 );
 
 CREATE INDEX IF NOT EXISTS kpi_targets_oy_idx ON kpi_targets (mon, bolim);
+
+-- ══════════════════════════════════════════════ ISH HAQI — HISOBLANDI
+--
+--  ★ OYMA-OY: HISOBLANDI · TO'LANDI (zavod qarori, 2026-10). Oylik
+--  kassadan chiqardi va kimga berilgani yozilardi (`cash_ops.staff_id`),
+--  lekin QANCHA BERILISHI KERAK EDI degan raqam hech qayerda yo'q edi —
+--  ya'ni «kimga qancha qarzmiz» degan savolga javob kassirning
+--  daftarida qolardi.
+--
+--  Bu jadval faqat HISOBLANGANINI saqlaydi. To'langani alohida
+--  yozilmaydi: u kassaning O'ZIDAN o'qiladi (`staff_id` bilan yozilgan
+--  har operatsiya, foyda-zarar oyi bo'yicha) — ikkinchi nusxa bir kun
+--  kassadan ajralib ketardi.
+--
+--  Valyuta bo'yicha ALOHIDA va kurs YO'Q: so'mda hisoblangan oylik
+--  so'mda to'lanadi va ikkalasini dollarga aylantirish kurs farqidan
+--  yolg'on qoldiq chiqarardi (kassadagi «so'm va dollar — ikkita
+--  alohida pul» bilan bir xil qoida).
+CREATE TABLE IF NOT EXISTS payroll_accruals (
+  id         SERIAL PRIMARY KEY,
+  worker_id  INT NOT NULL REFERENCES workers(id),
+  month      DATE NOT NULL CHECK (month = date_trunc('month', month)::date),
+  currency   TEXT NOT NULL DEFAULT 'UZS' CHECK (currency IN ('UZS', 'USD')),
+  amount     NUMERIC(18,2) NOT NULL CHECK (amount > 0),
+  note       TEXT,
+  created_by INT REFERENCES workers(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (worker_id, month, currency)
+);
+CREATE INDEX IF NOT EXISTS payroll_accruals_month_idx ON payroll_accruals (month);

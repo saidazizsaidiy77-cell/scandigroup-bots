@@ -27,7 +27,8 @@ const SIDE_LIST = (kind) => ({
               w.name + (Number(w.total_usd) ? ` · ${usd(w.total_usd)} $` : '')]),
   customer: (refs.customers || []).map(c =>
               [`customer:${c.id}`, c.name + (c.region ? ` · ${c.region}` : '')]),
-  supplier: (refs.suppliers || []).map(s => [`supplier:${s.id}`, s.name]),
+  supplier: (refs.suppliers || []).map(s => [`supplier:${s.id}`,
+              s.name + (Number(s.balance) ? ` · ${qarzMatn(s.balance)}` : '')]),
   //  Qo'liga pul BERILADIGAN xodimlar: belgisi Xodimlar sahifasida
   //  qo'yiladi. Qiymati baribir `worker:` — bazada bitta tur, farq
   //  faqat kimni tanlash mumkinligida.
@@ -269,6 +270,29 @@ function staffPick(id) {
 //
 //  Bittasi qolsa O'ZI tanlanadi: ro'yxatda bitta qator turganda uni
 //  bosish odamdan javobni ikkinchi marta so'rash bo'lardi.
+//  ★ TA'MINOTCHIGA QANCHA QARZMIZ (zavod qarori, 2026-10). Pul
+//  berayotgan odam buni tanlash paytida ko'rishi kerak — buyurtmada
+//  mijozning balansi bilan bir xil sabab. Musbat — biz qarzdormiz,
+//  manfiy — u bizga qarzdor (avans). Raqam serverdan, ta'minot
+//  hisoboti bilan bitta manba (`v_supplier_debt`).
+const qarzMatn = (b) => {
+  const x = Number(b) || 0;
+  return !x ? "qarz yo'q"
+    : x > 0 ? `qarzimiz ${usd(x)} $` : `avans ${usd(-x)} $`;
+};
+function supQarz() {
+  const id = Number(String($('fSup') ? $('fSup').value : '').split(':')[1]);
+  const s = (refs.suppliers || []).find(x => x.id === id);
+  const el = $('fSupHint');
+  if (!s || !el) return false;
+  //  To'lovdan keyin qancha qoladi: summa dollarga aylangan raqamdan.
+  const d = Number($('fSum') && $('fSum').value) || 0;
+  const keyin = Number(s.balance) - d;
+  el.innerHTML = `<b>${esc(s.name)}</b>: ${qarzMatn(s.balance)}` + (d
+    ? ` \u00b7 to'lovdan keyin: <b class="${keyin < 0 ? 'late' : ''}">${qarzMatn(keyin)}</b>` : '');
+  return true;
+}
+
 function supFilter() {
   const q = ($('fSupQ') ? $('fSupQ').value : '').trim().toLowerCase();
   const list = (refs.suppliers || [])
@@ -278,7 +302,8 @@ function supFilter() {
   $('fSupList').innerHTML = list.length
     ? list.map(x => `<button type="button"${
         `supplier:${x.id}` === bor ? ' class="on"' : ''
-      } onclick="supPick(${x.id})">${esc(x.name)}</button>`).join('')
+      } onclick="supPick(${x.id})">${esc(x.name)}${Number(x.balance)
+        ? ` <span class="muted" style="font-size:12px">· ${qarzMatn(x.balance)}</span>` : ''}</button>`).join('')
     //  Bo'sh ro'yxat sababini AYTADI: kassir «tizim ishlamayapti» deb
     //  o'ylab, to'lovni yozmay qo'yardi. Ro'yxat Ta'minot bo'limidan
     //  to'ladi — bir marta import qilinadi.
@@ -289,6 +314,7 @@ function supFilter() {
   $('fSupHint').textContent = q ? `${list.length} ta topildi`
     : bori ? `${bori} ta ta'minotchi` : '';
   calc();
+  supQarz();
 }
 
 //  Tanlangach qidiruv katagiga nomi yoziladi: ro'yxat bitta qatorga
@@ -545,6 +571,8 @@ function calc() {
   $('fSumHint').textContent = so
     ? 'bank qancha dollar yozgan bo\'lsa shuni yozing — kurs o\'zi chiqadi'
     : '';
+  //  Summa o'zgarsa «to'lovdan keyin» ham yangilanadi.
+  if ($('fSupBox') && !$('fSupBox').hidden) supQarz();
 }
 
 //  ★ KURSNI DOLLARDAN CHIQARISH (izoh: yuqorida). Bu «kursni o'ylab
@@ -563,6 +591,7 @@ function kursHisobla() {
   //  bo'lib tursin.
   $('fRate').value = String(Number((a / d).toFixed(4)));
   $('fRateHint').textContent = 'dollardagi raqamdan hisoblandi';
+  if ($('fSupBox') && !$('fSupBox').hidden) supQarz();
 }
 
 async function saveOp() {

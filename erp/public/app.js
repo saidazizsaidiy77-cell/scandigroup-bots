@@ -502,6 +502,12 @@ const App = (() => {
     // Muddat endi quvvatdan emas, marshrutdan hisoblanadi (har bo'limda
     // bir kun — izoh: sql/register.sql), shuning uchun bu sahifa
     // muddatga umuman kerak emas.
+    //  ★ ISH HAQI — oyma-oy hisoblandi · to'landi (izoh:
+    //  modules/payroll.js). To'langani kassadan o'qiladi.
+    { href: '/ish-haqi.html', mod: 'payroll', nav: 'Ish haqi',
+      title: 'Ish haqi', lead: 'Hisoblandi · to\'landi',
+      text: "Har xodim oyma-oy: boshiga + hisoblandi − to'landi = oxiriga",
+      perm: ['payroll.view', 'payroll.manage'] },
     { href: '/xodimlar.html', mod: 'payroll', nav: 'Xodimlar',
       title: 'Xodimlar', lead: 'Rollar va kirish',
       text: "Xodim qo'shish, PIN berish, rol va tsex biriktirish",

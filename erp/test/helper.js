@@ -78,6 +78,7 @@ async function startServer() {
   app.use('/api/materials', require('../modules/materials'));
   app.use('/api/navbat', require('../modules/nav'));
   app.use('/api/tasks', require('../modules/tasks'));
+  app.use('/api/payroll', require('../modules/payroll'));
   app.use('/api/kpi', require('../modules/kpi'));
 
   const server = await new Promise((resolve) => {
