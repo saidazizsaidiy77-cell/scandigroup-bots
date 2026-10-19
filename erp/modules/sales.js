@@ -2329,6 +2329,39 @@ router.post('/orders/:id/unsend', need(...WRITE), wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+//  ★ MUDIR HAM «TAYYOR» GA QAYTARADI (zavod qarori, 2026-10). Mijoz
+//  kelmay qoldi yoki kunni surdi — buyurtma esa mudirning ro'yxatida
+//  osilib turardi va qaytarish faqat savdoning qo'lida edi: mudir
+//  menejerga qo'ng'iroq qilib yurardi. Yo'l `/unsend` bilan AYNAN bir
+//  xil (holat, kunlik reja), farqi ikkita: SABAB majburiy va menejerga
+//  Telegram xabari ketadi — buyurtma uning qo'liga qaytdi, yangi kunni
+//  mijoz bilan u kelishadi.
+router.post('/orders/:id/return-ready', need(...SHIP), wrap(async (req, res) => {
+  const sabab = String((req.body || {}).note || '').trim();
+  if (!sabab) return res.status(400).json({ error: 'Sababini yozing' });
+  const { rows } = await db.query(
+    `UPDATE orders o SET status = 'reserved', sent_to_wh_on = NULL, sent_by = NULL,
+            plan_on = NULL, plan_by = NULL, plan_at = NULL
+       FROM customers c
+      WHERE o.id = $1 AND c.id = o.customer_id AND o.status = 'to_ship'
+      RETURNING o.order_no, o.manager_id, c.name AS customer`, [req.params.id]);
+  if (!rows[0]) return res.status(400).json({ error: 'Buyurtma chiqarishda emas' });
+  const o = rows[0];
+  if (o.manager_id) {
+    await notify.queue({
+      worker_id: o.manager_id, module: 'sales', kind: 'order_ready',
+      title: 'Buyurtma tayyorga qaytarildi',
+      body: `${o.order_no} · ${o.customer}`
+            + `\nSabab: ${sabab}`
+            + `\n\nKim qaytardi: ${req.user.name}`,
+    });
+  }
+  await audit(req, { module: 'warehouse', action: 'return-ready', entity: 'order',
+                     entity_id: Number(req.params.id),
+                     payload: { order_no: o.order_no, sabab } });
+  res.json({ ok: true });
+}));
+
 //  Ombor mudirining ro'yxati: chiqarilishi kerak bo'lgan buyurtmalar.
 //  Savdo yo'nalishi chegarasi qo'yilmaydi — ombor hamma yo'nalishga
 //  xizmat qiladi; vitrina doirasi esa qo'yiladi: o'z nuqtasidagi

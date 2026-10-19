@@ -3642,6 +3642,26 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
                 unit_price: 250 }] })).status, 200);
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
 
+  //  ★ MUDIR HAM «TAYYOR» GA QAYTARADI — mijoz kelmadi. Sabab majburiy,
+  //  menejerga xabar ketadi; savdo keyin qaytadan chiqarishga beradi.
+  const sababsiz = await mudir('POST', `/api/sales/orders/${z.id}/return-ready`, {});
+  assert.equal(sababsiz.status, 400);
+  assert.match(sababsiz.body.error, /Sabab/);
+  const { db: tdb } = require('../db');
+  const xOldin = (await tdb.query(
+    `SELECT COUNT(*)::int AS n FROM notifications WHERE title = 'Buyurtma tayyorga qaytarildi'`)).rows[0].n;
+  const trQayt = await mudir('POST', `/api/sales/orders/${z.id}/return-ready`,
+    { note: 'Mijoz 1 haftadan keyin oladi' });
+  assert.equal(trQayt.status, 200, trQayt.text);
+  assert.equal((await tdb.query(`SELECT status FROM orders WHERE id = $1`, [z.id])).rows[0].status,
+    'reserved', 'buyurtma tayyorga qaytdi');
+  assert.ok((await tdb.query(
+    `SELECT COUNT(*)::int AS n FROM notifications WHERE title = 'Buyurtma tayyorga qaytarildi'`)).rows[0].n
+    >= xOldin, 'menejerga xabar navbatga qo\'yiladi');
+  assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/return-ready`,
+    { note: 'yana' })).status, 400, 'chiqarishda bo\'lmagan buyurtma qaytarilmaydi');
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+
   // Endi chiqadi. Mudir faqat chiqqan kunni qo'yadi — pul kirim
   // sanasi savdoniki va ombordan yozilmaydi.
   const r = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
