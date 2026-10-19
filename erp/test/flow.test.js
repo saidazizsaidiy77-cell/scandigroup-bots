@@ -9316,6 +9316,23 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
     assert.ok(r.body && typeof r.body === 'object', y + ' javob bermadi');
   }
 
+  //  ★ SHU OY — TUR BO'YICHA: «buyurtmada» ustuni «zavodda turibdi»
+  //  kartochkasi bilan BIR XIL shartdan, ya'ni summasi teng bo'lishi
+  //  shart; tur ro'yxatida faol guruhlarning hammasi turadi.
+  const sd = (await admin('GET', '/api/sales/dashboard')).body;
+  const { db: tdb } = require('../db');
+  const ochiq = (await tdb.query(
+    `SELECT COALESCE(SUM(i.qty), 0)::int AS q,
+            COALESCE(SUM(i.qty * COALESCE(i.unit_price, 0)), 0)::numeric AS s
+       FROM v_sales_orders o JOIN order_items i ON i.order_id = o.id
+      WHERE o.status NOT IN ('shipped', 'cancelled')`)).rows[0];
+  assert.equal(sd.turi.reduce((a, r) => a + r.buyurtma_qty, 0), ochiq.q);
+  assert.equal(sd.turi.reduce((a, r) => a + Number(r.buyurtma_amount), 0).toFixed(2),
+               Number(ochiq.s).toFixed(2));
+  const faol = (await tdb.query(
+    `SELECT COUNT(*)::int n FROM product_groups WHERE active`)).rows[0].n;
+  assert.ok(sd.turi.length >= faol, 'sotilmagan tur ham qatorda turadi');
+
   //  Doirasi bor savdo menejeri: paneli o'ziniki bo'lib ochiladi.
   const { db } = require('../db');
   await db.query(`INSERT INTO workers (name) VALUES ('Panel menejer')

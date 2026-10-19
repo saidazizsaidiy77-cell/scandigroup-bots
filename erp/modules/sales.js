@@ -2469,7 +2469,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
     [from, to]);
   const P = [oraliq.dan, oraliq.gacha, chans, own];
 
-  const [kpi, oylar, kanal, menejer, mahsulot, qarz, holat] = await Promise.all([
+  const [kpi, oylar, kanal, menejer, mahsulot, qarz, holat, turi] = await Promise.all([
     //  Kartochkalar. «Zavodda» va «qarz» ORALIQQA bog'liq emas: ular
     //  BUGUNGI holat — oraliq filtri bilan aralashtirib bo'lmaydi
     //  (ombor qoldig'idagi bilan bir xil qoida).
@@ -2593,13 +2593,48 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
           AND ($1::text[] IS NULL OR o.channel = ANY($1))
           AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
         GROUP BY o.status ORDER BY amount DESC`, [chans, own]),
+
+    //  ★ SHU OY — TUR BO'YICHA (zavod qarori, 2026-10). Savol ikkita:
+    //  «shu oyda nechta stol, stul, penal… sotdik» va «hozir nechtasi
+    //  buyurtmada turibdi». Oraliq filtriga BOG'LIQ EMAS — savolning
+    //  o'zi «shu oy» (kalendar oyi, bugungi kungacha); buyurtmada
+    //  turgani esa «zavodda turibdi» kartochkasi bilan bir xil BUGUNGI
+    //  holat va bir xil shart. Har tur o'z birligida (stul DONA,
+    //  penal KOMPLEKT) — qo'shib bo'lmaydi. Sotilmagan tur ham o'z
+    //  qatorida: bo'sh qator javob, yo'q qator esa savol.
+    db.query(
+      `WITH q AS (
+         SELECT p.group_id, o.id AS order_id, i.qty,
+                i.qty * COALESCE(i.unit_price, 0) AS amount,
+                (o.status = 'shipped'
+                  AND o.shipped_on >= date_trunc('month', CURRENT_DATE)::date
+                  AND o.shipped_on <= CURRENT_DATE) AS sotildi,
+                (o.status NOT IN ('shipped', 'cancelled')) AS ochiq
+           FROM v_sales_orders o
+           JOIN order_items i ON i.order_id = o.id
+           JOIN products p    ON p.id = i.product_id
+          WHERE ($1::text[] IS NULL OR o.channel = ANY($1))
+            AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
+            AND (o.status NOT IN ('shipped', 'cancelled')
+                 OR o.shipped_on >= date_trunc('month', CURRENT_DATE)::date))
+       SELECT g.name, g.uom,
+              COALESCE(SUM(q.qty) FILTER (WHERE q.sotildi), 0)::int AS sotildi_qty,
+              COALESCE(SUM(q.amount) FILTER (WHERE q.sotildi), 0)::numeric AS sotildi_amount,
+              COALESCE(SUM(q.qty) FILTER (WHERE q.ochiq), 0)::int AS buyurtma_qty,
+              COALESCE(SUM(q.amount) FILTER (WHERE q.ochiq), 0)::numeric AS buyurtma_amount,
+              COUNT(DISTINCT q.order_id) FILTER (WHERE q.ochiq)::int AS buyurtma_soni
+         FROM product_groups g
+         LEFT JOIN q ON q.group_id = g.id
+        WHERE g.active OR q.group_id IS NOT NULL
+        GROUP BY g.id, g.name, g.uom, g.sort
+        ORDER BY g.sort, g.name`, [chans, own]),
   ]);
 
   res.json({
     dan: oraliq.dan, gacha: oraliq.gacha,
     kpi: kpi.rows[0], oylar: oylar.rows, kanal: kanal.rows,
     menejer: menejer.rows, mahsulot: mahsulot.rows,
-    qarz: qarz.rows, holat: holat.rows,
+    qarz: qarz.rows, holat: holat.rows, turi: turi.rows,
     //  Doirasi bor menejerda «kim ko'p sotdi» degan savol yo'q:
     //  ro'yxatda baribir bitta ism turadi.
     ozi: !!own,

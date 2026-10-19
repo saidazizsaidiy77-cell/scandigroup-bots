@@ -42,6 +42,17 @@
 
 <div class="grid g3" id="kpis"></div>
 
+<!--  ★ SHU OY — TUR BO'YICHA. Oraliq filtriga bog'liq emas: savol
+      «shu oyda nechta sotdik» va «hozir nechtasi buyurtmada». -->
+<div class="card" style="margin-top:16px">
+  <h2>Shu oy — tur bo'yicha</h2>
+  <div id="turi"></div>
+  <p class="muted" style="font-size:12px;margin-top:8px">
+    <b>Sotildi</b> — shu oyning 1-sanasidan bugungacha chiqib ketgan.
+    <b>Buyurtmada</b> — bugun yozilgan, lekin hali chiqmagan (bekor
+    qilinganisiz). Oraliq filtri bu jadvalga ta'sir qilmaydi.</p>
+</div>
+
 <div class="card" style="margin-top:16px">
   <h2>Oylar bo'yicha chiqib ketgan savdo</h2>
   <div id="oylar"></div>
@@ -120,6 +131,32 @@ async function load() {
       tone: Number(k.kechikkan) ? 'bad' : '',
       hint: 'chiqish sanasi o\'tib ketgan' },
   ]);
+
+  //  Jami qatori yo'q: stul DONA, penal KOMPLEKT — qo'shib bo'lmaydi.
+  //  Summa esa dollarda va u qo'shiladi.
+  const tr = d.turi || [];
+  const sum = (k) => tr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const nol = (v, t) => Number(v) ? t : '<span class="muted">—</span>';
+  $('turi').innerHTML = tr.length ? `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Turi</th>
+      <th class="num">Sotildi</th><th class="num">Summa</th>
+      <th class="num">Buyurtmada</th><th class="num">Buyurtmalar</th>
+      <th class="num">Summa</th></tr></thead><tbody>
+    ${tr.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
+      <td class="num">${nol(r.sotildi_qty, `<b>${Panel.son(r.sotildi_qty)}</b>
+        <span class="muted">${esc(r.uom || '')}</span>`)}</td>
+      <td class="num">${nol(r.sotildi_amount, esc(Panel.pul(r.sotildi_amount, true)))}</td>
+      <td class="num">${nol(r.buyurtma_qty, `<b>${Panel.son(r.buyurtma_qty)}</b>
+        <span class="muted">${esc(r.uom || '')}</span>`)}</td>
+      <td class="num">${nol(r.buyurtma_soni, Panel.son(r.buyurtma_soni) + ' ta')}</td>
+      <td class="num">${nol(r.buyurtma_amount, esc(Panel.pul(r.buyurtma_amount, true)))}</td>
+    </tr>`).join('')}
+    <tr><td><b>Jami</b></td><td></td>
+      <td class="num"><b>${esc(Panel.pul(sum('sotildi_amount'), true))}</b></td>
+      <td></td><td></td>
+      <td class="num"><b>${esc(Panel.pul(sum('buyurtma_amount'), true))}</b></td></tr>
+    </tbody></table></div>`
+    : '<p class="muted" style="font-size:13px">Ma\'lumot yo\'q.</p>';
 
   Panel.bars($('oylar'), { rows: d.oylar });
   //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur
