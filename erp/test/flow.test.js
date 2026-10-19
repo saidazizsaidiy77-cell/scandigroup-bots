@@ -5835,10 +5835,13 @@ test('aylanma kapital: ustun 15-sana va oy oxiri, aktiv − passiv = sof', async
   assert.ok(Number(avg.tamin_qarz) > Number(sen.tamin_qarz),
     'to\'langan qarz passivdan kamayadi');
 
-  //  Xom ashyo qatori TURADI, lekin nol: modul hali yozilmagan.
-  //  Qator umuman bo'lmasa hisobot to'la ko'rinardi.
-  assert.equal(Number(sen.xom), 0);
-  assert.ok('wip_shops' in d, 'tsex kesimi keladi');
+  //  Turkum kesimi: har sanada yig'indisi «Ishlab chiqarishda» ga teng.
+  for (const r of d.rows) {
+    const k = String(r.on_date).slice(0, 10);
+    const jam = d.wip_turkum.filter(x => String(x.on_date).slice(0, 10) === k)
+      .reduce((a, x) => a + Number(x.som), 0);
+    assert.equal(jam.toFixed(2), Number(r.wip).toFixed(2), 'turkumlar = ishlab chiqarishda');
+  }
 });
 
 test('jurnalda mahsulot ham tuzatiladi, lekin bron va marshrut chegara', async () => {
@@ -12541,6 +12544,24 @@ test('kassa: ta\'minotchi tanlanganda qarzi ko\'rinadi', async () => {
   const d = (await db.query(`SELECT balance FROM v_supplier_debt WHERE id=$1`, [s.id])).rows[0];
   assert.equal(Number(s.balance), Number(d ? d.balance : 0), 'hisobot bilan bitta manba');
 });
+
+test('aylanma kapital: xom ashyo ombordagi qoldiq qiymati bilan bir xil', async () => {
+  //  ★ Xom ashyo qatori endi hisoblanadi: o'sha kungi qoldiq × o'rtacha
+  //  kirim narxi — `v_material_stock.amount` bilan BITTA formula.
+  const { db } = require('../db');
+  const admin = H.api(base, await H.sessionFor('Administrator'));
+  const t = new Date();
+  const oxir = new Date(Date.UTC(t.getFullYear(), t.getMonth() + 1, 0))
+    .toISOString().slice(0, 10);
+  const d = (await admin('GET',
+    `/api/cash/working-capital?from=${oxir}&to=${oxir}`)).body;
+  const kutilgan = Number((await db.query(
+    `SELECT COALESCE(SUM(amount), 0) AS s FROM v_material_stock`)).rows[0].s);
+  assert.equal(d.rows.length, 1);
+  assert.ok(Math.abs(Number(d.rows[0].xom) - kutilgan) < 1,
+    `xom ${d.rows[0].xom} ≈ ombor ${kutilgan}`);
+});
+
 
 test('yakun', async () => {
   server.close();

@@ -68,10 +68,12 @@
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
   <p class="muted" style="font-size:12px;margin-top:14px">
     <b>Tannarx hali yo'q</b> &mdash; tayyor mahsulot ham, ishlab chiqarishdagi
-    ham SOTUV narxida sanalgan. Ya'ni ikkala raqam ham yuqori chegara:
-    ichida foyda ham turibdi. Xom ashyo hisobi yozilgach tannarx
-    shakllanadi va bu ikki qator o'zi to'g'rilanadi &mdash; sahifa
-    o'zgarmaydi.</p>
+    ham konver kartochkasidagi SOTUV narxida sanalgan (soni &times; narx).
+    Ya'ni ikkala raqam ham yuqori chegara: ichida foyda ham turibdi;
+    narxi yozilmagan konver nolga qo'shiladi.<br>
+    <b>Xom ashyo</b> &mdash; zavod va tsex omborlarida o'sha kuni turgan
+    material &times; o'sha kungacha bo'lgan o'rtacha kirim narxi. Narxi
+    yozilmagan material hisobga tushmaydi.</p>
 </div>
 
 <script>
@@ -99,8 +101,8 @@ const d8 = v => !v ? '—'
 const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4)
   .toISOString().slice(0, 10);
 
-let d = { rows: [], wip_shops: [] };
-//  Ishlab chiqarish qatori ochilganda tsex kesimi chiqadi. Ma'lumot
+let d = { rows: [], wip_turkum: [] };
+//  Ishlab chiqarish qatori ochilganda turkum kesimi chiqadi (mehmonxona, yotoqxona, stol, stul). Ma'lumot
 //  allaqachon kelgan — ikkinchi so'rov yozilmadi.
 let ochiq = false;
 
@@ -119,7 +121,7 @@ function davr(kind) {
 const AKTIV = [
   ['fg',          "T/M ombor va vitrinalar", 'omborda turgan tayyor mahsulot'],
   ['wip',         'Ishlab chiqarishda',      'tugallanmagan ishlab chiqarish'],
-  ['xom',         'Xom ashyo ombori',        'hisobi hali yozilmagan'],
+  ['xom',         'Xom ashyo omborlari',     "o'rtacha kirim narxida"],
   ['kassa',       'Kassa va bank',           ''],
   ['qolda',       "Xodimlar qo'lida",        "korxonaning puli, javonda emas"],
   ['mijoz_qarz',  'Mijozlarning qarzi',      ''],
@@ -148,12 +150,12 @@ function draw() {
       ${r.map(kel).join('')}
     </tr>`;
 
-  //  Tsex kesimi: har sana uchun o'sha kundagi tsexlar. Nomlar
-  //  hamma ustundan yig'iladi — bir oyda bo'sh, boshqasida to'la
-  //  bo'lishi mumkin va qator yo'qolib qolmasin.
-  const tsexlar = [...new Set(d.wip_shops.map(x => x.shop))].sort();
-  const tsexSom = (shop, on_date) => {
-    const x = d.wip_shops.find(y => y.shop === shop
+  //  Turkum kesimi: mehmonxona, yotoqxona, stol, stul — SERVER
+  //  tartibida. Nomlar hamma ustundan yig'iladi: bir oyda bo'sh,
+  //  boshqasida to'la bo'lishi mumkin va qator yo'qolib qolmasin.
+  const tsexlar = [...new Set(d.wip_turkum.map(x => x.turkum))];
+  const tsexSom = (nom, on_date) => {
+    const x = d.wip_turkum.find(y => y.turkum === nom
       && String(y.on_date).slice(0, 10) === String(on_date).slice(0, 10));
     return x ? x.som : 0;
   };
@@ -167,8 +169,8 @@ function draw() {
         const asos = qator(nom, izoh, x => `<td class="num">${num(x[k])}</td>`,
           k === 'wip' && tsexlar.length ? 'open' : '');
         if (k !== 'wip' || !ochiq || !tsexlar.length) return asos;
-        //  Tsex kesimi faqat ochilganda — ekranda yettita qator
-        //  turadi, tafsilot kerak bo'lganda chiqadi.
+        //  Turkum kesimi faqat ochilganda — bosilmasa qatorning
+        //  o'zi (jami summa) turadi, tafsilot kerak bo'lganda chiqadi.
         return asos + tsexlar.map(t => `
           <tr class="ich"><td>${esc(t)}</td>
             ${r.map(x => `<td class="num">${num(tsexSom(t, x.on_date))}</td>`).join('')}

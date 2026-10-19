@@ -1158,7 +1158,7 @@ WITH oy AS (
 ), d AS (
   SELECT on_date FROM kunlar WHERE on_date BETWEEN $1 AND $2
 )
-SELECT d.on_date, fg.som AS fg, wip.som AS wip, kas.som AS kassa, xod.som AS qolda,
+SELECT d.on_date, fg.som AS fg, wip.som AS wip, xom.som AS xom, kas.som AS kassa, xod.som AS qolda,
        mij.qarz AS mijoz_qarz, mij.avans AS mijoz_avans,
        tam.qarz AS tamin_qarz, tam.avans AS tamin_avans
   FROM d
@@ -1179,6 +1179,21 @@ SELECT d.on_date, fg.som AS fg, wip.som AS wip, kas.som AS kassa, xod.som AS qol
       FROM production_units u
      WHERE u.status <> 'cancelled' AND u.started_on <= d.on_date
        AND (u.fg_on IS NULL OR u.fg_on > d.on_date)) wip
+  --  ★ XOM ASHYO: o'sha kunda omborlarda (zavod va tsex omborlari)
+  --  turgan material × o'sha kungacha bo'lgan O'RTACHA kirim narxi —
+  --  v_material_stock bilan AYNAN bir xil formula, faqat sanaga
+  --  qisilgan (ombor qoldig'idagi «oraliq oxiriga» bilan bir xil
+  --  idiom). Narxsiz kirim o'rtachaga qo'shilmaydi; minus qoldiq
+  --  minus bo'lib qoladi — u xato belgisi, nolga qisilmaydi.
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(SUM(x.qty * x.narx), 0)::numeric(16,2) AS som
+      FROM (SELECT SUM(f.qty) AS qty,
+                   SUM(f.qty * f.price_usd) FILTER (WHERE f.qty > 0 AND f.price_usd IS NOT NULL)
+                   / NULLIF(SUM(f.qty) FILTER (WHERE f.qty > 0 AND f.price_usd IS NOT NULL), 0) AS narx
+              FROM v_material_flow f
+             WHERE f.kind = 'warehouse' AND f.moved_on <= d.on_date
+             GROUP BY f.place_id, f.material_id) x
+     WHERE x.narx IS NOT NULL) xom
   --  KASSA VA BANK: boshlang'ich qoldiq (sanasi kelgan bo'lsa) va
   --  o'sha kungacha bo'lgan harakat.
   CROSS JOIN LATERAL (
@@ -1219,13 +1234,13 @@ SELECT d.on_date, fg.som AS fg, wip.som AS wip, kas.som AS kassa, xod.som AS qol
              WHERE l.on_date <= d.on_date GROUP BY l.supplier_id) x) tam
  ORDER BY d.on_date`;
 
-//  ISHLAB CHIQARISHNING TSEX KESIMI. Konver o'sha kunda QAYSI tsexda
-//  turganini tarixdan o'qiymiz (`unit_moves`), hozirgi joyidan emas —
-//  aks holda avgust ustuni bugungi joylashuvni avgust deb yozib
-//  qo'yardi. Hech qayerga ko'chmagan konverda esa harakat yo'q va
-//  turgan joyi o'zgarmagan, shuning uchun kartochkasidagi bo'lim
-//  olinadi.
-const WIP_SHOP_SQL = `
+//  ★ ISHLAB CHIQARISHNING TURKUM KESIMI (zavod qarori, 2026-10).
+//  Qator bosilsa ostida mehmonxona to'plami, yotoqxona (sp) to'plami,
+//  stol va stul alohida chiqadi — savdo, KPI va foyda-zarar bilan bir
+//  xil kesim (`sales_categories`, guruhdan o'qiladi). Shart yuqoridagi
+//  `wip` bilan AYNAN bir xil, ya'ni turkumlar yig'indisi qatorning
+//  o'ziga teng.
+const WIP_CAT_SQL = `
 WITH oy AS (
   SELECT generate_series(date_trunc('month', $1::date),
                          date_trunc('month', $2::date),
@@ -1238,22 +1253,19 @@ WITH oy AS (
   SELECT on_date FROM kunlar WHERE on_date BETWEEN $1 AND $2
 )
 SELECT d.on_date,
-       COALESCE(sh.name, 'Bo''limsiz') AS shop,
-       SUM(u.qty * COALESCE(u.unit_price, 0))::numeric(16,2) AS som,
-       SUM(u.qty)::int AS qty
+       COALESCE(sc.name, 'Turkumsiz') AS turkum,
+       MIN(COALESCE(sc.sort, 999)) AS tartib,
+       SUM(u.qty * COALESCE(u.unit_price, 0))::numeric(16,2) AS som
   FROM d
   JOIN production_units u
     ON u.status <> 'cancelled' AND u.started_on <= d.on_date
    AND (u.fg_on IS NULL OR u.fg_on > d.on_date)
-  LEFT JOIN LATERAL (
-    SELECT m.section_id FROM unit_moves m
-     WHERE m.unit_id = u.id AND m.moved_on <= d.on_date
-     ORDER BY m.moved_at DESC LIMIT 1) mv ON true
-  LEFT JOIN sections s ON s.id = COALESCE(mv.section_id, u.current_section_id)
-  LEFT JOIN shops sh   ON sh.id = s.shop_id
- GROUP BY d.on_date, COALESCE(sh.name, 'Bo''limsiz')
+  LEFT JOIN products p          ON p.id = u.product_id
+  LEFT JOIN product_groups g    ON g.id = p.group_id
+  LEFT JOIN sales_categories sc ON sc.code = g.sales_category
+ GROUP BY d.on_date, COALESCE(sc.name, 'Turkumsiz')
 HAVING SUM(u.qty) > 0
- ORDER BY d.on_date, 2`;
+ ORDER BY d.on_date, 3, 2`;
 
 router.get('/working-capital', need(...READ), wrap(async (req, res) => {
   //  Oraliq berilmasa: shu yilning boshidan bugungacha.
@@ -1265,23 +1277,20 @@ router.get('/working-capital', need(...READ), wrap(async (req, res) => {
     || iso(new Date(Date.UTC(bugun.getUTCFullYear(), 0, 1)));
   const [a, b] = from <= to ? [from, to] : [to, from];
 
-  const [asos, tsex] = await Promise.all([
+  const [asos, turkum] = await Promise.all([
     db.query(WC_SQL, [a, b]),
-    db.query(WIP_SHOP_SQL, [a, b]),
+    db.query(WIP_CAT_SQL, [a, b]),
   ]);
   const rows = asos.rows;
-  //  Xom ashyo ombori HALI YO'Q: qatori turadi, lekin nol. Qator
-  //  umuman chizilmasa hisobot to'la ko'rinardi, holbuki bitta
-  //  aktivi yetishmaydi — bo'sh qator savol, yo'q qator esa yolg'on.
   const jadval = rows.map((r) => {
-    const aktiv = ['fg', 'wip', 'kassa', 'qolda', 'mijoz_qarz', 'tamin_avans']
+    const aktiv = ['fg', 'wip', 'xom', 'kassa', 'qolda', 'mijoz_qarz', 'tamin_avans']
       .reduce((n, k) => n + Number(r[k] || 0), 0);
     const passiv = ['tamin_qarz', 'mijoz_avans']
       .reduce((n, k) => n + Number(r[k] || 0), 0);
-    return { ...r, xom: 0, aktiv: +aktiv.toFixed(2), passiv: +passiv.toFixed(2),
+    return { ...r, aktiv: +aktiv.toFixed(2), passiv: +passiv.toFixed(2),
              sof: +(aktiv - passiv).toFixed(2) };
   });
-  res.json({ from: a, to: b, rows: jadval, wip_shops: tsex.rows });
+  res.json({ from: a, to: b, rows: jadval, wip_turkum: turkum.rows });
 }));
 
 /* ============================================================================

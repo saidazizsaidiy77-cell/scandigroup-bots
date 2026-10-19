@@ -2983,14 +2983,23 @@ korxonaning puli, shunchaki javonda emas.
 
 **Ishlab chiqarishdagi mahsulot ham aktiv** — tugallanmagan ishlab
 chiqarish: zaxira xom ashyodan tayyor mahsulotgacha uchta holatda
-turadi va o'rtadagisi ham korxonaniki. Qatori ochilsa **tsex kesimi**
-chiqadi va konver o'sha kunda QAYSI tsexda turgani TARIXDAN o'qiladi
-(`unit_moves`), hozirgi joyidan emas — aks holda avgust ustuni
-bugungi joylashuvni avgust deb yozib qo'yardi.
+turadi va o'rtadagisi ham korxonaniki. Qiymati — konver kartochkasidagi
+SOTUV narxi × soni (`unit_price`): boshlangan, lekin o'sha kuni hali
+omborga tushmagan konverlar; narxsizi nolga qo'shiladi.
 
-**Xom ashyo qatori TURADI, lekin nol** — moduli hali yozilmagan.
-Qator umuman chizilmasa hisobot to'la ko'rinardi, holbuki bitta aktivi
-yetishmaydi: bo'sh qator savol, yo'q qator esa yolg'on.
+**★ QATORI BOSILSA TURKUM KESIMI** (zavod qarori, 2026-10;
+`wip_turkum`): mehmonxona to'plami, yotoqxona (sp) to'plami, stol va
+stul alohida — savdo va foyda-zarar bilan bir xil kesim. Bosilmasa
+jami summa turadi. Shart `wip` bilan AYNAN bir xil va test
+turkumlar yig'indisini qatorning o'ziga solishtiradi.
+
+**★ XOM ASHYO QATORI HISOBLANADI** (zavod qarori, 2026-10). Ilgari
+u nol turardi (moduli yozilmagan edi). Endi o'sha kuni zavod va tsex
+omborlarida turgan material × o'sha kungacha bo'lgan O'RTACHA kirim
+narxi — `v_material_stock.amount` bilan BITTA formula, faqat sanaga
+qisilgan. Narxsiz kirim o'rtachaga qo'shilmaydi, minus qoldiq minus
+bo'lib qoladi (xato belgisi). Test raqamni ombor qoldig'ining
+qiymatiga solishtiradi.
 
 **Tannarx hali yo'q**, shuning uchun tayyor mahsulot ham, ishlab
 chiqarishdagi ham SOTUV narxida sanalgan — ikkala raqam ham yuqori
