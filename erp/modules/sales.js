@@ -2658,7 +2658,13 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
            FROM sales_kpi_targets t
            --  Ishdan ketgan xodimning rejasi sanalmaydi: u bu oy
            --  hech narsa sotmaydi va jami rejani yolg'on oshirardi.
-           JOIN workers w ON w.id = t.worker_id AND w.active, oy
+           --  ★ KPI si PUL TUSHUMIDAN bo'lgan xodim ham sanalmaydi
+           --  (kpi_bonus_tushum, zavod qarori 2026-10): uning asosiy
+           --  rejasi kassaga kelgan pul, turkum rejasi esa butun
+           --  bo'limniki — menejerlar rejasining USTIGA qo'shilib, jami
+           --  rejani ikki barobar qilardi.
+           JOIN workers w ON w.id = t.worker_id AND w.active
+                          AND NOT COALESCE(w.kpi_bonus_tushum, false), oy
           WHERE t.mon = oy.m AND t.category IS NOT NULL
             AND ($2::int IS NULL OR t.worker_id = $2)
           GROUP BY 1)
