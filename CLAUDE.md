@@ -3059,6 +3059,21 @@ qolaveradi.
 
 ---
 
+## Savdo paneli — shu oy, tur bo'yicha
+
+**★ «SHU OYDA NECHTA SOTDIK, NECHTASI BUYURTMADA»** (zavod qarori,
+2026-10; `/api/sales/dashboard` dagi `turi`, `/savdo-panel.html`).
+Har GURUH (stol, stul, penal, kamod, sp…) bitta qatorda: shu oyning
+1-sanasidan bugungacha CHIQIB KETGANI (soni o'z birligida va summa) va
+hozir BUYURTMADA turgani (soni, buyurtmalar soni, summa). **Oraliq
+filtriga bog'liq emas** — savolning o'zi «shu oy». «Buyurtmada» —
+«Zavodda turibdi» kartochkasi bilan BIR XIL shart (bekor va chiqib
+ketgansiz), test yig'indini solishtiradi. Doira (`channelsOf`,
+`ownOf`) panelning qolgani bilan bir xil. Sotilmagan tur ham o'z
+qatorida; jami faqat SUMMADA — dona bilan komplekt qo'shilmaydi.
+
+---
+
 ## Savdo turkumi va KPI
 
 **★ TURKUM — GURUHNING USTIDAGI QAVAT** (`sales_categories`,
