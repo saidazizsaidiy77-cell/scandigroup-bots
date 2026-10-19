@@ -1163,6 +1163,113 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
   res.json({ rows, can_approve: req.user.permissions.includes('production.approve') });
 }));
 
+//  ★ SO'ROVNING MAZMUNI BITTA JOYDA TEKSHIRILADI: yozishda ham
+//  (`requestOne`), tasdiqdan oldingi tahrirda ham (`PATCH /requests/:id`).
+//  Ikki nusxa bo'lsa tahrir yozishdagi qoidani chetlab o'tadigan
+//  eshik bo'lib qolardi. Topshirish sanasini qaytaradi.
+async function sorovTekshir(client, req, it, shopId, yozish = true) {
+  //  ★ STOL VA STULNI FAQAT SAVDO SO'RAYDI (zavod qarori, 2026-09).
+  //
+  //  Bu ikkisi mijozning so'rovi bilan ishlanadi: nechta va qaysi
+  //  rangda kerakligini savdo biladi, tsex esa bilmaydi. Ilgari
+  //  so'rovni kirituvchi ham, tsex boshlig'i ham yozardi va
+  //  zavodda bir xil mahsulot ikki joydan buyurtma qilinardi.
+  //
+  //  Korpus (sp, penal, kamod) ESKICHA qoladi: uning rejasi
+  //  oldindan tuziladi va uni tsex o'zi yuritadi.
+  //
+  //  Ro'yxat BAZADA (`product_groups.sales_can_request`), kodda
+  //  emas — ertaga zavod «endi kamod ham» desa bitta katakcha
+  //  belgilanadi (4-qoida). Belgi savdoga IKKINCHI yo'lni ham
+  //  ochadi (buyurtma oynasidagi «So'rov yuborish»), ya'ni bitta
+  //  qator ikkala eshikni ham boshqaradi.
+  const guruh = (await client.query(
+    `SELECT COALESCE(g.sales_can_request, false) AS savdoniki,
+            COALESCE(g.needs_fabric, false)      AS matoli,
+            g.name
+       FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE p.id = $1`, [it.product_id])).rows[0];
+  const bor = (...p) => p.some((x) => req.user.permissions.includes(x));
+  //  Tahrirda bu savol yo'q: so'rovni KIM yozishi allaqachon hal
+  //  bo'lgan, tasdiqlovchida esa savdo huquqi bo'lmasligi mumkin.
+  if (!yozish) { /* tahrir */ } else if (guruh?.savdoniki) {
+    if (!bor('sales.manage'))
+      throw new Error(`${guruh.name} so'rovini savdo bo'limi yozadi`);
+  } else if (!bor('production.request', 'production.approve')) {
+    throw new Error(`${guruh?.name || 'Bu mahsulot'} so'rovini `
+      + `ishlab chiqarish yozadi`);
+  }
+
+  //  ★ RANG VA MATO MAJBURIY, YOKI ZAHIRA (zavod qarori, 2026-09).
+  //
+  //  Rangsiz konver tsexda «qaysi rangga bo'yayman» degan savol
+  //  bo'lib turardi va javobini kiritgan odamdan so'rashdan boshqa
+  //  yo'l yo'q edi. Lekin rang HAR DOIM ham ma'lum emas: zahiraga
+  //  ishlanayotgan mahsulot buyurtma kutadi va rangi mijoz
+  //  aytganda tanlanadi.
+  //
+  //  Shuning uchun majburiylik ZAHIRA belgisi bilan yechiladi:
+  //  rangi ma'lum bo'lsa yoziladi, ma'lum bo'lmasa «zahira» deb
+  //  belgilanadi. Uchinchi yo'l — rangsiz, lekin zahira ham emas —
+  //  aynan o'sha javobsiz savol edi.
+  //
+  //  Mato faqat MATOSI BOR guruhda (`product_groups.needs_fabric`):
+  //  stolda u umuman ishlatilmaydi va majburiy qilinsa stol so'rovi
+  //  yozilmay qolardi.
+  //
+  //  Qoida SAVDO SO'RAYDIGAN guruhga tegadi (stol, stul): rangni
+  //  mijozdan savdo eshitadi va u so'rov yozilayotganda ALLAQACHON
+  //  ma'lum. Korpusda esa reja oldindan tuziladi va rang keyin,
+  //  mijoz chiqqanda ma'lum bo'ladi — u yerda majburiy qilinsa
+  //  kundalik kiritish har safar «zahira» ni belgilashga
+  //  aylanardi va belgi ma'nosini yo'qotardi. Ikkalasi bitta
+  //  katakchadan boshqariladi, ya'ni ertaga kamod ham savdoga
+  //  o'tsa rang qoidasi unga O'ZI keladi.
+  if (guruh?.savdoniki && it.is_stock !== true) {
+    const yoq = [
+      !trim(it.color) && 'rang',
+      guruh?.matoli && !trim(it.fabric) && 'mato',
+    ].filter(Boolean);
+    if (yoq.length) throw new Error(
+      `${yoq.join(' va ')} tanlanmagan — bilinmasa «zahira» deb belgilang`);
+  }
+
+  //  ★ RANG VA MATO FAQAT BORIDAN (zavod qarori, 2026-09).
+  //
+  //  Kiritayotgan xodim yangi rang yoki mato O'YLAB TOPMAYDI: bitta
+  //  «Venge» va bitta «venge » (oxirida bo'shliq bilan) ombor
+  //  qoldig'ini ikkiga bo'lib yuborardi va savdo ro'yxatida bir xil
+  //  rang ikki marta turardi. Yangi rang — zavodning qarori, terish
+  //  xatosi emas: u jurnal orqali (`production.units`) kiritiladi.
+  //
+  //  Solishtirish katta-kichik harfga qaramaydi: ro'yxatdan
+  //  tanlangani baribir aynan mos tushadi, bu tekshiruv esa qo'lda
+  //  yuborilgan so'rov uchun.
+  for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
+    const v = trim(it[maydon]);
+    if (!v) continue;
+    const bor = (await client.query(
+      `SELECT 1 FROM production_units
+        WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
+    if (!bor) throw new Error(
+      `${nom} «${v}» ro'yxatda yo'q \u2014 boridan tanlang`);
+  }
+
+  //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
+  //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
+  //  `shops.plan_auto`). Korpusda yo'l uzun va u kunni boshliqdan
+  //  boshqa hech kim ayta olmaydi; stulda esa formula o'zi
+  //  hisoblaydi va sana so'ralmaydi.
+  const tsex = (await client.query(
+    `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
+    [shopId])).rows[0];
+  const keyingi = await keyingiTsex(client, it.product_id, null, null, shopId);
+  const due = String(it.next_on || '').trim() || null;
+  if (!tsex?.auto && !due)
+    throw new Error(`${keyingi?.name || 'T/M ombor'}ga topshirish sanasi kiritilmagan`);
+  return due;
+}
+
 //  ★ SO'ROV YOZILADIGAN YAGONA JOY.
 //
 //  Uni IKKI yo'l ishlatadi: tsex boshlig'ining «Konver qo'shish»
@@ -1230,103 +1337,7 @@ async function requestOne(client, req, it, scope = null, orderItemId = null) {
     if (scope && (!shopId || !scope.includes(shopId)))
       throw new Error('Bu mahsulot boshqa tsexniki');
 
-    //  ★ STOL VA STULNI FAQAT SAVDO SO'RAYDI (zavod qarori, 2026-09).
-    //
-    //  Bu ikkisi mijozning so'rovi bilan ishlanadi: nechta va qaysi
-    //  rangda kerakligini savdo biladi, tsex esa bilmaydi. Ilgari
-    //  so'rovni kirituvchi ham, tsex boshlig'i ham yozardi va
-    //  zavodda bir xil mahsulot ikki joydan buyurtma qilinardi.
-    //
-    //  Korpus (sp, penal, kamod) ESKICHA qoladi: uning rejasi
-    //  oldindan tuziladi va uni tsex o'zi yuritadi.
-    //
-    //  Ro'yxat BAZADA (`product_groups.sales_can_request`), kodda
-    //  emas — ertaga zavod «endi kamod ham» desa bitta katakcha
-    //  belgilanadi (4-qoida). Belgi savdoga IKKINCHI yo'lni ham
-    //  ochadi (buyurtma oynasidagi «So'rov yuborish»), ya'ni bitta
-    //  qator ikkala eshikni ham boshqaradi.
-    const guruh = (await client.query(
-      `SELECT COALESCE(g.sales_can_request, false) AS savdoniki,
-              COALESCE(g.needs_fabric, false)      AS matoli,
-              g.name
-         FROM products p JOIN product_groups g ON g.id = p.group_id
-        WHERE p.id = $1`, [it.product_id])).rows[0];
-    const bor = (...p) => p.some((x) => req.user.permissions.includes(x));
-    if (guruh?.savdoniki) {
-      if (!bor('sales.manage'))
-        throw new Error(`${guruh.name} so'rovini savdo bo'limi yozadi`);
-    } else if (!bor('production.request', 'production.approve')) {
-      throw new Error(`${guruh?.name || 'Bu mahsulot'} so'rovini `
-        + `ishlab chiqarish yozadi`);
-    }
-
-    //  ★ RANG VA MATO MAJBURIY, YOKI ZAHIRA (zavod qarori, 2026-09).
-    //
-    //  Rangsiz konver tsexda «qaysi rangga bo'yayman» degan savol
-    //  bo'lib turardi va javobini kiritgan odamdan so'rashdan boshqa
-    //  yo'l yo'q edi. Lekin rang HAR DOIM ham ma'lum emas: zahiraga
-    //  ishlanayotgan mahsulot buyurtma kutadi va rangi mijoz
-    //  aytganda tanlanadi.
-    //
-    //  Shuning uchun majburiylik ZAHIRA belgisi bilan yechiladi:
-    //  rangi ma'lum bo'lsa yoziladi, ma'lum bo'lmasa «zahira» deb
-    //  belgilanadi. Uchinchi yo'l — rangsiz, lekin zahira ham emas —
-    //  aynan o'sha javobsiz savol edi.
-    //
-    //  Mato faqat MATOSI BOR guruhda (`product_groups.needs_fabric`):
-    //  stolda u umuman ishlatilmaydi va majburiy qilinsa stol so'rovi
-    //  yozilmay qolardi.
-    //
-    //  Qoida SAVDO SO'RAYDIGAN guruhga tegadi (stol, stul): rangni
-    //  mijozdan savdo eshitadi va u so'rov yozilayotganda ALLAQACHON
-    //  ma'lum. Korpusda esa reja oldindan tuziladi va rang keyin,
-    //  mijoz chiqqanda ma'lum bo'ladi — u yerda majburiy qilinsa
-    //  kundalik kiritish har safar «zahira» ni belgilashga
-    //  aylanardi va belgi ma'nosini yo'qotardi. Ikkalasi bitta
-    //  katakchadan boshqariladi, ya'ni ertaga kamod ham savdoga
-    //  o'tsa rang qoidasi unga O'ZI keladi.
-    if (guruh?.savdoniki && it.is_stock !== true) {
-      const yoq = [
-        !trim(it.color) && 'rang',
-        guruh?.matoli && !trim(it.fabric) && 'mato',
-      ].filter(Boolean);
-      if (yoq.length) throw new Error(
-        `${yoq.join(' va ')} tanlanmagan — bilinmasa «zahira» deb belgilang`);
-    }
-
-    //  ★ RANG VA MATO FAQAT BORIDAN (zavod qarori, 2026-09).
-    //
-    //  Kiritayotgan xodim yangi rang yoki mato O'YLAB TOPMAYDI: bitta
-    //  «Venge» va bitta «venge » (oxirida bo'shliq bilan) ombor
-    //  qoldig'ini ikkiga bo'lib yuborardi va savdo ro'yxatida bir xil
-    //  rang ikki marta turardi. Yangi rang — zavodning qarori, terish
-    //  xatosi emas: u jurnal orqali (`production.units`) kiritiladi.
-    //
-    //  Solishtirish katta-kichik harfga qaramaydi: ro'yxatdan
-    //  tanlangani baribir aynan mos tushadi, bu tekshiruv esa qo'lda
-    //  yuborilgan so'rov uchun.
-    for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
-      const v = trim(it[maydon]);
-      if (!v) continue;
-      const bor = (await client.query(
-        `SELECT 1 FROM production_units
-          WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
-      if (!bor) throw new Error(
-        `${nom} «${v}» ro'yxatda yo'q \u2014 boridan tanlang`);
-    }
-
-    //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
-    //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
-    //  `shops.plan_auto`). Korpusda yo'l uzun va u kunni boshliqdan
-    //  boshqa hech kim ayta olmaydi; stulda esa formula o'zi
-    //  hisoblaydi va sana so'ralmaydi.
-    const tsex = (await client.query(
-      `SELECT COALESCE(plan_auto, false) AS auto FROM shops WHERE id = $1`,
-      [shopId])).rows[0];
-    const keyingi = await keyingiTsex(client, it.product_id, null, null, shopId);
-    const due = String(it.next_on || '').trim() || null;
-    if (!tsex?.auto && !due)
-      throw new Error(`${keyingi?.name || 'T/M ombor'}ga topshirish sanasi kiritilmagan`);
+    const due = await sorovTekshir(client, req, it, shopId);
 
     //  Bo'lim berilsa marshrutda borligi tekshiriladi — `createOne()`
     //  dagi bilan bir xil qoida. Tasdiqlash paytida emas, SHU YERDA:
@@ -1552,6 +1563,85 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
 }));
 
 //  Rad etish va so'rovchining o'zi bekor qilishi — bitta yo'l.
+//  ★ TASDIQDAN OLDIN TAHRIRLANADI (zavod qarori, 2026-10). Ilgari
+//  so'rov faqat AYNAN o'sha holida ochilardi va bitta xato raqam uchun
+//  uni rad etib, qaytadan yozish kerak edi — raqam ham yonib ketardi.
+//  Endi kutib turgan so'rovda soni, rang, mato, sanalar, izoh va
+//  zahira belgisi tuzatiladi. MAHSULOT o'zgarmaydi: konver raqamining
+//  harfi undan chiqqan — boshqa mahsulot boshqa so'rov.
+//
+//  Kim: tasdiqlovchi yoki so'rovni yozgan odamning o'zi. Tekshiruv
+//  yozishdagi bilan BITTA (`sorovTekshir`). Eski qiymat audit
+//  jurnalida qoladi — «nima so'ralgan edi» degan savolning javobi.
+//  Tasdiqlovchi tuzatsa so'rovchiga Telegram ketadi: u nima ochilishini
+//  bilishi kerak.
+router.patch('/requests/:id', need(...REQUEST), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const boss = req.user.permissions.includes('production.approve');
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const q = (await client.query(
+      `SELECT * FROM unit_requests WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!q || q.status !== 'pending')
+      throw new Error('So\'rov topilmadi yoki allaqachon hal qilingan');
+    if (!boss && q.created_by !== req.user.id)
+      throw new Error('Faqat o\'zingiz yozgan so\'rovni tahrirlaysiz');
+    const b = req.body || {};
+    const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
+    const ymd = (v) => v ? String(v).slice(0, 10) : null;
+    const it = {
+      product_id: q.product_id,
+      qty:        has('qty') ? Number(b.qty) || 0 : Number(q.qty),
+      color:      has('color') ? b.color : q.color,
+      fabric:     has('fabric') ? b.fabric : q.fabric,
+      started_on: has('started_on') ? (b.started_on || null) : ymd(q.started_on),
+      next_on:    has('next_on') ? (b.next_on || null) : ymd(q.next_on),
+      note:       has('note') ? (trim(b.note) || null) : q.note,
+      is_stock:   has('is_stock') ? b.is_stock === true : q.is_stock,
+    };
+    if (it.qty <= 0) throw new Error('Soni kiritilmagan');
+    if (it.is_stock) { it.color = null; it.fabric = null; }
+    const due = await sorovTekshir(client, req, it, q.shop_id, false);
+    await client.query(
+      `UPDATE unit_requests
+          SET qty = $2, color = $3, fabric = $4, started_on = $5,
+              next_on = $6, note = $7, is_stock = $8
+        WHERE id = $1`,
+      [id, it.qty, trim(it.color), trim(it.fabric), it.started_on, due,
+       it.note, it.is_stock]);
+    const edi = { qty: Number(q.qty), color: q.color, fabric: q.fabric,
+                  started_on: ymd(q.started_on), next_on: ymd(q.next_on),
+                  note: q.note, is_stock: q.is_stock };
+    const boldi = { qty: it.qty, color: trim(it.color), fabric: trim(it.fabric),
+                    started_on: it.started_on, next_on: due,
+                    note: it.note, is_stock: it.is_stock };
+    await audit(req, { module: 'production', action: 'request-edit',
+                       entity: 'unit_requests', entity_id: id,
+                       payload: { edi, boldi } }, client);
+    if (q.created_by && q.created_by !== req.user.id) {
+      const nom = { qty: 'soni', color: 'rang', fabric: 'mato',
+                    started_on: 'boshlanish', next_on: 'topshirish',
+                    note: 'izoh', is_stock: 'zahira' };
+      const farq = Object.keys(nom)
+        .filter((k) => String(edi[k] ?? '') !== String(boldi[k] ?? ''))
+        .map((k) => `${nom[k]}: ${edi[k] ?? '—'} → ${boldi[k] ?? '—'}`);
+      if (farq.length) await notify.queue({
+        worker_id: q.created_by, module: 'production', kind: 'unit_request',
+        title: `So'rov ${q.conveyor_no} tahrirlandi`,
+        body: farq.join('\n') + `\n\nKim tahrirladi: ${req.user.name}`,
+      }, client);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+}));
+
 //  So'rovchi faqat O'Z so'rovini bekor qiladi, tasdiqlovchi esa rad etadi;
 //  sabab ikkalasida ham yoziladi.
 router.post('/requests/:id/reject', need(...REQUEST), wrap(async (req, res) => {
