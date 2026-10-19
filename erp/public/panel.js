@@ -243,5 +243,5 @@ const Panel = (() => {
     ulash(el);
   }
 
-  return { RANG, KUL, pul, son, oyNom, kpi, bars, bars2, rank, share, esc };
+  return { RANG, KUL, pul, son, oyNom, kpi, bars, bars2, rank, share, esc, ulash };
 })();
