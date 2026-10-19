@@ -1572,6 +1572,8 @@ function drawShip() {
                 Alohida oynada ochiladi: ro'yxat joyida qolsin. -->
           ${canShip ? `<button onclick="planDay(${o.id}, ${olingan})">${
             olingan ? 'Rejadan chiqarish' : 'Bugunga olish'}</button>` : ''}
+          ${canShip ? `<button onclick="tayyorgaOch(${o.id})"
+            title="Mijoz kelmadi yoki kunni surdi">Tayyorga qaytarish</button>` : ''}
           <button onclick="window.open('/yukxati.html?id=${o.id}',
             'yukxati' + ${o.id})">Yuk xati</button>
           <button class="primary" ${tayyor ? '' : 'disabled'}
@@ -1623,6 +1625,42 @@ function doShip(id) {
 }
 
 const closeShip = () => { $('modalRoot').innerHTML = ''; };
+
+//  ★ TAYYORGA QAYTARISH — mijoz kelmadi yoki kunni surdi. Buyurtma
+//  savdoning «Tayyor» tabiga qaytadi va menejerga Telegram ketadi:
+//  yangi kunni mijoz bilan u kelishadi. Sabab majburiy — «nega
+//  chiqmadi» degan savol menejerdan ham, direktordan ham keladi.
+function tayyorgaOch(id) {
+  const o = ship.find(x => x.id === id);
+  $('modalRoot').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closeShip()">
+      <div class="modal" style="max-width:460px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <h1 style="margin:0">${esc(o.order_no)}</h1>
+          <button onclick="closeShip()">Yopish</button></div>
+        <p class="muted" style="margin-bottom:18px">${esc(o.customer_name)} \u00b7
+          buyurtma «Tayyor» ga qaytadi, menejerga xabar ketadi</p>
+        <div class="stack">
+          <div><label>Sabab</label>
+            <textarea id="trNote" rows="3"
+              placeholder="Mijoz 1 haftadan keyin olib ketadi"></textarea></div>
+          <button class="primary" onclick="tayyorgaQaytar(${id})">Tayyorga qaytarish</button>
+        </div>
+      </div></div>`;
+  $('trNote').focus();
+}
+
+async function tayyorgaQaytar(id) {
+  const note = $('trNote').value.trim();
+  if (!note) return toast('Sababini yozing', true);
+  try {
+    await App.api(`/api/sales/orders/${id}/return-ready`, {
+      method: 'POST', body: JSON.stringify({ note }) });
+    closeShip();
+    toast('Buyurtma «Tayyor» ga qaytarildi');
+    await loadShip();
+  } catch (e) { toast(e.message, true); }
+}
 
 // ══════════════════════════════════════════ VITRINADAN QAYTARISH
 //

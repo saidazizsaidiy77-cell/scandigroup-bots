@@ -1383,6 +1383,16 @@ Belgi Xodimlar sahifasida, standarti `false` (4-qoida).
 **«Qaytarib olish»** esa `sales.manage` da qolaveradi va mudir
 chiqarmaguncha ochiq: xato bergan menejer o'zi orqaga oladi.
 
+**★ MUDIR HAM «TAYYOR» GA QAYTARADI** (zavod qarori, 2026-10;
+`POST /api/sales/orders/:id/return-ready`, «Jo'natish» tabidagi
+**«Tayyorga qaytarish»**). Mijoz kelmay qoldi yoki kunni surdi —
+buyurtma mudirning ro'yxatida osilib turardi va qaytarish faqat
+savdoning qo'lida edi. Yo'l `/unsend` bilan AYNAN bir xil (holat va
+kunlik reja tozalanadi), farqi ikkita: **sabab MAJBURIY** va
+menejerga Telegram ketadi (`order_ready`) — yangi kunni mijoz bilan u
+kelishadi va qaytadan chiqarishga beradi. Huquqi `SHIP` (ombor
+mudiri).
+
 **★ TAB YONIDA JAMI SUMMA** (`GET /api/sales/orders` javobidagi
 `jami`; zavod qarori 2026-09). Qatorda summa ilgari ham bor edi,
 lekin menejerning savoli boshqa: «bu tabda jami qancha pul turibdi» —
