@@ -3069,8 +3069,16 @@ hozir BUYURTMADA turgani (soni, buyurtmalar soni, summa). **Oraliq
 filtriga bog'liq emas** — savolning o'zi «shu oy». «Buyurtmada» —
 «Zavodda turibdi» kartochkasi bilan BIR XIL shart (bekor va chiqib
 ketgansiz), test yig'indini solishtiradi. Doira (`channelsOf`,
-`ownOf`) panelning qolgani bilan bir xil. Sotilmagan tur ham o'z
-qatorida; jami faqat SUMMADA — dona bilan komplekt qo'shilmaydi.
+`ownOf`) panelning qolgani bilan bir xil.
+
+**★ JADVAL EMAS, GRAFIK** (zavod qarori, 2026-10). Har tur bitta
+blokda, ikki chiziq: **sotildi** (soni · summa) va **zavodda** (soni ·
+nechta buyurtmada). Buyurtmadagi SUMMA ekranda yo'q — savol dona.
+Masshtab BLOK ICHIDA: stul DONA, penal KOMPLEKT va bitta o'qda 600 dona
+stul yonida 30 komplekt penal chiziqsiz qolardi; savol ham blok ichida
+— «sotganimizdan ko'p kutyaptimi». Ikkalasi ham nol bo'lgan tur
+chizilmaydi (bo'sh blok); jami faqat sotilgan SUMMADA, sarlavha
+yonida.
 
 ---
 

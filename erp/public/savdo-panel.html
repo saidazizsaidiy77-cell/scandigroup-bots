@@ -15,6 +15,14 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="/app.js"></script>
 <script src="/panel.js"></script>
+<style>
+  /*  Tur bloklari: kompyuterda uchtadan, telefonda bittadan. */
+  .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px 28px}
+  .tnom{font-weight:600;margin-bottom:6px}
+  .tchiz{display:grid;grid-template-columns:1fr 178px;gap:10px;
+         align-items:center;margin-top:5px}
+  .tchiz .ptrack{height:12px}
+</style>
 </head>
 <body>
 
@@ -45,12 +53,14 @@
 <!--  ★ SHU OY — TUR BO'YICHA. Oraliq filtriga bog'liq emas: savol
       «shu oyda nechta sotdik» va «hozir nechtasi buyurtmada». -->
 <div class="card" style="margin-top:16px">
-  <h2>Shu oy — tur bo'yicha</h2>
+  <div class="row" style="justify-content:space-between;align-items:baseline">
+    <h2>Shu oy — tur bo'yicha</h2>
+    <span class="muted" style="font-size:13px" id="turiJami"></span></div>
   <div id="turi"></div>
-  <p class="muted" style="font-size:12px;margin-top:8px">
+  <p class="muted" style="font-size:12px;margin-top:10px">
     <b>Sotildi</b> — shu oyning 1-sanasidan bugungacha chiqib ketgan.
-    <b>Buyurtmada</b> — bugun yozilgan, lekin hali chiqmagan (bekor
-    qilinganisiz). Oraliq filtri bu jadvalga ta'sir qilmaydi.</p>
+    <b>Zavodda</b> — buyurtma yozilgan, lekin hali chiqmagan (bekor
+    qilinganisiz). Oraliq filtri bu blokka ta'sir qilmaydi.</p>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -132,31 +142,48 @@ async function load() {
       hint: 'chiqish sanasi o\'tib ketgan' },
   ]);
 
-  //  Jami qatori yo'q: stul DONA, penal KOMPLEKT — qo'shib bo'lmaydi.
-  //  Summa esa dollarda va u qo'shiladi.
-  const tr = d.turi || [];
-  const sum = (k) => tr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
-  const nol = (v, t) => Number(v) ? t : '<span class="muted">—</span>';
-  $('turi').innerHTML = tr.length ? `<div style="overflow-x:auto"><table>
-    <thead><tr><th>Turi</th>
-      <th class="num">Sotildi</th><th class="num">Summa</th>
-      <th class="num">Buyurtmada</th><th class="num">Buyurtmalar</th>
-      <th class="num">Summa</th></tr></thead><tbody>
-    ${tr.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
-      <td class="num">${nol(r.sotildi_qty, `<b>${Panel.son(r.sotildi_qty)}</b>
-        <span class="muted">${esc(r.uom || '')}</span>`)}</td>
-      <td class="num">${nol(r.sotildi_amount, esc(Panel.pul(r.sotildi_amount, true)))}</td>
-      <td class="num">${nol(r.buyurtma_qty, `<b>${Panel.son(r.buyurtma_qty)}</b>
-        <span class="muted">${esc(r.uom || '')}</span>`)}</td>
-      <td class="num">${nol(r.buyurtma_soni, Panel.son(r.buyurtma_soni) + ' ta')}</td>
-      <td class="num">${nol(r.buyurtma_amount, esc(Panel.pul(r.buyurtma_amount, true)))}</td>
-    </tr>`).join('')}
-    <tr><td><b>Jami</b></td><td></td>
-      <td class="num"><b>${esc(Panel.pul(sum('sotildi_amount'), true))}</b></td>
-      <td></td><td></td>
-      <td class="num"><b>${esc(Panel.pul(sum('buyurtma_amount'), true))}</b></td></tr>
-    </tbody></table></div>`
-    : '<p class="muted" style="font-size:13px">Ma\'lumot yo\'q.</p>';
+  //  ★ GRAFIK, JADVAL EMAS (zavod qarori, 2026-10). Har tur bitta
+  //  blokda, ikki chiziq: SOTILDI (shu oy) va ZAVODDA (hali chiqmagan).
+  //  Masshtab QATOR ICHIDA — stul DONA, penal KOMPLEKT va ularni bitta
+  //  o'qqa qo'yib bo'lmaydi: 600 dona stul yonida 30 komplekt penal
+  //  chiziqsiz qolardi. Savol ham qator ichida: «sotganimizdan ko'p
+  //  kutyaptimi». Buyurtmadagi SUMMA ko'rsatilmaydi — savol dona.
+  const tr = (d.turi || []).filter((r) => r.sotildi_qty || r.buyurtma_qty);
+  const jamiSot = (d.turi || []).reduce((a, r) => a + (Number(r.sotildi_amount) || 0), 0);
+  $('turiJami').textContent = jamiSot ? 'sotildi ' + Panel.pul(jamiSot, true) : '';
+  const chiz = (v, max, rang, matn, tip) => `
+    <div class="tchiz" data-tip="${esc(tip)}">
+      <div class="ptrack"><i style="width:${v ? Math.max(2, v / max * 100) : 0}%;
+        background:${rang}"></i></div>
+      <div class="pval">${matn}</div></div>`;
+  $('turi').innerHTML = tr.length ? `
+    <div class="plegend" style="margin-bottom:12px">
+      <span><b style="background:${Panel.RANG[0]}"></b>Sotildi — shu oy</span>
+      <span><b style="background:${Panel.RANG[1]}"></b>Zavodda — hali chiqmagan</span>
+    </div>
+    <div class="tgrid">${tr.map((r) => {
+      const s = Number(r.sotildi_qty) || 0, z = Number(r.buyurtma_qty) || 0;
+      const max = Math.max(1, s, z), u = esc(r.uom || '');
+      return `<div class="tblok">
+        <div class="tnom">${esc(r.name)}</div>
+        ${chiz(s, max, Panel.RANG[0],
+          `<b>${Panel.son(s)}</b> ${u}<span class="muted"> · ${
+            esc(Panel.pul(r.sotildi_amount))}</span>`,
+          `<b>${esc(r.name)}</b><br>Sotildi: ${Panel.son(s)} ${r.uom || ''}<br>${
+            Panel.pul(r.sotildi_amount, true)}`)}
+        ${chiz(z, max, Panel.RANG[1],
+          `<b>${Panel.son(z)}</b> ${u}<span class="muted"> · ${
+            Panel.son(r.buyurtma_soni)} buyurtma</span>`,
+          `<b>${esc(r.name)}</b><br>Zavodda: ${Panel.son(z)} ${r.uom || ''}<br>${
+            Panel.son(r.buyurtma_soni)} ta buyurtmada`)}
+      </div>`;
+    }).join('')}</div>`
+    : '<p class="muted" style="font-size:13px">Shu oyda savdo ham, ochiq buyurtma ham yo\'q.</p>';
+  //  Hodisa BIR MARTA ulanadi: blok har filtrda qayta chiziladi.
+  if (!$('turi').dataset.ulandi) {
+    Panel.ulash($('turi'));
+    $('turi').dataset.ulandi = '1';
+  }
 
   Panel.bars($('oylar'), { rows: d.oylar });
   //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur
