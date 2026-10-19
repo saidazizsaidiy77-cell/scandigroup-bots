@@ -16,12 +16,24 @@
 <script src="/app.js"></script>
 <script src="/panel.js"></script>
 <style>
-  /*  Tur bloklari: kompyuterda uchtadan, telefonda bittadan. */
-  .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px 28px}
-  .tnom{font-weight:600;margin-bottom:6px}
-  .tchiz{display:grid;grid-template-columns:1fr 178px;gap:10px;
-         align-items:center;margin-top:5px}
-  .tchiz .ptrack{height:12px}
+  /*  Turkum kartochkalari: kompyuterda to'rttadan, telefonda bittadan. */
+  .kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:18px}
+  .kcard{border:1px solid var(--line,#e4e2dc);border-radius:12px;padding:14px 16px}
+  .kcard .knom{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .kcard .kfoiz{font-size:30px;font-weight:600;line-height:1.1;margin:6px 0 10px;
+                font-variant-numeric:tabular-nums}
+  .kcard .kfoiz small{font-size:13px;font-weight:400;color:var(--muted)}
+  .kbar{position:relative;height:10px;border-radius:5px;background:var(--surface-2,#ecebe6);
+        overflow:hidden;margin-bottom:10px}
+  .kbar i{position:absolute;top:0;bottom:0;left:0}
+  .kbar .kch{background:#8a5a00}
+  .kbar .kza{background:repeating-linear-gradient(45deg,#8a5a0066 0 4px,#8a5a0026 4px 8px)}
+  .kbar .kre{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text,#222)}
+  .kqator{display:flex;justify-content:space-between;gap:8px;font-size:13px;
+          padding:3px 0;font-variant-numeric:tabular-nums}
+  .kqator span:first-child{color:var(--muted)}
+  .kjami{display:flex;flex-wrap:wrap;gap:6px 28px;align-items:baseline;margin:4px 0 14px}
+  .kjami b{font-size:20px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -50,17 +62,18 @@
 
 <div class="grid g3" id="kpis"></div>
 
-<!--  ★ SHU OY — TUR BO'YICHA. Oraliq filtriga bog'liq emas: savol
-      «shu oyda nechta sotdik» va «hozir nechtasi buyurtmada». -->
+<!--  ★ SHU OY — TURKUM BO'YICHA, KPI REJASIGA NISBATAN. Oraliq
+      filtriga bog'liq emas: savol «shu oy». -->
 <div class="card" style="margin-top:16px">
-  <div class="row" style="justify-content:space-between;align-items:baseline">
-    <h2>Shu oy — tur bo'yicha</h2>
-    <span class="muted" style="font-size:13px" id="turiJami"></span></div>
-  <div id="turi"></div>
-  <p class="muted" style="font-size:12px;margin-top:10px">
-    <b>Sotildi</b> — shu oyning 1-sanasidan bugungacha chiqib ketgan.
-    <b>Zavodda</b> — buyurtma yozilgan, lekin hali chiqmagan (bekor
-    qilinganisiz). Oraliq filtri bu blokka ta'sir qilmaydi.</p>
+  <h2>Shu oy — KPI rejasi bo'yicha</h2>
+  <div id="turkumJami"></div>
+  <div id="turkum" class="kgrid"></div>
+  <p class="muted" style="font-size:12px;margin-top:12px">
+    <b>Reja</b> — shu oyga barcha menejerlarga qo'yilgan KPI rejasi
+    yig'indisi. <b>Chiqdi</b> — shu oy zavoddan chiqib ketgani (mijozdan
+    qaytgani ayirilgan). <b>Zavodda</b> — buyurtma yozilgan, lekin hali
+    chiqmagan. <b>Chiqsa</b> — zavoddagilar ham chiqib ketsa reja necha
+    foiz bajariladi. Matras donaga kirmaydi (to'plamning bir qismi).</p>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -142,48 +155,47 @@ async function load() {
       hint: 'chiqish sanasi o\'tib ketgan' },
   ]);
 
-  //  ★ GRAFIK, JADVAL EMAS (zavod qarori, 2026-10). Har tur bitta
-  //  blokda, ikki chiziq: SOTILDI (shu oy) va ZAVODDA (hali chiqmagan).
-  //  Masshtab QATOR ICHIDA — stul DONA, penal KOMPLEKT va ularni bitta
-  //  o'qqa qo'yib bo'lmaydi: 600 dona stul yonida 30 komplekt penal
-  //  chiziqsiz qolardi. Savol ham qator ichida: «sotganimizdan ko'p
-  //  kutyaptimi». Buyurtmadagi SUMMA ko'rsatilmaydi — savol dona.
-  const tr = (d.turi || []).filter((r) => r.sotildi_qty || r.buyurtma_qty);
-  const jamiSot = (d.turi || []).reduce((a, r) => a + (Number(r.sotildi_amount) || 0), 0);
-  $('turiJami').textContent = jamiSot ? 'sotildi ' + Panel.pul(jamiSot, true) : '';
-  const chiz = (v, max, rang, matn, tip) => `
-    <div class="tchiz" data-tip="${esc(tip)}">
-      <div class="ptrack"><i style="width:${v ? Math.max(2, v / max * 100) : 0}%;
-        background:${rang}"></i></div>
-      <div class="pval">${matn}</div></div>`;
-  $('turi').innerHTML = tr.length ? `
-    <div class="plegend" style="margin-bottom:12px">
-      <span><b style="background:${Panel.RANG[0]}"></b>Sotildi — shu oy</span>
-      <span><b style="background:${Panel.RANG[1]}"></b>Zavodda — hali chiqmagan</span>
-    </div>
-    <div class="tgrid">${tr.map((r) => {
-      const s = Number(r.sotildi_qty) || 0, z = Number(r.buyurtma_qty) || 0;
-      const max = Math.max(1, s, z), u = esc(r.uom || '');
-      return `<div class="tblok">
-        <div class="tnom">${esc(r.name)}</div>
-        ${chiz(s, max, Panel.RANG[0],
-          `<b>${Panel.son(s)}</b> ${u}<span class="muted"> · ${
-            esc(Panel.pul(r.sotildi_amount))}</span>`,
-          `<b>${esc(r.name)}</b><br>Sotildi: ${Panel.son(s)} ${r.uom || ''}<br>${
-            Panel.pul(r.sotildi_amount, true)}`)}
-        ${chiz(z, max, Panel.RANG[1],
-          `<b>${Panel.son(z)}</b> ${u}<span class="muted"> · ${
-            Panel.son(r.buyurtma_soni)} buyurtma</span>`,
-          `<b>${esc(r.name)}</b><br>Zavodda: ${Panel.son(z)} ${r.uom || ''}<br>${
-            Panel.son(r.buyurtma_soni)} ta buyurtmada`)}
-      </div>`;
-    }).join('')}</div>`
-    : '<p class="muted" style="font-size:13px">Shu oyda savdo ham, ochiq buyurtma ham yo\'q.</p>';
-  //  Hodisa BIR MARTA ulanadi: blok har filtrda qayta chiziladi.
-  if (!$('turi').dataset.ulandi) {
-    Panel.ulash($('turi'));
-    $('turi').dataset.ulandi = '1';
-  }
+  //  ★ KPI REJASIGA NISBATAN (zavod qarori, 2026-10). Har turkum —
+  //  kartochka: katta raqam BAJARILDI foizi, chiziqda to'q qismi
+  //  chiqib ketgani, chiziqli qismi zavodda turgani, qora belgi —
+  //  reja. Jami DOLLARDA: dona bilan komplektni qo'shib bo'lmaydi.
+  const tk = d.turkum || [];
+  const foiz = (a, b) => b ? Math.round(a / b * 100) : null;
+  const bar = (ch, za, re) => {
+    const max = Math.max(1, re || 0, ch + za);
+    const w = (v) => Math.max(0, Math.min(100, v / max * 100));
+    return `<div class="kbar">
+      <i class="kza" style="width:${w(ch + za)}%"></i>
+      <i class="kch" style="width:${w(ch)}%"></i>
+      ${re ? `<span class="kre" style="left:calc(${w(re)}% - 1px)"></span>` : ''}</div>`;
+  };
+  const jCh = tk.reduce((a, r) => a + Number(r.chiqdi_amount || 0), 0);
+  const jZa = tk.reduce((a, r) => a + Number(r.zavodda_amount || 0), 0);
+  const jRe = tk.reduce((a, r) => a + Number(r.reja_amount || 0), 0);
+  const jf = foiz(jCh, jRe), jfz = foiz(jCh + jZa, jRe);
+  $('turkumJami').innerHTML = `
+    <div class="kjami">
+      <span><span class="muted">Jami chiqdi</span> <b>${esc(Panel.pul(jCh, true))}</b></span>
+      <span><span class="muted">Reja</span> <b>${jRe ? esc(Panel.pul(jRe, true)) : '—'}</b></span>
+      <span><span class="muted">Bajarildi</span> <b>${jf == null ? '—' : jf + '%'}</b></span>
+      <span><span class="muted">Chiqsa</span> <b>${jfz == null ? '—' : jfz + '%'}</b></span>
+    </div>${bar(jCh, jZa, jRe)}`;
+  $('turkum').innerHTML = tk.map((r) => {
+    const ch = Number(r.chiqdi_qty) || 0, za = Number(r.zavodda_qty) || 0;
+    const re = Number(r.reja_qty) || 0, u = esc(r.uom || 'dona');
+    const f = foiz(ch, re), fz = foiz(ch + za, re);
+    return `<div class="kcard">
+      <div class="knom">${esc(r.name)}</div>
+      <div class="kfoiz">${f == null ? '<small>reja qo\'yilmagan</small>'
+        : f + '% <small>bajarildi</small>'}</div>
+      ${bar(ch, za, re)}
+      <div class="kqator"><span>Reja</span><span>${re ? `<b>${Panel.son(re)}</b> ${u}` : '—'}</span></div>
+      <div class="kqator"><span>Chiqdi</span><span><b>${Panel.son(ch)}</b> ${u}
+        <span class="muted">· ${esc(Panel.pul(r.chiqdi_amount))}</span></span></div>
+      <div class="kqator"><span>Zavodda</span><span><b>${Panel.son(za)}</b> ${u}</span></div>
+      <div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>
+    </div>`;
+  }).join('') || '<p class="muted" style="font-size:13px">Turkum yo\'q.</p>';
 
   Panel.bars($('oylar'), { rows: d.oylar });
   //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur

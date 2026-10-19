@@ -2594,47 +2594,90 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
           AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
         GROUP BY o.status ORDER BY amount DESC`, [chans, own]),
 
-    //  ★ SHU OY — TUR BO'YICHA (zavod qarori, 2026-10). Savol ikkita:
-    //  «shu oyda nechta stol, stul, penal… sotdik» va «hozir nechtasi
-    //  buyurtmada turibdi». Oraliq filtriga BOG'LIQ EMAS — savolning
-    //  o'zi «shu oy» (kalendar oyi, bugungi kungacha); buyurtmada
-    //  turgani esa «zavodda turibdi» kartochkasi bilan bir xil BUGUNGI
-    //  holat va bir xil shart. Har tur o'z birligida (stul DONA,
-    //  penal KOMPLEKT) — qo'shib bo'lmaydi. Sotilmagan tur ham o'z
-    //  qatorida: bo'sh qator javob, yo'q qator esa savol.
+    //  ★ SHU OY — TURKUM BO'YICHA KPI REJASIGA NISBATAN (zavod qarori,
+    //  2026-10). Savol: «barcha menejerlarga qancha stul rejasi
+    //  qo'yilgan, qanchasi chiqdi, qanchasi zavodda turibdi va oy
+    //  oxirida reja qanchaga bajariladi». Kesim — TURKUM, guruh emas:
+    //  reja turkumga qo'yiladi (`sales_kpi_targets.category`) va penal
+    //  bilan kamod BITTA reja (mehmonxona to'plami).
+    //
+    //  REJA — joriy oyning barcha menejerlariga qo'yilgan DONA va
+    //  SEGMENT rejalari yig'indisi; doirasi bor menejerda — faqat
+    //  o'ziniki. CHIQDI — KPI fakti bilan bir xil qoida
+    //  (`v_sales_kpi_fact`): chiqib ketgan KONVER (`ship_on` shu oyda),
+    //  QABUL QILINGAN qaytarish ayirilgan, dona faqat `kpi_dona`
+    //  guruhda (matras dona emas). Menejerlar faktini qo'shib
+    //  bo'lmaydi — ikki menejerli mijoz ikki marta sanalardi; shuning
+    //  uchun konverning o'zidan, bir marta. ZAVODDA — «Zavodda
+    //  turibdi» kartochkasi bilan bir xil shart (bekor va chiqib
+    //  ketgansiz). Oraliq filtriga BOG'LIQ EMAS — savolning o'zi «shu oy».
     db.query(
-      `WITH q AS (
-         SELECT p.group_id, o.id AS order_id, i.qty,
-                i.qty * COALESCE(i.unit_price, 0) AS amount,
-                (o.status = 'shipped'
-                  AND o.shipped_on >= date_trunc('month', CURRENT_DATE)::date
-                  AND o.shipped_on <= CURRENT_DATE) AS sotildi,
-                (o.status NOT IN ('shipped', 'cancelled')) AS ochiq
+      `WITH oy AS (SELECT date_trunc('month', CURRENT_DATE)::date AS m),
+       chiq AS (
+         SELECT g.sales_category AS c,
+                SUM(u.qty) FILTER (WHERE g.kpi_dona) AS q,
+                SUM(u.total_amount) AS s
+           FROM production_units u
+           JOIN products p       ON p.id = u.product_id
+           JOIN product_groups g ON g.id = p.group_id
+           LEFT JOIN customers cu ON cu.id = u.customer_id, oy
+          WHERE u.status = 'shipped' AND u.ship_on >= oy.m
+            AND ($1::text[] IS NULL OR cu.channel = ANY($1))
+            AND ($2::int IS NULL OR mijoz_meniki(u.customer_id, $2))
+          GROUP BY 1
+         UNION ALL
+         SELECT g.sales_category,
+                -SUM(i.qty) FILTER (WHERE g.kpi_dona),
+                -SUM(i.qty * COALESCE(i.price, 0))
+           FROM cust_returns r
+           JOIN cust_return_items i ON i.return_id = r.id
+           JOIN production_units u  ON u.id = i.unit_id
+           JOIN products p          ON p.id = u.product_id
+           JOIN product_groups g    ON g.id = p.group_id
+           LEFT JOIN customers cu   ON cu.id = r.customer_id, oy
+          WHERE r.status = 'accepted' AND r.ret_on >= oy.m
+            AND ($1::text[] IS NULL OR cu.channel = ANY($1))
+            AND ($2::int IS NULL OR mijoz_meniki(r.customer_id, $2))
+          GROUP BY 1),
+       zav AS (
+         SELECT g.sales_category AS c,
+                SUM(i.qty) FILTER (WHERE g.kpi_dona) AS q,
+                SUM(i.qty * COALESCE(i.unit_price, 0)) AS s
            FROM v_sales_orders o
-           JOIN order_items i ON i.order_id = o.id
-           JOIN products p    ON p.id = i.product_id
-          WHERE ($1::text[] IS NULL OR o.channel = ANY($1))
+           JOIN order_items i    ON i.order_id = o.id
+           JOIN products p       ON p.id = i.product_id
+           JOIN product_groups g ON g.id = p.group_id
+          WHERE o.status NOT IN ('shipped', 'cancelled')
+            AND ($1::text[] IS NULL OR o.channel = ANY($1))
             AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
-            AND (o.status NOT IN ('shipped', 'cancelled')
-                 OR o.shipped_on >= date_trunc('month', CURRENT_DATE)::date))
-       SELECT g.name, g.uom,
-              COALESCE(SUM(q.qty) FILTER (WHERE q.sotildi), 0)::int AS sotildi_qty,
-              COALESCE(SUM(q.amount) FILTER (WHERE q.sotildi), 0)::numeric AS sotildi_amount,
-              COALESCE(SUM(q.qty) FILTER (WHERE q.ochiq), 0)::int AS buyurtma_qty,
-              COALESCE(SUM(q.amount) FILTER (WHERE q.ochiq), 0)::numeric AS buyurtma_amount,
-              COUNT(DISTINCT q.order_id) FILTER (WHERE q.ochiq)::int AS buyurtma_soni
-         FROM product_groups g
-         LEFT JOIN q ON q.group_id = g.id
-        WHERE g.active OR q.group_id IS NOT NULL
-        GROUP BY g.id, g.name, g.uom, g.sort
-        ORDER BY g.sort, g.name`, [chans, own]),
+          GROUP BY 1),
+       reja AS (
+         SELECT t.category AS c,
+                SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
+                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT') AS s
+           FROM sales_kpi_targets t, oy
+          WHERE t.mon = oy.m AND t.category IS NOT NULL
+            AND ($2::int IS NULL OR t.worker_id = $2)
+          GROUP BY 1)
+       SELECT sc.code, sc.name,
+              (SELECT MIN(g.uom) FROM product_groups g
+                WHERE g.sales_category = sc.code AND g.kpi_dona AND g.active) AS uom,
+              COALESCE((SELECT SUM(q) FROM chiq WHERE c = sc.code), 0)::int     AS chiqdi_qty,
+              COALESCE((SELECT SUM(s) FROM chiq WHERE c = sc.code), 0)::numeric AS chiqdi_amount,
+              COALESCE((SELECT q FROM zav WHERE c = sc.code), 0)::int           AS zavodda_qty,
+              COALESCE((SELECT s FROM zav WHERE c = sc.code), 0)::numeric       AS zavodda_amount,
+              (SELECT q FROM reja WHERE c = sc.code)::numeric                   AS reja_qty,
+              (SELECT s FROM reja WHERE c = sc.code)::numeric                   AS reja_amount
+         FROM sales_categories sc
+        WHERE sc.active
+        ORDER BY sc.sort, sc.name`, [chans, own]),
   ]);
 
   res.json({
     dan: oraliq.dan, gacha: oraliq.gacha,
     kpi: kpi.rows[0], oylar: oylar.rows, kanal: kanal.rows,
     menejer: menejer.rows, mahsulot: mahsulot.rows,
-    qarz: qarz.rows, holat: holat.rows, turi: turi.rows,
+    qarz: qarz.rows, holat: holat.rows, turkum: turi.rows,
     //  Doirasi bor menejerda «kim ko'p sotdi» degan savol yo'q:
     //  ro'yxatda baribir bitta ism turadi.
     ozi: !!own,

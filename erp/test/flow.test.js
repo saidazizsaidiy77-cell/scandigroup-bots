@@ -9316,22 +9316,29 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
     assert.ok(r.body && typeof r.body === 'object', y + ' javob bermadi');
   }
 
-  //  ★ SHU OY — TUR BO'YICHA: «buyurtmada» ustuni «zavodda turibdi»
-  //  kartochkasi bilan BIR XIL shartdan, ya'ni summasi teng bo'lishi
-  //  shart; tur ro'yxatida faol guruhlarning hammasi turadi.
+  //  ★ SHU OY — KPI REJASI BO'YICHA: «zavodda» summasi «Zavodda
+  //  turibdi» kartochkasi bilan BIR XIL shartdan (turkumi bor
+  //  guruhlarda), reja esa joriy oyning rejalari yig'indisi.
   const sd = (await admin('GET', '/api/sales/dashboard')).body;
   const { db: tdb } = require('../db');
   const ochiq = (await tdb.query(
-    `SELECT COALESCE(SUM(i.qty), 0)::int AS q,
-            COALESCE(SUM(i.qty * COALESCE(i.unit_price, 0)), 0)::numeric AS s
+    `SELECT COALESCE(SUM(i.qty * COALESCE(i.unit_price, 0)), 0)::numeric AS s
        FROM v_sales_orders o JOIN order_items i ON i.order_id = o.id
-      WHERE o.status NOT IN ('shipped', 'cancelled')`)).rows[0];
-  assert.equal(sd.turi.reduce((a, r) => a + r.buyurtma_qty, 0), ochiq.q);
-  assert.equal(sd.turi.reduce((a, r) => a + Number(r.buyurtma_amount), 0).toFixed(2),
+       JOIN products p ON p.id = i.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE o.status NOT IN ('shipped', 'cancelled')
+        AND g.sales_category IS NOT NULL`)).rows[0];
+  assert.equal(sd.turkum.reduce((a, r) => a + Number(r.zavodda_amount), 0).toFixed(2),
                Number(ochiq.s).toFixed(2));
+  const reja = (await tdb.query(
+    `SELECT COALESCE(SUM(plan), 0)::numeric AS s FROM sales_kpi_targets
+      WHERE indicator = 'DONA' AND category IS NOT NULL
+        AND mon = date_trunc('month', CURRENT_DATE)::date`)).rows[0];
+  assert.equal(sd.turkum.reduce((a, r) => a + Number(r.reja_qty || 0), 0),
+               Number(reja.s));
   const faol = (await tdb.query(
-    `SELECT COUNT(*)::int n FROM product_groups WHERE active`)).rows[0].n;
-  assert.ok(sd.turi.length >= faol, 'sotilmagan tur ham qatorda turadi');
+    `SELECT COUNT(*)::int n FROM sales_categories WHERE active`)).rows[0].n;
+  assert.equal(sd.turkum.length, faol, 'har turkum o\'z kartochkasida');
 
   //  Doirasi bor savdo menejeri: paneli o'ziniki bo'lib ochiladi.
   const { db } = require('../db');

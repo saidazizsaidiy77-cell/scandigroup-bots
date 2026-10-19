@@ -3059,26 +3059,31 @@ qolaveradi.
 
 ---
 
-## Savdo paneli — shu oy, tur bo'yicha
+## Savdo paneli — shu oy, KPI rejasiga nisbatan
 
-**★ «SHU OYDA NECHTA SOTDIK, NECHTASI BUYURTMADA»** (zavod qarori,
-2026-10; `/api/sales/dashboard` dagi `turi`, `/savdo-panel.html`).
-Har GURUH (stol, stul, penal, kamod, sp…) bitta qatorda: shu oyning
-1-sanasidan bugungacha CHIQIB KETGANI (soni o'z birligida va summa) va
-hozir BUYURTMADA turgani (soni, buyurtmalar soni, summa). **Oraliq
-filtriga bog'liq emas** — savolning o'zi «shu oy». «Buyurtmada» —
-«Zavodda turibdi» kartochkasi bilan BIR XIL shart (bekor va chiqib
-ketgansiz), test yig'indini solishtiradi. Doira (`channelsOf`,
-`ownOf`) panelning qolgani bilan bir xil.
+**★ «REJA QANCHA, QANCHASI CHIQDI, QANCHASI ZAVODDA»** (zavod qarori,
+2026-10; `/api/sales/dashboard` dagi `turkum`, `/savdo-panel.html`).
+Kesim — TURKUM (mehmonxona · yotoqxona · stol · stul), guruh emas:
+KPI rejasi turkumga qo'yiladi va penal bilan kamod BITTA reja. Har
+turkum — kartochka: katta raqam **bajarildi %** (chiqdi ÷ reja),
+chiziqda to'q qismi chiqdi, chiziqli qismi zavodda, qora belgi reja;
+ostida reja, chiqdi (soni · $), zavodda (soni) va **chiqsa %**
+((chiqdi + zavodda) ÷ reja). Tepada JAMI — dollarda (SEGMENT rejasi),
+chunki dona bilan komplekt qo'shilmaydi.
 
-**★ JADVAL EMAS, GRAFIK** (zavod qarori, 2026-10). Har tur bitta
-blokda, ikki chiziq: **sotildi** (soni · summa) va **zavodda** (soni ·
-nechta buyurtmada). Buyurtmadagi SUMMA ekranda yo'q — savol dona.
-Masshtab BLOK ICHIDA: stul DONA, penal KOMPLEKT va bitta o'qda 600 dona
-stul yonida 30 komplekt penal chiziqsiz qolardi; savol ham blok ichida
-— «sotganimizdan ko'p kutyaptimi». Ikkalasi ham nol bo'lgan tur
-chizilmaydi (bo'sh blok); jami faqat sotilgan SUMMADA, sarlavha
-yonida.
+**Reja** — joriy oyda BARCHA menejerlarga qo'yilgan DONA/SEGMENT
+rejalari yig'indisi; doirasi bor menejerda faqat o'ziniki.
+**Chiqdi** — KPI fakti bilan bir xil qoida (`v_sales_kpi_fact`):
+chiqib ketgan KONVER, qabul qilingan qaytarish ayirilgan, dona faqat
+`kpi_dona` guruhda (matras emas). Menejerlar faktini qo'shib
+bo'lmaydi — ikki menejerli mijoz ikki marta sanalardi — shuning
+uchun konverning o'zidan, bir marta. **Zavodda** — «Zavodda turibdi»
+kartochkasi bilan bir xil shart; buyurtmadagi SUMMA ekranda yo'q,
+faqat jami «chiqsa %» ga kiradi. Oraliq filtriga bog'liq emas.
+
+Birinchi ikki urinish (guruh bo'yicha jadval, keyin ikki chiziqli
+grafik) zavodga yoqmadi: savol «nechta sotdik» emas, «reja qanchaga
+bajariladi» edi.
 
 ---
 
