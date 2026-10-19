@@ -12563,6 +12563,45 @@ test('aylanma kapital: xom ashyo ombordagi qoldiq qiymati bilan bir xil', async 
 });
 
 
+test('aylanma kapital: narxsiz konver katalogdagi optom narx bilan', async () => {
+  //  ★ Konverda narx bo'lmasa katalogdagi OPTOM narx olinadi; ikkalasi
+  //  ham yo'q bo'lsa nol qo'shiladi va SONI fg_narxsiz da qaytadi.
+  const { db } = require('../db');
+  const admin = H.api(base, await H.sessionFor('Administrator'));
+  const t = new Date();
+  const oxir = new Date(Date.UTC(t.getFullYear(), t.getMonth() + 1, 0))
+    .toISOString().slice(0, 10);
+  const ol = async () => (await admin('GET',
+    `/api/cash/working-capital?from=${oxir}&to=${oxir}`)).body.rows[0];
+  const u = (await db.query(`
+    SELECT u.id, u.product_id, u.unit_price, p.price_opt
+      FROM production_units u JOIN products p ON p.id = u.product_id
+     WHERE u.status = 'fg' AND u.fg_on IS NOT NULL AND u.ship_on IS NULL
+     ORDER BY u.id LIMIT 1`)).rows[0];
+  assert.ok(u, 'omborda konver bor');
+  //  Shu mahsulotning narxsiz konverlari — optom narx ularning hammasiga tegadi.
+  const qolganlar = async () => (await db.query(`
+    SELECT COUNT(*)::int AS n, COALESCE(SUM(qty), 0) AS q FROM production_units
+     WHERE product_id = $1 AND unit_price IS NULL AND status <> 'cancelled'
+       AND fg_on IS NOT NULL AND fg_on <= $2 AND (ship_on IS NULL OR ship_on > $2)`,
+    [u.product_id, oxir])).rows[0];
+  try {
+    await db.query(`UPDATE production_units SET unit_price = NULL WHERE id = $1`, [u.id]);
+    await db.query(`UPDATE products SET price_opt = NULL WHERE id = $1`, [u.product_id]);
+    const a = await ol();
+    const k = await qolganlar();
+    assert.ok(Number(a.fg_narxsiz) >= k.n, 'narxsizlar sanaladi');
+    await db.query(`UPDATE products SET price_opt = 50 WHERE id = $1`, [u.product_id]);
+    const b = await ol();
+    assert.equal((Number(b.fg) - Number(a.fg)).toFixed(2), (50 * Number(k.q)).toFixed(2),
+      'narxsiz konver optom narx bilan qo\'shiladi');
+    assert.equal(Number(a.fg_narxsiz) - Number(b.fg_narxsiz), k.n);
+  } finally {
+    await db.query(`UPDATE production_units SET unit_price = $2 WHERE id = $1`, [u.id, u.unit_price]);
+    await db.query(`UPDATE products SET price_opt = $2 WHERE id = $1`, [u.product_id, u.price_opt]);
+  }
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

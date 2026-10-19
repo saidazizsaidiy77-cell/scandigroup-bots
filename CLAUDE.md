@@ -3007,6 +3007,16 @@ chegara, ichida foyda ham turibdi. Sahifa buni o'zi aytib turadi. Xom
 ashyo hisobi yozilgach tannarx shakllanadi va bu ikki qator o'zi
 to'g'rilanadi; sahifa o'zgarmaydi.
 
+**★ NARXSIZ KONVER — KATALOGDAGI OPTOM NARX BILAN** (zavod qarori,
+2026-10). Konverga narx odatda CHIQARISHDA yoziladi (yuk xatidan),
+ya'ni omborda va tsexda turgan mahsulotning ko'pida `unit_price` bo'sh
+va u nol bo'lib qo'shilardi — T/M ombor qatori haqiqatdan ancha kam
+chiqardi. Endi tartib: konverning o'z narxi → mahsulotning
+`products.price_opt` → nol. Ikkalasi ham yo'q konverlar SONI
+(`fg_narxsiz`, `wip_narxsiz`) katak ostida qizil yoziladi: raqamning
+o'zi yolg'on emas, tushuntirilmagani yolg'on bo'lardi. Turkum kesimi
+ham shu narxdan, ya'ni yig'indisi «Ishlab chiqarishda» ga teng qoladi.
+
 **Ustun — OY.** Direktorning savoli «qaysi oyda nima bo'ldi»: bitta
 yig'indi raqam unga javob bermaydi, oylar yonma-yon turgandagina o'sish
 ham, sakrash ham ko'rinadi. Oylar ORALIQdan chiqadi, ma'lumotdan emas —
