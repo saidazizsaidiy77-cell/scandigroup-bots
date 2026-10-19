@@ -118,7 +118,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
   (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const d8 = (v) => !v ? '' : String(v).slice(0, 10).split('-').reverse().join('.');
 
-let ref = null, mahsulotlar = [], planKerak = false;
+let ref = null, mahsulotlar = [], planKerak = false, ranglar = [], matolar = [];
 let data = { rows: [], can_approve: false };
 
 const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
@@ -254,6 +254,7 @@ async function load() {
     //  ma'lum bo'lmaydi — mijoz aytganda bo'yaladi.
     const royxat = (v) => '<option value="">\u2014 yo\'q \u2014</option>'
       + v.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    ranglar = sug.colors; matolar = sug.fabrics;
     $('fColor').innerHTML  = royxat(sug.colors);
     $('fFabric').innerHTML = royxat(sug.fabrics);
     if (!$('fStart').value) $('fStart').value = new Date().toISOString().slice(0, 10);
@@ -282,6 +283,11 @@ function draw() {
     const act = [];
     if (r.status === 'pending' && data.can_approve)
       act.push(`<button class="primary" onclick="approve(${r.id})">Tasdiqlash</button>`);
+    //  Tahrir — tasdiqlovchida va so'rovni yozgan odamning o'zida
+    //  (tekshiruv serverda, `PATCH /requests/:id`).
+    if (r.status === 'pending'
+        && (data.can_approve || r.created_by === App.me()?.id))
+      act.push(`<button onclick="tahrir(${r.id})">Tahrirlash</button>`);
     if (r.status === 'pending')
       act.push(`<button onclick="reject(${r.id}, ${data.can_approve})">${
         data.can_approve ? 'Rad etish' : 'Bekor qilish'}</button>`);
@@ -367,6 +373,70 @@ async function send() {
     //  kiritilganda har safar qo'lda terib o'tirmasin.
     await taklif(true);
     $('fStatus').value = 'pending';
+    await load();
+  } catch (e) { alert(e.message); }
+}
+
+//  ★ TASDIQDAN OLDIN TAHRIR (zavod qarori, 2026-10). Mahsulot
+//  o'zgarmaydi — konver raqamining harfi undan chiqqan; boshqa
+//  mahsulot kerak bo'lsa so'rov rad etiladi. Qoida serverda
+//  (`sorovTekshir`) — yozishdagi bilan bitta.
+function tahrir(id) {
+  const r = data.rows.find((x) => x.id === id);
+  if (!r) return;
+  const opt = (v, cur) => '<option value="">\u2014 yo\'q \u2014</option>'
+    + [...new Set([...(cur ? [cur] : []), ...v])].map((c) =>
+      `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const p = mahsulotlar.find((x) => x.id === r.product_id)
+         || (ref?.products || []).find((x) => x.id === r.product_id);
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="eBox" onclick="if(event.target===this)eYop()">
+      <div class="modal" style="max-width:520px">
+        <h2 style="margin-bottom:4px">${esc(r.conveyor_no)}</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:16px">${esc(r.product)}${
+          r.size_label ? ' · ' + esc(r.size_label) : ''} · ${esc(r.product_type)}
+          — mahsulot o'zgarmaydi</p>
+        <div class="form">
+          <div><label>Soni</label>
+            <input id="eQty" type="number" min="1" step="1" inputmode="numeric" value="${r.qty}"></div>
+          <div><label>Boshlanish sanasi</label>
+            <input id="eStart" type="date" value="${esc(String(r.started_on || '').slice(0, 10))}"></div>
+          <div><label>Rangi</label><select id="eColor">${opt(ranglar, r.color)}</select></div>
+          ${p?.needs_fabric || r.fabric
+            ? `<div><label>Matosi</label><select id="eFabric">${opt(matolar, r.fabric)}</select></div>` : ''}
+          ${!r.auto || r.next_on ? `<div><label>Keyingi tsexga topshirish${
+            r.auto ? '' : ' <span class="muted" style="text-transform:none">— majburiy</span>'}</label>
+            <input id="eNext" type="date" value="${esc(String(r.next_on || '').slice(0, 10))}"></div>` : ''}
+          <div class="wide"><label>Izoh</label>
+            <input id="eNote" value="${esc(r.note || '')}"></div>
+          <div class="wide"><label class="row" style="gap:10px;align-items:center;
+            text-transform:none;font-size:14px;cursor:pointer">
+            <input type="checkbox" id="eStock" style="width:auto"${r.is_stock ? ' checked' : ''}>
+            <span>Zahira uchun — rang va mato so'ralmaydi</span></label></div>
+        </div>
+        <button class="primary" style="width:100%;margin-top:16px"
+          onclick="eSaqla(${id})">Saqlash</button>
+        <button style="width:100%;margin-top:8px" onclick="eYop()">Bekor qilish</button>
+      </div>
+    </div>`);
+}
+
+const eYop = () => $('eBox')?.remove();
+
+async function eSaqla(id) {
+  const body = {
+    qty:        Number($('eQty').value) || 0,
+    started_on: $('eStart').value || null,
+    color:      $('eColor').value || null,
+    note:       $('eNote').value.trim() || null,
+    is_stock:   $('eStock').checked,
+  };
+  if ($('eFabric')) body.fabric = $('eFabric').value || null;
+  if ($('eNext'))   body.next_on = $('eNext').value || null;
+  if (body.qty <= 0) return alert('Soni kiritilmagan');
+  try {
+    await App.api(`/api/units/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    eYop();
     await load();
   } catch (e) { alert(e.message); }
 }

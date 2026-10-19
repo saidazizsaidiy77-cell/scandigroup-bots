@@ -760,6 +760,18 @@ harakat yozuvi ham, jamlanma hisobot ham bir xil yo'ldan o'tadi.
 o'zgartirilmaydi: tasdiqlovchi boshqacha xohlasa rad etadi va sababini
 yozadi, aks holda boshliq nima so'raganini keyin solishtirib bo'lmasdi.
 
+**★ TASDIQDAN OLDIN TAHRIRLANADI** (zavod qarori, 2026-10;
+`PATCH /api/units/requests/:id`, ro'yxatdagi **«Tahrirlash»**). Bitta
+xato raqam uchun so'rovni rad etib, qaytadan yozish raqamni yoqardi va
+ish bir kun turib qolardi. Kutib turgan so'rovda soni, rang, mato,
+sanalar, izoh va zahira belgisi tuzatiladi; **mahsulot o'zgarmaydi** —
+konver raqamining harfi undan chiqqan. Kim: tasdiqlovchi yoki so'rovni
+yozgan odamning o'zi. Tekshiruv yozishdagi bilan BITTA
+(`sorovTekshir`). Solishtirish yo'qolmadi: eski va yangi qiymat audit
+jurnalida (`request-edit`, `edi`/`boldi`), tasdiqlovchi tuzatsa
+so'rovchiga Telegram ketadi — nima o'zgargani bilan. Tasdiqlash esa
+eskicha: ekranda turgan holida ochiladi.
+
 Chegara so'rashda ham bor: tsexi biriktirilgan xodim FAQAT o'z
 tsexining mahsulotiga so'rov yozadi (mahsulot qaysi tsexniki —
 `owner_shop_id`, bo'lmasa marshrutning birinchi qadami). Doirasi

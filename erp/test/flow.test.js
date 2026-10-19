@@ -6038,6 +6038,24 @@ test('konver so\'rovi: tsex boshlig\'i yozadi, tasdiqlovchi ochadi', async () =>
   assert.equal((await H.id(
     `SELECT COUNT(*)::int n FROM production_units WHERE qty = 7 AND color = 'Oq'`)).n, 0);
 
+  //  ★ TASDIQDAN OLDIN TAHRIR: so'rovchi o'zinikini, tasdiqlovchi
+  //  hammasini. Mahsulot o'zgarmaydi, rang faqat boridan.
+  const e1 = await korpus('PATCH', `/api/units/requests/${id}`,
+    { qty: 9, product_id: STUL, note: 'tahrir' });
+  assert.equal(e1.status, 200, e1.text);
+  let eq = await H.id(`SELECT qty, product_id, note FROM unit_requests WHERE id = $1`, [id]);
+  assert.equal(eq.qty, 9);
+  assert.equal(eq.product_id, PENAL, 'mahsulot o\'zgarmaydi');
+  assert.equal((await admin('PATCH', `/api/units/requests/${id}`,
+    { color: 'Yo\'q rang' })).status, 400);
+  assert.equal((await admin('PATCH', `/api/units/requests/${id}`,
+    { qty: 0 })).status, 400);
+  const e2 = await admin('PATCH', `/api/units/requests/${id}`, { qty: 7 });
+  assert.equal(e2.status, 200, e2.text);
+  const qno = (await H.id(`SELECT conveyor_no FROM unit_requests WHERE id = $1`, [id])).conveyor_no;
+  assert.equal((await H.id(`SELECT COUNT(*)::int n FROM notifications WHERE title = $1`,
+    [`So'rov ${qno} tahrirlandi`])).n, 1, 'so\'rovchiga xabar ketadi');
+
   //  Tasdiqlovchi ochadi — so'ralgan soni bilan.
   const ok = await admin('POST', `/api/units/requests/${id}/approve`);
   assert.equal(ok.status, 200, ok.text);
@@ -6052,6 +6070,8 @@ test('konver so\'rovi: tsex boshlig\'i yozadi, tasdiqlovchi ochadi', async () =>
   //  Ikkinchi marta tasdiqlab bo'lmaydi: aks holda bitta so'rovdan
   //  ikkita konver ochilardi.
   assert.equal((await admin('POST', `/api/units/requests/${id}/approve`)).status, 400);
+  //  Hal qilingan so'rov tahrirlanmaydi.
+  assert.equal((await admin('PATCH', `/api/units/requests/${id}`, { qty: 3 })).status, 400);
 
   const row = (await korpus('GET', '/api/units/requests?status=approved'))
     .body.rows.find((r) => r.id === id);
