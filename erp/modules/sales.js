@@ -2655,7 +2655,10 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          SELECT t.category AS c,
                 SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
                 SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT') AS s
-           FROM sales_kpi_targets t, oy
+           FROM sales_kpi_targets t
+           --  Ishdan ketgan xodimning rejasi sanalmaydi: u bu oy
+           --  hech narsa sotmaydi va jami rejani yolg'on oshirardi.
+           JOIN workers w ON w.id = t.worker_id AND w.active, oy
           WHERE t.mon = oy.m AND t.category IS NOT NULL
             AND ($2::int IS NULL OR t.worker_id = $2)
           GROUP BY 1)

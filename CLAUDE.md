@@ -3067,12 +3067,13 @@ Kesim — TURKUM (mehmonxona · yotoqxona · stol · stul), guruh emas:
 KPI rejasi turkumga qo'yiladi va penal bilan kamod BITTA reja. Har
 turkum — kartochka: katta raqam **bajarildi %** (chiqdi ÷ reja),
 chiziqda to'q qismi chiqdi, chiziqli qismi zavodda, qora belgi reja;
-ostida reja, chiqdi (soni · $), zavodda (soni) va **chiqsa %**
+ostida reja, chiqdi va zavodda — faqat SON (summa tepadagi jamida) va **chiqsa %**
 ((chiqdi + zavodda) ÷ reja). Tepada JAMI — dollarda (SEGMENT rejasi),
 chunki dona bilan komplekt qo'shilmaydi.
 
 **Reja** — joriy oyda BARCHA menejerlarga qo'yilgan DONA/SEGMENT
-rejalari yig'indisi; doirasi bor menejerda faqat o'ziniki.
+rejalari yig'indisi (ishdan ketgan xodimniki sanalmaydi); doirasi bor
+menejerda faqat o'ziniki.
 **Chiqdi** — KPI fakti bilan bir xil qoida (`v_sales_kpi_fact`):
 chiqib ketgan KONVER, qabul qilingan qaytarish ayirilgan, dona faqat
 `kpi_dona` guruhda (matras emas). Menejerlar faktini qo'shib

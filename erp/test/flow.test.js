@@ -9331,7 +9331,8 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   assert.equal(sd.turkum.reduce((a, r) => a + Number(r.zavodda_amount), 0).toFixed(2),
                Number(ochiq.s).toFixed(2));
   const reja = (await tdb.query(
-    `SELECT COALESCE(SUM(plan), 0)::numeric AS s FROM sales_kpi_targets
+    `SELECT COALESCE(SUM(plan), 0)::numeric AS s FROM sales_kpi_targets t
+       JOIN workers w ON w.id = t.worker_id AND w.active
       WHERE indicator = 'DONA' AND category IS NOT NULL
         AND mon = date_trunc('month', CURRENT_DATE)::date`)).rows[0];
   assert.equal(sd.turkum.reduce((a, r) => a + Number(r.reja_qty || 0), 0),
