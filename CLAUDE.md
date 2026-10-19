@@ -2983,9 +2983,10 @@ korxonaning puli, shunchaki javonda emas.
 
 **Ishlab chiqarishdagi mahsulot ham aktiv** — tugallanmagan ishlab
 chiqarish: zaxira xom ashyodan tayyor mahsulotgacha uchta holatda
-turadi va o'rtadagisi ham korxonaniki. Qiymati — konver kartochkasidagi
-SOTUV narxi × soni (`unit_price`): boshlangan, lekin o'sha kuni hali
-omborga tushmagan konverlar; narxsizi nolga qo'shiladi.
+turadi va o'rtadagisi ham korxonaniki. Qiymati — SOTUV narxi × soni:
+boshlangan, lekin o'sha kuni hali omborga tushmagan konverlar. Narx
+konverning o'zidan (`unit_price`), u bo'lmasa katalogdagi optom
+narxdan olinadi (pastda, «★ NARXSIZ KONVER»).
 
 **★ QATORI BOSILSA TURKUM KESIMI** (zavod qarori, 2026-10;
 `wip_turkum`): mehmonxona to'plami, yotoqxona (sp) to'plami, stol va
