@@ -155,6 +155,8 @@ async function load() {
       hint: 'chiqish sanasi o\'tib ketgan' },
   ]);
 
+  //  Kartochkada faqat SON (zavod qarori, 2026-10): summa tepadagi
+  //  jamida turadi va turkum ichida takrorlanmaydi.
   //  ★ KPI REJASIGA NISBATAN (zavod qarori, 2026-10). Har turkum —
   //  kartochka: katta raqam BAJARILDI foizi, chiziqda to'q qismi
   //  chiqib ketgani, chiziqli qismi zavodda turgani, qora belgi —
@@ -190,8 +192,7 @@ async function load() {
         : f + '% <small>bajarildi</small>'}</div>
       ${bar(ch, za, re)}
       <div class="kqator"><span>Reja</span><span>${re ? `<b>${Panel.son(re)}</b> ${u}` : '—'}</span></div>
-      <div class="kqator"><span>Chiqdi</span><span><b>${Panel.son(ch)}</b> ${u}
-        <span class="muted">· ${esc(Panel.pul(r.chiqdi_amount))}</span></span></div>
+      <div class="kqator"><span>Chiqdi</span><span><b>${Panel.son(ch)}</b> ${u}</span></div>
       <div class="kqator"><span>Zavodda</span><span><b>${Panel.son(za)}</b> ${u}</span></div>
       <div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>
     </div>`;
