@@ -1158,15 +1158,22 @@ WITH oy AS (
 ), d AS (
   SELECT on_date FROM kunlar WHERE on_date BETWEEN $1 AND $2
 )
-SELECT d.on_date, fg.som AS fg, wip.som AS wip, xom.som AS xom, kas.som AS kassa, xod.som AS qolda,
+SELECT d.on_date, fg.som AS fg, wip.som AS wip, fg.narxsiz AS fg_narxsiz,
+       wip.narxsiz AS wip_narxsiz, xom.som AS xom, kas.som AS kassa, xod.som AS qolda,
        mij.qarz AS mijoz_qarz, mij.avans AS mijoz_avans,
        tam.qarz AS tamin_qarz, tam.avans AS tamin_avans
   FROM d
   --  TAYYOR MAHSULOT: o'sha kunda omborda TURGANI. Chiqib ketgan
   --  sanasi keyin bo'lsa o'sha kuni hali javonda edi.
+  --  ★ NARX: konverning o'zi, bo'lmasa katalogdagi OPTOM narx
+  --  (zavod qarori, 2026-10) — konverga narx odatda chiqarishda
+  --  yoziladi va omborda turgan mahsulot nol bo'lib qolardi. Ikkalasi
+  --  ham yo'q konverlar SONI (narxsiz) sahifada yoziladi.
   CROSS JOIN LATERAL (
-    SELECT COALESCE(SUM(u.qty * COALESCE(u.unit_price, 0)), 0)::numeric(16,2) AS som
+    SELECT COALESCE(SUM(u.qty * COALESCE(u.unit_price, p.price_opt, 0)), 0)::numeric(16,2) AS som,
+           COUNT(*) FILTER (WHERE COALESCE(u.unit_price, p.price_opt) IS NULL)::int AS narxsiz
       FROM production_units u
+      LEFT JOIN products p ON p.id = u.product_id
      WHERE u.status <> 'cancelled' AND u.fg_on IS NOT NULL
        AND u.fg_on <= d.on_date
        AND (u.ship_on IS NULL OR u.ship_on > d.on_date)) fg
@@ -1175,8 +1182,10 @@ SELECT d.on_date, fg.som AS fg, wip.som AS wip, xom.som AS xom, kas.som AS kassa
   --  mahsulotgacha uchta holatda turadi va o'rtadagisi ham korxonaniki.
   --  O'sha kunda: boshlangan, lekin hali omborga tushmagan.
   CROSS JOIN LATERAL (
-    SELECT COALESCE(SUM(u.qty * COALESCE(u.unit_price, 0)), 0)::numeric(16,2) AS som
+    SELECT COALESCE(SUM(u.qty * COALESCE(u.unit_price, p.price_opt, 0)), 0)::numeric(16,2) AS som,
+           COUNT(*) FILTER (WHERE COALESCE(u.unit_price, p.price_opt) IS NULL)::int AS narxsiz
       FROM production_units u
+      LEFT JOIN products p ON p.id = u.product_id
      WHERE u.status <> 'cancelled' AND u.started_on <= d.on_date
        AND (u.fg_on IS NULL OR u.fg_on > d.on_date)) wip
   --  ★ XOM ASHYO: o'sha kunda omborlarda (zavod va tsex omborlari)
@@ -1255,7 +1264,7 @@ WITH oy AS (
 SELECT d.on_date,
        COALESCE(sc.name, 'Turkumsiz') AS turkum,
        MIN(COALESCE(sc.sort, 999)) AS tartib,
-       SUM(u.qty * COALESCE(u.unit_price, 0))::numeric(16,2) AS som
+       SUM(u.qty * COALESCE(u.unit_price, p.price_opt, 0))::numeric(16,2) AS som
   FROM d
   JOIN production_units u
     ON u.status <> 'cancelled' AND u.started_on <= d.on_date

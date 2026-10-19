@@ -68,9 +68,10 @@
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
   <p class="muted" style="font-size:12px;margin-top:14px">
     <b>Tannarx hali yo'q</b> &mdash; tayyor mahsulot ham, ishlab chiqarishdagi
-    ham konver kartochkasidagi SOTUV narxida sanalgan (soni &times; narx).
-    Ya'ni ikkala raqam ham yuqori chegara: ichida foyda ham turibdi;
-    narxi yozilmagan konver nolga qo'shiladi.<br>
+    ham SOTUV narxida sanalgan (soni &times; narx): konverning o'z narxi,
+    u yozilmagan bo'lsa katalogdagi OPTOM narx. Ya'ni ikkala raqam ham
+    yuqori chegara: ichida foyda ham turibdi. Ikkalasi ham yo'q konver
+    nolga qo'shiladi va katak ostida «N ta narxsiz» deb yoziladi.<br>
     <b>Xom ashyo</b> &mdash; zavod va tsex omborlarida o'sha kuni turgan
     material &times; o'sha kungacha bo'lgan o'rtacha kirim narxi. Narxi
     yozilmagan material hisobga tushmaydi.</p>
@@ -166,7 +167,14 @@ function draw() {
     <tbody>
       ${qator('AKTIVLAR', '', () => '<td></td>', 'grp')}
       ${AKTIV.map(([k, nom, izoh]) => {
-        const asos = qator(nom, izoh, x => `<td class="num">${num(x[k])}</td>`,
+        //  Narxsiz konver nolga qo'shiladi — soni katak ostida turadi,
+        //  aks holda raqam kam chiqqani hech qayerda ko'rinmasdi.
+        const bosh = x => {
+          const n = Number(x[k + '_narxsiz']) || 0;
+          return `<td class="num">${num(x[k])}${n
+            ? `<div class="bad" style="font-size:11px">${n} ta narxsiz</div>` : ''}</td>`;
+        };
+        const asos = qator(nom, izoh, bosh,
           k === 'wip' && tsexlar.length ? 'open' : '');
         if (k !== 'wip' || !ochiq || !tsexlar.length) return asos;
         //  Turkum kesimi faqat ochilganda — bosilmasa qatorning
