@@ -160,7 +160,11 @@ function qator(r) {
             ? `<button title="Buyurtmaga biriktirish"
                  style="padding:4px 9px;font-size:12px"
                  onclick="biriktir(${r.id}, '${esc(r.conveyor_no)}', ${r.qty})"
-                 >+ hujjat</button>`
+                 >+ hujjat</button>
+               <button title="Chiqim adashib yozilgan — mahsulot omborda"
+                 style="padding:4px 9px;font-size:12px"
+                 onclick="omborga(${r.id}, '${esc(r.conveyor_no)}', ${r.qty})"
+                 >↩ omborga</button>`
             : `<span class="muted">hujjat yo'q</span>`)
     : r.booked
       ? (r.bron || []).map((b) => `${esc(b.customer)} — ${b.qty} ta${
@@ -189,20 +193,76 @@ function qator(r) {
 //  va u sonini OLDIN aytadi. Shuning uchun javobda keyingi qadam
 //  yozilib turadi.
 async function biriktir(id, nomer, qty) {
-  const no = prompt(nomer + ' — ' + qty + ' ta zavoddan chiqqan, lekin '
-    + 'mijozi va hujjati yozilmagan.\n\nQaysi zakaz raqamiga biriktirilsin?');
-  if (!no || !no.trim()) return;
-  const sabab = prompt(no.trim() + ' ga biriktirilsin. Sababi:');
+  let rows = [];
+  try { rows = (await App.api('/api/sales/units/' + id + '/attach-candidates')).rows; }
+  catch (e) { /* ro'yxat bo'lmasa ham qo'lda yozish qoladi */ }
+  //  Nomzodlar ro'yxati — shu mahsulotdan yuk xatidagidan KAM chiqqan
+  //  buyurtmalar, chiqqan kuni yaqini tepada. Qo'lda yozish ham qoladi:
+  //  taklif to'liq bo'lmasligi mumkin.
+  const el = document.createElement('div');
+  el.id = 'bxOyna';
+  el.innerHTML = `<div class="overlay" onclick="if(event.target===this)bxYop()">
+    <div class="modal" style="max-width:760px">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <h1 style="margin:0">${esc(nomer)} — buyurtmaga biriktirish</h1>
+        <button onclick="bxYop()">Orqaga</button></div>
+      <p class="muted" style="margin-bottom:14px">${qty} ta zavoddan chiqqan,
+        lekin mijozi va hujjati yozilmagan. Pastda shu mahsulotdan yuk
+        xatidagidan KAM chiqqan buyurtmalar — chiqqan kuni yaqini tepada.</p>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Zakaz</th><th>Mijoz</th><th>Chiqqan</th>
+          <th class="num">Yuk xatida</th><th class="num">Chiqqani</th>
+          <th class="num">Yetishmaydi</th><th></th></tr></thead>
+        <tbody>${rows.length ? rows.map((r) => `<tr>
+          <td><a href="/yukxati.html?id=${r.id}" target="_blank">${esc(r.order_no)}</a></td>
+          <td>${esc(r.customer || '')}</td>
+          <td>${d8(r.shipped_on) || '—'}</td>
+          <td class="num">${r.item_qty}</td>
+          <td class="num">${r.chiqdi}</td>
+          <td class="num"><b class="${r.kam === qty ? '' : 'muted'}">${r.kam}</b></td>
+          <td class="num"><button class="primary"
+            onclick="bxOl(${id}, '${esc(nomer)}', '${esc(r.order_no)}')">Biriktirish</button></td>
+        </tr>`).join('')
+          : `<tr><td colspan="7" class="muted">Shu mahsulotdan kam chiqqan
+              buyurtma topilmadi — zakaz raqamini pastda qo'lda yozing.</td></tr>`}</tbody>
+      </table></div>
+      <div class="row" style="gap:8px;margin-top:16px">
+        <input id="bxNo" placeholder="Zakaz raqami, masalan Z26-0891" style="max-width:260px">
+        <button onclick="bxOl(${id}, '${esc(nomer)}', $('bxNo').value)">Biriktirish</button>
+      </div>
+    </div></div>`;
+  document.body.appendChild(el);
+}
+
+//  Egasiz chiqim umuman bo'lmagan bo'lsa — mahsulot javonda turibdi.
+async function omborga(id, nomer, qty) {
+  const sabab = prompt(nomer + ' — ' + qty + ' ta T/M omborga qaytariladi '
+    + '(chiqim adashib yozilgan, mahsulot javonda).\n\nSababi:');
+  if (!sabab || !sabab.trim()) return;
+  try {
+    await App.api('/api/sales/units/' + id + '/unship',
+      { method: 'POST', body: { note: sabab.trim() } });
+    await qidir();
+  } catch (e) { alert(e.message); }
+}
+
+function bxYop() { $('bxOyna')?.remove(); }
+
+async function bxOl(id, nomer, no) {
+  no = String(no || '').trim();
+  if (!no) return alert('Zakaz raqami yozilmagan');
+  const sabab = prompt(nomer + ' → ' + no + ' ga biriktirilsin. Sababi:');
   if (!sabab || !sabab.trim()) return;
   try {
     const r = await App.api('/api/sales/units/' + id + '/attach', {
       method: 'POST',
-      body: { order_no: no.trim(), note: sabab.trim() },
+      body: { order_no: no, note: sabab.trim() },
     });
+    bxYop();
     alert(nomer + ' → ' + r.order_no + ' · ' + (r.customer || '')
       + '\n' + r.qty + ' ta, ' + r.unit_price + ' $'
       + '\n\nYuk xatining qatori chiqqan donaga to\'g\'ri kelmasa, '
-      + 'buyurtma ekranidagi \u2715 bilan tenglashtiring.');
+      + 'buyurtma ekranidagi ✕ bilan tenglashtiring.');
     await qidir();
   } catch (e) { alert(e.message); }
 }

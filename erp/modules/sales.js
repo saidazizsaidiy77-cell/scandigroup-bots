@@ -1952,6 +1952,49 @@ router.post('/orders/:id/items/:itemId/remove', need('sales.fix'),
 //  29 chiqdi) — uni qatordagi ✕ tenglashtiradi va u SONINI oldin
 //  aytadi. Ikki savol, ikki bosish: bu konver kimniki, va hujjatda
 //  nechta yozilgan.
+//  ★ NOMZOD BUYURTMALAR — «+ hujjat» oynasi o'zi taklif qiladi
+//  (zavod qarori, 2026-10). Egasiz konverning egasini topish uchun
+//  administrator «Kam chiqqan» ro'yxatini ochib, mahsulotni ko'z bilan
+//  izlab, zakaz raqamini qo'lda terardi. Savol esa aniq: shu
+//  mahsulotdan yuk xatidagidan KAM chiqqan, chiqib ketgan buyurtma.
+//  Shart «kam chiqqan» bilan AYNAN bir xil (order_no matni + mahsulot)
+//  va chiqqan kuni konvernikiga yaqini tepada turadi.
+//
+//  Bu TAKLIF, qaror emas: tanlash va sabab yozish odamniki, tekshiruv
+//  esa `/attach` da — ro'yxatni chetlab yuborilgan raqam ham o'sha
+//  yerdan o'tadi.
+router.get('/units/:id/attach-candidates', need('sales.fix'), wrap(async (req, res) => {
+  const u = (await db.query(
+    `SELECT id, product_id, ship_on FROM production_units WHERE id = $1`,
+    [req.params.id])).rows[0];
+  if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
+  const { rows } = await db.query(
+    `WITH soralgan AS (
+       SELECT o.id, o.order_no, o.shipped_on, SUM(i.qty)::int AS qty
+         FROM orders o
+         JOIN order_items i ON i.order_id = o.id
+        WHERE o.status = 'shipped' AND i.product_id = $1
+        GROUP BY o.id, o.order_no, o.shipped_on
+     ), chiqdi AS (
+       SELECT order_no, SUM(qty)::int AS qty
+         FROM production_units
+        WHERE status = 'shipped' AND product_id = $1 AND order_no IS NOT NULL
+        GROUP BY order_no
+     )
+     SELECT s.id, s.order_no, s.shipped_on, c.name AS customer,
+            s.qty AS item_qty, COALESCE(ch.qty, 0) AS chiqdi,
+            s.qty - COALESCE(ch.qty, 0) AS kam
+       FROM soralgan s
+       JOIN orders o     ON o.id = s.id
+       JOIN customers c  ON c.id = o.customer_id
+       LEFT JOIN chiqdi ch ON ch.order_no = s.order_no
+      WHERE COALESCE(ch.qty, 0) < s.qty
+      ORDER BY ABS(COALESCE(s.shipped_on, CURRENT_DATE)
+                   - COALESCE($2::date, CURRENT_DATE)), s.id DESC
+      LIMIT 20`, [u.product_id, u.ship_on]);
+  res.json({ rows });
+}));
+
 router.post('/units/:id/attach', need('sales.fix'), wrap(async (req, res) => {
   const sabab = String(req.body.note || '').trim();
   if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
@@ -2130,6 +2173,51 @@ router.post('/orders/:id/ship-late', need('sales.fix'), wrap(async (req, res) =>
       client);
     await client.query('COMMIT');
     res.json({ ok: true, conveyor_no: u.conveyor_no, qty: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  ★ ADASHIB YOZILGAN EGASIZ CHIQIM OMBORGA QAYTARILADI (zavod
+//  qarori, 2026-10; konver pasportidagi «↩ omborga»). Egasiz chiqqan
+//  konverning ikkinchi javobi ham bor: u UMUMAN chiqmagan — yozuv
+//  xato, mahsulot javonda turibdi. Unda «+ hujjat» yolg'on qarz
+//  yozardi, egasiz qoldirish esa foyda-zararda bo'lmagan savdoni va
+//  qoldiqda yo'q mahsulotni qoldirardi.
+//
+//  Faqat EGASIZ konver: mijozi yoki zakazi bor chiqim kimningdir
+//  imzolagan yuk xati va qarzi — uning yo'li «Mijozdan qaytarish».
+//  Qaytarilgan donasi bor konverga ham tegilmaydi (uning hujjati
+//  bor). Sabab MAJBURIY, audit `fix`.
+router.post('/units/:id/unship', need('sales.fix'), wrap(async (req, res) => {
+  const sabab = String(req.body.note || '').trim();
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const u = (await client.query(
+      `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+    if (u.status !== 'shipped') throw new Error(`${u.conveyor_no}: chiqib ketmagan`);
+    if (u.customer_id || u.order_no)
+      throw new Error(`${u.conveyor_no}: egasi bor (${u.order_no || 'mijozi yozilgan'})`
+        + ' — u «Mijozdan qaytarish» hujjati bilan qaytadi');
+    if (Number(u.returned_qty || 0) > 0)
+      throw new Error(`${u.conveyor_no}: qaytarish hujjati bor`);
+    await client.query(
+      `UPDATE production_units
+          SET status = 'fg', ship_on = NULL, ship_by = NULL
+        WHERE id = $1`, [u.id]);
+    await refreshStock(client, u.product_id);
+    await audit(req, { module: 'sales', action: 'fix', entity: 'unit',
+                       entity_id: u.id,
+                       payload: { conveyor_no: u.conveyor_no, qty: u.qty,
+                                  konver: 'egasiz chiqim omborga qaytarildi',
+                                  ship_on: u.ship_on, note: sabab } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, conveyor_no: u.conveyor_no, qty: u.qty });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
