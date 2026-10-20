@@ -1810,7 +1810,10 @@ async function openPick(itemId){
             <td class="num" style="white-space:nowrap">${u.mine
               ? `<button onclick="unassign(${u.id})">Qaytarish</button>`
               : (cur.order.status === 'shipped'
-                ? `<span class="muted" style="font-size:12px">chiqib ketgan</span>`
+                ? (canFix && u.status === 'fg'
+                  ? `<button class="primary" onclick="kechChiqar(${u.id})"
+                       title="Mahsulot mijozga ketgan, konver omborda qolgan">Chiqarish</button>`
+                  : `<span class="muted" style="font-size:12px">chiqib ketgan</span>`)
                 : `<button class="primary" onclick="assign(${u.id})">Olish</button>`)}</td>
           </tr>`).join('')
             : `<tr><td class="muted" colspan="8">Bo'sh konver yo'q —
@@ -1865,6 +1868,23 @@ async function soravYubor() {
       + `Rahbariyat tasdiqlagach konver shu qatorga biriktiriladi.`);
     load();
   } catch (e) { alert(e.message); }
+}
+
+//  ★ OMBORDA QOLIB KETGAN KONVER (`sales.fix`). Mahsulot mijozga
+//  ketgan, konver esa T/M da turibdi — qarz va dalolatnoma konverdan
+//  hisoblanadi, ya'ni u summa hech qayerga tushmasdi.
+async function kechChiqar(unitId){
+  const n = Number($('q' + unitId).value) || null;
+  const note = prompt(`${n || ''} ta konver buyurtmaning chiqqan kuni bilan `
+    + 'chiqib ketgan deb yoziladi va mijoz qarziga tushadi.\n\nSababi:');
+  if (note == null) return;
+  try{
+    await App.api(`/api/sales/orders/${cur.order.id}/ship-late`, { method: 'POST',
+      body: JSON.stringify({ item_id: pick.item.id, unit_id: unitId, qty: n, note }) });
+    cur = await App.api('/api/sales/orders/' + cur.order.id);
+    await openPick(pick.item.id);
+    load();
+  }catch(e){ alert(e.message); }
 }
 
 async function assign(unitId){
