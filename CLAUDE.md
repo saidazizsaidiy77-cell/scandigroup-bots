@@ -1968,6 +1968,11 @@ yuk xatidagidan oshmaydi** (qator − allaqachon chiqqani, mahsulot
 bo'yicha), bronda turgan dona olinmaydi, vitrina olinmaydi. Huquqi
 `sales.fix`, **sabab MAJBURIY**, audit `fix`.
 
+**Chiqib ketgan buyurtma QULFSIZ HAM YOPIQ**: administrator tuzatib
+«Saqlash» ni bossa `/lock` so'ralmaydi va server ham `ok` qaytaradi —
+bron chiqarishda o'chiriladi, ya'ni qulf sharti u yerda har doim
+«yopilmadi» deb rad etardi, tuzatish esa allaqachon saqlangan edi.
+
 «Kam chiqqan» ro'yxatida mahsulot TURI bilan yoziladi
 (`Orex · Penal`): bitta nom ikki guruhda uchraydi.
 
