@@ -3811,6 +3811,44 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal(takror.status, 400, takror.text);
   assert.match(takror.body.error, /egasi bor/);
 
+  //  ★ OMBORDA QOLIB KETGAN KONVER CHIQIB KETGAN BUYURTMAGA
+  //  CHIQARILADI. Qo'shimcha qator (3 ta stul) — mahsulot mijozga
+  //  ketgan, konver esa T/M da 5 talik bo'lib turibdi.
+  const stOmbor = (await admin('POST', '/api/units/', { items: [
+    { product_id: STU, qty: 5, unit_price: 90, is_opening: true,
+      fg_on: '2026-09-02' }] })).body.created[0];
+  const kech = (b) => `/api/sales/orders/${z.id}/ship-late`;
+  assert.equal((await mudir('POST', kech(), { item_id: qoshimcha.id,
+    unit_id: stOmbor.id, qty: 2, note: 'sinov' })).status, 403);
+  assert.equal((await admin('POST', kech(), { item_id: qoshimcha.id,
+    unit_id: stOmbor.id, qty: 2 })).status, 400, 'sabab majburiy');
+  const ortiq = await admin('POST', kech(), { item_id: qoshimcha.id,
+    unit_id: stOmbor.id, qty: 4, note: 'sinov' });
+  assert.equal(ortiq.status, 400, 'yuk xatidagidan oshmaydi');
+  assert.match(ortiq.body.error, /3 ta qolgan/);
+  const kc = await admin('POST', kech(), { item_id: qoshimcha.id,
+    unit_id: stOmbor.id, qty: 2, note: "mudir bronsiz chiqargan" });
+  assert.equal(kc.status, 200, kc.text);
+  //  Konver bo'lindi: 2 tasi chiqdi — buyurtmaning kuni, qatorning
+  //  narxi bilan; 3 tasi omborda qoldi
+  const bolak = (await dbq.query(
+    `SELECT status, qty, to_char(ship_on,'YYYY-MM-DD') AS on, unit_price,
+            customer_id, order_no
+       FROM production_units WHERE conveyor_no = $1 ORDER BY status`,
+    [stOmbor.conveyor_no])).rows;
+  assert.deepEqual(bolak.map((x) => [x.status, x.qty]), [['fg', 3], ['shipped', 2]]);
+  assert.equal(bolak[1].on, '2026-10-04');
+  assert.equal(Number(bolak[1].unit_price), 100);
+  assert.equal(bolak[1].customer_id, mijoz);
+  assert.equal(bolak[1].order_no, z.order_no);
+  //  Qolgan 1 ta — yana 2 ta so'ralsa rad etiladi
+  assert.equal((await admin('POST', kech(), { item_id: qoshimcha.id,
+    unit_id: stOmbor.id, qty: 2, note: 'sinov' })).status, 400);
+  //  Testning qolgani «chiqmagan qator» ni sinaydi — chiqqanini qaytaramiz
+  await dbq.query(`UPDATE production_units SET status = 'fg', ship_on = NULL,
+     customer_id = NULL, order_no = NULL WHERE conveyor_no = $1`,
+    [stOmbor.conveyor_no]);
+
   //  Chiqmagani esa olib tashlanadi
   assert.equal((await admin('POST',
     `/api/sales/orders/${z.id}/items/${qoshimcha.id}/remove`,

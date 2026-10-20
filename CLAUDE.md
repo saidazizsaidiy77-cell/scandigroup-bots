@@ -1954,6 +1954,23 @@ audit jurnalida yozuv `fix` deb turadi. Pasportdagi bo'sh katak
 o'rnida endi tugma yoki «hujjat yo'q» yozuvi turadi: bo'sh katak bu
 yerda javob emas, savol.
 
+**★ OMBORDA QOLIB KETGAN KONVER HAM CHIQARILADI** (zavod qarori,
+2026-10; `POST /api/sales/orders/:id/ship-late`, konver oynasidagi
+**«Chiqarish»**). Teskari hol: buyurtma «Chiqib ketdi», mahsulot
+mijozda, konver esa tizimda hali T/M omborda — mudir uni bronsiz
+chiqarib yuborgan. Qarz va dalolatnoma konverdan hisoblanadi, ya'ni
+summa hech qayerga tushmasdi («Kam chiqqan» ro'yxati buni ko'rsatadi).
+
+Yozuv `/ship` niki bilan AYNAN bir xil, faqat bitta konverga:
+holat, **buyurtmaning chiqqan kuni**, kim chiqargani, qatorning
+narxi, mijoz, zakaz. Bir qismi olinsa konver bo'linadi. **Soni
+yuk xatidagidan oshmaydi** (qator − allaqachon chiqqani, mahsulot
+bo'yicha), bronda turgan dona olinmaydi, vitrina olinmaydi. Huquqi
+`sales.fix`, **sabab MAJBURIY**, audit `fix`.
+
+«Kam chiqqan» ro'yxatida mahsulot TURI bilan yoziladi
+(`Orex · Penal`): bitta nom ikki guruhda uchraydi.
+
 **Mijoz almashsa konver ham ko'chadi** (`production_units.customer_id`):
 buyurtmada mijozni almashtirib, konverni eskisida qoldirish qarzni IKKI
 odamda yolg'on qilardi — yangisida ko'rinmas, eskisida turib qolardi.

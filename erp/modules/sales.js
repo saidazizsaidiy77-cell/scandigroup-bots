@@ -1701,11 +1701,13 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
         GROUP BY u.order_no, u.product_id
      )
      SELECT s.id, s.order_no, o.customer_name AS customer,
-            o.manager_name AS manager, p.name AS item_product,
+            o.manager_name AS manager,
+            p.name || ' · ' || g.name AS item_product,
             s.qty AS item_qty, COALESCE(c.qty, 0) AS chiqdi
        FROM soralgan s
        JOIN v_sales_orders o ON o.id = s.id
        JOIN products p       ON p.id = s.product_id
+       JOIN product_groups g ON g.id = p.group_id
        LEFT JOIN chiqdi c    ON c.order_no = s.order_no
                             AND c.product_id = s.product_id
       WHERE COALESCE(c.qty, 0) < s.qty
@@ -2019,6 +2021,109 @@ router.post('/units/:id/attach', need('sales.fix'), wrap(async (req, res) => {
     await client.query('COMMIT');
     res.json({ ok: true, order_no: o.order_no, customer: o.customer,
                qty: u.qty, unit_price: narx });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  ★ OMBORDA QOLIB KETGAN KONVER CHIQIB KETGAN BUYURTMAGA
+//  CHIQARILADI (zavod qarori, 2026-10; `sales.fix`). Mahsulot
+//  mijozga ketgan, buyurtma «Chiqib ketdi», konver esa tizimda
+//  hali T/M omborda turibdi: mudir uni bron qilinmagan holda
+//  chiqarib yuborgan. Qarz ham, dalolatnoma ham KONVERDAN
+//  hisoblanadi — ya'ni summa hech qayerga tushmasdi, ombor
+//  qoldig'ida esa yo'q mahsulot turaverardi.
+//
+//  `/ship` ning AYNAN o'sha yozuvi, faqat bitta konverga va
+//  buyurtmaning chiqqan kuni bilan: holat, kun, kim, narx, mijoz,
+//  zakaz. Konverning bir qismi olinsa bo'linadi (`clonePart`).
+//
+//  Soni yuk xatidagidan OSHMAYDI: qatorda 2 ta turib 4 ta chiqarish
+//  hujjatni yana haqiqatdan ajratardi. Bronda turgan dona olinmaydi —
+//  u boshqa mijozga va'da qilingan.
+router.post('/orders/:id/ship-late', need('sales.fix'), wrap(async (req, res) => {
+  const sabab = String(req.body.note || '').trim();
+  if (!sabab) return res.status(400).json({ error: 'Sabab yozilmagan' });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(
+      `SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!o) throw new Error('Buyurtma topilmadi');
+    if (o.status !== 'shipped')
+      throw new Error('Buyurtma hali chiqib ketmagan — konver oddiy '
+        + 'biriktiriladi');
+    const it = (await client.query(
+      `SELECT * FROM order_items WHERE id = $1 AND order_id = $2`,
+      [req.body.item_id, o.id])).rows[0];
+    if (!it) throw new Error('Qator topilmadi');
+
+    const u = (await client.query(
+      `SELECT u.*,
+              COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
+                         WHERE r.unit_id = u.id), 0)::int AS reserved
+         FROM production_units u WHERE u.id = $1 FOR UPDATE OF u`,
+      [req.body.unit_id])).rows[0];
+    if (!u) throw new Error('Konver topilmadi');
+    if (u.product_id !== it.product_id)
+      throw new Error(`${u.conveyor_no}: boshqa mahsulot`);
+    if (u.status !== 'fg')
+      throw new Error(`${u.conveyor_no}: T/M omborda emas`);
+    const tm = (await client.query(
+      `SELECT 1 FROM warehouses w
+        WHERE w.id = COALESCE($1, (SELECT id FROM warehouses WHERE code = 'TM'))
+          AND w.code = 'TM'`, [u.warehouse_id])).rowCount;
+    if (!tm) throw new Error(`${u.conveyor_no}: vitrinadagi mahsulot`);
+
+    //  Shu mahsulotdan allaqachon chiqqani — bog'lanish `order_no`
+    //  matni va mahsulot bo'yicha («kam chiqqan» bilan bir xil qoida).
+    const chiq = (await client.query(
+      `SELECT COALESCE(SUM(qty), 0)::int AS n FROM production_units
+        WHERE status = 'shipped' AND order_no = $1 AND product_id = $2`,
+      [o.order_no, it.product_id])).rows[0].n;
+    const soralgan = (await client.query(
+      `SELECT COALESCE(SUM(qty), 0)::int AS n FROM order_items
+        WHERE order_id = $1 AND product_id = $2`,
+      [o.id, it.product_id])).rows[0].n;
+    const qoldi = soralgan - chiq;
+    if (qoldi <= 0)
+      throw new Error("Yuk xatidagi dona to'liq chiqqan — qo'shimcha "
+        + 'konver chiqarilmaydi');
+
+    const free = u.qty - u.reserved;
+    const n = req.body.qty == null || req.body.qty === ''
+      ? Math.min(free, qoldi) : Number(req.body.qty);
+    if (!Number.isInteger(n) || n <= 0)
+      throw new Error(`${u.conveyor_no}: soni noto'g'ri`);
+    if (n > free)
+      throw new Error(`${u.conveyor_no}: bo'sh ${free} ta, ${n} ta so'ralmoqda`);
+    if (n > qoldi)
+      throw new Error(`Yuk xatida yana ${qoldi} ta qolgan, ${n} ta so'ralmoqda`);
+
+    const id = n < u.qty
+      ? await clonePart(client, req, u, n, { keepPlace: true })
+      : u.id;
+    await client.query(
+      `UPDATE production_units
+          SET status = 'shipped', ship_on = COALESCE($2::date, CURRENT_DATE),
+              ship_by = COALESCE($5::int, $6::int),
+              unit_price = COALESCE($7::numeric, unit_price),
+              customer_id = $3, order_no = $4
+        WHERE id = $1`,
+      [id, o.shipped_on, o.customer_id, o.order_no, o.shipped_by,
+       req.user.id, it.unit_price]);
+    await refreshStock(client, u.product_id);
+
+    await audit(req, { module: 'sales', action: 'fix', entity: 'order',
+                       entity_id: o.id,
+                       payload: { order_no: o.order_no,
+                                  konver: 'ombordan kech chiqarildi',
+                                  conveyor_no: u.conveyor_no, qty: n,
+                                  narx: it.unit_price, note: sabab } },
+      client);
+    await client.query('COMMIT');
+    res.json({ ok: true, conveyor_no: u.conveyor_no, qty: n });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
