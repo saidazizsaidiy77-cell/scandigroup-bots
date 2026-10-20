@@ -3817,6 +3817,9 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   const stOmbor = (await admin('POST', '/api/units/', { items: [
     { product_id: STU, qty: 5, unit_price: 90, is_opening: true,
       fg_on: '2026-09-02' }] })).body.created[0];
+  //  Chiqib ketgan buyurtmani tuzatgandan keyingi «Saqlash» qulf
+  //  so'raydi — bron yo'q, lekin u xato emas: hujjat allaqachon yopiq
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/lock`)).status, 200);
   const kech = (b) => `/api/sales/orders/${z.id}/ship-late`;
   assert.equal((await mudir('POST', kech(), { item_id: qoshimcha.id,
     unit_id: stOmbor.id, qty: 2, note: 'sinov' })).status, 403);

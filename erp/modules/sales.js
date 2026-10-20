@@ -1756,6 +1756,12 @@ router.post('/orders/:id/lock', need(...WRITE), wrap(async (req, res) => {
   if (o.status === 'cancelled')
     return res.status(400).json({ error: 'Buyurtma bekor qilingan' });
   if (o.locked_at) return res.json({ ok: true, locked_at: o.locked_at });
+  //  ★ CHIQIB KETGAN BUYURTMA QULFSIZ HAM YOPIQ: qatorlari mijoz
+  //  imzolagan yuk xati va ularni faqat `fixShipped` tuzatadi. Bron esa
+  //  chiqarishda o'chiriladi, ya'ni pastdagi shart u yerda HAR DOIM
+  //  yolg'on chiqib, administratorning tuzatishidan keyin «yopilmadi»
+  //  degan xato berardi — holbuki tuzatish allaqachon saqlangan.
+  if (o.status === 'shipped') return res.json({ ok: true });
 
   const bor = (await db.query(
     `SELECT EXISTS (SELECT 1 FROM unit_reservations r

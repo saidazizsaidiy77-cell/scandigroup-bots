@@ -1683,6 +1683,9 @@ async function saqla({ qulfla }) {
 //  «o'zgarishlarim yozilsin» deb bosardi va hujjat yopilib qolgani
 //  uni hayron qoldirardi.
 async function save(){
+  //  Chiqib ketgan buyurtma (administratorning tuzatishi) qulfsiz ham
+  //  yopiq — «YOPILADI» degan ogohlantirish u yerda yolg'on bo'lardi.
+  if (cur.order.status === 'shipped') { await saqla({ qulfla: false }); return; }
   if (!cur.order.id || !cur.order.locked_at) {
     if (!confirm('Buyurtma saqlanadi va YOPILADI.\n\n'
       + 'Shundan keyin mahsulot, rangi, matosi, soni va narxi '
