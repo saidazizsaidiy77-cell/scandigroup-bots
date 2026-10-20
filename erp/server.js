@@ -79,6 +79,7 @@ app.use('/api/sales', require('./modules/sales'));
 app.use('/api/returns', require('./modules/returns'));
 app.use('/api/cash', require('./modules/cash'));
 app.use('/api/materials', require('./modules/materials'));
+app.use('/api/cost', require('./modules/cost'));
 // Menyudagi navbat belgisi: har bo'limda nechta ish kutayotgani.
 // Huquq tekshiruvi modul ichida — har navbat o'z egasiga ko'rinadi.
 app.use('/api/navbat', require('./modules/nav'));

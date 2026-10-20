@@ -363,6 +363,14 @@ const App = (() => {
       title: 'Pul oqimi', lead: 'Kirim va chiqim',
       text: "Mijozlardan kelgan va ta'minot bilan harajatga ketgan pul \u00b7 to'lov sanasi bo'yicha \u00b7 hozirgi qoldiq",
       perm: ['cash.view', 'cash.manage'] },
+    //  ★ TANNARX (zavod qarori, 2026-10) — alohida modul emas,
+    //  hisobot: u xom ashyo sarfidan o'qiydi, o'zi hech narsa yozmaydi.
+    { href: '/tannarx.html', mod: 'reports', nav: 'Tannarx',
+      group: 'Moliyaviy hisobotlar',
+      title: 'Tannarx', lead: 'Konver bo\'yicha',
+      text: "Har konver ketma-ket \u00b7 bir donaga xom ashyo \u00b7 oldingi konverga nisbatan farq",
+      perm: ['cash.view', 'cash.manage', 'production.manage',
+             'materials.manage', 'purchasing.view'] },
     //  SOF AYLANMA KAPITAL — «qo'limizda nima qoldi». Foyda-zarar
     //  «qancha ishladik» degan savolga javob beradi va ikkalasi
     //  bir-birini almashtirmaydi: foyda bo'lishi, lekin puli

@@ -5398,12 +5398,33 @@ bo'limda o'z materialini yozadi, Zborkanikini ikkinchi marta emas
 kirim narxi (`v_material_stock`) — oxirgi kirimniki butun qoldiqning
 bahosini o'zgartirib yuborardi.
 
-**Hali hal bo'lmagani — BRAK.** 12 tadan 1 tasi brak bo'lsa material
-baribir 12 taga ketgan. Donaga tannarx CHIQQAN donaga bo'linsa raqam
-to'g'ri (brak ham pul yegan), SARFLANGAN donaga bo'linsa tannarx
-pasayib ko'rinadi va brak hech qayerda ko'rinmaydi. Ikkisining farqi
-zavodning qarori: brak tannarxga kiradimi yoki alohida zarar bo'ladimi.
-Javob kelmaguncha formula yozilmaydi.
+**✅ BRAK TANNARXGA KIRADI** (zavod qarori, 2026-10): material
+CHIQQAN (bekor qilinmagan) donaga bo'linadi — brakning puli
+qolganlarning ustiga tushadi.
+
+**★ TANNARX HISOBOTI — HISOBOTLAR ICHIDA, ALOHIDA MODUL EMAS**
+(zavod qarori, 2026-10; `modules/cost.js`, `GET /api/cost`,
+`/tannarx.html`). Tannarx o'zi ma'lumot yaratmaydi — sarfdan, keyin ish
+haqi va kassadagi harajatdan O'QIYDI. Uch bosqich:
+
+    1  material       YOZILDI — sarf × manba omborning o'rtacha narxi
+    2  ish haqi       ishbay yozilguncha tsex oyligi taqsimlanadi
+    3  kommunal       «oyni yopish»: shu oyda omborga kirgan konverlarga,
+                      TANNARXIGA proporsional (zavod qarori), raqam qotadi
+
+Har konver BITTA qator, omborga kirgan kuni (`MIN(fg_on)`) bo'yicha
+ketma-ket: soni (pasportdagi «Jami yasalgan» bilan bir xil qoida),
+jami material, bir donaga va **oldingi konverga nisbatan farq** — shu
+mahsulotning sarfi bor oldingi konveri, $ va %. Sarfsiz konver
+solishtirishga olinmaydi (nol bilan solishtirish yolg'on «+100%»
+berardi), o'zi esa qizil «sarf yozilmagan» bo'lib turadi. Qator
+bosilsa material bo'yicha, BIR DONAGA, oldingisi bilan yonma-yon —
+«nega oshdi» degan savolning javobi. Boshlang'ich qoldiq (`is_opening`)
+va marshrutsiz mahsulot (matras) ro'yxatga tushmaydi.
+
+Huquqi: `cash.view`/`manage`, `production.manage`, `materials.manage`,
+`purchasing.view` — tsex boshlig'iga ochilmaydi. Oy yopilmaguncha
+o'rtacha narx yangi kirim bilan siljiydi; qotishi 3-bosqichning ishi.
 
 **★ BITTA MATERIALDA BIR NECHTA TA'MINOTCHI** (`material_suppliers`,
 zavod qarori 2026-09). Zavod ro'yxati buni o'zi ko'rsatdi: bitta MDF

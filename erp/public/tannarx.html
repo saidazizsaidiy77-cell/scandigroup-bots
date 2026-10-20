@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tannarx · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<style>
+/*  Farq — qatorning javobi: oshgani qizil, kamaygani yashil. */
+.up{color:var(--bad);font-weight:600}
+.down{color:var(--ok);font-weight:600}
+tr.k-row{cursor:pointer}
+tr.k-det>td{background:var(--surface-2)}
+</style>
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Tannarx</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div id="printHead" class="print-only print-head"></div>
+
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div><label>Omborga kirgan — dan</label><input id="fFrom" type="date" onchange="load()"></div>
+    <div><label>gacha</label><input id="fTo" type="date" onchange="load()"></div>
+    <button onclick="davr('oy')">Shu oy</button>
+    <button onclick="davr('otgan')">O'tgan oy</button>
+    <div><label>Qidiruv</label><input id="fQ" placeholder="mahsulot, turi, raqam"
+      oninput="chiz()"></div>
+    <label class="row" style="gap:6px;margin:0 0 8px"><input type="checkbox" id="fYol"
+      style="width:auto" onchange="load()"> Ishlab chiqarishdagilar ham</label>
+    <button onclick="chop()">Chop etish</button>
+    <button onclick="exportCsv()">Excelga yuklash</button>
+  </div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Konverlar</h2><div class="kpi" id="kN">—</div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kNi"></p></div>
+  <div class="card"><h2>Xom ashyo</h2><div class="kpi" id="kS">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Konverlarga sarflangan</p></div>
+  <div class="card"><h2>Sarf yozilmagan</h2><div class="kpi" id="kY">—</div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Material biriktirilmagan konver</p></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    Hozircha faqat <b>xom ashyo</b>: ish haqi va kommunal keyingi bosqichda
+    qo'shiladi. Bir donaga = konverning jami materiali ÷ chiqqan dona
+    (brak ham kiradi). Narx — material olingan omborning o'rtacha kirim
+    narxi. «Oldingi» — shu mahsulotning sarfi bor oldingi konveri.
+    <span class="no-print">Qator bosilsa material bo'yicha farq chiqadi.</span></p>
+</div>
+
+<script>
+// ============================================================================
+//  TANNARX — har konver bitta qator, omborga kirgan kuni bo'yicha
+//  ketma-ket. Hisob SERVERDA (`/api/cost`): bo'laklarni raqam bo'yicha
+//  yig'ish va oldingi konverni topish sahifada qilinsa, ro'yxat
+//  oraliq bilan kesilganda oldingisi «yo'q» bo'lib qolardi.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const usd = v => (Number(v) || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const n3 = v => (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+const d8 = v => !v ? '' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)}`)(String(v).slice(0,10));
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+let rows = [], ochiq = null, det = null;
+
+function davr(k) {
+  const t = new Date();
+  const y = t.getFullYear(), m = t.getMonth() + (k === 'otgan' ? -1 : 0);
+  $('fFrom').value = iso(new Date(y, m, 1));
+  $('fTo').value   = iso(new Date(y, m + 1, 0));
+  load();
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  if ($('fFrom').value) q.set('from', $('fFrom').value);
+  if ($('fTo').value) q.set('to', $('fTo').value);
+  if ($('fYol').checked) q.set('yolda', '1');
+  try { rows = (await App.api('/api/cost?' + q)).rows; }
+  catch (e) { $('body').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  ochiq = null; det = null;
+  chiz();
+}
+
+function korinadi() {
+  const s = $('fQ').value.trim().toLowerCase();
+  return !s ? rows : rows.filter((r) =>
+    [r.conveyor_no, r.product, r.product_type].some((v) => String(v || '').toLowerCase().includes(s)));
+}
+
+//  Farq — oldingi konverning BIR DONASIGA nisbatan, $ va %.
+function farq(r) {
+  if (r.dona == null || r.prev_dona == null) return '<span class="muted">—</span>';
+  const f = Number(r.dona) - Number(r.prev_dona);
+  const pr = Number(r.prev_dona) ? f / Number(r.prev_dona) * 100 : 0;
+  if (Math.abs(f) < 0.005) return '<span class="muted">teng</span>';
+  return `<span class="${f > 0 ? 'up' : 'down'}">${f > 0 ? '▲ +' : '▼ '}${usd(f)} $</span>
+    <span class="muted">(${pr > 0 ? '+' : ''}${pr.toFixed(1)}%)</span>`;
+}
+
+function chiz() {
+  const v = korinadi();
+  const sarfsiz = v.filter((r) => r.summa == null).length;
+  $('kN').textContent = v.length;
+  $('kNi').textContent = `${v.filter((r) => r.yolda).length} tasi hali ishlab chiqarishda`;
+  $('kS').innerHTML = `${usd(v.reduce((s, r) => s + Number(r.summa || 0), 0))}<small> $</small>`;
+  $('kY').innerHTML = sarfsiz ? `<span class="late">${sarfsiz}</span>` : '0';
+  if (!v.length) { $('body').innerHTML = `<p class="muted">Bu oraliqda omborga kirgan konver yo'q.</p>`; return; }
+  $('body').innerHTML = `<div class="tbox"><table>
+    <thead><tr><th>Kirgan</th><th>Konver</th><th>Mahsulot</th><th class="num">Soni</th>
+      <th class="num">Xom ashyo, $</th><th class="num">Bir donaga, $</th>
+      <th>Oldingi</th><th class="num">Oldingisi donaga, $</th><th>Farq</th></tr></thead>
+    <tbody>${v.map((r) => `
+      <tr class="k-row" onclick="och('${esc(r.conveyor_no)}')">
+        <td>${d8(r.kirgan) || '<span class="tag warn">yo\'lda</span>'}</td>
+        <td><a href="/konver.html?no=${encodeURIComponent(r.conveyor_no)}" target="_blank"
+          onclick="event.stopPropagation()">${esc(r.conveyor_no)}</a></td>
+        <td>${esc(r.product)} <span class="muted">· ${esc(r.product_type || '')}</span></td>
+        <td class="num">${r.soni} <span class="muted">${esc(r.uom || '')}</span></td>
+        <td class="num">${r.summa == null ? '<span class="late">sarf yozilmagan</span>' : usd(r.summa)}${
+          r.narxsiz ? ` <span class="late" title="${r.narxsiz} ta qatorda narx yo'q">*</span>` : ''}</td>
+        <td class="num"><b>${r.dona == null ? '—' : usd(r.dona)}</b></td>
+        <td>${r.prev_no ? esc(r.prev_no) : '<span class="muted">birinchi</span>'}</td>
+        <td class="num">${r.prev_dona == null ? '—' : usd(r.prev_dona)}</td>
+        <td>${farq(r)}</td></tr>
+      ${ochiq === r.conveyor_no ? `<tr class="k-det"><td colspan="9">${detal()}</td></tr>` : ''}`).join('')}
+    </tbody></table></div>`;
+}
+
+async function och(no) {
+  if (ochiq === no) { ochiq = null; chiz(); return; }
+  ochiq = no; det = null; chiz();
+  try { det = await App.api('/api/cost/' + encodeURIComponent(no)); }
+  catch (e) { det = { error: e.message }; }
+  if (ochiq === no) chiz();
+}
+
+//  Material bo'yicha, BIR DONAGA: shu konver va oldingisi yonma-yon —
+//  «nega oshdi» degan savol shu yerda javob topadi.
+function detal() {
+  if (!det) return '<span class="muted">Yuklanmoqda…</span>';
+  if (det.error) return esc(det.error);
+  if (!det.rows.length) return '<span class="muted">Material biriktirilmagan.</span>';
+  const p = det.prev_no;
+  return `<table style="background:transparent">
+    <thead><tr><th>Material</th><th class="num">Donaga soni</th><th class="num">Donaga, $</th>
+      ${p ? `<th class="num">${esc(p)}: soni</th><th class="num">${esc(p)}: $</th><th>Farq</th>` : ''}</tr></thead>
+    <tbody>${det.rows.map((m) => {
+      const f = m.summa != null && m.prev_summa != null ? m.summa - m.prev_summa
+              : m.summa != null ? m.summa : m.prev_summa != null ? -m.prev_summa : 0;
+      return `<tr><td>${esc(m.material)}${m.code ? ` <span class="muted">${esc(m.code)}</span>` : ''}</td>
+        <td class="num">${m.qty == null ? '—' : n3(m.qty)} <span class="muted">${esc(m.uom || '')}</span></td>
+        <td class="num">${m.summa == null ? '—' : usd(m.summa)}${m.narxsiz ? ' <span class="late">narxsiz</span>' : ''}</td>
+        ${p ? `<td class="num">${m.prev_qty == null ? '—' : n3(m.prev_qty)}</td>
+          <td class="num">${m.prev_summa == null ? '—' : usd(m.prev_summa)}</td>
+          <td>${Math.abs(f) < 0.005 ? '<span class="muted">—</span>'
+            : `<span class="${f > 0 ? 'up' : 'down'}">${f > 0 ? '+' : ''}${usd(f)} $</span>`}</td>` : ''}</tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+//  Varaq o'zi aytsin: qaysi oraliq, qaysi qidiruv, kim va qachon.
+function chop() {
+  const now = new Date();
+  const ikki = (n) => String(n).padStart(2, '0');
+  const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
+  const q = $('fQ').value.trim();
+  $('printHead').innerHTML = `
+    <h1>Tannarx (xom ashyo) · konver bo'yicha</h1>
+    <div class="meta">Omborga kirgan: ${d8($('fFrom').value) || 'boshidan'} — ${
+      d8($('fTo').value) || 'bugungacha'}${q ? ` · qidiruv: ${esc(q)}` : ''}${
+      $('fYol').checked ? ' · ishlab chiqarishdagilar bilan' : ''}</div>
+    <div class="meta">${korinadi().length} ta konver · chop etildi ${ikki(now.getDate())}.${
+      ikki(now.getMonth() + 1)}.${now.getFullYear()} ${ikki(now.getHours())}:${ikki(now.getMinutes())}${xodim}</div>`;
+  window.print();
+}
+
+function exportCsv() {
+  const qat = [['Kirgan', 'Konver', 'Mahsulot', 'Turi', 'Soni', 'Xom ashyo $',
+                'Bir donaga $', 'Oldingi konver', 'Oldingisi donaga $', 'Farq $']];
+  for (const r of korinadi()) qat.push([d8(r.kirgan), r.conveyor_no, r.product,
+    r.product_type || '', r.soni, r.summa ?? '', r.dona ?? '', r.prev_no || '',
+    r.prev_dona ?? '', r.dona != null && r.prev_dona != null
+      ? (Number(r.dona) - Number(r.prev_dona)).toFixed(2) : '']);
+  const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)
+    .join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `tannarx-${$('fFrom').value || 'boshidan'}_${$('fTo').value || 'bugun'}.csv`;
+  a.click();
+}
+
+App.start(() => davr('oy'), 'cash.view', 'cash.manage', 'production.manage',
+          'materials.manage', 'purchasing.view');
+</script>
+</body>
+</html>
