@@ -3792,6 +3792,32 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
     { order_no: 'Z26-9999', note: 'sinov' })).status, 400);
 
+  //  ★ Egasiz chiqim adashib yozilgan bo'lsa omborga qaytariladi
+  assert.equal((await mudir('POST', `/api/sales/units/${tayyor.id}/unship`,
+    { note: 'sinov' })).status, 403);
+  assert.equal((await admin('POST', `/api/sales/units/${tayyor.id}/unship`,
+    {})).status, 400, 'sabab majburiy');
+  const qayt0 = await admin('POST', `/api/sales/units/${tayyor.id}/unship`,
+    { note: 'chiqim xato yozilgan' });
+  assert.equal(qayt0.status, 200, qayt0.text);
+  const hol = await H.id(`SELECT status, ship_on FROM production_units WHERE id = $1`,
+    [tayyor.id]);
+  assert.equal(hol.status, 'fg');
+  assert.equal(hol.ship_on, null);
+  //  Testning qolgani egasiz chiqimni sinaydi — holatini qaytaramiz
+  await dbq.query(`UPDATE production_units SET status = 'shipped',
+     ship_on = '2026-10-04' WHERE id = $1`, [tayyor.id]);
+
+  //  ★ «+ hujjat» oynasi nomzodni o'zi taklif qiladi: shu mahsulotdan
+  //  yuk xatidagidan kam chiqqan, chiqib ketgan buyurtma
+  assert.equal((await mudir('GET',
+    `/api/sales/units/${tayyor.id}/attach-candidates`)).status, 403);
+  const nomzod = (await admin('GET',
+    `/api/sales/units/${tayyor.id}/attach-candidates`)).body.rows;
+  const bu = nomzod.find((r) => r.order_no === z.order_no);
+  assert.ok(bu, 'egasiz qolgan buyurtma nomzodlar ichida');
+  assert.equal(bu.kam, bu.item_qty - bu.chiqdi);
+  assert.ok(bu.kam > 0);
   const bir = await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
     { order_no: z.order_no, note: 'qog\'ozda bor, tizimda yo\'q edi' });
   assert.equal(bir.status, 200, bir.text);

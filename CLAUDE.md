@@ -1976,6 +1976,19 @@ bron chiqarishda o'chiriladi, ya'ni qulf sharti u yerda har doim
 «Kam chiqqan» ro'yxatida mahsulot TURI bilan yoziladi
 (`Orex · Penal`): bitta nom ikki guruhda uchraydi.
 
+**Nomzodlar oynaning O'ZIDA** (`GET /api/sales/units/:id/attach-candidates`):
+«+ hujjat» bosilsa shu mahsulotdan yuk xatidagidan KAM chiqqan,
+chiqib ketgan buyurtmalar chiqadi («kam chiqqan» bilan bir xil shart),
+chiqqan kuni konvernikiga yaqini tepada. Bu TAKLIF — tanlash va sabab
+odamniki, tekshiruv `/attach` da; qo'lda raqam yozish ham qoladi.
+
+**★ EGASIZ CHIQIM UMUMAN BO'LMAGAN BO'LSA — OMBORGA**
+(`POST /api/sales/units/:id/unship`, pasportdagi **«↩ omborga»**).
+Ikkinchi javob ham bor: yozuv xato, mahsulot javonda. Konver `fg`
+ga qaytadi, `ship_on`/`ship_by` tozalanadi. Faqat EGASIZ va
+qaytarishsiz konver: egasi bori kimningdir yuk xati va qarzi — uning
+yo'li «Mijozdan qaytarish». `sales.fix`, sabab MAJBURIY, audit `fix`.
+
 **Mijoz almashsa konver ham ko'chadi** (`production_units.customer_id`):
 buyurtmada mijozni almashtirib, konverni eskisida qoldirish qarzni IKKI
 odamda yolg'on qilardi — yangisida ko'rinmas, eskisida turib qolardi.
