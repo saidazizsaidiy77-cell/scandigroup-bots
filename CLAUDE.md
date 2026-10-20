@@ -2171,6 +2171,12 @@ Huquqi: yozish — `sales.manage` (savdo doirasi CHEGARA: `channelsOf`,
 Ombor mudiriga Telegram xabari (`cust_return`) va menyuda navbat
 (`nav.js`, 6b).
 
+**Menyuda SAVDO bo'limida** (zavod qarori, 2026-10): savdo huquqi bor
+xodimda sahifa Ombor bo'limida takrorlanmaydi (`modYoq`,
+`public/app.js`) va navbat belgisi ham Savdoga tushadi. Ombor
+mudirida savdo yo'q — unga Ombor bo'limida qoladi, aks holda qabul
+qiladigan joyi yo'qolardi.
+
 ---
 
 ## Kassa
@@ -5304,6 +5310,19 @@ Bekor qilish boshlang'ich qoldiq bilan BITTA yo'ldan
 yo'l yozilsa bir kun biri ikkinchisidan ajralib ketardi. Huquqi
 **`materials.manage`** — javonni sanaydigan odam; ombor doirasi bu
 yerda ham CHEGARA.
+
+**★ SARFNI TEKSHIRISH — KONVER PASPORTIDA** (zavod qarori, 2026-10;
+`GET /api/materials/conveyor?no=`, `/konver.html` dagi **«Xom ashyo
+sarfi»**). ▣ oynasi bitta BO'LAKNI ko'rsatadi, konver esa bo'linadi
+va sarf qaysi bo'lakda turgani tasodif — ya'ni sarfni tekshiradigan
+joy yo'q edi. Ro'yxat RAQAMNING hamma qatori bo'yicha (tannarx
+qoidasi bilan bir xil): sana, material, soni, sarf paytidagi dona,
+ombor · bo'lim, kim; bekor qilingani o'chirilgan holida. Ostida
+material bo'yicha jami. **Narx faqat narx huquqida** (`materials.*`,
+`purchasing.*`, `production.manage`, `cash.view`) — manba omborning
+o'rtacha kirim narxi; savdo va ombor uchun pasportda pul yo'q.
+**«Chop etish»** qog'ozga faqat shu kartochkani chiqaradi, sarlavhada
+konver, mahsulot, kun-soat va chop etgan xodim.
 
 Huquqi **`materials.request`** — nomi shuni aytadi: «talabnoma yozish
 va SARFNI yozish». Tsex boshlig'ida u allaqachon bor; huquqi yo'q
