@@ -5422,6 +5422,10 @@ bosilsa material bo'yicha, BIR DONAGA, oldingisi bilan yonma-yon —
 «nega oshdi» degan savolning javobi. Boshlang'ich qoldiq (`is_opening`)
 va marshrutsiz mahsulot (matras) ro'yxatga tushmaydi.
 
+**Mahsulot turi filtri** (penal, stul…) va qidiruv KLIENTDA: ro'yxatda
+LIMIT yo'q, ya'ni hammasi sahifada turadi. Turlar yuklangan qatorlardan
+yig'iladi; tanlangani chop etilgan varaqda ham yoziladi.
+
 Huquqi: `cash.view`/`manage`, `production.manage`, `materials.manage`,
 `purchasing.view` — tsex boshlig'iga ochilmaydi. Oy yopilmaguncha
 o'rtacha narx yangi kirim bilan siljiydi; qotishi 3-bosqichning ishi.

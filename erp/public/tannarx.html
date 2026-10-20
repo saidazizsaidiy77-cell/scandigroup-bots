@@ -31,6 +31,8 @@ tr.k-det>td{background:var(--surface-2)}
     <div><label>gacha</label><input id="fTo" type="date" onchange="load()"></div>
     <button onclick="davr('oy')">Shu oy</button>
     <button onclick="davr('otgan')">O'tgan oy</button>
+    <div><label>Mahsulot turi</label><select id="fTur" onchange="chiz()">
+      <option value="">Hammasi</option></select></div>
     <div><label>Qidiruv</label><input id="fQ" placeholder="mahsulot, turi, raqam"
       oninput="chiz()"></div>
     <label class="row" style="gap:6px;margin:0 0 8px"><input type="checkbox" id="fYol"
@@ -92,13 +94,25 @@ async function load() {
   try { rows = (await App.api('/api/cost?' + q)).rows; }
   catch (e) { $('body').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   ochiq = null; det = null;
+  turlar();
   chiz();
 }
 
+//  Turlar ro'yxati YUKLANGAN qatorlardan: oraliqda bo'lmagan tur
+//  tanlansa jadval bo'sh chiqardi. Tanlangani yo'qolsa ham saqlanadi.
+function turlar() {
+  const el = $('fTur'), v = el.value;
+  const t = [...new Set(rows.map((r) => r.product_type).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  if (v && !t.includes(v)) t.push(v);
+  el.innerHTML = '<option value="">Hammasi</option>'
+    + t.map((x) => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
+}
+
 function korinadi() {
-  const s = $('fQ').value.trim().toLowerCase();
-  return !s ? rows : rows.filter((r) =>
-    [r.conveyor_no, r.product, r.product_type].some((v) => String(v || '').toLowerCase().includes(s)));
+  const s = $('fQ').value.trim().toLowerCase(), tur = $('fTur').value;
+  return rows.filter((r) => (!tur || r.product_type === tur) && (!s ||
+    [r.conveyor_no, r.product, r.product_type].some((v) => String(v || '').toLowerCase().includes(s))));
 }
 
 //  Farq — oldingi konverning BIR DONASIGA nisbatan, $ va %.
@@ -176,11 +190,11 @@ function chop() {
   const now = new Date();
   const ikki = (n) => String(n).padStart(2, '0');
   const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
-  const q = $('fQ').value.trim();
+  const q = $('fQ').value.trim(), tur = $('fTur').value;
   $('printHead').innerHTML = `
     <h1>Tannarx (xom ashyo) · konver bo'yicha</h1>
     <div class="meta">Omborga kirgan: ${d8($('fFrom').value) || 'boshidan'} — ${
-      d8($('fTo').value) || 'bugungacha'}${q ? ` · qidiruv: ${esc(q)}` : ''}${
+      d8($('fTo').value) || 'bugungacha'}${tur ? ` \u00b7 turi: ${esc(tur)}` : ''}${q ? ` · qidiruv: ${esc(q)}` : ''}${
       $('fYol').checked ? ' · ishlab chiqarishdagilar bilan' : ''}</div>
     <div class="meta">${korinadi().length} ta konver · chop etildi ${ikki(now.getDate())}.${
       ikki(now.getMonth() + 1)}.${now.getFullYear()} ${ikki(now.getHours())}:${ikki(now.getMinutes())}${xodim}</div>`;
