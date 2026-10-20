@@ -25,6 +25,11 @@
 /*  Joy — javobning O'ZI, shuning uchun qalin. Yonidagi mayda yozuv
     uni to'ldiradi (sana, zakaz), almashtirmaydi. */
 .k-joy{font-weight:600}
+/*  Sarfni chop etish: qog'ozga FAQAT sarf kartochkasi chiqadi —
+    qidiruv va joylar jadvali u varaqning savoli emas. */
+@media print{
+  body.sarfp #qCard, body.sarfp #body>.card:not(#sarfCard){display:none!important}
+}
 </style>
 <script src="/app.js"></script>
 </head>
@@ -36,7 +41,7 @@
 </div>
 <div id="erpNav"></div>
 
-<div class="card" style="margin-bottom:16px">
+<div class="card" id="qCard" style="margin-bottom:16px">
   <!--  BITTA katak: savol ham bitta — «shu raqam qayerda». Filtr
         ro'yxati qo'shilmadi, u boshqa savolga javob beradi va u
         jurnalda allaqachon bor. -->
@@ -137,7 +142,100 @@ function chiz(d) {
         <thead><tr><th>Joy</th><th class="num">Soni</th>
           <th>Hujjat</th><th>Sana</th></tr></thead>
         <tbody>${d.rows.map(qator).join('')}</tbody></table></div>
-    </div>`;
+    </div>
+    <div class="card" id="sarfCard" style="margin-top:16px"></div>`;
+  sarf(d);
+}
+
+// ============================================================================
+//  ★ XOM ASHYO SARFI (zavod qarori, 2026-10). Sarf ▣ oynasidan yoziladi,
+//  lekin uni TEKSHIRADIGAN joy yo'q edi: oyna bitta BO'LAKNI ko'rsatadi,
+//  konver esa bo'linadi. Ro'yxat RAQAMNING hamma qatori bo'yicha
+//  (`GET /api/materials/conveyor`) va pastda material bo'yicha jami.
+//  Narx faqat server bergan holda (narx huquqi) — pasportning o'zida pul yo'q.
+const n3 = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+const n2 = (v) => Number(v || 0).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let SARF = null;
+async function sarf(d) {
+  const el = $('sarfCard');
+  if (!App.can('materials.view', 'materials.manage', 'materials.request',
+               'production.manage', 'production.view', 'production.entry')) {
+    el.remove(); return;
+  }
+  el.innerHTML = `<p class="muted">Xom ashyo yuklanmoqda…</p>`;
+  try { SARF = await App.api('/api/materials/conveyor?no=' + encodeURIComponent(d.conveyor_no)); }
+  catch (e) { el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  SARF.product = `${d.product}${d.product_type ? ' · ' + d.product_type : ''}`;
+  SARF.total = d.total; SARF.uom = d.uom || 'dona';
+  const narx = SARF.narx;
+  const ok = SARF.rows.filter((r) => r.status === 'ok');
+  //  Material bo'yicha jami — tekshiruvning savoli «nima, qancha ketdi».
+  const jam = new Map();
+  for (const r of ok) {
+    const j = jam.get(r.material_id) || { material: r.material, code: r.code,
+      uom: r.uom, qty: 0, sum: 0, narxsiz: false };
+    j.qty += Number(r.qty);
+    if (r.price == null) j.narxsiz = true; else j.sum += Number(r.qty) * Number(r.price);
+    jam.set(r.material_id, j);
+  }
+  const jami = [...jam.values()].reduce((s, j) => s + j.sum, 0);
+  const sum = (r) => r.price == null ? '<span class="muted">—</span>'
+                                     : n2(Number(r.qty) * Number(r.price));
+  el.innerHTML = `
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;
+      margin-bottom:10px">
+      <h2 style="margin:0">Xom ashyo sarfi</h2>
+      ${SARF.rows.length ? `<button class="no-print" onclick="sarfChop()">Chop etish</button>` : ''}
+    </div>
+    <div id="sarfHead" class="print-only print-head"></div>
+    ${!SARF.rows.length
+      ? `<p class="muted" style="font-size:13px">Bu konverga hali xom ashyo
+           biriktirilmagan. Sarf tsex ekranidagi ▣ tugmasidan yoziladi.</p>`
+      : `<div class="tbox"><table>
+        <thead><tr><th>Sana</th><th>Material</th><th class="num">Soni</th>
+          <th class="num">Donaga</th><th>Ombor · bo'lim</th><th>Kim</th>
+          ${narx ? '<th class="num">Narx, $</th><th class="num">Summa, $</th>' : ''}</tr></thead>
+        <tbody>${SARF.rows.map((r) => `<tr${r.status !== 'ok'
+            ? ' style="opacity:.5;text-decoration:line-through" title="bekor qilingan"' : ''}>
+          <td>${d8(r.moved_on)}</td>
+          <td>${esc(r.material)}${r.code ? ` <span class="muted">${esc(r.code)}</span>` : ''}</td>
+          <td class="num">${n3(r.qty)} <span class="muted">${esc(r.uom || '')}</span></td>
+          <td class="num">${r.unit_qty ?? '<span class="muted">—</span>'}</td>
+          <td>${esc(r.warehouse || '')}${r.section ? ` <span class="muted">· ${esc(r.section)}</span>` : ''}</td>
+          <td>${esc(r.worker || '')}</td>
+          ${narx ? `<td class="num">${r.price == null ? '<span class="muted">—</span>' : n2(r.price)}</td>
+                    <td class="num">${sum(r)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+      <h3 style="margin:14px 0 8px;font-size:14px">Material bo'yicha jami</h3>
+      <div class="tbox"><table>
+        <thead><tr><th>Material</th><th class="num">Soni</th>
+          ${narx ? '<th class="num">Summa, $</th>' : ''}</tr></thead>
+        <tbody>${[...jam.values()].map((j) => `<tr>
+          <td>${esc(j.material)}${j.code ? ` <span class="muted">${esc(j.code)}</span>` : ''}</td>
+          <td class="num">${n3(j.qty)} <span class="muted">${esc(j.uom || '')}</span></td>
+          ${narx ? `<td class="num">${n2(j.sum)}${j.narxsiz
+            ? ' <span class="late" title="ba\'zi qatorda narx yo\'q">*</span>' : ''}</td>` : ''}</tr>`).join('')}
+        ${narx ? `<tr><td><b>Jami</b></td><td></td><td class="num"><b>${n2(jami)}</b></td></tr>
+          <tr><td colspan="3" class="muted" style="font-size:12px">Donaga: ${
+            SARF.total ? n2(jami / SARF.total) : '—'} $ (${SARF.total} ${esc(SARF.uom)})
+            · narx — manba omborning o'rtacha kirim narxi</td></tr>` : ''}
+        </tbody></table></div>`}`;
+}
+
+//  Varaq o'zi aytsin: qaysi konver, qaysi mahsulot, kim va qachon
+//  chop etdi (qarzdorlik hisoboti bilan bir xil idiom).
+function sarfChop() {
+  const now = new Date();
+  const ikki = (n) => String(n).padStart(2, '0');
+  const xodim = App.me()?.name ? ` \u00b7 ${esc(App.me().name)}` : '';
+  $('sarfHead').innerHTML = `
+    <h1>Xom ashyo sarfi \u00b7 ${esc(SARF.conveyor_no)}</h1>
+    <div class="meta">${esc(SARF.product)} \u00b7 ${SARF.total} ${esc(SARF.uom)}</div>
+    <div class="meta">chop etildi ${ikki(now.getDate())}.${ikki(now.getMonth() + 1)}.${
+      now.getFullYear()} ${ikki(now.getHours())}:${ikki(now.getMinutes())}${xodim}</div>`;
+  document.body.classList.add('sarfp');
+  window.print();
+  document.body.classList.remove('sarfp');
 }
 
 function qator(r) {

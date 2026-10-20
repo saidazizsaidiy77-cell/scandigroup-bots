@@ -2825,6 +2825,21 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
     'bekor qilingani qoldiqqa qaytdi');
   assert.equal((await usta('GET', '/api/materials/unit/' + u.id)).body.rows
     .find((r) => r.id === oxirgi.id).status, 'cancelled', 'tarixda qoladi');
+
+  //  ★ SARF RAQAM BO'YICHA TEKSHIRILADI (konver pasporti): hamma bo'lak,
+  //  bekor qilingani ham (o'chirilgan holida). Narx faqat narx huquqida.
+  const sotuv = await xodim('Sinov sarf sotuvchi', 'sotuvchi');
+  const sar = (await sotuv('GET', '/api/materials/conveyor?no='
+    + encodeURIComponent(u.conveyor_no))).body;
+  assert.equal(sar.rows.length, 2);
+  assert.equal(sar.narx, false, 'savdoga narx berilmaydi');
+  assert.ok(!('price' in sar.rows[0]));
+  assert.equal(sar.rows[0].unit_qty, 8, 'sarf paytidagi dona');
+  const narxli = (await xom('GET', '/api/materials/conveyor?no='
+    + encodeURIComponent(u.conveyor_no))).body;
+  assert.equal(narxli.narx, true);
+  assert.equal(Number(narxli.rows.find((r) => r.status === 'ok').price), 20,
+    'manba omborning o\'rtacha kirim narxi');
   //  Ikkinchi marta bekor qilib bo'lmaydi — u allaqachon hech qaysi
   //  hisobda yo'q.
   assert.equal((await usta('POST', '/api/materials/consume/' + oxirgi.id + '/cancel'))
