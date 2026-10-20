@@ -234,7 +234,10 @@ const NAVBATLAR = [
     if (!bor(req, 'warehouse.move', 'warehouse.manage', 'production.manage')) return [];
     const n = await son(
       `SELECT COUNT(*)::int AS n FROM cust_returns WHERE status = 'new'`);
-    return [{ page: '/qaytarish.html', mod: 'warehouse', n,
+    //  Savdosi bor xodimda sahifa Savdo bo'limida turadi (`modYoq`,
+    //  public/app.js) — belgi ham o'sha yerga tushadi.
+    const mod = bor(req, 'sales.view', 'sales.manage') ? 'sales' : 'warehouse';
+    return [{ page: '/qaytarish.html', mod, n,
               izoh: `${n} ta mijozdan qaytarish qabul qilinmagan` }];
   },
 

@@ -540,7 +540,11 @@ const App = (() => {
     //  havola, ikkinchisi «rejada» degan kulrang yozuv.
     //  ★ MIJOZDAN QAYTARISH (zavod qarori, 2026-10): menejer yozadi,
     //  ombor mudiri qabul qiladi — sahifa ikkala bo'limda ham.
+    //  ★ SAVDOSI BOR XODIMDA FAQAT SAVDODA (zavod qarori, 2026-10):
+    //  ikkala bo'limda turgani takror edi va Ombor bo'limi aynan shu
+    //  sahifadan ochilardi. Ombor mudirida savdo yo'q — unga qoladi.
     { href: '/qaytarish.html', mod: ['sales', 'warehouse'], nav: 'Qaytib olish (mijozdan)',
+      modYoq: { warehouse: ['sales.view', 'sales.manage'] },
       title: 'Mijozdan qaytarish', lead: 'Qaytgan mahsulot',
       text: "Menejer hujjat yozadi \u00b7 ombor mudiri qabul qiladi \u00b7 qarz sotilgan narxda kamayadi",
       perm: ['sales.view', 'sales.manage', 'warehouse.view', 'warehouse.move',
@@ -675,7 +679,13 @@ const App = (() => {
   // Sahifa bir nechta modulda turishi mumkin: `mod` ro'yxat bo'lsa, u har
   // birida ko'rinadi. Mijozlar shunday — savdo uchun ham kerak,
   // ma'lumotnoma sifatida ham.
-  const inMod = (p, code) => Array.isArray(p.mod) ? p.mod.includes(code) : p.mod === code;
+  //  `modYoq` — sahifa shu bo'limda turmaydi, agar xodimda o'sha
+  //  huquqlardan biri bo'lsa: u sahifani o'z bo'limida allaqachon
+  //  ko'radi va ikkinchi joyda takror faqat chalg'itadi.
+  const inMod = (p, code) => {
+    if (p.modYoq?.[code] && can(...p.modYoq[code])) return false;
+    return Array.isArray(p.mod) ? p.mod.includes(code) : p.mod === code;
+  };
 
   // Bir nechta modulda turgan sahifaga qaysi bo'limdan kirilgani manzilga
   // yoziladi — shunda menyu o'sha bo'limni yoqib turadi.

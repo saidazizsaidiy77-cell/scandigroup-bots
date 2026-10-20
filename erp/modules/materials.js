@@ -969,6 +969,50 @@ const OMBOR = `
              AND w.section_id IS NULL) DESC,
             w.sort, w.name`;
 
+//  ★ KONVERNING XOM ASHYO SARFI — RAQAM BO'YICHA (zavod qarori,
+//  2026-10; konver pasportidagi «Xom ashyo sarfi»). Sarf yozilardi,
+//  lekin uni TEKSHIRADIGAN joy yo'q edi: ▣ oynasi bitta BO'LAKNI
+//  ko'rsatadi, konver esa bo'linadi va sarf qaysi bo'lakda turgani
+//  tasodif. Shuning uchun ro'yxat RAQAMNING hamma qatori bo'yicha
+//  yig'iladi — tannarx qoidasi bilan bir xil.
+//
+//  Narx faqat narx huquqi borida: pasport savdo va ombor uchun ham
+//  ochiq va u yerda pul turmaydi. Narx — manba omborning O'RTACHA
+//  kirim narxi (`v_material_stock` bilan bir xil formula).
+const SARF_NARX = [...NARX_HUQUQ, 'production.manage', 'cash.view'];
+router.get('/conveyor', need(...VIEW, 'production.view', 'production.entry'),
+  wrap(async (req, res) => {
+  const no = String(req.query.no || '').trim();
+  if (!no) return res.status(400).json({ error: 'Konver raqami yozilmagan' });
+  const narx = SARF_NARX.some((p) => req.user.permissions.includes(p));
+  const { rows } = await db.query(
+    `WITH ortacha AS (
+       SELECT place_id, material_id,
+              SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
+              / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
+                AS price
+         FROM v_material_flow WHERE kind = 'warehouse'
+        GROUP BY place_id, material_id)
+     SELECT mv.id, mv.qty, mv.unit_qty, mv.moved_on, mv.status, mv.note,
+            m.id AS material_id, m.name AS material, m.code, m.uom,
+            w.name AS warehouse, sc.name AS section,
+            wk.name AS worker, u.part,
+            o.price::NUMERIC(16,4) AS price
+       FROM material_moves mv
+       JOIN production_units u ON u.id = mv.to_id
+       JOIN materials m ON m.id = mv.material_id
+       LEFT JOIN warehouses w ON w.id = mv.from_id AND mv.from_kind = 'warehouse'
+       LEFT JOIN sections sc  ON sc.id = w.section_id
+       LEFT JOIN workers wk   ON wk.id = mv.worker_id
+       LEFT JOIN ortacha o    ON o.place_id = mv.from_id
+                             AND o.material_id = mv.material_id
+                             AND mv.from_kind = 'warehouse'
+      WHERE mv.to_kind = 'unit' AND lower(u.conveyor_no) = lower($1)
+      ORDER BY mv.moved_on, mv.id`, [no]);
+  if (!narx) rows.forEach((r) => { delete r.price; });
+  res.json({ conveyor_no: no, narx, rows });
+}));
+
 //  Konverga nima biriktirilgani va qayerdan olinishi mumkinligi —
 //  BITTA so'rovda: telefonda oyna ochilganda ikkinchi so'rovni kutib
 //  turish sezilarli.
