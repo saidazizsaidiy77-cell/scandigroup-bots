@@ -76,6 +76,7 @@ async function startServer() {
   app.use('/api/returns', require('../modules/returns'));
   app.use('/api/cash', require('../modules/cash'));
   app.use('/api/materials', require('../modules/materials'));
+  app.use('/api/cost', require('../modules/cost'));
   app.use('/api/navbat', require('../modules/nav'));
   app.use('/api/tasks', require('../modules/tasks'));
   app.use('/api/payroll', require('../modules/payroll'));

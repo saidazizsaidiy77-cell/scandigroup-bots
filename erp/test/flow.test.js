@@ -2864,6 +2864,30 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
     { warehouse_id: (await H.id(
         `SELECT id FROM warehouses WHERE code='TSEX-STU-ZBOR'`)).id,
       items: [{ material_id: m.id, qty: 1 }] })).status, 400);
+
+  //  ★ TANNARX (konver bo'yicha). Ikkinchi konver shu mahsulotdan:
+  //  donaga material va OLDINGI konverga nisbatan farq. Tsex
+  //  boshlig'iga ochilmaydi — bu pul hisoboti.
+  const u2 = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 4, color: 'Oq', section_id: ARRA }] })).body.created[0];
+  assert.equal((await usta('POST', '/api/materials/unit/' + u2.id + '/consume',
+    { items: [{ material_id: m.id, qty: 8 }] })).status, 200);
+  assert.equal((await usta('GET', '/api/cost?yolda=1')).status, 403);
+  const tn = await xom('GET', '/api/cost?yolda=1');
+  assert.equal(tn.status, 200, tn.text);
+  const t1 = tn.body.rows.find((r) => r.conveyor_no === u.conveyor_no);
+  const t2 = tn.body.rows.find((r) => r.conveyor_no === u2.conveyor_no);
+  assert.equal(Number(t1.dona), 30, '12 list × 20 $ ÷ 8 dona');
+  assert.equal(Number(t2.dona), 40, '8 list × 20 $ ÷ 4 dona');
+  assert.equal(t2.prev_no, u.conveyor_no, 'oldingisi — shu mahsulotning oldingi konveri');
+  assert.equal(Number(t2.prev_dona), 30);
+  //  Omborga kirmagani oraliq bo'yicha ro'yxatga tushmaydi.
+  assert.ok(!(await xom('GET', '/api/cost')).body.rows
+    .some((r) => r.conveyor_no === u2.conveyor_no));
+  const tf = (await xom('GET', '/api/cost/' + encodeURIComponent(u2.conveyor_no))).body;
+  assert.equal(tf.prev_no, u.conveyor_no);
+  assert.equal(Number(tf.rows[0].qty), 2, 'donaga 2 list');
+  assert.equal(Number(tf.rows[0].prev_qty), 1.5, 'oldingisida donaga 1,5 list');
 });
 
 test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {
