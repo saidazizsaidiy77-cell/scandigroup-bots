@@ -2088,6 +2088,12 @@ App.start(async () => {
   if (canShip && isTM()) {
     try { ship = (await App.api('/api/sales/shipping')).rows; } catch { ship = []; }
   }
+  //  Menyudagi «Matras kirimi» havolasi tabni manzilda beradi
+  //  (`?tab=buy`): mudir Kirim tabini qidirib yurmasin. Ochilmaydigan
+  //  tab so'ralsa e'tiborga olinmaydi.
+  const soralgan = new URLSearchParams(location.search).get('tab');
+  if (soralgan && tabs().some(([k]) => k === soralgan) && soralgan !== tab)
+    return go(soralgan);
   drawTabs();
   await (tab === 'inbox' ? draw() : loadStock());
 }, 'warehouse.view', 'production.view');

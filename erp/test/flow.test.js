@@ -10231,6 +10231,17 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
   //  4 × 60 + 2 × 55 = 350
   assert.equal(Number(k.body.amount), 350);
 
+  //  ★ KIRIMNI T/M OMBOR MUDIRI YOZADI (huquqi `warehouse.manage`):
+  //  javonni u sanaydi va molni u qabul qiladi.
+  const mudir = await xodim('Sinov matras mudiri', 'omborchi');
+  const mk = await mudir('GET', '/api/warehouse/fg/buyable');
+  assert.equal(mk.status, 200, mk.text);
+  const mr = await mudir('POST', '/api/warehouse/fg/receipts', {
+    supplier_id: tam, items: [{ product_id: mat, qty: 1, price: 10 }] });
+  assert.equal(mr.status, 200, mr.text);
+  assert.equal((await mudir('POST', `/api/warehouse/fg/receipts/${mr.body.id}/cancel`,
+    { note: 'sinov' })).status, 200);
+
   //  Konverlar T/M omborda va raqami MT bilan.
   const rows = (await db.query(
     `SELECT u.conveyor_no, u.status, u.qty, u.buy_price,

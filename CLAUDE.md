@@ -463,6 +463,13 @@ Ajratadigan belgi — MARSHRUT, va tekshiruv serverda ham
 Guruhlar ro'yxatida esa u o'z qatorida turaveradi — o'lchov birligi,
 harfi va savdo qoidalari o'sha yerda yoziladi.
 
+**★ MENYUDA «MATRAS KIRIMI»** (zavod qarori, 2026-10;
+`/ombor.html?w=TM&tab=buy`, `warehouse.manage`). Mudir kirimni xom
+ashyoning «Kirimlar» sahifasida izlardi va T/M ombor u yerda yo'q —
+«Kirim» tabini esa topa olmasdi. Endi Ombor bo'limida alohida qator
+va xom ashyo «Kirimlar» ko'rinishida ham havola turadi. Ombor sahifasi
+`?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi).
+
 **Kirim FAQAT T/M OMBORGA**: mol ta'minotchidan ZAVODGA keladi,
 vitrinaga esa u T/M dan omborlar aro hujjat bilan boradi (xom
 ashyodagi «kirim faqat zavod omboriga» bilan bir xil qoida). Ombor

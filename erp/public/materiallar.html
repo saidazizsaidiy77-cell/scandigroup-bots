@@ -396,6 +396,12 @@ async function boot() {
       ? '<button class="primary" onclick="kirimOch(\'return\')">'
         + '+ Qaytarish</button>'
       : '<button class="primary" onclick="kirimOch()">+ Kirim</button>';
+  //  Matras XOM ASHYO emas — tayyor mahsulot va T/M omborga kiradi.
+  //  Mudir uni shu sahifada izlardi, shuning uchun yo'l shu yerda.
+  if (tab !== 'qayt' && App.can('warehouse.manage', 'production.manage'))
+    $('kirimTools').insertAdjacentHTML('beforeend',
+      ' <a class="muted" style="font-size:12.5px;margin-left:8px" '
+      + 'href="/ombor.html?w=TM&tab=buy">Matras kirimi → T/M ombor</a>');
 
   $('stockTools').innerHTML = boshqara()
     ? `<button onclick="boshlangich(${kirdi ? kirdi.id : 'null'})">
