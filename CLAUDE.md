@@ -469,6 +469,11 @@ ashyoning «Kirimlar» sahifasida izlardi va T/M ombor u yerda yo'q —
 «Kirim» tabini esa topa olmasdi. Endi Ombor bo'limida alohida qator
 va xom ashyo «Kirimlar» ko'rinishida ham havola turadi. Ombor sahifasi
 `?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi).
+«+ Yangi kirim» oynasi ochilmasa sababi xabar bo'lib chiqadi (`buyOpen`):
+ilgari shablondagi bitta xato tugmani JIM o'chirib qo'ygan edi.
+Xom ashyo «Kirim hujjati» oynasida ham ombor ostida «T/M ombor bu yerda
+yo'q — Matras kirimi →» havolasi turadi: mudir matrasni o'sha oynadan
+izlab, uni MATERIAL qilib kiritib yuborardi.
 
 **Kirim FAQAT T/M OMBORGA**: mol ta'minotchidan ZAVODGA keladi,
 vitrinaga esa u T/M dan omborlar aro hujjat bilan boradi (xom

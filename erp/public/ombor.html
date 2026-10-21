@@ -1920,7 +1920,21 @@ async function buyCancel(id, no) {
 //  valyutada — ostida qatorlar, eng pastda jami. Jami saqlashdan OLDIN
 //  ko'rinadi: bir nol ortiqcha yozilgani aynan shu yerda bilinadi,
 //  ta'minotchining qarzida emas.
-function buyOpen() {
+//  ★ OYNA OCHILMASA SABABI EKRANDA (zavod qarori, 2026-10). Ilgari
+//  shablondagi bitta xato tugmani JIM o'chirib qo'ygan edi: bosilardi
+//  va hech narsa bo'lmasdi — mudir nima yetishmayotganini bilmasdi.
+async function buyOpen() {
+  try {
+    if (!buyRef) buyRef = await App.api('/api/warehouse/fg/buyable');
+    $('buyBox')?.remove();
+    buyOchish();
+  } catch (e) {
+    $('buyBox')?.remove();
+    toast('Kirim oynasi ochilmadi: ' + (e.message || e), true);
+  }
+}
+
+function buyOchish() {
   buyLines = [{ product_id: '', qty: '', price: '', color: '' }];
   const bugun = isoDay(new Date());
   document.body.insertAdjacentHTML('beforeend', `
