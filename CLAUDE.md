@@ -463,6 +463,13 @@ Ajratadigan belgi — MARSHRUT, va tekshiruv serverda ham
 Guruhlar ro'yxatida esa u o'z qatorida turaveradi — o'lchov birligi,
 harfi va savdo qoidalari o'sha yerda yoziladi.
 
+**★ MENYUDA «MATRAS KIRIMI»** (zavod qarori, 2026-10;
+`/ombor.html?w=TM&tab=buy`, `warehouse.manage`). Mudir kirimni xom
+ashyoning «Kirimlar» sahifasida izlardi va T/M ombor u yerda yo'q —
+«Kirim» tabini esa topa olmasdi. Endi Ombor bo'limida alohida qator
+va xom ashyo «Kirimlar» ko'rinishida ham havola turadi. Ombor sahifasi
+`?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi).
+
 **Kirim FAQAT T/M OMBORGA**: mol ta'minotchidan ZAVODGA keladi,
 vitrinaga esa u T/M dan omborlar aro hujjat bilan boradi (xom
 ashyodagi «kirim faqat zavod omboriga» bilan bir xil qoida). Ombor
@@ -2412,6 +2419,18 @@ alohida javob talab qiladi.
 
 Sabab **EKRANDA** yozilib turadi: nimaga tegib bo'lmasligini bilmagan
 odam summa katagini qidirib yurardi.
+
+**★ KASSALAR ARO VALYUTA ALMASHISH** (zavod qarori, 2026-10;
+`cash_ops.to_currency`, `to_amount`). Bankdan so'm chiqadi, asosiy
+kassaga dollar kiradi — BITTA hujjat. «Ko'chirish / valyuta» oynasida
+«Kassaga tushdi — valyuta» tanlansa ikkinchi summa so'raladi va KURS
+ikkalasidan O'ZI chiqadi (kurs katagi yopiladi — «kursda tiyin bor,
+summada yo'q» bilan bir xil sabab). `v_cash_flow` ning qabul qiluvchi
+shoxi `to_*` ni o'qiydi: bankning so'mi kamayadi, kassaning dollari
+oshadi; dollar qiymati qabul qilingan dollarning O'ZI. Faqat kassa →
+kassa (`CHECK` va serverda); ichki harakat bo'lgani uchun pul oqimiga
+tushmaydi. Summani `/fix` bilan tuzatib bo'lmaydi — ikki summa bog'liq,
+bekor qilinadi va qaytadan yoziladi.
 
 **Avval KASSALAR ro'yxati, keyin kassaning ichi** — omborlar bilan bir
 xil idiom: zavodda ikkita pul joyi bor va ular bir-biriga o'xshamaydi,

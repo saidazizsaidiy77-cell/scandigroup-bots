@@ -510,7 +510,25 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     if (!(amount > 0)) throw new Error('Summa kiritilmagan');
     //  Kurs har operatsiyada: pulni kiritayotgan odam o'sha to'lovning
     //  kursini yozadi va u operatsiya bilan birga qotib qoladi.
-    const rate = currency === 'USD' ? null : Number(b.rate);
+    let rate = currency === 'USD' ? null : Number(b.rate);
+
+    //  ★ KASSALAR ARO VALYUTA ALMASHISH (zavod qarori, 2026-10). Bankdan
+    //  so'm chiqadi, kassaga dollar kiradi: qabul qilingan valyuta va
+    //  summa alohida keladi va KURS ikkalasidan O'ZI chiqadi — kassir
+    //  ikki raqamni yozadi, uchinchisini emas («kursda tiyin bor,
+    //  summada yo'q» bilan bir xil sabab). Faqat kassa → kassa.
+    let to_currency = null, to_amount = null;
+    const tc = b.to_currency === 'USD' ? 'USD' : b.to_currency === 'UZS' ? 'UZS' : null;
+    if (tc && tc !== currency) {
+      if (from_kind !== 'account' || to_kind !== 'account')
+        throw new Error('Valyuta faqat kassalar aro ko\'chirishda almashadi');
+      to_amount = Number(b.to_amount);
+      if (!(to_amount > 0)) throw new Error('Qabul qilingan summa kiritilmagan');
+      to_currency = tc;
+      rate = currency === 'UZS'
+        ? Math.round(amount / to_amount * 10000) / 10000
+        : Math.round(to_amount / amount * 10000) / 10000;
+    }
     if (currency === 'UZS' && !(rate > 0)) throw new Error('Kurs kiritilmagan');
 
     //  ★ HARAJAT QAYSI OYNING FOYDA-ZARARIDA. To'lov bugun ketadi,
@@ -707,14 +725,15 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     const { rows } = await client.query(
       `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind, to_id,
                              currency, amount, rate, pl_month, expense_item_id,
-                             order_id, note, created_by, status, staff_id)
+                             order_id, note, created_by, status, staff_id,
+                             to_currency, to_amount)
        VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6,
-               $7, $8, $9, $10::date, $11, $12, $13, $14, $15, $16)
+               $7, $8, $9, $10::date, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING id, doc_no, amount_usd, status`,
       [doc_no, b.op_date || null, from_kind, from_id, to_kind, to_id,
        currency, amount, rate, pl_month, item_id,
        b.order_id || null, (b.note || '').trim() || null, req.user.id, status,
-       staff_id]);
+       staff_id, to_currency, to_amount]);
 
     //  ★ TOPSHIRILGAN PUL KASSIRGA AYTILADI (zavod qarori, 2026-09).
     //  `pending` yozuv hech qaysi qoldiqda turmaydi: pul xodimning
@@ -731,7 +750,8 @@ router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => 
     await audit(req, { module: 'cash', action: 'create', entity: 'cash_op',
                        entity_id: rows[0].id,
                        payload: { doc_no, from_kind, from_id, to_kind, to_id,
-                                  currency, amount, rate } }, client);
+                                  currency, amount, rate,
+                                  to_currency, to_amount } }, client);
     await client.query('COMMIT');
     res.json(rows[0]);
   } catch (e) {
@@ -868,7 +888,14 @@ router.patch('/ops/:id/fix', need(...MANAGE), wrap(async (req, res) => {
     //  katakni yashirish himoya emas.
     const pul = can(req, 'cash.fix');
     let amount = o.amount, currency = o.currency, rate = o.rate;
-    if (pul && b.amount !== undefined) {
+    //  Valyuta almashish hujjati (ikki valyuta) bu yerda tuzatilmaydi:
+    //  ikkala summa bir-biriga bog'liq va bittasini o'zgartirish kursni
+    //  jimgina o'zgartirardi. Bekor qilinadi va qaytadan yoziladi.
+    if (pul && b.amount !== undefined && o.to_currency
+        && (Number(b.amount) !== Number(o.amount)
+            || (b.currency === 'USD' ? 'USD' : 'UZS') !== o.currency))
+      throw new Error('Valyuta almashish hujjati — bekor qilib, qaytadan yozing');
+    if (pul && b.amount !== undefined && !o.to_currency) {
       //  Tekshiruv yaratishdagi bilan AYNAN bir xil: ikki joyda
       //  boshqacha yozilsa tuzatilgan qator yangisidan boshqa
       //  qoidaga bo'ysunardi.

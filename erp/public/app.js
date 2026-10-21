@@ -658,6 +658,14 @@ const App = (() => {
       title: 'Omborlar aro harakat', lead: "Ombordan omborga jo'natish",
       text: "Hujjat uch bosqich: shakllantirish \u00b7 jo'natish \u00b7 qabul qilish \u00b7 mahsulot faqat qabul qilinganda ko'chadi",
       perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage', 'sales.manage'] },
+    //  ★ MATRAS KIRIMI (zavod qarori, 2026-10). Ta'minotchidan tayyor
+    //  keladigan mahsulot T/M omborning «Kirim» tabida yoziladi va mudir
+    //  uni topa olmasdi — xom ashyoning «Kirimlar» sahifasida izlardi.
+    //  Havola o'sha tabni to'g'ridan-to'g'ri ochadi.
+    { href: '/ombor.html?w=TM&tab=buy', mod: 'warehouse', nav: 'Matras kirimi',
+      title: 'Matras kirimi', lead: "Ta'minotchidan tayyor mahsulot",
+      text: "T/M omborga kirim hujjati \u00b7 omborni to'ldiradi va ta'minotchining qarzini oshiradi",
+      perm: ['warehouse.manage', 'production.manage'] },
     // Menyuda ko'rinmaydi: omborga faqat omborlar ro'yxati orqali
     // kiriladi. Ikki yo'l bo'lsa, ertaga omborlar ko'payganda biri
     // ikkinchisidan orqada qolardi — menyuda bitta ombor, ro'yxatda

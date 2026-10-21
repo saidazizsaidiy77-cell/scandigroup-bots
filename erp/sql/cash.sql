@@ -302,6 +302,21 @@ ALTER TABLE cash_ops DROP CONSTRAINT IF EXISTS cash_ops_status_check;
 ALTER TABLE cash_ops ADD  CONSTRAINT cash_ops_status_check
   CHECK (status IN ('ok', 'pending', 'cancelled'));
 
+--  ★ KASSALAR ARO VALYUTA ALMASHISH (zavod qarori, 2026-10). Bankdan
+--  so'm chiqadi, asosiy kassaga dollar kiradi — bitta hujjat, ikki
+--  valyuta. Ustunlar QABUL QILUVCHI tomonniki: bo'sh bo'lsa u ham
+--  beruvchiniki bilan bir xil (oddiy ko'chirish). Faqat kassa → kassa.
+ALTER TABLE cash_ops ADD COLUMN IF NOT EXISTS to_currency TEXT
+  CHECK (to_currency IN ('UZS', 'USD'));
+ALTER TABLE cash_ops ADD COLUMN IF NOT EXISTS to_amount NUMERIC(18,2)
+  CHECK (to_amount > 0);
+ALTER TABLE cash_ops DROP CONSTRAINT IF EXISTS cash_ops_to_ccy;
+ALTER TABLE cash_ops ADD  CONSTRAINT cash_ops_to_ccy CHECK (
+  (to_currency IS NULL AND to_amount IS NULL)
+  OR (to_currency IS NOT NULL AND to_amount IS NOT NULL
+      AND to_currency <> currency
+      AND from_kind = 'account' AND to_kind = 'account'));
+
 ALTER TABLE cash_ops DROP CONSTRAINT IF EXISTS cash_ops_expense_needs;
 ALTER TABLE cash_ops ADD  CONSTRAINT cash_ops_expense_needs CHECK (
   to_kind <> 'expense' OR (expense_item_id IS NOT NULL AND pl_month IS NOT NULL));
@@ -409,9 +424,14 @@ SELECT o.id AS op_id, o.doc_no, o.op_date, o.pl_month,
        o.to_kind AS other_kind, o.to_id AS other_id
   FROM cash_ops o WHERE o.status = 'ok'
 UNION ALL
+--  Qabul qiluvchi tomon valyuta almashganda O'Z valyutasida oladi.
+--  Dollari ham o'ziniki: so'm → $ da qabul qilingan dollarning o'zi
+--  (bo'lishdan chiqqan tiyin farqi qoldiqqa tushmasin).
 SELECT o.id, o.doc_no, o.op_date, o.pl_month,
        o.to_kind, o.to_id,
-       o.currency, o.amount, o.amount_usd,
+       COALESCE(o.to_currency, o.currency),
+       COALESCE(o.to_amount, o.amount),
+       CASE WHEN o.to_currency = 'USD' THEN o.to_amount ELSE o.amount_usd END,
        o.rate, o.note, o.order_id, o.expense_item_id,
        o.from_kind, o.from_id
   FROM cash_ops o WHERE o.status = 'ok';
@@ -433,7 +453,8 @@ SELECT o.id, o.doc_no, o.op_date, o.from_kind, o.from_id, o.to_kind, o.to_id,
        eg.name  AS expense_group,
        ei.name  AS expense_item,
        ord.order_no,
-       w.name   AS created_by_name
+       w.name   AS created_by_name,
+       o.to_currency, o.to_amount
   FROM cash_ops o
   LEFT JOIN cash_accounts fa ON o.from_kind = 'account'  AND fa.id = o.from_id
   LEFT JOIN workers       fw ON o.from_kind = 'worker'   AND fw.id = o.from_id

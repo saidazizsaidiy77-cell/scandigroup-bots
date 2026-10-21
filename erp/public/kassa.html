@@ -330,6 +330,18 @@ function davrQator() {
   </div>`;
 }
 
+//  Shu kassa tomonidagi summa: valyuta almashgan hujjatda kirim tomoni
+//  O'Z valyutasida oladi (`to_currency`, `to_amount`, sql/cash.sql).
+function tomon(o) {
+  const q = kirimmi(o) && o.to_currency;
+  return { cur: q ? o.to_currency : o.currency,
+           amt: q ? o.to_amount : o.amount,
+           usd: q && o.to_currency === 'USD' ? o.to_amount : o.amount_usd };
+}
+const pulMatn = (cur, amt) => cur === 'UZS'
+  ? `${uzs(amt)} <span class="muted" style="font-size:11px">so'm</span>`
+  : `${usd(amt)} <span class="muted" style="font-size:11px">$</span>`;
+
 function drawOps() {
   const bor = f.from || f.to || f.q;
   $('body').innerHTML = `<div class="card" style="margin-bottom:16px">
@@ -363,15 +375,19 @@ function drawOps() {
           o.expense_group ? `<div class="muted" style="font-size:11.5px">${
             esc(o.expense_group)}${o.pl_month
               ? ' · ' + String(o.pl_month).slice(0, 7) : ''}</div>` : ''}</td>
-        <td class="num">${o.currency === 'UZS'
-          ? `${uzs(o.amount)} <span class="muted" style="font-size:11px">so'm</span>`
-          : `${usd(o.amount)} <span class="muted" style="font-size:11px">$</span>`}</td>
+        <!--  ★ VALYUTA ALMASHISH: kassa O'Z valyutasidagi summani
+              ko'rsatadi (kirimda — tushgani, chiqimda — berilgani),
+              ostida esa ikkinchi tomoni. -->
+        <td class="num">${pulMatn(tomon(o).cur, tomon(o).amt)}${o.to_currency
+          ? `<div class="muted" style="font-size:11px">${kirimmi(o) ? '← ' : '→ '}${
+              kirimmi(o) ? pulMatn(o.currency, o.amount) : pulMatn(o.to_currency, o.to_amount)}</div>`
+          : ''}</td>
         <!--  ★ ISHORA VA RANG. Ishorasiz raqam qaysi tomon ekanini
               aytmasdi: kassadan olingan avans ham, kassaga
               topshirilgan pul ham bir xil «7 480,91» bo'lib turardi.
               Kirim yashil «+», chiqim qizil «&minus;».  -->
         <td class="num"><b class="${kirimmi(o) ? 'mny-in' : 'mny-out'}">${
-          kirimmi(o) ? '+' : '&minus;'}${usd(o.amount_usd)}</b>${o.rate
+          kirimmi(o) ? '+' : '&minus;'}${usd(tomon(o).usd)}</b>${o.rate
           ? `<div class="muted" style="font-size:11px">${uzs(o.rate)}</div>` : ''}</td>
         <td class="muted" style="font-size:12.5px">${esc(o.note || '')}${o.order_no
           ? ` <span class="tag">${esc(o.order_no)}</span>` : ''}</td>
