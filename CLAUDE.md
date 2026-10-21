@@ -3141,7 +3141,11 @@ rejalari yig'indisi; doirasi bor menejerda faqat o'ziniki. **Ikki
 xil reja sanalmaydi**: ishdan ketgan xodimniki va KPI si PUL
 TUSHUMIDAN bo'lgan xodimniki (`kpi_bonus_tushum`) — uning turkum
 rejasi butun bo'limniki va menejerlarnikining ustiga qo'shilib, jami
-rejani ikki barobar qilardi (zavod qarori, 2026-10).
+rejani ikki barobar qilardi (zavod qarori, 2026-10). **Bu faqat
+DOLLAR rejasiga tegishli**: boshliqning DONA/KOMPLEKT rejasi SANALADI
+(zavod qarori, 2026-10) — uning o'z mijozlari bor va donasi
+menejerlarnikiga kirmaydi; sanalmasa panel stulda 900 o'rniga 750
+ko'rsatardi.
 **Chiqdi** — KPI fakti bilan bir xil qoida (`v_sales_kpi_fact`):
 chiqib ketgan KONVER, qabul qilingan qaytarish ayirilgan, dona faqat
 `kpi_dona` guruhda (matras emas). Menejerlar faktini qo'shib
