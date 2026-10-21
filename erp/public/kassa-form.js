@@ -480,6 +480,19 @@ function openForm(kind) {
               <option value="UZS">So'm</option><option value="USD">Dollar</option>
             </select><div class="hint"></div></div>
 
+          ${kind === 'move' ? `
+          <!--  ★ VALYUTA ALMASHISH (zavod qarori, 2026-10). Bankdan so'm
+                chiqadi, kassaga dollar kiradi — bitta hujjat. Kassir
+                ikkala summani yozadi, KURS ulardan o'zi chiqadi. -->
+          <div><label>Kassaga tushdi — valyuta</label>
+            <select id="fToCur" onchange="calc()">
+              <option value="">o'sha valyutada</option>
+              <option value="USD">Dollar</option><option value="UZS">So'm</option>
+            </select><div class="hint">boshqa valyutada tushsa tanlang</div></div>
+          <div id="fToAmtBox" hidden><label>Kassaga tushgan summa</label>
+            <input id="fToAmt" type="number" min="0" step="0.01" inputmode="decimal"
+              oninput="calc()"><div class="hint" id="fToHint"></div></div>` : ''}
+
           <!--  Kurs HAR OPERATSIYADA: pulni kiritayotgan odam o'sha
                 to'lovning kursini yozadi va u operatsiya bilan birga
                 qotib qoladi.
@@ -562,6 +575,23 @@ function calc() {
   //  foyda-zararga o'sha oy bilan tushadi.
   $('fMonthBox').hidden = !side.startsWith('expense:');
   const a = Number($('fAmt').value) || 0;
+  //  Valyuta almashsa kurs ikkala summadan chiqadi va katagi yopiladi:
+  //  uchinchi raqamni qo'lda yozish ikki raqamdan biriga zid bo'lardi.
+  const alm = almashish();
+  if (alm) {
+    $('fToAmtBox').hidden = false;
+    $('fRateBox').hidden = true;
+    const t = Number($('fToAmt').value) || 0;
+    const kurs = a > 0 && t > 0 ? (so ? a / t : t / a) : 0;
+    $('fToHint').textContent = kurs
+      ? `kurs ${Number(kurs.toFixed(4)).toLocaleString('ru-RU')} so'm` : '';
+    $('fSum').readOnly = true;
+    const dd = so ? t : a;
+    $('fSum').value = dd ? dd.toFixed(2) : '';
+    $('fSumHint').textContent = '';
+    return;
+  }
+  if ($('fToAmtBox')) $('fToAmtBox').hidden = true;
   const r = Number($('fRate').value) || 0;
   const d = so ? (r > 0 ? a / r : 0) : a;
   //  Dollarda kurs yo'q: raqam summaning O'ZI va uni tahrirlash
@@ -575,6 +605,10 @@ function calc() {
   if ($('fSupBox') && !$('fSupBox').hidden) supQarz();
 }
 
+//  Ko'chirishda kassaga BOSHQA valyuta tushyaptimi.
+const almashish = () => !!($('fToCur') && $('fToCur').value
+                            && $('fToCur').value !== $('fCur').value);
+
 //  ★ KURSNI DOLLARDAN CHIQARISH (izoh: yuqorida). Bu «kursni o'ylab
 //  topish» EMAS: boshlang'ich qoldiqda so'm va dollar ikkita ALOHIDA
 //  pul va ularni bo'lish o'ylab topilgan kurs berardi — shuning uchun
@@ -582,7 +616,7 @@ function calc() {
 //  esa BITTA pul ikki xil yozilgan: bank o'sha to'lovni 9 000 000 so'm
 //  ham, 762 $ ham deb ko'rsatgan, ya'ni kurs — haqiqat, taxmin emas.
 function kursHisobla() {
-  if (!$('fCur') || $('fCur').value !== 'UZS') return;
+  if (!$('fCur') || $('fCur').value !== 'UZS' || almashish()) return;
   const a = Number($('fAmt').value) || 0;
   const d = Number($('fSum').value) || 0;
   if (!(a > 0 && d > 0)) return;
@@ -655,6 +689,8 @@ async function saveOp() {
       : supOchiq && modda.startsWith('expense:')
       ? { expense_item_id: Number(modda.slice(8)), pl_month: $('fMonth').value } : {}),
     ...(xodOchiq ? { staff_id: Number($('fStaff').value) } : {}),
+    ...(almashish() ? { to_currency: $('fToCur').value,
+                        to_amount: $('fToAmt').value } : {}),
   };
   try {
     const r = await App.api('/api/cash/ops',

@@ -12774,6 +12774,59 @@ test('aylanma kapital: narxsiz konver katalogdagi optom narx bilan', async () =>
   }
 });
 
+test('kassalar aro valyuta almashish: bankdan so\'m, kassaga dollar', async () => {
+  //  ★ BITTA HUJJAT, IKKI VALYUTA (zavod qarori, 2026-10): bankda so'm
+  //  kamayadi, asosiy kassada dollar ko'payadi; kurs ikkala summadan
+  //  O'ZI chiqadi va pul oqimiga tushmaydi (ichki harakat).
+  const { db } = require('../db');
+  await db.query(`INSERT INTO app_settings (key, val) VALUES ('minus_cash', '')
+                  ON CONFLICT (key) DO UPDATE SET val = ''`);
+  const admin = H.api(base, tokenAdmin);
+  const bank = (await H.id(`SELECT id FROM cash_accounts WHERE code = 'BANK'`)).id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code = 'MAIN'`)).id;
+  const bal = async (id) => H.id(`SELECT uzs, usd FROM v_cash_balance WHERE id = $1`, [id]);
+  const b0 = await bal(bank), k0 = await bal(kassa);
+
+  const r = await admin('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: bank, to_kind: 'account', to_id: kassa,
+    currency: 'UZS', amount: 12000000, to_currency: 'USD', to_amount: 1000 });
+  assert.equal(r.status, 200, r.text);
+  const op = await H.id(`SELECT rate, to_currency, to_amount FROM cash_ops WHERE doc_no = $1`,
+    [r.body.doc_no]);
+  assert.equal(Number(op.rate), 12000, 'kurs ikkala summadan');
+  const b1 = await bal(bank), k1 = await bal(kassa);
+  assert.equal(Number(b1.uzs), Number(b0.uzs) - 12000000, 'bankda so\'m kamaydi');
+  assert.equal(Number(b1.usd), Number(b0.usd), 'bankning dollari tegilmadi');
+  assert.equal(Number(k1.usd), Number(k0.usd) + 1000, 'kassaga dollar tushdi');
+  assert.equal(Number(k1.uzs), Number(k0.uzs), 'kassaning so\'mi tegilmadi');
+
+  //  Lentada kassa O'Z valyutasini ko'radi.
+  const lenta = (await admin('GET', '/api/cash/ops?a=MAIN')).body.rows
+    .find((x) => x.doc_no === r.body.doc_no);
+  assert.equal(lenta.to_currency, 'USD');
+  assert.equal(Number(lenta.to_amount), 1000);
+
+  //  Faqat kassa → kassa: mijozdan kelgan pulda valyuta almashmaydi.
+  const cid = (await H.id(`SELECT id FROM customers ORDER BY id LIMIT 1`)).id;
+  const yomon = await admin('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: cid, to_kind: 'account', to_id: kassa,
+    currency: 'UZS', amount: 1200000, rate: 12000, to_currency: 'USD', to_amount: 100 });
+  assert.equal(yomon.status, 400);
+  assert.match(yomon.body.error, /kassalar aro/);
+  //  Qabul qilingan summasiz bo'lmaydi.
+  assert.equal((await admin('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: bank, to_kind: 'account', to_id: kassa,
+    currency: 'UZS', amount: 1200000, to_currency: 'USD' })).status, 400);
+
+  //  Teskari yo'nalish: kassadan dollar, bankka so'm.
+  const t = await admin('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'account', to_id: bank,
+    currency: 'USD', amount: 100, to_currency: 'UZS', to_amount: 1210000 });
+  assert.equal(t.status, 200, t.text);
+  const b2 = await bal(bank);
+  assert.equal(Number(b2.uzs), Number(b1.uzs) + 1210000);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

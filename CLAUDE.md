@@ -2413,6 +2413,18 @@ alohida javob talab qiladi.
 Sabab **EKRANDA** yozilib turadi: nimaga tegib bo'lmasligini bilmagan
 odam summa katagini qidirib yurardi.
 
+**★ KASSALAR ARO VALYUTA ALMASHISH** (zavod qarori, 2026-10;
+`cash_ops.to_currency`, `to_amount`). Bankdan so'm chiqadi, asosiy
+kassaga dollar kiradi — BITTA hujjat. «Ko'chirish / valyuta» oynasida
+«Kassaga tushdi — valyuta» tanlansa ikkinchi summa so'raladi va KURS
+ikkalasidan O'ZI chiqadi (kurs katagi yopiladi — «kursda tiyin bor,
+summada yo'q» bilan bir xil sabab). `v_cash_flow` ning qabul qiluvchi
+shoxi `to_*` ni o'qiydi: bankning so'mi kamayadi, kassaning dollari
+oshadi; dollar qiymati qabul qilingan dollarning O'ZI. Faqat kassa →
+kassa (`CHECK` va serverda); ichki harakat bo'lgani uchun pul oqimiga
+tushmaydi. Summani `/fix` bilan tuzatib bo'lmaydi — ikki summa bog'liq,
+bekor qilinadi va qaytadan yoziladi.
+
 **Avval KASSALAR ro'yxati, keyin kassaning ichi** — omborlar bilan bir
 xil idiom: zavodda ikkita pul joyi bor va ular bir-biriga o'xshamaydi,
 qoldig'i ham alohida sanaladi. `/kassalar.html` — ro'yxat (har kassa
