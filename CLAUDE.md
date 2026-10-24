@@ -463,12 +463,13 @@ Ajratadigan belgi — MARSHRUT, va tekshiruv serverda ham
 Guruhlar ro'yxatida esa u o'z qatorida turaveradi — o'lchov birligi,
 harfi va savdo qoidalari o'sha yerda yoziladi.
 
-**★ MENYUDA «MATRAS KIRIMI»** (zavod qarori, 2026-10;
-`/ombor.html?w=TM&tab=buy`, `warehouse.manage`). Mudir kirimni xom
-ashyoning «Kirimlar» sahifasida izlardi va T/M ombor u yerda yo'q —
-«Kirim» tabini esa topa olmasdi. Endi Ombor bo'limida alohida qator
-va xom ashyo «Kirimlar» ko'rinishida ham havola turadi. Ombor sahifasi
-`?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi).
+**★ KIRIM — OMBORLAR → T/M OMBOR → «KIRIM» TABI** (zavod qarori,
+2026-10; `/ombor.html?w=TM&tab=buy`, `warehouse.manage`). Menyuda
+alohida «Matras kirimi» qatori bir kun turdi va olib tashlandi: mudir
+T/M omborda kun bo'yi turadi va kirim o'sha omborning ichida bo'lishi
+kerak — ikkinchi yo'l menyuni to'ldirardi, xolos. Ombor sahifasi
+`?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi) — xom
+ashyodagi havola shundan foydalanadi.
 «+ Yangi kirim» oynasi ochilmasa sababi xabar bo'lib chiqadi (`buyOpen`):
 ilgari shablondagi bitta xato tugmani JIM o'chirib qo'ygan edi.
 Xom ashyo «Kirim hujjati» oynasida ham ombor ostida «T/M ombor bu yerda
@@ -4172,6 +4173,17 @@ eski qatorda «jo'natilgan» bo'lib ro'yxatda turaveradi — ikkala raqam
 ham to'g'ri. **Bron ESKI qatorda qoladi**: teskarisi qilinsa 2 talik
 qatorda 4 ta bron turib qolardi, ya'ni konverda bo'shdan ko'p band dona
 bo'lardi va savdo hisobi buzilardi.
+
+**★ LEKIN BRON BO'LAKDAN KO'P BO'LIB QOLMAYDI** (zavod qarori,
+2026-10; `bronOrtigi`, `modules/units.js`). Qoida bron eski qatorda
+qolgan donadan kam yoki teng bo'lganda to'g'ri edi. 10 talikning
+hammasi buyurtmada bo'lsa-chi: 2 tasi qabul qilingach eski qatorda
+8 dona, 10 bron turib qolardi. Chiqarishda `/ship` bron 10 ni ko'rib
+buyurtmani to'liq deb o'tkazar, konverdan esa 8 tasi chiqardi —
+yuk xatida 10, mijozning qarzida 8 (Z26-0849 aynan shunday chiqdi).
+Endi qisman jo'natish va qisman qabulda ORTIQCHASI ajralgan bo'lak
+bilan ketadi. `/ship` ham tutadi: bron konverdagi donadan ko'p bo'lsa
+chiqarmaydi va konver raqamini yozadi.
 
 **★ ORQAGA QAYTARISH — FAQAT ADMINISTRATORDA** (`production.undo`,
 `POST /api/units/undo`, zavod qarori 2026-10). «O'tkazish» bexosdan
