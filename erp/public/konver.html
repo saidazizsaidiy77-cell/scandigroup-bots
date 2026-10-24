@@ -244,7 +244,18 @@ function qator(r) {
   //  omborda turganida «kim kutmoqda», tsexda esa «jo'natilganmi».
   const hujjat =
     r.status === 'shipped'
-      ? (r.order_id
+      ? (r.order_id && r.order_status !== 'shipped'
+          //  ★ BUYURTMA HALI CHIQMAGAN, konver esa «chiqib ketgan»:
+          //  yuk xati yo'q, qarz bor. Javob ham, tugma ham shu yerda.
+          ? `<a href="/buyurtmalar.html?id=${r.order_id}" target="_blank"
+               >${esc(r.order_no)}</a>
+             <span class="tag warn" title="Qarzga yozilgan, yuk xati yo'q"
+               >buyurtma chiqmagan</span>${canFix ? `
+             <button title="Chiqim adashib yozilgan — mahsulot omborda"
+               style="padding:4px 9px;font-size:12px"
+               onclick="omborga(${r.id}, '${esc(r.conveyor_no)}', ${r.qty})"
+               >↩ omborga</button>` : ''}`
+        : r.order_id
           ? `<a href="/yukxati.html?id=${r.order_id}" target="_blank"
                >${esc(r.order_no || 'yuk xati')}</a>`
           //  ★ EGASIZ CHIQQAN KONVERDA — TUZATISH TUGMASI. Bo'sh

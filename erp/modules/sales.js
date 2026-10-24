@@ -2225,20 +2225,36 @@ router.post('/units/:id/unship', need('sales.fix'), wrap(async (req, res) => {
       [req.params.id])).rows[0];
     if (!u) throw new Error('Konver topilmadi');
     if (u.status !== 'shipped') throw new Error(`${u.conveyor_no}: chiqib ketmagan`);
-    if (u.customer_id || u.order_no)
+    //  ★ BUYURTMASI CHIQMAGAN CHIQIM HAM YOLG'ON. Yuk xati faqat
+    //  chiqib ketgan buyurtmada bor; buyurtma hali zavodda bo'lsa
+    //  konverdagi zakaz raqami hech qanday imzolangan hujjatga
+    //  bog'lanmaydi — qarz esa (u konverdan hisoblanadi) mijozga
+    //  yozilib turaveradi. «Mijozdan qaytarish» bu yerda yo'l emas:
+    //  u lentaga HAQDOR qator qo'shib, bo'lmagan savdoni ham, bo'lmagan
+    //  qaytishni ham tarixda qoldirardi.
+    const ord = u.order_no ? (await client.query(
+      `SELECT status FROM orders WHERE order_no = $1`, [u.order_no])).rows[0] : null;
+    const hujjatsiz = !u.customer_id && !u.order_no;
+    const ochiq = u.order_no && (!ord || ord.status !== 'shipped');
+    if (!hujjatsiz && !ochiq)
       throw new Error(`${u.conveyor_no}: egasi bor (${u.order_no || 'mijozi yozilgan'})`
         + ' — u «Mijozdan qaytarish» hujjati bilan qaytadi');
     if (Number(u.returned_qty || 0) > 0)
       throw new Error(`${u.conveyor_no}: qaytarish hujjati bor`);
     await client.query(
       `UPDATE production_units
-          SET status = 'fg', ship_on = NULL, ship_by = NULL
-        WHERE id = $1`, [u.id]);
+          SET status = 'fg', ship_on = NULL, ship_by = NULL,
+              customer_id = CASE WHEN $2 THEN NULL ELSE customer_id END,
+              order_no    = CASE WHEN $2 THEN NULL ELSE order_no END
+        WHERE id = $1`, [u.id, !!ochiq]);
     await refreshStock(client, u.product_id);
     await audit(req, { module: 'sales', action: 'fix', entity: 'unit',
                        entity_id: u.id,
                        payload: { conveyor_no: u.conveyor_no, qty: u.qty,
-                                  konver: 'egasiz chiqim omborga qaytarildi',
+                                  konver: ochiq
+                                    ? 'buyurtmasi chiqmagan chiqim omborga qaytarildi'
+                                    : 'egasiz chiqim omborga qaytarildi',
+                                  order_no: u.order_no, customer_id: u.customer_id,
                                   ship_on: u.ship_on, note: sabab } }, client);
     await client.query('COMMIT');
     res.json({ ok: true, conveyor_no: u.conveyor_no, qty: u.qty });
