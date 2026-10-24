@@ -1531,7 +1531,8 @@ async function texshir(){
   try { d = await App.api('/api/sales/mismatch'); }
   catch (e) { return toast(e.message, true); }
   const kam = d.kam || [];
-  const jami = d.rows.length + d.kop.length + kam.length;
+  const osilgan = d.osilgan || [];
+  const jami = d.rows.length + d.kop.length + kam.length + osilgan.length;
   const qator = (x) => `<tr style="cursor:pointer"
       onclick="openOrder(${x.id})">
       <td><b>${esc(x.order_no)}</b><div class="muted" style="font-size:12px"
@@ -1567,6 +1568,19 @@ async function texshir(){
       <td>yuk xatida <b>${x.item_qty}</b>, konver bo'yicha chiqqani
         <b>${x.chiqdi}</b></td>
       <td><span class="tag bad">kam chiqqan</span></td></tr>`;
+  //  ★ KONVERDA YO'Q DONAGA BRON: konverda N dona, bronlar esa
+  //  undan ko'p. Tuzatish — «Konver» oynasida qaytarish va mavjud
+  //  konverga qaytadan biriktirish.
+  const osilQator = (x) => `<tr style="cursor:pointer"
+      onclick="openOrder(${x.id})">
+      <td><b>${esc(x.order_no)}</b><div class="muted" style="font-size:12px"
+        >${esc(statusOf(x))}</div></td>
+      <td>${esc(x.customer || '')}<div class="muted" style="font-size:12px"
+        >${esc(x.manager || '')}</div></td>
+      <td>${esc(x.item_product)}</td>
+      <td><b>${esc(x.conveyor_no)}</b>: konverda <b>${x.unit_qty}</b> ta,
+        bronlar <b>${x.bron}</b> ta (shu buyurtmaniki ${x.shu})</td>
+      <td><span class="tag bad">konverda yo'q</span></td></tr>`;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:1000px">
@@ -1584,11 +1598,16 @@ async function texshir(){
           hisoblanadi — ya'ni mijoz imzolagan qog'oz balansdan farq
           qiladi. Bu tuzatilmaydi (mahsulot mijozda), lekin shikoyat
           kelganda javob shu yerda.</p>
+        <p class="muted" style="margin-bottom:12px">
+          «Konverda yo'q» — konverga undagi donadan ko'p bron ilingan:
+          buyurtma mahsulot bordek ko'rinadi, aslida yo'q. Buyurtmani
+          oching, «Konver» oynasida o'sha konverni qaytaring va mavjud
+          konverga qaytadan biriktiring.</p>
         <div style="overflow-x:auto;max-height:60vh"><table>
           <thead><tr><th>Buyurtma</th><th>Mijoz</th>
             <th>Qatorda</th><th>Konverda</th><th>Farq</th></tr></thead>
-          <tbody>${d.rows.map(qator).join('')}${d.kop.map(kopQator).join('')}${
-            kam.map(kamQator).join('')}</tbody>
+          <tbody>${osilgan.map(osilQator).join('')}${d.rows.map(qator).join('')}${
+            d.kop.map(kopQator).join('')}${kam.map(kamQator).join('')}</tbody>
         </table></div>`
         : `<p class="muted">Nomuvofiq buyurtma topilmadi — hammasi joyida.</p>`}
       </div></div>`;

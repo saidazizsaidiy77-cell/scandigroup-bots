@@ -4184,6 +4184,10 @@ yuk xatida 10, mijozning qarzida 8 (Z26-0849 aynan shunday chiqdi).
 Endi qisman jo'natish va qisman qabulda ORTIQCHASI ajralgan bo'lak
 bilan ketadi. `/ship` ham tutadi: bron konverdagi donadan ko'p bo'lsa
 chiqarmaydi va konver raqamini yozadi.
+Eskidan qolgan shunday bronlar **«Nomuvofiq buyurtmalar»** ro'yxatida
+**«konverda yo'q»** bo'lib chiqadi (`/api/sales/mismatch` dagi
+`osilgan`): konverda N dona, bronlar undan ko'p. Avtomatik
+tuzatilmaydi — qaysi buyurtma qolishini tizim taxmin qilmaydi.
 
 **★ ORQAGA QAYTARISH — FAQAT ADMINISTRATORDA** (`production.undo`,
 `POST /api/units/undo`, zavod qarori 2026-10). «O'tkazish» bexosdan
