@@ -463,12 +463,13 @@ Ajratadigan belgi — MARSHRUT, va tekshiruv serverda ham
 Guruhlar ro'yxatida esa u o'z qatorida turaveradi — o'lchov birligi,
 harfi va savdo qoidalari o'sha yerda yoziladi.
 
-**★ MENYUDA «MATRAS KIRIMI»** (zavod qarori, 2026-10;
-`/ombor.html?w=TM&tab=buy`, `warehouse.manage`). Mudir kirimni xom
-ashyoning «Kirimlar» sahifasida izlardi va T/M ombor u yerda yo'q —
-«Kirim» tabini esa topa olmasdi. Endi Ombor bo'limida alohida qator
-va xom ashyo «Kirimlar» ko'rinishida ham havola turadi. Ombor sahifasi
-`?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi).
+**★ KIRIM — OMBORLAR → T/M OMBOR → «KIRIM» TABI** (zavod qarori,
+2026-10; `/ombor.html?w=TM&tab=buy`, `warehouse.manage`). Menyuda
+alohida «Matras kirimi» qatori bir kun turdi va olib tashlandi: mudir
+T/M omborda kun bo'yi turadi va kirim o'sha omborning ichida bo'lishi
+kerak — ikkinchi yo'l menyuni to'ldirardi, xolos. Ombor sahifasi
+`?tab=` ni o'qiydi (ochilmaydigan tab e'tiborga olinmaydi) — xom
+ashyodagi havola shundan foydalanadi.
 «+ Yangi kirim» oynasi ochilmasa sababi xabar bo'lib chiqadi (`buyOpen`):
 ilgari shablondagi bitta xato tugmani JIM o'chirib qo'ygan edi.
 Xom ashyo «Kirim hujjati» oynasida ham ombor ostida «T/M ombor bu yerda
