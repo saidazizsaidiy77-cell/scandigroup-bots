@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tizim tekshiruvi · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Tizim tekshiruvi</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <p class="muted" style="margin:0;max-width:900px">Har hujjat — yuk xati, kirim,
+      omborlar aro hujjat, kassa operatsiyasi — qoldiq va qarz bilan BIR XIL
+      raqamni aytishi kerak. Bu sahifa faqat o'qiydi: hech narsani o'zgartirmaydi.
+      Har xatoning ostida tuzatish yo'li yozilgan.</p>
+    <button class="primary" onclick="load()">Qayta tekshirish</button>
+  </div>
+  <div id="kpi" class="grid g3" style="margin-top:16px"></div>
+</div>
+
+<div id="body" style="margin-top:16px"><p class="muted">Tekshirilmoqda…</p></div>
+
+<script>
+//  TIZIM TEKSHIRUVI — hisob SERVERDA (`modules/integrity.js`), sahifa
+//  faqat chizadi. Ustunlar har tekshiruvning o'z javobidan olinadi.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const val = (v) => v === true ? 'ha' : v === false ? '—'
+  : /^\d{4}-\d{2}-\d{2}T/.test(String(v)) ? String(v).slice(0, 10) : esc(v ?? '—');
+
+async function load() {
+  $('body').innerHTML = '<p class="muted">Tekshirilmoqda…</p>';
+  let d;
+  try { d = await App.api('/api/integrity'); }
+  catch (e) { $('body').innerHTML = `<p class="late">${esc(e.message)}</p>`; return; }
+  const xato = d.checks.filter((c) => c.count);
+  const xatoli = d.checks.filter((c) => c.error);
+  $('kpi').innerHTML = `
+    <div class="card"><h2>Tekshiruvlar</h2><div class="kpi">${d.checks.length}</div></div>
+    <div class="card"><h2>Muammo topilgan</h2>
+      <div class="kpi${xato.length ? ' late' : ''}">${xato.length}</div></div>
+    <div class="card"><h2>Joyida</h2>
+      <div class="kpi">${d.checks.length - xato.length - xatoli.length}</div></div>`;
+  //  Muammosi borlar tepada — savol aynan ular haqida.
+  const tartib = [...d.checks].sort((a, b) => (b.count || 0) - (a.count || 0));
+  $('body').innerHTML = tartib.map((c) => {
+    const holat = c.error ? `<span class="tag bad">tekshirib bo'lmadi</span>`
+      : c.count ? `<span class="tag bad">${c.count} ta</span>`
+      : `<span class="tag ok">joyida</span>`;
+    const cols = c.rows.length ? Object.keys(c.rows[0]) : [];
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div><span class="muted" style="font-size:12px">${esc(c.soha)}</span>
+          <h3 style="margin:2px 0 0;font-size:15px">${esc(c.title)}</h3></div>
+        ${holat}</div>
+      ${c.error ? `<p class="muted" style="font-size:12px">${esc(c.error)}</p>` : ''}
+      ${c.count ? `<p class="muted" style="font-size:13px;margin:8px 0">Tuzatish: ${esc(c.fix)}</p>
+        <div style="overflow-x:auto"><table>
+          <thead><tr>${cols.map((k) => `<th>${esc(k.replace(/_/g, ' '))}</th>`).join('')}</tr></thead>
+          <tbody>${c.rows.map((r) => `<tr>${cols.map((k) =>
+            `<td>${val(r[k])}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table></div>${c.count > c.rows.length
+          ? `<p class="muted" style="font-size:12px">… yana ${c.count - c.rows.length} ta</p>` : ''}` : ''}
+    </div>`;
+  }).join('');
+}
+
+App.start(load, 'sales.fix');
+</script>
+</body>
+</html>
