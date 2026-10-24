@@ -324,6 +324,11 @@ test('qisman qabulda ortiqcha bron bo\'lak bilan ketadi', async () => {
   const sh = await admin('POST', `/api/sales/orders/${oi.id}/ship`, {});
   assert.equal(sh.status, 400, sh.text);
   assert.match(sh.body.error, /konverda 2 ta/);
+  //  Nomuvofiqlar ro'yxati osilgan bronni topadi
+  const nm = await admin('GET', '/api/sales/mismatch');
+  assert.equal(nm.status, 200, nm.text);
+  assert.ok(nm.body.osilgan.some((x) => x.order_no === 'BRON-ORT-1' && x.unit_qty === 2
+    && x.bron === 10), 'konverda yo\'q bron ro\'yxatda');
   await db.query(`DELETE FROM unit_reservations WHERE order_item_id = $1`, [item.id]);
   await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [oi.id]);
 });

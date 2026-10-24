@@ -1713,7 +1713,31 @@ router.get('/mismatch', need('sales.fix'), wrap(async (req, res) => {
       WHERE COALESCE(c.qty, 0) < s.qty
       ORDER BY s.id DESC, p.name`)).rows;
 
-  res.json({ rows, kop, kam });
+  //  ★ KONVERDA YO'Q DONAGA BRON (zavod qarori, 2026-10). Qisman
+  //  jo'natish va qisman qabulda bron eski qatorda qolardi va qolgan
+  //  donadan ko'p bo'lib ketardi: S26-477 ning Qadoqlashda qolgan
+  //  bo'lagida dona yo'q, Z26-0850 ning 4 ta broni esa o'sha yerda
+  //  turibdi. Buyurtma «Tayyor» ga yaqin ko'rinadi, mahsulot esa yo'q.
+  //  Yangi xato endi tug'ilmaydi (`bronOrtigi`, modules/units.js),
+  //  ESKISI esa shu ro'yxatda: bron qaytarilib, mavjud konverga
+  //  qaytadan biriktiriladi.
+  const osilgan = (await db.query(
+    `SELECT o.id, o.order_no, ${HOLAT} AS holat, o.customer_name AS customer,
+            o.manager_name AS manager,
+            p.name || ' · ' || g.name AS item_product,
+            u.conveyor_no, u.qty AS unit_qty, b.jami AS bron, r.qty AS shu
+       FROM (SELECT unit_id, SUM(qty)::int AS jami FROM unit_reservations
+              GROUP BY unit_id) b
+       JOIN production_units u   ON u.id = b.unit_id
+       JOIN unit_reservations r  ON r.unit_id = u.id
+       JOIN order_items i        ON i.id = r.order_item_id
+       JOIN v_sales_orders o     ON o.id = i.order_id
+       JOIN products p           ON p.id = i.product_id
+       JOIN product_groups g     ON g.id = p.group_id
+      WHERE u.status IN ('production', 'fg') AND b.jami > u.qty
+      ORDER BY u.conveyor_no, o.id DESC`)).rows;
+
+  res.json({ rows, kop, kam, osilgan });
 }));
 
 //  ★ QULFNI ADMINISTRATOR OCHADI (zavod qarori, 2026-10). Yo'l
