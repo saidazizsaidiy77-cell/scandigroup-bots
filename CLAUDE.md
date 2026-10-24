@@ -4561,6 +4561,7 @@ erp/
   sql/                 migratsiya, migrate.js dagi tartibda
   modules/             express router'lar
                        nav.js — menyudagi navbat belgisi (bitta joyda)
+                       integrity.js — tizim tekshiruvi (hujjat ↔ qoldiq ↔ qarz)
   public/              sahifalar; app.js — menyu va sessiya
                        yukxati.js — yuk xati hujjati (ikki sahifa chizadi)
                        kassa-form.js — kirim/chiqim orderi oynasi
@@ -5629,6 +5630,37 @@ Railway → Deployments → Logs da `[sekin` deb qidiriladi.
 **Buyurtmalar ro'yxatidagi `meniki`** faqat `can_release_own` belgisi
 bor xodimga hisoblanadi: qolganlarida ekran uni o'qimaydi, ro'yxat esa
 500 qatorgacha va har qatorda `mijoz_meniki` chaqirilardi.
+
+---
+
+## Tizim tekshiruvi
+
+**★ HUJJAT, QOLDIQ VA QARZ BIR XIL RAQAMNI AYTADI** (zavod qarori,
+2026-10; `modules/integrity.js`, `/tekshiruv.html`, Hisobotlar →
+«Tizim tekshiruvi»). Z26-0849 da yuk xatida 10 ta, qarzda 8 ta turardi
+va xato faqat mijoz bilan solishtirishda bilindi. Qoida esa faqat
+stulga emas, butun tizimga tegishli: yuk xati, kirim, talabnoma,
+omborlar aro hujjat va kassa — har biri qoldiq va qarz bilan BIR XIL
+raqamni aytishi shart.
+
+Har soha uchun bitta savol, hammasi BITTA ro'yxatda (`TEKSHIRUVLAR`):
+bron ↔ konver, yuk xati ↔ chiqqan konver (dona va summa), egasiz va
+narxsiz chiqim, T/M jamlanma ↔ konverlar, matras kirimi ↔ konverlar,
+xom ashyo minus va kirim qatorlari, omborlar aro yo'lda qolgan
+hujjat, qaytarish, kassa minus va kursiz so'm, mijoz va ta'minotchi
+balansi ↔ qarzdorlik lentasi.
+
+**Faqat O'QIYDI** — qaysi hujjat to'g'ri ekanini tizim taxmin
+qilmaydi; har xatoning yonida tuzatish yo'li yoziladi. Har tekshiruv
+ALOHIDA bajariladi: bittasining SQL xatosi qolganini to'xtatmaydi.
+Yangi hujjat turi qo'shilganda shu ro'yxatga bitta tekshiruv
+qo'shiladi va test uni xatosiz ishlashini talab qiladi.
+
+Ikki eshik: `GET /api/integrity` — `sales.fix` (administrator);
+`GET /api/integrity/diag` — sessiyasiz, `X-Diag-Token` sarlavhasi
+`ERP_DIAG_TOKEN` ga teng bo'lsa (kamida 24 belgi). Kalit qo'yilmagan
+bo'lsa yo'l 404 qaytaradi. Javobda mijoz va xodim ISMI yo'q (4-qoida)
+— hujjat va konver raqami, mahsulot va son.
 
 ---
 

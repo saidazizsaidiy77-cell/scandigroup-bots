@@ -380,6 +380,12 @@ const App = (() => {
       title: 'Sof aylanma kapital', lead: 'Aktiv va passiv',
       text: "Ombor, ishlab chiqarish, kassa va qarzlar \u00b7 oyning 15-sanasi va oxiriga",
       perm: ['cash.view', 'cash.manage'] },
+    //  ★ TIZIM TEKSHIRUVI (zavod qarori, 2026-10): yuk xati, kirim,
+    //  ombor, kassa va qarz bir xil raqamni aytadimi. Faqat o'qiydi.
+    { href: '/tekshiruv.html', mod: 'reports', nav: 'Tizim tekshiruvi',
+      title: 'Tizim tekshiruvi', lead: 'Hujjat ↔ qoldiq ↔ qarz',
+      text: "Yuk xati, bron, ombor, xom ashyo, omborlar aro, kassa va qarzlar bir-biriga mos keladimi",
+      perm: ['sales.fix'] },
     { href: '/dashboard.html', mod: 'reports', nav: 'Panel',
       group: 'Ishlab chiqarish hisobotlari',
       title: 'Boshqaruv paneli', lead: "Ko'rsatkichlar",

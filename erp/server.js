@@ -85,6 +85,8 @@ app.use('/api/cost', require('./modules/cost'));
 app.use('/api/navbat', require('./modules/nav'));
 app.use('/api/tasks', require('./modules/tasks'));
 app.use('/api/payroll', require('./modules/payroll'));
+// Tizim tekshiruvi: hujjat, qoldiq va qarz bir xil raqamni aytadimi.
+app.use('/api/integrity', require('./modules/integrity'));
 
 // Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:
 // menyu sahifa ochilishi bilan chiziladi, ya'ni nom klientda baribir kerak.

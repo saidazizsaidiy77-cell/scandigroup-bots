@@ -12914,6 +12914,50 @@ test('kassalar aro valyuta almashish: bankdan so\'m, kassaga dollar', async () =
   assert.equal(Number(b2.uzs), Number(b1.uzs) + 1210000);
 });
 
+//  ★ TIZIM TEKSHIRUVI: har tekshiruv xatosiz ishlaydi (eski bazada
+//  ustun yo'q bo'lsa ham javob qaytadi), faqat administratorga ochiq,
+//  sessiyasiz eshik esa kalitsiz yopiq. Osilgan bron va yuk xati
+//  farqini topadi.
+test('tizim tekshiruvi: hamma tekshiruv ishlaydi va xatoni topadi', async () => {
+  const { db } = require('../db');
+  const r = await admin('GET', '/api/integrity');
+  assert.equal(r.status, 200, r.text);
+  const xatolar = r.body.checks.filter((c) => c.error);
+  assert.deepEqual(xatolar.map((c) => c.key + ': ' + c.error), [], 'SQL xatosiz');
+
+  //  Osilgan bron: 3 talik konverga 5 ta bron
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 3, is_opening: true, fg_on: kun(-1) }] })).body.created[0];
+  const o = (await db.query(
+    `WITH c AS (INSERT INTO customers (name) VALUES ('Tekshiruv mijoz') RETURNING id)
+     INSERT INTO orders (order_no, customer_id, status)
+     SELECT 'TEKSH-1', id, 'new' FROM c RETURNING id`)).rows[0];
+  const it = (await db.query(`INSERT INTO order_items (order_id, product_id, qty, unit_price)
+    VALUES ($1, $2, 5, 100) RETURNING id`, [o.id, PENAL])).rows[0];
+  await db.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
+    VALUES ($1, $2, 5)`, [u.id, it.id]);
+  const r2 = (await admin('GET', '/api/integrity')).body;
+  const bron = r2.checks.find((c) => c.key === 'bron_konverdan_kop');
+  assert.ok(bron.rows.some((x) => x.conveyor_no === u.conveyor_no && x.bron === 5));
+  assert.ok(r2.xato >= 1);
+
+  //  Huquq: savdo xodimiga yopiq; kalitsiz eshik yo'qdek javob beradi
+  const sot = await xodim('Tekshiruv sotuvchi', 'sotuvchi');
+  assert.equal((await sot('GET', '/api/integrity')).status, 403);
+  const diag = await fetch(base + '/api/integrity/diag', { headers: { 'x-diag-token': 'x' } });
+  assert.equal(diag.status, 404);
+  process.env.ERP_DIAG_TOKEN = 'k'.repeat(32);
+  const ok = await fetch(base + '/api/integrity/diag',
+    { headers: { 'x-diag-token': 'k'.repeat(32) } });
+  assert.equal(ok.status, 200);
+  assert.equal((await fetch(base + '/api/integrity/diag',
+    { headers: { 'x-diag-token': 'j'.repeat(32) } })).status, 404);
+  delete process.env.ERP_DIAG_TOKEN;
+
+  await db.query(`DELETE FROM unit_reservations WHERE order_item_id = $1`, [it.id]);
+  await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [o.id]);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
