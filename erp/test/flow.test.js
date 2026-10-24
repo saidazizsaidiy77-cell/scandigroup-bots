@@ -12958,6 +12958,42 @@ test('tizim tekshiruvi: hamma tekshiruv ishlaydi va xatoni topadi', async () => 
   await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [o.id]);
 });
 
+//  ★ BUYURTMASI CHIQMAGAN CHIQIM: qarz bor, yuk xati yo'q. Tekshiruv
+//  topadi, «↩ omborga» qaytaradi, jurnal esa `shipped` ni qabul qilmaydi.
+test('buyurtmasi chiqmagan chiqim omborga qaytadi', async () => {
+  const { db } = require('../db');
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, is_opening: true, fg_on: kun(-3) }] })).body.created[0];
+  //  Jurnaldan «chiqib ketgan» qilib bo'lmaydi
+  const j = await admin('PATCH', '/api/units/' + u.id, { status: 'shipped' });
+  assert.equal(j.status, 400, j.text);
+  const o = (await db.query(
+    `WITH c AS (INSERT INTO customers (name) VALUES ('Ochiq buyurtma mijoz') RETURNING id)
+     INSERT INTO orders (order_no, customer_id, status)
+     SELECT 'OCHIQ-1', id, 'new' FROM c RETURNING id, customer_id`)).rows[0];
+  //  Eski yozuv: konver chiqib ketgan, buyurtma esa yo'q
+  await db.query(`UPDATE production_units SET status = 'shipped', ship_on = $2,
+                    order_no = 'OCHIQ-1', customer_id = $3, unit_price = 450
+                  WHERE id = $1`, [u.id, kun(-1), o.customer_id]);
+  const t = (await admin('GET', '/api/integrity')).body.checks
+    .find((c) => c.key === 'chiqqan_buyurtma_ochiq');
+  assert.ok(t.rows.some((x) => x.conveyor_no === u.conveyor_no), 'tekshiruv topadi');
+  const p = (await admin('GET', '/api/units/track?no=' + u.conveyor_no)).body;
+  assert.ok(JSON.stringify(p).includes('"order_status":"new"'));
+
+  //  Sababsiz bo'lmaydi; sotuvchiga yopiq
+  assert.equal((await admin('POST', `/api/sales/units/${u.id}/unship`, {})).status, 400);
+  const r = await admin('POST', `/api/sales/units/${u.id}/unship`, { note: 'chiqmagan' });
+  assert.equal(r.status, 200, r.text);
+  const v = await H.id(`SELECT status, ship_on, customer_id, order_no
+                          FROM production_units WHERE id = $1`, [u.id]);
+  assert.equal(v.status, 'fg');
+  assert.equal(v.ship_on, null);
+  assert.equal(v.customer_id, null, 'qarzdan chiqdi');
+  assert.equal(v.order_no, null);
+  await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [o.id]);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

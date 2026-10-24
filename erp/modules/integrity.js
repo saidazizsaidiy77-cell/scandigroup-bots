@@ -168,6 +168,17 @@ const TEKSHIRUVLAR = [
            ORDER BY u.order_no`,
   },
 
+  {
+    key: 'chiqqan_buyurtma_ochiq', soha: 'Savdo',
+    title: "Konver chiqib ketgan, buyurtmasi esa chiqmagan — qarz bor, yuk xati yo'q",
+    fix: "Konver pasportida «↩ omborga» (mahsulot javonda bo'lsa) yoki buyurtmani chiqarish",
+    sql: `SELECT u.conveyor_no, u.order_no, u.qty, u.ship_on, o.status AS buyurtma
+            FROM production_units u
+            JOIN orders o ON o.order_no = u.order_no
+           WHERE u.status = 'shipped' AND o.status <> 'shipped'
+           ORDER BY u.ship_on`,
+  },
+
   // ── ISHLAB CHIQARISH VA T/M OMBOR ───────────────────────────────────
   {
     key: 'konver_soni', soha: 'Ombor',

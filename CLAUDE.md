@@ -1981,6 +1981,21 @@ yuk xatidagidan oshmaydi** (qator − allaqachon chiqqani, mahsulot
 bo'yicha), bronda turgan dona olinmaydi, vitrina olinmaydi. Huquqi
 `sales.fix`, **sabab MAJBURIY**, audit `fix`.
 
+**★ BUYURTMASI CHIQMAGAN CHIQIM HAM OMBORGA** (zavod qarori,
+2026-10; Z-544). Konver «chiqib ketgan» va zakaz raqami bor, lekin
+o'sha buyurtma O'ZI chiqmagan — ya'ni yuk xati yo'q, imzo yo'q, qarz
+esa (u konverdan) mijozga yozilib turibdi. «Mijozdan qaytarish» bu
+yerda yo'l emas: lentaga bo'lmagan savdo ham, bo'lmagan qaytish ham
+qolardi. Shuning uchun `/unship` buni ham oladi: konver `fg` ga
+qaytadi, mijoz va zakaz raqami tozalanadi (eski qiymati auditda).
+Pasportda zakaz yonida **«buyurtma chiqmagan»** tegi va «↩ omborga»;
+«Tizim tekshiruvi» da `chiqqan_buyurtma_ochiq`.
+
+**Jurnaldan holat FAQAT «bekor qilingan» ga o'zgaradi**
+(`PATCH /api/units/:id`): `shipped`, `fg` va boshqasi o'z yo'lidan
+(/ship, qabul, o'tkazish) — ular hujjat, bron va qarzni birga yozadi.
+Ilgari API har qanday holatni qabul qilardi.
+
 **Chiqib ketgan buyurtma QULFSIZ HAM YOPIQ**: administrator tuzatib
 «Saqlash» ni bossa `/lock` so'ralmaydi va server ham `ok` qaytaradi —
 bron chiqarishda o'chiriladi, ya'ni qulf sharti u yerda har doim

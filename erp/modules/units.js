@@ -797,7 +797,11 @@ router.get('/track', need('production.view', 'production.entry',
             c.name  AS customer, o.id AS order_id,
             p.name  AS product, g.name AS product_type, g.uom,
             COALESCE(b.qty, 0)::int AS booked,
-            COALESCE(b.rows, '[]'::json) AS bron
+            COALESCE(b.rows, '[]'::json) AS bron,
+            --  Chiqib ketgan konverning buyurtmasi O'ZI chiqmagan bo'lsa
+            --  yuk xati yo'q, qarz esa bor — pasport tuzatish tugmasini
+            --  shundan chizadi (/unship).
+            o.status AS order_status
        FROM production_units u
        JOIN products p        ON p.id = u.product_id
        JOIN product_groups g  ON g.id = p.group_id
@@ -1988,6 +1992,17 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
     const e = new Error(touched.map((k) => RESTRICTED[k]).join(', ') +
       " \u2014 buni faqat administrator va ishlab chiqarish boshlig'i o'zgartiradi");
     e.status = 403; throw e;
+  }
+
+  //  ★ HOLAT BU YERDAN FAQAT BEKOR QILINADI. Konver «chiqib ketgan»,
+  //  «omborda» yoki «ishlab chiqarishda» bo'lishi O'Z yo'lidan chiqadi
+  //  (/ship, qabul qilish, o'tkazish) — har biri hujjat, bron, qarz va
+  //  jamlanma hisobni birga yozadi. Bu yerdan `shipped` yuborilsa
+  //  konver yuk xatisiz mijozning qarziga tushardi: buyurtma zavodda,
+  //  qarzda esa mahsulot.
+  if (status != null && status !== '' && status !== 'cancelled') {
+    const e = new Error("Holatni bu yerdan faqat «bekor qilingan» ga o'zgartirish mumkin");
+    e.status = 400; throw e;
   }
 
   const nextNo  = conveyor_no != null && String(conveyor_no).trim()
