@@ -9439,11 +9439,26 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   const reja = (await tdb.query(
     `SELECT COALESCE(SUM(plan), 0)::numeric AS s FROM sales_kpi_targets t
        JOIN workers w ON w.id = t.worker_id AND w.active
-                      AND NOT COALESCE(w.kpi_bonus_tushum, false)
       WHERE indicator = 'DONA' AND category IS NOT NULL
         AND mon = date_trunc('month', CURRENT_DATE)::date`)).rows[0];
   assert.equal(sd.turkum.reduce((a, r) => a + Number(r.reja_qty || 0), 0),
                Number(reja.s));
+
+  //  ★ BOSHLIQNING (kpi_bonus_tushum) DONA rejasi SANALADI, dollar
+  //  rejasi esa YO'Q (zavod qarori, 2026-10).
+  const bosh = (await tdb.query(
+    `INSERT INTO workers (name, kpi_bonus_tushum) VALUES ('Panel boshliq', true)
+     RETURNING id`)).rows[0].id;
+  const stul = (r) => r.turkum.find((x) => x.code === 'STUL');
+  await tdb.query(
+    `INSERT INTO sales_kpi_targets (worker_id, mon, indicator, category, plan)
+     VALUES ($1, date_trunc('month', CURRENT_DATE), 'DONA', 'STUL', 150),
+            ($1, date_trunc('month', CURRENT_DATE), 'SEGMENT', 'STUL', 9000)`, [bosh]);
+  const sd2 = (await admin('GET', '/api/sales/dashboard')).body;
+  assert.equal(Number(stul(sd2).reja_qty || 0) - Number(stul(sd).reja_qty || 0), 150);
+  assert.equal(Number(stul(sd2).reja_amount || 0), Number(stul(sd).reja_amount || 0));
+  await tdb.query(`DELETE FROM sales_kpi_targets WHERE worker_id = $1`, [bosh]);
+  await tdb.query(`UPDATE workers SET active = false WHERE id = $1`, [bosh]);
   const faol = (await tdb.query(
     `SELECT COUNT(*)::int n FROM sales_categories WHERE active`)).rows[0].n;
   assert.equal(sd.turkum.length, faol, 'har turkum o\'z kartochkasida');
