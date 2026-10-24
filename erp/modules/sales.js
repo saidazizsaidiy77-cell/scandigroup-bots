@@ -3038,6 +3038,13 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     for (const b of bron) {
       const u = (await client.query(
         `SELECT * FROM production_units WHERE id = $1`, [b.unit_id])).rows[0];
+      //  ★ BRON KONVERDAN KO'P BO'LSA CHIQARILMAYDI (zavod qarori,
+      //  2026-10). Ilgari konver BUTUNLIGICHA chiqib ketardi va
+      //  ortiqcha bron jimgina tashlab yuborilardi: yuk xatida 10,
+      //  konverdan 8 — mijozning qarzi ham 8 tadan yozilardi.
+      if (Number(b.qty) > Number(u.qty))
+        throw new Error(`${b.conveyor_no}: buyurtmada ${b.qty} ta, konverda `
+          + `${u.qty} ta — savdo qaytarib olib, yetishmaganiga konver biriktirsin`);
       const id = b.qty < u.qty
         ? await clonePart(client, req, u, b.qty, { keepPlace: true })
         : u.id;

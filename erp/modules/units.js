@@ -2566,6 +2566,28 @@ async function bronKochir(client, fromId, toId, limit) {
   return kochdi;
 }
 
+//  ★ BRON BO'LAKDAN KO'P BO'LIB QOLMAYDI (zavod qarori, 2026-10).
+//  Qisman jo'natish va qisman qabulda bron ESKI qatorda qoladi
+//  (izoh: `handoverOne`, `acceptStock`) — lekin eski qatorda qolgan
+//  dona brondan KAM bo'lishi mumkin: 10 talik konver, 10 tasi
+//  buyurtmada, mudir 2 tasini qabul qildi va 8 tasi qoldi. Shart
+//  yo'q edi va qatorda 8 dona, 10 bron turib qolardi.
+//
+//  Natijasi chiqarishda bilinardi: `/ship` bron 10 ni ko'rib
+//  buyurtmani to'liq deb o'tkazardi, konverdan esa 8 tasi chiqardi —
+//  yuk xatida 10, mijozning qarzida 8.
+//
+//  Shuning uchun ORTIQCHASI ajralgan bo'lak bilan ketadi: eski
+//  qatorda o'z donasicha bron qoladi, qolgani yangi bo'lakka ko'chadi.
+async function bronOrtigi(client, fromId, toId) {
+  const r = (await client.query(
+    `SELECT u.qty, COALESCE((SELECT SUM(x.qty) FROM unit_reservations x
+                              WHERE x.unit_id = u.id), 0)::int AS bron
+       FROM production_units u WHERE u.id = $1`, [fromId])).rows[0];
+  const ortiq = r ? Number(r.bron) - Number(r.qty) : 0;
+  if (ortiq > 0) await bronKochir(client, fromId, toId, ortiq);
+}
+
 //  ★ BO'SHAB QOLGAN QATOR O'CHADI — TARIXI QOLADI. Bo'laklar
 //  uchrashganda qator birlashadi va bo'shab qolgani o'chiriladi. O'sha
 //  qatorga ilingan hamma narsa AVVAL tirik qatorga ko'chadi.
@@ -3254,6 +3276,7 @@ async function handoverOne(client, req, it, undo) {
     throw new Error(`${u.conveyor_no}: bu yerda ${u.qty} ta, ${n} ta jo'natilmoqda`);
   const id = n < u.qty ? await clonePart(client, req, u, n, { keepPlace: true })
                        : unitId;
+  if (id !== unitId) await bronOrtigi(client, unitId, id);
 
   await client.query(
     `UPDATE production_units
@@ -3402,6 +3425,7 @@ async function acceptStock(client, req, it, undo) {
     throw new Error(`${u.conveyor_no}: jo'natilgani ${u.qty} ta, ${n} ta qabul qilinmoqda`);
   const id = n < u.qty ? await clonePart(client, req, u, n, { keepPlace: true })
                        : unitId;
+  if (id !== unitId) await bronOrtigi(client, unitId, id);
 
   //  Ishlab chiqarishdan kelgan mahsulot HAR DOIM T/M omborga tushadi:
   //  vitrinaga u shu yerdan ko'chiriladi (`warehouse/fg/transfer`). Tsex

@@ -272,6 +272,62 @@ test('omborda qisman qabul va tsexga qaytarish', async () => {
     'fg');
 });
 
+//  ★ BRON BO'LAKDAN KO'P BO'LIB QOLMAYDI. 10 talik konverning hammasi
+//  buyurtmada; mudir 2 tasini qabul qildi va 8 tasi qoldi. Bron eski
+//  qatorda turardi (10 bron, 8 dona) va /ship buyurtmani to'liq deb
+//  o'tkazib, konverdan 8 tasini chiqarardi — yuk xatida 10, qarzda 8.
+test('qisman qabulda ortiqcha bron bo\'lak bilan ketadi', async () => {
+  const { db } = require('../db');
+  const QADOYNA = (await H.id(`SELECT id FROM sections WHERE code='QAD-OYNA'`)).id;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 10, color: 'Oq', section_id: QADOYNA }] })).body.created[0];
+  const qad = H.api(base, await H.sessionFor('Qadoqlash ustasi'));
+  await xomsiz();
+  await qad('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  const oi = (await db.query(
+    `WITH c AS (INSERT INTO customers (name) VALUES ('Bron ortiqcha mijoz') RETURNING id)
+     INSERT INTO orders (order_no, customer_id, status)
+     SELECT 'BRON-ORT-1', id, 'new' FROM c RETURNING id`)).rows[0];
+  const item = (await db.query(`INSERT INTO order_items (order_id, product_id, qty, unit_price)
+    VALUES ($1, $2, 10, 100) RETURNING id`, [oi.id, PENAL])).rows[0];
+  await db.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
+    VALUES ($1, $2, 10)`, [u.id, item.id]);
+
+  //  Qisman jo'natish: 7 tasi jo'natildi, 3 tasi tsexda qoldi
+  const jo = await qad('POST', '/api/units/handover', { items: [{ unit_id: u.id, qty: 7 }] });
+  assert.equal(jo.status, 200, jo.text);
+  const bron = async (id) => (await H.id(`SELECT COALESCE(SUM(qty),0)::int n
+    FROM unit_reservations WHERE unit_id=$1`, [id])).n;
+  const piece = jo.body.done[0].unit_id;
+  assert.equal(await bron(u.id), 3, 'eski qatorda o\'z donasicha');
+  assert.equal(await bron(piece), 7, 'ortiqchasi bo\'lak bilan ketdi');
+
+  //  Qisman qabul: 7 tadan 2 tasi
+  const ok = await admin('POST', '/api/units/stock/accept',
+    { items: [{ unit_id: piece, qty: 2 }] });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(await bron(piece), 5);
+  assert.equal(await bron(ok.body.done[0].unit_id), 2);
+
+  //  Hech bir qatorda bron donadan ko'p emas
+  const ortiq = (await db.query(`SELECT u.id FROM production_units u
+    WHERE u.conveyor_no = $1 AND u.qty < (SELECT COALESCE(SUM(qty),0)
+      FROM unit_reservations x WHERE x.unit_id = u.id)`, [u.conveyor_no])).rows;
+  assert.equal(ortiq.length, 0);
+
+  //  /ship ham tutadi: eski xato ma'lumotda bron konverdan ko'p bo'lsa
+  //  chiqarilmaydi (yuk xatida 10, konverdan 2 chiqib ketmasin)
+  await db.query(`DELETE FROM unit_reservations WHERE order_item_id = $1`, [item.id]);
+  await db.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
+    VALUES ($1, $2, 10)`, [ok.body.done[0].unit_id, item.id]);
+  await db.query(`UPDATE orders SET status = 'to_ship' WHERE id = $1`, [oi.id]);
+  const sh = await admin('POST', `/api/sales/orders/${oi.id}/ship`, {});
+  assert.equal(sh.status, 400, sh.text);
+  assert.match(sh.body.error, /konverda 2 ta/);
+  await db.query(`DELETE FROM unit_reservations WHERE order_item_id = $1`, [item.id]);
+  await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [oi.id]);
+});
+
 //  ★ BOSQICHDAN SAKRAB BO'LMAYDI. Topshirish — marshrutning
 //  CHEGARASIDA bo'ladigan ish: konver yo keyingi tsexga o'tadi, yo
 //  chiqish bo'limidan T/M omborga. Ilgari server faqat doirani

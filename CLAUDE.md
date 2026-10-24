@@ -4174,6 +4174,17 @@ ham to'g'ri. **Bron ESKI qatorda qoladi**: teskarisi qilinsa 2 talik
 qatorda 4 ta bron turib qolardi, ya'ni konverda bo'shdan ko'p band dona
 bo'lardi va savdo hisobi buzilardi.
 
+**★ LEKIN BRON BO'LAKDAN KO'P BO'LIB QOLMAYDI** (zavod qarori,
+2026-10; `bronOrtigi`, `modules/units.js`). Qoida bron eski qatorda
+qolgan donadan kam yoki teng bo'lganda to'g'ri edi. 10 talikning
+hammasi buyurtmada bo'lsa-chi: 2 tasi qabul qilingach eski qatorda
+8 dona, 10 bron turib qolardi. Chiqarishda `/ship` bron 10 ni ko'rib
+buyurtmani to'liq deb o'tkazar, konverdan esa 8 tasi chiqardi —
+yuk xatida 10, mijozning qarzida 8 (Z26-0849 aynan shunday chiqdi).
+Endi qisman jo'natish va qisman qabulda ORTIQCHASI ajralgan bo'lak
+bilan ketadi. `/ship` ham tutadi: bron konverdagi donadan ko'p bo'lsa
+chiqarmaydi va konver raqamini yozadi.
+
 **★ ORQAGA QAYTARISH — FAQAT ADMINISTRATORDA** (`production.undo`,
 `POST /api/units/undo`, zavod qarori 2026-10). «O'tkazish» bexosdan
 bosilishi oddiy hol, lekin uni orqaga oladigan joy tsex ekranida YO'Q
