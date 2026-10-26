@@ -2690,6 +2690,30 @@ const KUN = [...READ, ...SHIP];
 //  Doira bu yerda ham CHEGARA: yo'nalish (`channelsOf`) va «faqat
 //  o'zinikini» (`ownOf`) — ro'yxat bilan AYNAN bir xil shart, aks
 //  holda panel menejerga boshqa menejerning savdosini ko'rsatardi.
+//  ★ PUL TUSHUMI — BITTA JOYDA. KPI varag'i ham, savdo paneli ham
+//  shundan o'qiydi: ikki joyda yozilgan shart bir kun ajralib ketardi
+//  va panelda bitta raqam, varaqda boshqasi turardi.
+//  Fakt — shu oy BARCHA mijozdan kassaga kelgan pul (`ok`; bekor va
+//  `pending` sanalmaydi — `v_sales_kpi_fact` dagi TUSHUM shoxi bilan
+//  bir xil shart).
+async function zavodTushumi(mon) {
+  return Number((await db.query(
+    `SELECT COALESCE(SUM(amount_usd), 0) AS s FROM cash_ops
+      WHERE from_kind = 'customer' AND status = 'ok'
+        AND date_trunc('month', op_date)::date = $1::date`, [mon])).rows[0].s);
+}
+//  Kutilmoqda — pul kirim sanasi (`orders.payment_on`) shu oyning
+//  BUGUNDAN keyingi kunlariga tushgan buyurtmalar.
+async function kutilganPuli(mon) {
+  return Number((await db.query(
+    `SELECT COALESCE(SUM(oi.qty * COALESCE(oi.unit_price, 0)), 0) AS s
+       FROM orders o JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status <> 'cancelled'
+        AND o.payment_on >= CURRENT_DATE
+        AND date_trunc('month', o.payment_on)::date = $1::date`,
+    [mon])).rows[0].s);
+}
+
 router.get('/dashboard', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const own = ownOf(req);
@@ -2922,11 +2946,33 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
         ORDER BY sc.sort, sc.name`, [chans, own]),
   ]);
 
+  //  ★ PUL TUSHUMI REJASI (zavod qarori, 2026-10). Turkumlar SAVDONI
+  //  o'lchaydi, «KPI bonusi tushgan puldan» belgili xodimning rejasi
+  //  esa KASSAGA KELGAN PULGA qo'yiladi — u turkum jamiga qo'shilmaydi
+  //  (yuqoridagi `reja` CTE), shuning uchun alohida kartochka. Reja —
+  //  shu oy belgili faol xodimlarga qo'yilgan TUSHUM rejasi; fakt va
+  //  kutilmoqda KPI varag'i bilan BITTA manbadan. Fakt butun zavodniki,
+  //  ya'ni doirasi bor menejerga chizilmaydi — u yerda javob uniki emas.
+  let tushum = null;
+  if (!own) {
+    const mon = (await db.query(
+      `SELECT to_char(date_trunc('month', CURRENT_DATE), 'YYYY-MM-DD') AS m`)).rows[0].m;
+    const reja = Number((await db.query(
+      `SELECT COALESCE(SUM(t.plan), 0) AS s
+         FROM sales_kpi_targets t
+         JOIN workers w ON w.id = t.worker_id AND w.active
+                       AND COALESCE(w.kpi_bonus_tushum, false)
+        WHERE t.mon = $1::date AND t.indicator = 'TUSHUM'
+          AND t.category IS NULL`, [mon])).rows[0].s);
+    if (reja > 0) tushum = { reja, fakt: await zavodTushumi(mon),
+                             kutilmoqda: await kutilganPuli(mon) };
+  }
+
   res.json({
     dan: oraliq.dan, gacha: oraliq.gacha,
     kpi: kpi.rows[0], oylar: oylar.rows, kanal: kanal.rows,
     menejer: menejer.rows, mahsulot: mahsulot.rows,
-    qarz: qarz.rows, holat: holat.rows, turkum: turi.rows,
+    qarz: qarz.rows, holat: holat.rows, turkum: turi.rows, tushum,
     //  Doirasi bor menejerda «kim ko'p sotdi» degan savol yo'q:
     //  ro'yxatda baribir bitta ism turadi.
     ozi: !!own,
@@ -3895,10 +3941,7 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   //  o'zinikidan emas: fakt barcha mijozdan kassaga kelgan pul (bekor
   //  qilingani va qabul qilinmagani — `pending` — sanalmaydi; TUSHUM
   //  shoxi bilan bir xil shart, `sql/sales-kpi.sql`).
-  const zavodTushum = Number((await db.query(
-    `SELECT COALESCE(SUM(amount_usd), 0) AS s FROM cash_ops
-      WHERE from_kind = 'customer' AND status = 'ok'
-        AND date_trunc('month', op_date)::date = $1::date`, [K.mon])).rows[0].s);
+  const zavodTushum = await zavodTushumi(K.mon);
 
   const nisbat = K.jami_kun ? K.otgan_kun / K.jami_kun : 0;
   const son = (v) => Number(v || 0);
@@ -3946,13 +3989,7 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   //  zavodniki. Faqat BUGUNDAN keyingi kun: o'tib ketgani yo pul
   //  allaqachon kelgan (faktda turibdi) yo kelmagan — ikkala holda ham
   //  qo'shish yolg'on bo'lardi.
-  const kutilganPul = !joriy ? 0 : Number((await db.query(
-    `SELECT COALESCE(SUM(oi.qty * COALESCE(oi.unit_price, 0)), 0) AS s
-       FROM orders o JOIN order_items oi ON oi.order_id = o.id
-      WHERE o.status <> 'cancelled'
-        AND o.payment_on >= CURRENT_DATE
-        AND date_trunc('month', o.payment_on)::date = $1::date`,
-    [K.mon])).rows[0].s);
+  const kutilganPul = !joriy ? 0 : await kutilganPuli(K.mon);
 
   //  Har xodim uchun alohida varaq — Excel'dagi bilan bir xil shakl.
   //  ★ ISHDAN KETGAN XODIMNING VARAG'I CHIZILMAYDI (zavod qarori,

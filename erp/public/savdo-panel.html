@@ -73,7 +73,11 @@
     yig'indisi. <b>Chiqdi</b> — shu oy zavoddan chiqib ketgani (mijozdan
     qaytgani ayirilgan). <b>Zavodda</b> — buyurtma yozilgan, lekin hali
     chiqmagan. <b>Chiqsa</b> — zavoddagilar ham chiqib ketsa reja necha
-    foiz bajariladi. Matras donaga kirmaydi (to'plamning bir qismi).</p>
+    foiz bajariladi. Matras donaga kirmaydi (to'plamning bir qismi).
+    <b>Pul tushumi</b> — «KPI bonusi tushgan puldan» belgili xodimga
+    qo'yilgan reja; tushdi — shu oy barcha mijozdan kassaga kelgan pul,
+    kutilmoqda — pul kirim sanasi shu oyning qolgan kunlariga qo'yilgan
+    buyurtmalar. Jamiga qo'shilmaydi: u savdo emas, pul.</p>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -175,6 +179,25 @@ async function load() {
   const jZa = tk.reduce((a, r) => a + Number(r.zavodda_amount || 0), 0);
   const jRe = tk.reduce((a, r) => a + Number(r.reja_amount || 0), 0);
   const jf = foiz(jCh, jRe), jfz = foiz(jCh + jZa, jRe);
+  //  ★ PUL TUSHUMI — turkumlar bilan YONMA-YON, lekin jamiga
+  //  qo'shilmaydi: u savdo emas, kassaga KELGAN pul. Chiziq o'sha
+  //  shaklda: to'q — tushdi, chiziqli — kutilmoqda (pul kirim sanasi
+  //  shu oyga qo'yilgan buyurtmalar), belgi — reja.
+  const tushumKart = (t) => {
+    if (!t) return '';
+    const fa = Number(t.fakt) || 0, ku = Number(t.kutilmoqda) || 0;
+    const re = Number(t.reja) || 0;
+    const f = foiz(fa, re), fz = foiz(fa + ku, re);
+    return `<div class="kcard">
+      <div class="knom">Pul tushumi</div>
+      <div class="kfoiz">${f == null ? '—' : f + '% <small>bajarildi</small>'}</div>
+      ${bar(fa, ku, re)}
+      <div class="kqator"><span>Reja</span><span><b>${esc(Panel.pul(re, true))}</b></span></div>
+      <div class="kqator"><span>Tushdi</span><span><b>${esc(Panel.pul(fa, true))}</b></span></div>
+      <div class="kqator"><span>Kutilmoqda</span><span><b>${esc(Panel.pul(ku, true))}</b></span></div>
+      <div class="kqator"><span>Tushsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>
+    </div>`;
+  };
   $('turkumJami').innerHTML = `
     <div class="kjami">
       <span><span class="muted">Jami chiqdi</span> <b>${esc(Panel.pul(jCh, true))}</b></span>
@@ -196,7 +219,8 @@ async function load() {
       <div class="kqator"><span>Zavodda</span><span><b>${Panel.son(za)}</b> ${u}</span></div>
       <div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>
     </div>`;
-  }).join('') || '<p class="muted" style="font-size:13px">Turkum yo\'q.</p>';
+  }).join('') + tushumKart(d.tushum)
+    || '<p class="muted" style="font-size:13px">Turkum yo\'q.</p>';
 
   Panel.bars($('oylar'), { rows: d.oylar });
   //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur

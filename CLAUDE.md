@@ -3170,6 +3170,17 @@ uchun konverning o'zidan, bir marta. **Zavodda** — «Zavodda turibdi»
 kartochkasi bilan bir xil shart; buyurtmadagi SUMMA ekranda yo'q,
 faqat jami «chiqsa %» ga kiradi. Oraliq filtriga bog'liq emas.
 
+**★ PUL TUSHUMI — BESHINCHI KARTOCHKA** (zavod qarori, 2026-10;
+`/api/sales/dashboard` dagi `tushum`). «KPI bonusi tushgan puldan»
+belgili xodimning rejasi kassaga KELGAN pulga qo'yiladi va turkum
+jamiga qo'shilmaydi (yuqorida) — shuning uchun alohida kartochka:
+reja, **tushdi** (shu oy barcha mijozdan kassaga kelgan pul),
+**kutilmoqda** (pul kirim sanasi shu oyning qolgan kunlariga qo'yilgan
+buyurtmalar) va **tushsa %**. Fakt va kutilmoqda KPI varag'i bilan
+BITTA joydan (`zavodTushumi`, `kutilganPuli`, `modules/sales.js`).
+Rejasi yo'q oyda va doirasi bor menejerda chizilmaydi — u butun
+zavodning puli.
+
 Birinchi ikki urinish (guruh bo'yicha jadval, keyin ikki chiziqli
 grafik) zavodga yoqmadi: savol «nechta sotdik» emas, «reja qanchaga
 bajariladi» edi.
