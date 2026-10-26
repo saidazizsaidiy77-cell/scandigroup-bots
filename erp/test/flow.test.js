@@ -9518,6 +9518,21 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   const sd2 = (await admin('GET', '/api/sales/dashboard')).body;
   assert.equal(Number(stul(sd2).reja_qty || 0) - Number(stul(sd).reja_qty || 0), 150);
   assert.equal(Number(stul(sd2).reja_amount || 0), Number(stul(sd).reja_amount || 0));
+  //  ★ PUL TUSHUMI KARTOCHKASI: reja — belgili xodimning TUSHUM rejasi,
+  //  fakt — KPI varag'idagi bilan BITTA manba (`zavodTushumi`).
+  assert.equal(sd2.tushum, null, 'TUSHUM rejasi yo\'q — kartochka yo\'q');
+  await tdb.query(
+    `INSERT INTO sales_kpi_targets (worker_id, mon, indicator, category, plan)
+     VALUES ($1, date_trunc('month', CURRENT_DATE), 'TUSHUM', NULL, 50000)`, [bosh]);
+  const sd3 = (await admin('GET', '/api/sales/dashboard')).body;
+  assert.equal(Number(sd3.tushum.reja), 50000);
+  const kassa = (await tdb.query(
+    `SELECT COALESCE(SUM(amount_usd), 0)::numeric AS s FROM cash_ops
+      WHERE from_kind = 'customer' AND status = 'ok'
+        AND date_trunc('month', op_date) = date_trunc('month', CURRENT_DATE)`)).rows[0];
+  assert.equal(Number(sd3.tushum.fakt).toFixed(2), Number(kassa.s).toFixed(2));
+  assert.equal(Number(stul(sd3).reja_amount || 0), Number(stul(sd).reja_amount || 0),
+               'tushum rejasi turkum jamiga qo\'shilmaydi');
   await tdb.query(`DELETE FROM sales_kpi_targets WHERE worker_id = $1`, [bosh]);
   await tdb.query(`UPDATE workers SET active = false WHERE id = $1`, [bosh]);
   const faol = (await tdb.query(
@@ -9538,6 +9553,7 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   const r = await mng('GET', '/api/sales/dashboard');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.ozi, true, 'doirasi bor xodimda menejerlar bloki chizilmaydi');
+  assert.equal(r.body.tushum, null, 'butun zavodning puli doirasi bor menejerga chizilmaydi');
 });
 
 //  ★ KUNLIK XABARLAR — JADVALDAN YUBORILADI (zavod qarori, 2026-09).
