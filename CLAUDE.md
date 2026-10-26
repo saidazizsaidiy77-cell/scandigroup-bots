@@ -1093,6 +1093,25 @@ Ikki yo'ldan kiritiladi:
 Qayta yuklashda yozilgani O'CHMAYDI, faqat bo'sh bo'lsa to'ladi —
 kartochkadan esa tuzatish ham, tozalash ham mumkin.
 
+**★ MIJOZ O'CHIRILMAYDI, ARXIVGA OLINADI** (zavod qarori, 2026-10;
+`arxivSababi`, `modules/units.js`; mijoz kartochkasidagi **«Arxivga
+olish»**). Mijozga buyurtma, yuk xati, to'lov va konver bog'langan —
+qator o'chirilsa qarzdorlik, dalolatnoma va foyda-zarar tarixi
+buzilardi. Arxivdagi mijoz (`customers.active = false`) ro'yxatlardan
+va buyurtma oynasidan chiqadi, lekin `v_customer_sales` ham uni
+o'qimaydi — ya'ni QARZI hisobotlardan jimgina yo'qolardi. Shuning
+uchun faqat **hisobi yopiq** mijoz arxivga olinadi: balansi nol,
+ochiq buyurtmasi, zavodda unga yozilgan konveri va qabul qilinmagan
+qaytarishi yo'q; rad etilsa sabab nomi bilan keladi. Tekshiruv
+SERVERDA (`PATCH /customers/:id`, `active: false`). Ro'yxat ostida
+**«Arxiv (N)»** — u yerdan qaytariladi; arxivdagi nom qayta
+kiritilsa ham mijoz qaytadi.
+
+**Izi yo'q mijoz esa O'CHIRILADI** (`DELETE /api/units/customers/:id`):
+buyurtmasi, konveri, kassa operatsiyasi, qaytarishi va boshlang'ich
+qarzi yo'q — adashib kiritilgan. Huquqi mijoz qo'shish bilan bir xil
+(`can_add_customer`), doira chegarasi bilan; audit `delete`.
+
 **Buyurtma** (`orders` + `order_items`) — mijoz nima so'ragani, qatorlari
 bilan: bitta buyurtmada bir nechta mahsulot bo'ladi. Raqamni tizim beradi
 (`Z26-0001`). Zavod uni IKKI manbadan bajaradi (zavod qarori): T/M omborda
