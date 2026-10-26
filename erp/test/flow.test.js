@@ -13010,6 +13010,62 @@ test('buyurtmasi chiqmagan chiqim omborga qaytadi', async () => {
   await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [o.id]);
 });
 
+//  ★ MIJOZ O'CHIRILMAYDI, ARXIVGA OLINADI (izoh: modules/units.js,
+//  `arxivSababi`). Qarzi yoki ochiq buyurtmasi bor mijoz arxivga
+//  olinmaydi — aks holda qarzi hisobotlardan jimgina yo'qolardi;
+//  izi yo'q mijoz esa o'chiriladi.
+test('mijoz: arxivga olish va o\'chirish', async () => {
+  const { db } = require('../db');
+  const yangi = async (name) => (await admin('POST', '/api/units/customers',
+    { name })).body.id;
+  const royxat = async () => (await admin('GET', '/api/units/customers')).body;
+
+  //  1. Izi yo'q mijoz o'chiriladi
+  const bosh = await yangi('Arxiv sinov bo\'sh');
+  const d = await admin('DELETE', '/api/units/customers/' + bosh);
+  assert.equal(d.status, 200, d.text);
+  assert.ok(!(await royxat()).customers.some((c) => c.id === bosh));
+
+  //  2. Qarzi bor — arxivga ham, o'chirishga ham yo'q
+  const qarz = await yangi('Arxiv sinov qarzdor');
+  await admin('PATCH', '/api/units/customers/' + qarz,
+    { opening_debt: 300, opening_debt_on: kun(-10) });
+  const a1 = await admin('PATCH', '/api/units/customers/' + qarz, { active: false });
+  assert.equal(a1.status, 400, a1.text);
+  assert.match(a1.body.error, /qarzi 300/);
+  const d1 = await admin('DELETE', '/api/units/customers/' + qarz);
+  assert.equal(d1.status, 400, d1.text);
+  assert.match(d1.body.error, /boshlang'ich qarz/);
+
+  //  3. Ochiq buyurtmasi bor — arxivga yo'q
+  const och = await yangi('Arxiv sinov ochiq');
+  const o = (await db.query(`INSERT INTO orders (order_no, customer_id, status)
+    VALUES ('ARXIV-1', $1, 'new') RETURNING id`, [och])).rows[0];
+  const a2 = await admin('PATCH', '/api/units/customers/' + och, { active: false });
+  assert.equal(a2.status, 400, a2.text);
+  assert.match(a2.body.error, /1 ta buyurtma ochiq/);
+
+  //  4. Hisobi yopiq (buyurtma bekor) — arxivga olinadi, o'chirilmaydi
+  await db.query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [o.id]);
+  assert.equal((await admin('DELETE', '/api/units/customers/' + och)).status, 400,
+    'buyurtmasi bor mijoz o\'chirilmaydi');
+  const a3 = await admin('PATCH', '/api/units/customers/' + och, { active: false });
+  assert.equal(a3.status, 200, a3.text);
+  let r = await royxat();
+  assert.ok(!r.customers.some((c) => c.id === och), 'ro\'yxatdan chiqdi');
+  assert.ok(r.arxiv.some((c) => c.id === och), 'arxivda turadi');
+
+  //  5. Qaytariladi — va shu nom bilan qayta kiritilsa ham qaytadi
+  assert.equal((await admin('PATCH', '/api/units/customers/' + och,
+    { active: true })).status, 200);
+  r = await royxat();
+  assert.ok(r.customers.some((c) => c.id === och));
+  await admin('PATCH', '/api/units/customers/' + och, { active: false });
+  assert.equal(await yangi('Arxiv sinov ochiq'), och);
+  assert.ok((await royxat()).customers.some((c) => c.id === och),
+    'arxivdagi nom qayta kiritilsa mijoz qaytadi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

@@ -67,8 +67,51 @@ router.get('/customers', need('production.view', 'sales.view'), wrap(async (req,
             OR EXISTS (SELECT 1 FROM orders o    WHERE o.manager_id = w.id))
         ORDER BY is_sales DESC, w.name`),
   ]);
-  res.json({ customers: customers.rows, channels: channels.rows, managers: managers.rows });
+  //  ★ ARXIVDAGI MIJOZLAR alohida ro'yxat (izoh: `arxivSababi`).
+  //  `v_customer_sales` faqat faolini o'qiydi, shuning uchun jadvalning
+  //  o'zidan, doira chegarasi bilan — u yerdan qaytarib yoqiladi.
+  const arxiv = await db.query(
+    `SELECT c.id, c.name, c.phone, c.region, ch.name AS channel_name,
+            m.name AS manager_name
+       FROM customers c
+       LEFT JOIN customer_channels ch ON ch.code = c.channel
+       LEFT JOIN workers m            ON m.id = c.manager_id
+      WHERE NOT c.active
+        AND ($1::text[] IS NULL OR c.channel = ANY($1))
+        AND ($2::int IS NULL OR $2 IN (c.manager_id, c.manager2_id))
+      ORDER BY c.name`, [chans, own]);
+  res.json({ customers: customers.rows, channels: channels.rows,
+             managers: managers.rows, arxiv: arxiv.rows });
 }));
+
+//  ★ MIJOZ O'CHIRILMAYDI, ARXIVGA OLINADI (zavod qarori, 2026-10).
+//  Unga buyurtma, yuk xati, to'lov va konver bog'langan — qator
+//  o'chirilsa qarzdorlik, dalolatnoma va foyda-zarar tarixi buzilardi.
+//
+//  Arxivdagi mijoz `v_customer_sales` dan tushadi (`WHERE c.active`),
+//  ya'ni uning QARZI ham qarzdorlik ro'yxatidan va mijozlar saldosidan
+//  jimgina yo'qolardi. Shuning uchun faqat HISOBI YOPIQ mijoz arxivga
+//  olinadi: balansi nol, ochiq buyurtmasi, zavodda turgan konveri va
+//  qabul qilinmagan qaytarishi yo'q. Sabab NOMI bilan qaytadi —
+//  «olib bo'lmaydi» degan javob nima qilish kerakligini aytmasdi.
+async function arxivSababi(q, id) {
+  const { rows: [r] } = await q.query(
+    `SELECT (SELECT balance FROM v_customer_sales WHERE id = $1) AS balance,
+            (SELECT COUNT(*)::int FROM orders
+              WHERE customer_id = $1 AND status NOT IN ('shipped', 'cancelled')) AS ochiq,
+            (SELECT COUNT(*)::int FROM production_units
+              WHERE customer_id = $1 AND status IN ('production', 'fg')) AS konver,
+            (SELECT COUNT(*)::int FROM cust_returns
+              WHERE customer_id = $1 AND status = 'new') AS qaytarish`, [id]);
+  const sabab = [];
+  if (Number(r.balance)) sabab.push(Number(r.balance) > 0
+    ? `qarzi ${Number(r.balance).toFixed(2)} $`
+    : `haqdor ${(-Number(r.balance)).toFixed(2)} $ (biz qarzdormiz)`);
+  if (r.ochiq) sabab.push(`${r.ochiq} ta buyurtma ochiq`);
+  if (r.konver) sabab.push(`${r.konver} ta konver zavodda unga yozilgan`);
+  if (r.qaytarish) sabab.push(`${r.qaytarish} ta qaytarish qabul qilinmagan`);
+  return sabab.length ? 'Arxivga olib bo\'lmaydi: ' + sabab.join(' · ') : null;
+}
 
 router.get('/customers/stats', need('production.view', 'sales.view'), wrap(async (req, res) => {
   //  Kesimlar butun zavod bo'yicha yig'iladi — doirasi bor xodimga
@@ -128,6 +171,9 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
            manager_id = COALESCE(EXCLUDED.manager_id, customers.manager_id),
            manager2_id = COALESCE(EXCLUDED.manager2_id, customers.manager2_id),
            note       = COALESCE(EXCLUDED.note,       customers.note),
+           -- Arxivdagi nom qayta kiritilsa mijoz QAYTADI: aks holda u
+           -- «saqlandi» deb turib, ro'yxatda ko'rinmay qolardi.
+           active     = true,
            -- Boshlang'ich qarz bir marta kiritiladi. Qayta yuklashda
            -- yozilgani o'chmaydi, faqat bo'sh bo'lsa to'ldiriladi.
            opening_debt    = COALESCE(customers.opening_debt, EXCLUDED.opening_debt),
@@ -154,6 +200,12 @@ router.post('/customers', need(...COMMERCE), wrap(async (req, res) => {
 router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
   const { name, phone, country, region, channel, manager_id, note, active,
           opening_debt, opening_debt_on, manager2_id } = req.body;
+  //  Arxivga olish — `arxivSababi` dan o'tadi; katakni chizmaslik
+  //  himoya emas, API to'g'ridan-to'g'ri ham chaqiriladi.
+  if (active === false) {
+    const sabab = await arxivSababi(db, req.params.id);
+    if (sabab) return res.status(400).json({ error: sabab });
+  }
   const { rows } = await db.query(
     `UPDATE customers SET
        name       = COALESCE($2, name),
@@ -188,6 +240,52 @@ router.patch('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
      opening_debt_on || null, ownOf(req),
      manager2_id !== undefined, Number(manager2_id) || null]);
   if (!rows[0]) return res.status(404).json({ error: 'Mijoz topilmadi' });
+  if (typeof active === 'boolean') {
+    await audit(req, { module: 'sales', action: active ? 'unarchive' : 'archive',
+                       entity: 'customer', entity_id: req.params.id });
+  }
+  res.json({ ok: true });
+}));
+
+//  ★ ADASHIB KIRITILGAN MIJOZ O'CHIRILADI — faqat IZI YO'Q bo'lsa
+//  (zavod qarori, 2026-10). Buyurtmasi, konveri, to'lovi, qaytarishi
+//  va boshlang'ich qarzi yo'q mijoz hech qaysi hisobotda turmaydi —
+//  uni o'chirish hech narsani buzmaydi, arxivda esa bekorga yotardi.
+//  Izi bor mijoz o'chirilmaydi, arxivga olinadi. Huquqi mijoz QO'SHISH
+//  bilan bir xil (`can_add_customer`): adashib kiritganini o'sha odam
+//  tozalaydi. Doira chegarasi PATCH bilan bir xil.
+router.delete('/customers/:id', need(...COMMERCE), wrap(async (req, res) => {
+  if (!req.user.can_add_customer) {
+    return res.status(403).json({ error: 'Mijozni o\'chirish huquqi yo\'q \u2014 '
+      + 'Xodimlar sahifasida \u00abMijoz qo\'shadi\u00bb katagi kerak' });
+  }
+  const id = Number(req.params.id);
+  const { rows: [c] } = await db.query(
+    `SELECT id, name, opening_debt FROM customers
+      WHERE id = $1 AND ($2::int IS NULL OR $2 IN (manager_id, manager2_id))`,
+    [id, ownOf(req)]);
+  if (!c) return res.status(404).json({ error: 'Mijoz topilmadi' });
+  const { rows: [r] } = await db.query(
+    `SELECT (SELECT COUNT(*)::int FROM orders           WHERE customer_id = $1) AS buyurtma,
+            (SELECT COUNT(*)::int FROM production_units WHERE customer_id = $1) AS konver,
+            (SELECT COUNT(*)::int FROM cust_returns     WHERE customer_id = $1) AS qaytarish,
+            (SELECT COUNT(*)::int FROM cash_ops
+              WHERE (from_kind = 'customer' AND from_id = $1)
+                 OR (to_kind   = 'customer' AND to_id   = $1)) AS tolov`, [id]);
+  const iz = [];
+  if (r.buyurtma) iz.push(`${r.buyurtma} ta buyurtma`);
+  if (r.konver) iz.push(`${r.konver} ta konver`);
+  if (r.tolov) iz.push(`${r.tolov} ta kassa operatsiyasi`);
+  if (r.qaytarish) iz.push(`${r.qaytarish} ta qaytarish`);
+  if (Number(c.opening_debt)) iz.push('boshlang\'ich qarz');
+  if (iz.length) {
+    return res.status(400).json({ error: 'O\'chirib bo\'lmaydi \u2014 mijozda '
+      + iz.join(', ') + ' bor. Arxivga oling: hisobi yopiq bo\'lsa ro\'yxatdan yo\'qoladi, '
+      + 'tarixi saqlanadi.' });
+  }
+  await db.query(`DELETE FROM customers WHERE id = $1`, [id]);
+  await audit(req, { module: 'sales', action: 'delete', entity: 'customer',
+                     entity_id: id, payload: { name: c.name } });
   res.json({ ok: true });
 }));
 

@@ -65,6 +65,9 @@
     <div class="row" style="gap:10px">
       <h2 style="margin:0">Ro'yxat</h2>
       <button id="btnList" onclick="toggleList()">Ko'rsatish</button>
+      <!--  Arxivdagi mijozlar alohida: ular hech qaysi hisobotda turmaydi,
+            lekin qaytarib yoqish uchun ro'yxat kerak. -->
+      <button id="btnArxiv" onclick="toggleArxiv()" hidden></button>
     </div>
     <input id="fQ" placeholder="ism, region yoki telefon" style="max-width:280px" oninput="onSearch()">
   </div>
@@ -77,6 +80,14 @@
       <th class="num">Qarzi, $</th><th></th></tr></thead>
     <tbody id="tB"></tbody>
   </table></div>
+  <div id="arxivWrap" hidden style="overflow-x:auto;margin-top:14px">
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Arxivdagi mijozlar
+      ro'yxatlarda, buyurtma oynasida va hisobotlarda turmaydi. Tarixi
+      (yuk xatlari, to'lovlar) saqlanadi.</p>
+    <table><thead><tr><th>Mijoz nomi</th><th>Region</th><th>Tel raqami</th>
+      <th>Kanali</th><th>Menejer</th><th></th></tr></thead>
+      <tbody id="tA"></tbody></table>
+  </div>
 </div>
 
 <div id="modalRoot"></div>
@@ -105,12 +116,13 @@ const GEO = {
 };
 const COUNTRIES = Object.keys(GEO);
 
-let customers = [], channels = [], managers = [];
+let customers = [], channels = [], managers = [], arxiv = [];
 
 async function load(){
   const [c, s] = await Promise.all([
     App.api('/api/units/customers'), App.api('/api/units/customers/stats')]);
   customers = c.customers; channels = c.channels; managers = c.managers;
+  arxiv = c.arxiv || [];
 
   //  `load()` qayta chaqiriladi (saqlangandan keyin), shuning uchun
   //  qo'shib emas, QAYTA yoziladi — aks holda tugma har saqlashda
@@ -200,6 +212,52 @@ function render(){
     : '<tr><td class="muted" colspan="11">Mijoz topilmadi</td></tr>';
   $('btnList').textContent = $('listWrap').hidden
     ? `Ko'rsatish (${rows.length})` : `Yashirish (${rows.length})`;
+
+  //  Arxiv bo'sh bo'lsa tugma umuman chizilmaydi: «Arxiv (0)» savol
+  //  qoldirardi, javob emas.
+  $('btnArxiv').hidden = !arxiv.length;
+  $('btnArxiv').textContent = `Arxiv (${arxiv.length})`;
+  if (!arxiv.length) $('arxivWrap').hidden = true;
+  $('tA').innerHTML = arxiv.map(c => `
+    <tr>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td class="muted">${c.region ? esc(c.region) : '—'}</td>
+      <td class="muted">${c.phone ? esc(c.phone) : '—'}</td>
+      <td class="muted">${c.channel_name ? esc(c.channel_name) : '—'}</td>
+      <td class="muted">${c.manager_name ? esc(c.manager_name) : '—'}</td>
+      <td class="num"><button onclick="faollik(${c.id}, true)">Qaytarish</button></td>
+    </tr>`).join('');
+}
+
+function toggleArxiv(){
+  $('arxivWrap').hidden = !$('arxivWrap').hidden;
+}
+
+//  ★ ARXIVGA OLISH / QAYTARISH. Tekshiruv SERVERDA (`arxivSababi`):
+//  qarzi, ochiq buyurtmasi yoki zavodda turgan konveri bor mijoz
+//  arxivga olinmaydi — aks holda qarzi hisobotlardan jimgina
+//  yo'qolardi. Rad etilsa sababi xabarda keladi.
+async function faollik(id, active){
+  if (!active && !confirm('Mijoz arxivga olinadi: ro\'yxatlarda va buyurtma '
+      + 'oynasida ko\'rinmaydi. Tarixi saqlanadi va «Arxiv» dan qaytariladi.\n\nDavom etilsinmi?')) return;
+  try{
+    await App.api('/api/units/customers/' + id,
+      { method: 'PATCH', body: JSON.stringify({ active }) });
+    close_(); load();
+  }catch(e){ alert(e.message); }
+}
+
+//  ★ O'CHIRISH — faqat izi yo'q mijoz (adashib kiritilgan). Buyurtma,
+//  konver, to'lov yoki boshlang'ich qarzi bori server rad etadi va
+//  arxivga olishni taklif qiladi.
+async function ochir(id){
+  const c = customers.find(x => x.id === id);
+  if (!confirm(`«${c?.name || ''}» butunlay o'chiriladi. Bu faqat adashib `
+      + 'kiritilgan, hech qanday harakati yo\'q mijoz uchun.\n\nDavom etilsinmi?')) return;
+  try{
+    await App.api('/api/units/customers/' + id, { method: 'DELETE' });
+    close_(); load();
+  }catch(e){ alert(e.message); }
 }
 
 //  Kiritilayotgan raqam qaysi tomon ekanini aytadi. «-400» ni yozgan odam
@@ -276,6 +334,15 @@ function openForm(id){
           <p class="muted" style="font-size:12px;margin:-6px 0 0" id="cDebtHint"></p>
           <div><label>Izoh</label><input id="cNote"></div>
           <button class="primary" onclick="save(${id || 'null'})">Saqlash</button>
+          ${c ? `<div class="row" style="gap:8px;justify-content:space-between;
+                   border-top:1px solid var(--line);padding-top:12px">
+            <span class="muted" style="font-size:12px">Hisobi yopiq mijoz arxivga
+              olinadi; izi yo'q (adashib kiritilgan) mijoz o'chiriladi.</span>
+            <span class="row" style="gap:8px">
+              <button onclick="faollik(${c.id}, false)">Arxivga olish</button>
+              ${App.me()?.can_add_customer
+                ? `<button onclick="ochir(${c.id})">O'chirish</button>` : ''}
+            </span></div>` : ''}
         </div>
       </div></div>`;
   fillRegions();
