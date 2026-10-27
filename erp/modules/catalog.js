@@ -199,9 +199,13 @@ router.patch('/fasons/:id', need('production.manage'), wrap(async (req, res) => 
      typeof active === 'boolean' ? active : null, sort == null ? null : Number(sort)]);
   if (!rows[0]) return res.status(404).json({ error: 'Mahsulot nomi topilmadi' });
   // Mahsulot nomi fasondan olinadi — nom o'zgarsa SKU nomlari ham yangilanadi,
-  // aks holda jurnalda eski nom qolib ketadi.
-  if (name) await db.query(`UPDATE products SET name = $2 WHERE fason_id = $1`,
-                           [req.params.id, rows[0].name]);
+  // aks holda jurnalda eski nom qolib ketadi. O'lcham nomning bir qismi
+  // («Safia 3,5 m», yaratishdagi bilan bir xil qoida) — u tushib qolsa
+  // oltita stol bitta nom bo'lib qolardi.
+  if (name) await db.query(
+    `UPDATE products SET name = CASE WHEN size_label IS NOT NULL
+                                     THEN $2 || ' ' || size_label ELSE $2 END
+      WHERE fason_id = $1`, [req.params.id, rows[0].name]);
   await audit(req, { module: 'production', action: 'update', entity: 'fason',
                      entity_id: req.params.id, payload: req.body });
   res.json({ ok: true });
