@@ -2946,6 +2946,61 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
         ORDER BY sc.sort, sc.name`, [chans, own]),
   ]);
 
+  //  ★ TURKUM ICHIDA — QAYSI MAHSULOTDAN NECHTA (zavod qarori, 2026-10).
+  //  Turkum kartochkasi «stuldan 806 dona chiqdi» deydi, savol esa
+  //  keyingisi: QAYSI stuldan. Qoida turkum kartochkasi bilan AYNAN bir
+  //  xil (`turi` so'rovi): shu oy chiqib ketgan KONVER, qabul qilingan
+  //  qaytarish ayirilgan; zavodda — chiqmagan buyurtma qatorlari; doira
+  //  ham o'sha. Shuning uchun mahsulotlar yig'indisi kartochkadagi
+  //  raqamga teng (test solishtiradi).
+  //
+  //  ★ NOL QATOR TASHLAB YUBORILMAYDI — so'rov savdodan emas, MAHSULOTDAN
+  //  boshlanadi (LEFT JOIN): shu oy umuman sotilmagan mahsulot ham
+  //  o'z qatorida turadi — «nima sotilmayapti» degan savol ham shu
+  //  yerda (kunlik xulosadagi qoida bilan bir xil). Faqat faol mahsulot
+  //  va turkumi bor guruh; faolsizida savdo bo'lsa u ham qoladi.
+  const mahsulotlar = (await db.query(
+    `WITH oy AS (SELECT date_trunc('month', CURRENT_DATE)::date AS m),
+     chiq AS (
+       SELECT u.product_id AS pid, SUM(u.qty) AS q, SUM(u.total_amount) AS s
+         FROM production_units u
+         LEFT JOIN customers cu ON cu.id = u.customer_id, oy
+        WHERE u.status = 'shipped' AND u.ship_on >= oy.m
+          AND ($1::text[] IS NULL OR cu.channel = ANY($1))
+          AND ($2::int IS NULL OR mijoz_meniki(u.customer_id, $2))
+        GROUP BY 1
+       UNION ALL
+       SELECT u.product_id, -SUM(i.qty), -SUM(i.qty * COALESCE(i.price, 0))
+         FROM cust_returns r
+         JOIN cust_return_items i ON i.return_id = r.id
+         JOIN production_units u  ON u.id = i.unit_id
+         LEFT JOIN customers cu   ON cu.id = r.customer_id, oy
+        WHERE r.status = 'accepted' AND r.ret_on >= oy.m
+          AND ($1::text[] IS NULL OR cu.channel = ANY($1))
+          AND ($2::int IS NULL OR mijoz_meniki(r.customer_id, $2))
+        GROUP BY 1),
+     ch AS (SELECT pid, SUM(q) AS q, SUM(s) AS s FROM chiq GROUP BY 1),
+     zav AS (
+       SELECT i.product_id AS pid, SUM(i.qty) AS q
+         FROM v_sales_orders o
+         JOIN order_items i ON i.order_id = o.id
+        WHERE o.status NOT IN ('shipped', 'cancelled')
+          AND ($1::text[] IS NULL OR o.channel = ANY($1))
+          AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
+        GROUP BY 1)
+     SELECT p.id, p.name, g.name AS turi, g.sales_category AS turkum, g.uom,
+            COALESCE(ch.q, 0)::int      AS chiqdi_qty,
+            COALESCE(ch.s, 0)::numeric  AS chiqdi_amount,
+            COALESCE(zav.q, 0)::int     AS zavodda_qty
+       FROM products p
+       JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN ch  ON ch.pid  = p.id
+       LEFT JOIN zav ON zav.pid = p.id
+      WHERE g.sales_category IS NOT NULL
+        AND ((p.active AND g.active) OR ch.q IS NOT NULL OR zav.q IS NOT NULL)
+      ORDER BY chiqdi_amount DESC, chiqdi_qty DESC, p.name, g.name`,
+    [chans, own])).rows;
+
   //  ★ PUL TUSHUMI REJASI (zavod qarori, 2026-10). Turkumlar SAVDONI
   //  o'lchaydi, «KPI bonusi tushgan puldan» belgili xodimning rejasi
   //  esa KASSAGA KELGAN PULGA qo'yiladi — u turkum jamiga qo'shilmaydi
@@ -2973,6 +3028,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
     kpi: kpi.rows[0], oylar: oylar.rows, kanal: kanal.rows,
     menejer: menejer.rows, mahsulot: mahsulot.rows,
     qarz: qarz.rows, holat: holat.rows, turkum: turi.rows, tushum,
+    mahsulotlar,
     //  Doirasi bor menejerda «kim ko'p sotdi» degan savol yo'q:
     //  ro'yxatda baribir bitta ism turadi.
     ozi: !!own,
