@@ -5432,6 +5432,13 @@ Sarf O'SHA bo'limga va uning omboridan yoziladi (`section_id` so'rovda,
 `mehmonBolim`); doira — bo'limning tsexi. Qaysi bo'lim qaysi guruhga
 — bazada, bir martalik (`migration_flags`: `qoplash-sp`).
 
+**★ QOPLASH SARFISIZ T/M OMBORGA YO'Q** (zavod qarori, 2026-10;
+`qoplamaYoqmi`, `modules/units.js`). Konver Qoplashdan marshrut bilan
+o'tmagani uchun bo'limdagi savol (`xomYoqmi`) uni so'ramaydi — sarf
+yozilmasa mato tannarxdan jimgina tushardi. Chegara oxirida: T/M
+omborga JO'NATISHDA ham, QABULDA ham. Sarf konver RAQAMI bo'yicha
+qaraladi (bo'lak tasodif); bekor qilingani hisoblanmaydi.
+
 Huquqi **`materials.request`** — nomi shuni aytadi: «talabnoma yozish
 va SARFNI yozish». Tsex boshlig'ida u allaqachon bor; huquqi yo'q
 xodimda tugma umuman chizilmaydi va tekshiruv serverda.

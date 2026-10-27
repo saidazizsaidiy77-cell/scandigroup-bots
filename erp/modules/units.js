@@ -2879,6 +2879,39 @@ async function xomYoqmi(client, unitId) {
   return rows[0] || null;
 }
 
+//  ★ QOPLASH SARFISIZ T/M OMBORGA YO'Q (zavod qarori, 2026-10;
+//  `section_material_groups`). SP suyanchig'iga mato stul tsexining
+//  Qoplash bo'limida qoplanadi va konver u yerga marshrut bilan
+//  bormaydi — ya'ni bo'limdan o'tishdagi savol (`xomYoqmi`) uni hech
+//  qachon so'ramaydi. Sarf yozilmasa matoning puli tannarxdan jimgina
+//  tushib qolardi. Shuning uchun chegara oxirida: omborga JO'NATISHDA
+//  ham, QABUL qilishda ham.
+//
+//  Sarf RAQAM bo'yicha qaraladi (tannarx qoidasi): konver bo'linadi va
+//  mato qaysi bo'lakka yozilgani tasodif. Qaytaradi: yetishmayotgan
+//  bo'lim nomi, yoki null.
+async function qoplamaYoqmi(client, unitId) {
+  const { rows } = await client.query(
+    `SELECT u.conveyor_no, s.name AS section, sh.name AS shop
+       FROM production_units u
+       JOIN products p ON p.id = u.product_id
+       JOIN section_material_groups smg ON smg.group_id = p.group_id
+       JOIN sections s ON s.id = smg.section_id
+       LEFT JOIN shops sh ON sh.id = s.shop_id
+      WHERE u.id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM material_moves mm
+            JOIN production_units u2 ON u2.id = mm.to_id
+           WHERE mm.to_kind = 'unit' AND mm.status = 'ok'
+             AND mm.section_id = s.id
+             AND lower(u2.conveyor_no) = lower(u.conveyor_no))
+      LIMIT 1`, [unitId]);
+  const r = rows[0];
+  if (r) throw new Error(
+    `${r.conveyor_no}: «${r.section}» bo'limida xom ashyo biriktirilmagan`
+    + `${r.shop ? ` (${r.shop})` : ''} — avval ▣ bilan mato yozilsin`);
+}
+
 //  ★ SAVOL BIR YO'LA BERILADI (zavod qarori, 2026-09). Ilgari xato
 //  BIRINCHI konverda to'xtardi va ekranda o'shaning raqami turardi:
 //  boshliq «bu bo'limda biriktirilmaydi» ni bosardi, belgi bittasiga
@@ -3357,6 +3390,7 @@ async function handoverOne(client, req, it, undo) {
       throw new Error(
         `${u.conveyor_no}: «${u.section || 'bo\'limsiz'}» chiqish bo'limi emas — `
         + `T/M omborga faqat qadoqlashdan topshiriladi`);
+    if (!u.next_shop_id) await qoplamaYoqmi(client, u.id);
   }
 
   if (undo) {
@@ -3513,6 +3547,7 @@ async function acceptStock(client, req, it, undo) {
     throw new Error(`${u.conveyor_no}: hali chiqish bo'limiga yetmagan`);
   if (!u.handover_on)
     throw new Error(`${u.conveyor_no}: hali jo'natilmagan — qadoqlash tsexi «jo'natdim» deyishi kerak`);
+  await qoplamaYoqmi(client, u.id);
 
   //  ★ BIR QISMI HAM QABUL QILINADI (zavod qarori, 2026-09).
   //
