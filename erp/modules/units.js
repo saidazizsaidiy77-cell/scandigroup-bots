@@ -4311,6 +4311,21 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
       GROUP BY p.name, g.name, g.uom
       ORDER BY SUM(c.qty) DESC, p.name`, [shopId])).rows;
 
+  //  ★ BEGONA KONVER — FAQAT XOM ASHYO UCHUN (zavod qarori, 2026-10;
+  //  `section_material_groups`). SP suyanchig'i Qoplash bo'limida
+  //  qoplanadi, lekin konver u yerga marshrut bilan bormaydi: ro'yxatda
+  //  faqat ▣ turadi, o'tkazish ham, jo'natish ham yo'q. Ishlab
+  //  chiqarishdagi konver, qaysi bo'limda turgani bilan birga.
+  const xom = (await db.query(
+    `SELECT smg.section_id AS host_id, r.id, r.conveyor_no, r.product,
+            r.product_type, r.qty, r.color, r.fabric, r.note,
+            r.section, r.shop
+       FROM section_material_groups smg
+       JOIN sections s ON s.id = smg.section_id AND s.shop_id = $1
+       JOIN v_unit_register r ON r.group_id = smg.group_id
+      WHERE r.status = 'production'
+      ORDER BY r.conveyor_no, r.id`, [shopId])).rows;
+
   const mine = rows.filter((r) => r.owner_shop_id === shopId);
   // Kiritilgan, lekin hali konveyerga chiqmagan konverlar. Ular hech bir
   // bo'limda turmaydi, shuning uchun bo'lim ustunlariga tushmaydi —
@@ -4322,7 +4337,8 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
     oy,
     unstarted: fresh,
     sections: sections.map((sc) => ({
-      ...sc, units: mine.filter((u) => u.section_id === sc.id) })),
+      ...sc, units: mine.filter((u) => u.section_id === sc.id),
+      xom_units: xom.filter((u) => u.host_id === sc.id) })),
     // Qabul qilishni kutayotganlar: boshqa tsexda turibdi, keyingi qadami menda
     inbox: rows.filter((r) => r.owner_shop_id !== shopId && r.section_id),
   });

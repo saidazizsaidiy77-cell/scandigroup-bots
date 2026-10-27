@@ -945,6 +945,34 @@ async function konverDoira(req, id) {
     new Error('Bu konver sizning doirangizda emas'), { status: 403 });
 }
 
+//  ★ BEGONA BO'LIM — FAQAT XOM ASHYO (zavod qarori, 2026-10;
+//  `section_material_groups`). SP suyanchig'i stul tsexining «Qoplash»
+//  bo'limida qoplanadi, konver esa u yerga marshrut bo'yicha bormaydi.
+//  O'sha bo'limning boshlig'i SP konveriga o'z omboridan mato yozadi:
+//  doirasi konverniki emas, BO'LIMNIKI. Qaytaradi: sarf yoziladigan
+//  bo'lim (va uning tsexi), yo'q bo'lsa null.
+async function mehmonBolim(q, req, unitId, sectionId) {
+  if (!sectionId) return null;
+  const d = req.user.scope_shop_ids || [];
+  return (await q.query(
+    `SELECT s.id AS section_id, s.shop_id
+       FROM section_material_groups smg
+       JOIN sections s ON s.id = smg.section_id
+       JOIN production_units u ON u.id = $1
+       JOIN products p ON p.id = u.product_id AND p.group_id = smg.group_id
+      WHERE smg.section_id = $2
+        AND ($3::int[] IS NULL OR s.shop_id = ANY($3))`,
+    [unitId, Number(sectionId) || 0, d.length ? d : null])).rows[0] || null;
+}
+
+//  Konverning o'z doirasi YOKI begona bo'lim — ikkalasidan biri.
+async function sarfDoira(q, req, unitId, sectionId) {
+  const m = await mehmonBolim(q, req, unitId, sectionId);
+  if (m) return m;
+  await konverDoira(req, unitId);
+  return null;
+}
+
 //  ★ OMBOR RO'YXATI TARTIBLANADI, TANLAB QO'YILMAYDI. Eng to'g'risi
 //  birinchi turadi — konver turgan BO'LIMNING ombori, keyin o'sha
 //  bo'lim TSEXining ombori — va sahifa birinchisini oladi.
@@ -1018,7 +1046,7 @@ router.get('/conveyor', need(...VIEW, 'production.view', 'production.entry'),
 //  turish sezilarli.
 router.get('/unit/:id', need(...VIEW, 'materials.request'),
   wrap(async (req, res) => {
-  await konverDoira(req, req.params.id);
+  const mehmon = await sarfDoira(db, req, req.params.id, req.query.section_id);
   const doira = whDoira(req);
   const u = (await db.query(
     `SELECT u.id, u.conveyor_no, u.qty, u.current_section_id AS section_id,
@@ -1028,9 +1056,12 @@ router.get('/unit/:id', need(...VIEW, 'materials.request'),
        LEFT JOIN sections s ON s.id = u.current_section_id
       WHERE u.id = $1`, [req.params.id])).rows[0];
   if (!u) return res.status(404).json({ error: 'Konver topilmadi' });
+  //  Begona bo'limdan ochilsa ombor tartibi O'SHA bo'limdan: Qoplash
+  //  ombori birinchi, konver turgan bo'limniki emas.
+  const joy = mehmon || u;
 
   const [whs, rows] = await Promise.all([
-    db.query(OMBOR, [doira, u.section_id, u.shop_id]),
+    db.query(OMBOR, [doira, joy.section_id, joy.shop_id]),
     //  Bekor qilingani ham chiqadi, lekin o'chirilgan holida: sarf
     //  PULGA tegadi va yo'qolgan qator savol qoldirardi («men yozgan
     //  edim-ku»). Ombor qoldig'iga esa qo'shilmaydi (`status = 'ok'`).
@@ -1058,7 +1089,7 @@ router.get('/unit/:id', need(...VIEW, 'materials.request'),
 //  hozircha bo'sh va talabnoma moduli hali yozilmagan.
 router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
   wrap(async (req, res) => {
-  await konverDoira(req, req.params.id);
+  const mehmon = await sarfDoira(db, req, req.params.id, req.body.section_id);
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "Qator yo'q" });
   const doira = whDoira(req);
@@ -1073,6 +1104,9 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
         WHERE u.id = $1 AND u.status <> 'cancelled'`,
       [req.params.id])).rows[0];
     if (!u) throw new Error('Konver topilmadi');
+    //  Begona bo'limda sarf O'SHA bo'limga yoziladi: ish shu yerda
+    //  qilingan va «qaysi bo'limda sarflandi» degan savolning javobi.
+    if (mehmon) Object.assign(u, mehmon);
 
     //  Ombor RO'YXATDAN tanlanadi va ro'yxat doira bilan chegaralangan:
     //  id ni qo'lda yuborib boshqa tsexning omboridan yozib bo'lmaydi
@@ -1136,11 +1170,11 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
 router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
   wrap(async (req, res) => {
   const mv = (await db.query(
-    `SELECT id, to_id FROM material_moves
+    `SELECT id, to_id, section_id FROM material_moves
       WHERE id = $1 AND to_kind = 'unit' AND status = 'ok'`,
     [req.params.id])).rows[0];
   if (!mv) return res.status(404).json({ error: 'Sarf topilmadi' });
-  await konverDoira(req, mv.to_id);
+  await sarfDoira(db, req, mv.to_id, mv.section_id);
   await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`,
                  [mv.id]);
   await audit(req, { module: 'materials', action: 'consume-cancel',
@@ -1203,13 +1237,13 @@ router.post('/consume/:id/restore', need('materials.request', ...MANAGE),
   try {
     await client.query('BEGIN');
     const mv = (await client.query(
-      `SELECT id, to_id, from_id, material_id, qty FROM material_moves
+      `SELECT id, to_id, from_id, material_id, qty, section_id FROM material_moves
         WHERE id = $1 AND to_kind = 'unit' AND status = 'cancelled'
         FOR UPDATE`,
       [req.params.id])).rows[0];
     if (!mv) { const e = new Error('Bekor qilingan sarf topilmadi');
                e.status = 404; throw e; }
-    await konverDoira(req, mv.to_id);
+    await sarfDoira(client, req, mv.to_id, mv.section_id);
     //  Tiklash sarfni QAYTA ayiradi — ya'ni u yozishning o'zi bilan
     //  bir xil qoidaga bo'ysunadi. Aks holda bekor qilib, darrov
     //  tiklash to'siqni bitta bosishda chetlab o'tardi.

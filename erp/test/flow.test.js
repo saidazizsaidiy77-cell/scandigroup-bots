@@ -13110,6 +13110,68 @@ test('katalog: mahsulot nomini o\'zgartirish o\'lchamni saqlaydi', async () => {
     x.size_label ? 'Bellagio ' + x.size_label : 'Bellagio');
 });
 
+//  ★ SP SUYANCHIG'I STUL TSEXIDA QOPLANADI (zavod qarori, 2026-10):
+//  konver marshrut bilan bormaydi, Qoplash bo'limi esa unga o'z
+//  omboridan mato yozadi. Penalga — yo'q (guruh ro'yxatda emas).
+test('qoplash bo\'limi SP konveriga xom ashyo yozadi', async () => {
+  const { db } = require('../db');
+  const ARRA = (await H.id(`SELECT id FROM sections WHERE code='KOR-ARRA'`)).id;
+  const QOPL = (await H.id(`SELECT id FROM sections WHERE code='STU-QOPL'`)).id;
+  const spP = (await H.id(
+    `SELECT p.id FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE g.code = 'SP' AND p.route_template_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM v_product_route r
+                     WHERE r.product_id = p.id AND r.section_id = $1)
+      LIMIT 1`, [ARRA])).id;
+  const sp = (await admin('POST', '/api/units/', { items: [
+    { product_id: spP, qty: 2, section_id: ARRA }] })).body.created[0];
+  const pen = (await admin('POST', '/api/units/', { items: [
+    { product_id: PENAL, qty: 2, section_id: ARRA }] })).body.created[0];
+
+  const xom = await xodim('Qoplash mato ombori', 'xom_ombor');
+  const wh = (await H.id(`SELECT id FROM warehouses WHERE code='TSEX-STU-QOPL'`)).id;
+  const m = (await xom('POST', '/api/materials',
+    { name: 'Qoplash sinov mato', uom: 'list', category: 'LDSP' })).body;
+  await xom('POST', '/api/materials/opening', { on: '2026-09-01', ccy: 'USD',
+    items: [{ warehouse_id: wh, material_id: m.id, qty: 30, price: 4 }] });
+
+  await xodim('Qoplash boshlig\'i', 'tsex_usta');
+  await db.query(
+    `UPDATE worker_roles SET scope_shop_id = (SELECT id FROM shops WHERE code='STUL')
+      WHERE role_code = 'tsex_usta'
+        AND worker_id = (SELECT id FROM workers WHERE name = 'Qoplash boshlig''i')`);
+  const usta = H.api(base, await H.sessionFor('Qoplash boshlig\'i'));
+
+  //  Bo'limlar ekranida — Qoplash ostida, faqat ▣ uchun.
+  const b = (await usta('GET', '/api/units/board')).body;
+  const qs = b.sections.find((x) => x.id === QOPL);
+  assert.ok(qs.xom_units.some((u) => u.id === sp.id), 'SP Qoplashda ko\'rinadi');
+  assert.ok(!qs.xom_units.some((u) => u.id === pen.id), 'penal ko\'rinmaydi');
+  assert.ok(!qs.units.some((u) => u.id === sp.id), 'o\'tkaziladigan ro\'yxatda emas');
+
+  //  Bo'limsiz — o'z doirasi emas.
+  assert.equal((await usta('GET', '/api/materials/unit/' + sp.id)).status, 403);
+  const d = (await usta('GET', '/api/materials/unit/' + sp.id + '?section_id=' + QOPL)).body;
+  assert.equal(d.warehouses[0].id, wh, 'Qoplash ombori birinchi');
+  const ok = await usta('POST', '/api/materials/unit/' + sp.id + '/consume',
+    { section_id: QOPL, items: [{ material_id: m.id, qty: 5 }] });
+  assert.equal(ok.status, 200, ok.text);
+  const mv = (await db.query(
+    `SELECT id, section_id, from_id FROM material_moves
+      WHERE to_kind = 'unit' AND to_id = $1`, [sp.id])).rows[0];
+  assert.equal(mv.section_id, QOPL, 'sarf Qoplash bo\'limiga yoziladi');
+  assert.equal(mv.from_id, wh);
+  assert.equal((await usta('POST', '/api/materials/consume/' + mv.id + '/cancel')).status, 200);
+  assert.equal((await usta('POST', '/api/materials/consume/' + mv.id + '/restore')).status, 200);
+
+  //  Penalga Qoplash orqali ham yo'q.
+  assert.equal((await usta('POST', '/api/materials/unit/' + pen.id + '/consume',
+    { section_id: QOPL, items: [{ material_id: m.id, qty: 1 }] })).status, 403);
+  //  Konver marshrutga tegilmagan.
+  assert.equal((await H.id(
+    `SELECT current_section_id AS id FROM production_units WHERE id = $1`, [sp.id])).id, ARRA);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
