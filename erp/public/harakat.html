@@ -805,7 +805,7 @@ async function xomOch(id, ev, sec) {
   if (ev) ev.stopPropagation();
   const u = unitById(id);
   if (!u) return;
-  xomUnit = id; xomSec = sec || null; xomQator = [];
+  xomUnit = id; xomSec = sec || null; xomQator = []; xomKorsat = 30;
   document.body.insertAdjacentHTML('beforeend', `
     <div class="overlay" id="xomBox" onclick="if(event.target===this)xomYop()">
       <div class="modal" style="max-width:520px">
@@ -899,6 +899,7 @@ function xomChiz(d) {
 
 async function xomWhChange() {
   xomWh = Number($('xomWh').value) || null;
+  xomKorsat = 30;
   await xomQoldiq();
   xomTop();
 }
@@ -909,11 +910,18 @@ const son = (v) => {
 };
 
 //  Qidiruv: avval omborda turgani (qoldig'i bilan), keyin
-//  spravochnikning qolgani. Ro'yxat o'ttizta bilan cheklanadi —
-//  telefonda undan uzuni baribir o'qilmaydi va qidiruvni
-//  aniqlashtirish kerak.
+//  spravochnikning qolgani. Ro'yxat o'ttizta bilan boshlanadi.
+//
+//  ★ «YANA 50 TA» (zavod qarori, 2026-10). Boshliqning omborida
+//  o'ttizdan ko'p material turadi va qolgani ko'rinmasdi — uni faqat
+//  nomini eslab, qidiruvdan topish mumkin edi. Endi ro'yxat ostida
+//  tugma bor va har bosishda yana ellikta ochiladi. Qidiruv
+//  o'zgarsa yana o'ttizdan boshlanadi.
+let xomKorsat = 30, xomOxirgiQ = '';
+const xomYana = () => { xomKorsat += 50; xomTop(); };
 function xomTop() {
   const q = ($('xomQ')?.value || '').trim().toLowerCase();
+  if (q !== xomOxirgiQ) { xomOxirgiQ = q; xomKorsat = 30; }
   const bor = new Map(xomStock.map((r) => [r.material_id, r]));
   const mos = (nom) => !q || String(nom).toLowerCase().includes(q);
   const tanlangan = new Set(xomQator.map((r) => r.id));
@@ -926,7 +934,9 @@ function xomTop() {
 
   //  Qidiruv yozilmaguncha butun spravochnik chiqarilmaydi: omborda
   //  turgani odatda o'ntacha va javob ko'pincha o'sha yerda.
-  const royxat = q ? [...birinchi, ...qolgan].slice(0, 30) : birinchi.slice(0, 30);
+  const hammasi = q ? [...birinchi, ...qolgan] : birinchi;
+  const royxat = hammasi.slice(0, xomKorsat);
+  const qoldi = hammasi.length - royxat.length;
   if (!$('xomList')) return;
   $('xomList').innerHTML = royxat.length
     ? royxat.map((m) => `
@@ -938,6 +948,9 @@ function xomTop() {
             style="font-size:12px">${
             m.qoldiq == null ? esc(m.uom)
               : `${son(m.qoldiq)} ${esc(m.uom)}`}</span></button>`).join('')
+      + (qoldi > 0 ? `<button style="width:100%;margin-top:4px" onclick="xomYana()">
+          Yana ${Math.min(50, qoldi)} tasini ko'rsatish
+          <span class="muted">· yana ${qoldi} ta${q ? '' : ' omborda'}</span></button>` : '')
     : `<p class="muted" style="font-size:13px">${q
         ? 'Topilmadi' : 'Bu omborda material yo\'q — nomini yozib qidiring'}</p>`;
 }
