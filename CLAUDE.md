@@ -3200,6 +3200,14 @@ BITTA joydan (`zavodTushumi`, `kutilganPuli`, `modules/sales.js`).
 Rejasi yo'q oyda va doirasi bor menejerda chizilmaydi — u butun
 zavodning puli.
 
+**★ TURKUM ICHIDA — QAYSI MAHSULOTDAN NECHTA** (zavod qarori,
+2026-10; `/api/sales/dashboard` dagi `mahsulotlar`). KPI kartochkasi
+ostida turkum tablari (chip) va jadval: mahsulot · turi · chiqdi ·
+summa · zavodda. Qoida va doira kartochka bilan AYNAN bir xil, test
+yig'indini kartochkaga solishtiradi (dona — faqat `kpi_dona`).
+**Nol qator ham turadi**: so'rov MAHSULOTDAN boshlanadi (LEFT JOIN),
+xira bo'lib — «nima sotilmayapti» ham savol.
+
 Birinchi ikki urinish (guruh bo'yicha jadval, keyin ikki chiziqli
 grafik) zavodga yoqmadi: savol «nechta sotdik» emas, «reja qanchaga
 bajariladi» edi.

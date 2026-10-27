@@ -34,6 +34,11 @@
   .kqator span:first-child{color:var(--muted)}
   .kjami{display:flex;flex-wrap:wrap;gap:6px 28px;align-items:baseline;margin:4px 0 14px}
   .kjami b{font-size:20px;font-variant-numeric:tabular-nums}
+  /*  Turkum ichidagi mahsulotlar: nol qator ham turadi, lekin xira —
+      ko'z avval sotilayotganini ko'rsin. */
+  #tmTab tr.nol td{color:var(--muted)}
+  #tmTab tfoot td{font-weight:600;border-top:2px solid var(--line,#e4e2dc)}
+  #tmChips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
 </style>
 </head>
 <body>
@@ -78,6 +83,15 @@
     qo'yilgan reja; tushdi — shu oy barcha mijozdan kassaga kelgan pul,
     kutilmoqda — pul kirim sanasi shu oyning qolgan kunlariga qo'yilgan
     buyurtmalar. Jamiga qo'shilmaydi: u savdo emas, pul.</p>
+</div>
+
+<!--  ★ TURKUM ICHIDA — QAYSI MAHSULOTDAN NECHTA (zavod qarori, 2026-10).
+      Shu oy, KPI kartochkasi bilan bir xil qoida; sotilmagan mahsulot
+      ham o'z qatorida turadi — «nima sotilmayapti» ham savol. -->
+<div class="card" style="margin-top:16px">
+  <h2>Shu oy — turkum bo'yicha mahsulotlar</h2>
+  <div id="tmChips"></div>
+  <div class="tbox"><table id="tmTab"></table></div>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -130,6 +144,45 @@ const HOLAT = {
   draft: 'Boshlanmagan', new: 'Boshlanmagan', waiting: 'Ishlab chiqarilmoqda',
   ready: 'Tayyor', to_ship: 'Mijozga chiqarilsin',
 };
+
+//  Turkum tanlovi qayta yuklashda saqlanadi — ro'yxat har daqiqa
+//  yangilansa ham odam o'z tabida qoladi.
+let tmRows = [], tmTurkum = [], tmSel = null;
+function tmChiz() {
+  $('tmChips').innerHTML = tmTurkum.map((t) =>
+    `<button class="chip${t.code === tmSel ? ' on' : ''}" data-c="${esc(t.code)}">${esc(t.name)}</button>`).join('');
+  $('tmChips').querySelectorAll('button').forEach((b) =>
+    b.onclick = () => { tmSel = b.dataset.c; tmChiz(); });
+  const rows = tmRows.filter((r) => r.turkum === tmSel);
+  if (!rows.length) {
+    $('tmTab').innerHTML = '<tbody><tr><td class="muted">Bu turkumda mahsulot yo\'q.</td></tr></tbody>';
+    return;
+  }
+  //  Yig'indi O'LCHOV BIRLIGI bo'yicha: dona bilan komplekt qo'shilmaydi.
+  const jami = {}; let jS = 0;
+  rows.forEach((r) => {
+    const u = r.uom || 'dona';
+    const j = jami[u] || (jami[u] = { ch: 0, za: 0 });
+    j.ch += Number(r.chiqdi_qty) || 0; j.za += Number(r.zavodda_qty) || 0;
+    jS += Number(r.chiqdi_amount) || 0;
+  });
+  const uj = (k) => Object.entries(jami).map(([u, j]) => `${Panel.son(j[k])} ${esc(u)}`).join(' · ');
+  $('tmTab').innerHTML = `<thead><tr>
+      <th>Mahsulot</th><th>Turi</th><th class="num">Chiqdi</th>
+      <th class="num">Summa</th><th class="num">Zavodda</th></tr></thead>
+    <tbody>${rows.map((r) => {
+      const ch = Number(r.chiqdi_qty) || 0, s = Number(r.chiqdi_amount) || 0;
+      const za = Number(r.zavodda_qty) || 0, u = esc(r.uom || 'dona');
+      return `<tr class="${ch || s ? '' : 'nol'}">
+        <td><b>${esc(r.name)}</b></td><td class="muted">${esc(r.turi || '')}</td>
+        <td class="num">${Panel.son(ch)} ${u}</td>
+        <td class="num">${esc(Panel.pul(s, true))}</td>
+        <td class="num">${Panel.son(za)} ${u}</td></tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr><td>Jami · ${rows.length} ta mahsulot</td><td></td>
+      <td class="num">${uj('ch')}</td><td class="num">${esc(Panel.pul(jS, true))}</td>
+      <td class="num">${uj('za')}</td></tr></tfoot>`;
+}
 
 async function load() {
   const q = new URLSearchParams();
@@ -221,6 +274,11 @@ async function load() {
     </div>`;
   }).join('') + tushumKart(d.tushum)
     || '<p class="muted" style="font-size:13px">Turkum yo\'q.</p>';
+
+  tmRows = d.mahsulotlar || [];
+  tmTurkum = tk.map((r) => ({ code: r.code, name: r.name }));
+  if (!tmTurkum.some((t) => t.code === tmSel)) tmSel = tmTurkum[0] && tmTurkum[0].code;
+  tmChiz();
 
   Panel.bars($('oylar'), { rows: d.oylar });
   //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur

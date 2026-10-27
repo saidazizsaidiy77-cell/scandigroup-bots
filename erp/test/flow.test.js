@@ -9539,6 +9539,27 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
     `SELECT COUNT(*)::int n FROM sales_categories WHERE active`)).rows[0].n;
   assert.equal(sd.turkum.length, faol, 'har turkum o\'z kartochkasida');
 
+  //  ★ TURKUM ICHIDA MAHSULOTLAR: yig'indi turkum kartochkasiga teng
+  //  (summa hammasi, dona — faqat kpi_dona guruhlarda), NOL mahsulot
+  //  ham ro'yxatda.
+  const kd = new Set((await tdb.query(
+    `SELECT id FROM products p WHERE EXISTS (SELECT 1 FROM product_groups g
+      WHERE g.id = p.group_id AND g.kpi_dona)`)).rows.map((x) => x.id));
+  for (const t of sd.turkum) {
+    const ms = sd.mahsulotlar.filter((m) => m.turkum === t.code);
+    assert.equal(ms.reduce((a, m) => a + Number(m.chiqdi_amount), 0).toFixed(2),
+                 Number(t.chiqdi_amount).toFixed(2), t.code + ' summa');
+    assert.equal(ms.filter((m) => kd.has(m.id))
+                   .reduce((a, m) => a + Number(m.chiqdi_qty), 0),
+                 Number(t.chiqdi_qty), t.code + ' dona');
+  }
+  const faolMah = (await tdb.query(
+    `SELECT COUNT(*)::int n FROM products p JOIN product_groups g ON g.id = p.group_id
+      WHERE p.active AND g.active AND g.sales_category IS NOT NULL`)).rows[0].n;
+  assert.ok(sd.mahsulotlar.length >= faolMah, 'sotilmagan mahsulot ham turadi');
+  assert.ok(sd.mahsulotlar.some((m) => Number(m.chiqdi_qty) === 0
+                                    && Number(m.chiqdi_amount) === 0), 'nol qator bor');
+
   //  Doirasi bor savdo menejeri: paneli o'ziniki bo'lib ochiladi.
   const { db } = require('../db');
   await db.query(`INSERT INTO workers (name) VALUES ('Panel menejer')
