@@ -5422,6 +5422,16 @@ o'rtacha kirim narxi; savdo va ombor uchun pasportda pul yo'q.
 **«Chop etish»** qog'ozga faqat shu kartochkani chiqaradi, sarlavhada
 konver, mahsulot, kun-soat va chop etgan xodim.
 
+**★ BEGONA BO'LIM — FAQAT XOM ASHYO** (zavod qarori, 2026-10;
+`section_material_groups`, `sql/materials.sql`). SP suyanchig'iga mato
+stul tsexining «Qoplash» bo'limida qoplanadi, lekin konver u yerga
+MARSHRUT bilan bormaydi: harakat, muddat va topshirish o'zgarmaydi.
+Bo'limlar ekranida Qoplash ostida «xom ashyo» ro'yxati turadi —
+ishlab chiqarishdagi SP konverlari, qayerda turgani bilan, faqat ▣.
+Sarf O'SHA bo'limga va uning omboridan yoziladi (`section_id` so'rovda,
+`mehmonBolim`); doira — bo'limning tsexi. Qaysi bo'lim qaysi guruhga
+— bazada, bir martalik (`migration_flags`: `qoplash-sp`).
+
 Huquqi **`materials.request`** — nomi shuni aytadi: «talabnoma yozish
 va SARFNI yozish». Tsex boshlig'ida u allaqachon bor; huquqi yo'q
 xodimda tugma umuman chizilmaydi va tekshiruv serverda.

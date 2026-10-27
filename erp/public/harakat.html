@@ -442,7 +442,37 @@ function drawBoard() {
     + block('Qabul qilish', data.inbox, false,
         'oldingi tsex topshirishga tayyorladi', true, false)
     + data.sections.map(sc => block(sc.name, sc.units, true,
-        sc.is_exit ? 'T/M omborga chiqish' : '', false, sc.is_exit)).join('');
+        sc.is_exit ? 'T/M omborga chiqish' : '', false, sc.is_exit)
+        + xomBlock(sc)).join('');
+}
+
+//  ★ BEGONA KONVER — FAQAT XOM ASHYO (zavod qarori, 2026-10). SP
+//  suyanchig'i shu bo'limda qoplanadi, lekin konver bu yerga marshrut
+//  bilan kelmaydi: o'tkazish ham, jo'natish ham yo'q, faqat ▣. Qayerda
+//  turgani yoziladi — boshliq qaysi konver ekanini topsin.
+function xomBlock(sc) {
+  const us = sc.xom_units || [];
+  if (!us.length || !canXom) return '';
+  const turlar = [...new Set(us.map(u => u.product_type).filter(Boolean))].join(', ');
+  return `<div class="card" style="margin:-8px 0 16px">
+    <div class="row" style="gap:10px;margin-bottom:10px">
+      <h2 style="margin:0;font-size:15px">${esc(sc.name)} · xom ashyo</h2>
+      <span class="muted" style="font-size:13px">${us.length} ta ${esc(turlar)}
+        · faqat material yoziladi</span>
+    </div>
+    <table class="board"><tbody>${us.map(u => `<tr>
+      <td><b>${esc(u.conveyor_no)}</b></td>
+      <td>${esc(u.product)} · ${esc(u.product_type || '')}${
+        u.color ? `<div class="muted" style="font-size:12px">${esc(u.color)}${
+          u.fabric ? ' · ' + esc(u.fabric) : ''}</div>` : ''}${
+        u.note ? `<div class="izoh">${esc(u.note)}</div>` : ''}</td>
+      <td class="num">${u.qty}</td>
+      <td class="muted" style="font-size:12px">${esc(u.section || 'boshlanmagan')}${
+        u.shop ? ' · ' + esc(u.shop) : ''}</td>
+      <td class="num"><button class="ic" title="Xom ashyo biriktirish"
+        onclick="xomOch(${u.id}, event, ${sc.id})">&#9635;</button></td>
+    </tr>`).join('')}</tbody></table>
+  </div>`;
 }
 
 //  ── OY BOSHIDAN BERI CHIQARILGAN ─────────────────────────────────────
@@ -694,6 +724,7 @@ function unitById(id) {
   for (const u of (data.unstarted || [])) if (u.id === id) return u;
   for (const u of data.inbox) if (u.id === id) return u;
   for (const sc of data.sections) for (const u of sc.units) if (u.id === id) return u;
+  for (const sc of data.sections) for (const u of (sc.xom_units || [])) if (u.id === id) return u;
   return null;
 }
 
@@ -766,13 +797,15 @@ function okQty(id, max) {
 //  avval SHU OMBORDA turgani (qoldig'i bilan), keyin spravochnikning
 //  qolgani. Omborda turgani odatda o'ntacha bo'ladi — boshliq
 //  ko'pincha birinchi ro'yxatdan topadi va hech narsa yozmaydi ham.
-let xomUnit = null, xomWh = null, xomStock = [], xomAll = [], xomQator = [];
+let xomUnit = null, xomSec = null, xomWh = null, xomStock = [], xomAll = [], xomQator = [];
 
-async function xomOch(id, ev) {
+//  `sec` — begona bo'limdan ochilganda (Qoplashdagi SP): sarf o'sha
+//  bo'limga va uning omboridan yoziladi (izoh: modules/materials.js).
+async function xomOch(id, ev, sec) {
   if (ev) ev.stopPropagation();
   const u = unitById(id);
   if (!u) return;
-  xomUnit = id; xomQator = [];
+  xomUnit = id; xomSec = sec || null; xomQator = [];
   document.body.insertAdjacentHTML('beforeend', `
     <div class="overlay" id="xomBox" onclick="if(event.target===this)xomYop()">
       <div class="modal" style="max-width:520px">
@@ -784,7 +817,7 @@ async function xomOch(id, ev) {
       </div>
     </div>`);
   try {
-    const d = await App.api('/api/materials/unit/' + id);
+    const d = await App.api('/api/materials/unit/' + id + (xomSec ? '?section_id=' + xomSec : ''));
     if (!$('xomBox')) return;
     xomWh = d.warehouses[0] ? d.warehouses[0].id : null;
     //  Spravochnik bir marta o'qiladi va oyna qayta ochilganda
@@ -948,11 +981,12 @@ async function xomSaqla() {
   if (!items.length) return toast('Soni yozilmadi', true);
   try {
     const r = await App.api('/api/materials/unit/' + xomUnit + '/consume', {
-      method: 'POST', body: JSON.stringify({ warehouse_id: xomWh, items }) });
+      method: 'POST', body: JSON.stringify({ warehouse_id: xomWh, items,
+                                             section_id: xomSec }) });
     toast(`${r.saved} ta material biriktirildi`);
-    const id = xomUnit;
+    const id = xomUnit, sec = xomSec;
     xomYop();
-    xomOch(id);
+    xomOch(id, null, sec);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -960,9 +994,9 @@ async function xomBekor(id) {
   try {
     await App.api('/api/materials/consume/' + id + '/cancel', { method: 'POST' });
     toast('Bekor qilindi');
-    const u = xomUnit;
+    const u = xomUnit, sec = xomSec;
     xomYop();
-    xomOch(u);
+    xomOch(u, null, sec);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -974,9 +1008,9 @@ async function xomQaytar(id) {
   try {
     await App.api('/api/materials/consume/' + id + '/restore', { method: 'POST' });
     toast('Tiklandi');
-    const u = xomUnit;
+    const u = xomUnit, sec = xomSec;
     xomYop();
-    xomOch(u);
+    xomOch(u, null, sec);
   } catch (e) { toast(e.message, true); }
 }
 

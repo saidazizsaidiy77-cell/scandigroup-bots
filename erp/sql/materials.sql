@@ -1436,3 +1436,31 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('tsex-narx');
   END IF;
 END $$;
+
+-- ═══════════════════════════════ BO'LIM BEGONA KONVERGA XOM ASHYO YOZADI
+--
+--  ★ SP SUYANCHIG'I STUL TSEXIDA QOPLANADI (zavod qarori, 2026-10).
+--  Karavat suyanchig'iga mato stul tsexining «Qoplash» bo'limida
+--  qoplanadi, lekin SP konveri u yerga MARSHRUT bo'yicha bormaydi —
+--  harakat yozilmaydi, muddat o'zgarmaydi. Kerak bo'lgani bitta: o'sha
+--  bo'lim o'z omboridan matoni SP konveriga CHIQIM qila olsin.
+--
+--  Qaysi bo'lim qaysi guruhning konveriga yozishi BAZADA (4-qoida):
+--  ertaga «stol ham qoplanadi» desa bitta qator qo'shiladi.
+CREATE TABLE IF NOT EXISTS section_material_groups (
+  section_id INT NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  group_id   INT NOT NULL REFERENCES product_groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (section_id, group_id)
+);
+
+--  Bir martalik: keyin saytdan (bazadan) olib tashlangani qaytmasin.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'qoplash-sp') THEN
+    INSERT INTO section_material_groups (section_id, group_id)
+    SELECT s.id, g.id FROM sections s, product_groups g
+     WHERE s.code = 'STU-QOPL' AND g.code = 'SP'
+    ON CONFLICT DO NOTHING;
+    INSERT INTO migration_flags (key) VALUES ('qoplash-sp');
+  END IF;
+END $$;
