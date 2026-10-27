@@ -3200,6 +3200,13 @@ BITTA joydan (`zavodTushumi`, `kutilganPuli`, `modules/sales.js`).
 Rejasi yo'q oyda va doirasi bor menejerda chizilmaydi — u butun
 zavodning puli.
 
+**★ «CHIQIB KETDI» KARTOCHKASIDAN QAYTARISH AYIRILADI** (zavod qarori,
+2026-10; `kpi.qaytdi`). Kartochka buyurtma summasini, KPI bloki esa
+qaytganini ayirib turardi — ekranda bitta savolga ikki javob (284 341 va
+283 691, farqi R26-0001). Endi ikkalasi ham ayiradi: oraliqda QABUL
+qilingan qaytarish, hujjatdagi narx bilan; ostida «qaytarish −650 $
+ayirilgan» yoziladi.
+
 **★ TURKUM ICHIDA — QAYSI MAHSULOTDAN NECHTA** (zavod qarori,
 2026-10; `/api/sales/dashboard` dagi `mahsulotlar`). KPI kartochkasi
 ostida turkum tablari (chip) va jadval: mahsulot · turi · chiqdi ·

@@ -2746,6 +2746,19 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
            WHERE o.status = 'shipped' AND o.shipped_on BETWEEN $1::date AND $2::date
              AND ($3::text[] IS NULL OR o.channel = ANY($3))
              AND ($4::int IS NULL OR o.manager_id = $4 OR mijoz_meniki(o.customer_id, $4))) AS chiqdi_soni,
+         --  ★ QAYTARISH AYIRILADI (zavod qarori, 2026-10). KPI bloki
+         --  qaytganini ayirib turardi, bu kartochka esa yo'q — ekranda
+         --  bitta savolga ikki javob (284 341 va 283 691) turardi.
+         --  Qaytarish QAYTGAN kun bo'yicha, faqat qabul qilingani,
+         --  hujjatda qotgan narx bilan (KPI va foyda-zarar bilan bir
+         --  xil qoida).
+         (SELECT COALESCE(SUM(i.qty * COALESCE(i.price, 0)), 0)
+            FROM cust_returns r
+            JOIN cust_return_items i ON i.return_id = r.id
+            LEFT JOIN customers cu   ON cu.id = r.customer_id
+           WHERE r.status = 'accepted' AND r.ret_on BETWEEN $1::date AND $2::date
+             AND ($3::text[] IS NULL OR cu.channel = ANY($3))
+             AND ($4::int IS NULL OR mijoz_meniki(r.customer_id, $4))) AS qaytdi,
          --  ZAVODDA TURGANI — bugungi holat: bekor qilingani ham,
          --  chiqib ketgani ham hisobga olinmaydi (buyurtmalar
          --  ro'yxatidagi «Hammasi» chipi bilan bir xil qoida).
@@ -3025,7 +3038,9 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
 
   res.json({
     dan: oraliq.dan, gacha: oraliq.gacha,
-    kpi: kpi.rows[0], oylar: oylar.rows, kanal: kanal.rows,
+    kpi: { ...kpi.rows[0],
+           chiqdi: Number(kpi.rows[0].chiqdi) - Number(kpi.rows[0].qaytdi) },
+    oylar: oylar.rows, kanal: kanal.rows,
     menejer: menejer.rows, mahsulot: mahsulot.rows,
     qarz: qarz.rows, holat: holat.rows, turkum: turi.rows, tushum,
     mahsulotlar,
