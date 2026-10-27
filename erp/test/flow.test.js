@@ -13170,6 +13170,32 @@ test('qoplash bo\'limi SP konveriga xom ashyo yozadi', async () => {
   //  Konver marshrutga tegilmagan.
   assert.equal((await H.id(
     `SELECT current_section_id AS id FROM production_units WHERE id = $1`, [sp.id])).id, ARRA);
+  //  ★ QOPLASH SARFISIZ T/M OMBORGA YO'Q: jo'natishda ham, qabulda ham.
+  //  Konverni qadoqlashning chiqish bo'limiga qo'yamiz (marshrut
+  //  bo'ylab haydash bu testning savoli emas).
+  const CHIQ = (await H.id(
+    `SELECT pr.section_id AS id FROM v_product_route pr
+      WHERE pr.product_id = $1 ORDER BY pr.step_no DESC LIMIT 1`, [spP])).id;
+  const sp2 = (await admin('POST', '/api/units/', { items: [
+    { product_id: spP, qty: 1, section_id: ARRA }] })).body.created[0];
+  await db.query(`UPDATE production_units SET current_section_id = $2 WHERE id = $1`,
+                 [sp2.id, CHIQ]);
+  const yoq = await admin('POST', '/api/units/handover', { items: [sp2.id] });
+  assert.equal(yoq.status, 400, yoq.text);
+  assert.match(yoq.body.error, /Qoplash/);
+  assert.equal((await usta('POST', '/api/materials/unit/' + sp2.id + '/consume',
+    { section_id: QOPL, items: [{ material_id: m.id, qty: 2 }] })).status, 200);
+  assert.equal((await admin('POST', '/api/units/handover', { items: [sp2.id] })).status, 200);
+  //  Jo'natilgandan keyin sarf bekor qilinsa — qabul ham to'xtaydi.
+  const mv2 = (await H.id(
+    `SELECT id FROM material_moves WHERE to_kind = 'unit' AND to_id = $1`, [sp2.id])).id;
+  await usta('POST', '/api/materials/consume/' + mv2 + '/cancel');
+  const qab = await admin('POST', '/api/units/stock/accept', { items: [{ unit_id: sp2.id }] });
+  assert.equal(qab.status, 400, qab.text);
+  assert.match(qab.body.error, /Qoplash/);
+  await usta('POST', '/api/materials/consume/' + mv2 + '/restore');
+  assert.equal((await admin('POST', '/api/units/stock/accept',
+    { items: [{ unit_id: sp2.id }] })).status, 200);
 });
 
 test('yakun', async () => {
