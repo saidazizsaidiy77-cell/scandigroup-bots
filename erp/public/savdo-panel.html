@@ -202,7 +202,9 @@ async function load() {
   const k = d.kpi;
   Panel.kpi($('kpis'), [
     { name: 'Chiqib ketdi', value: Panel.pul(k.chiqdi),
-      hint: Panel.son(k.chiqdi_soni) + ' ta buyurtma · oraliq bo\'yicha' },
+      hint: Panel.son(k.chiqdi_soni) + ' ta buyurtma'
+        + (Number(k.qaytdi) ? ' · qaytarish −' + Panel.pul(k.qaytdi, true) + ' ayirilgan' : '')
+        + ' · oraliq bo\'yicha' },
     { name: 'Zavodda turibdi', value: Panel.pul(k.zavodda),
       hint: Panel.son(k.zavodda_soni) + ' ta buyurtma · bugungi holat' },
     { name: 'Mijozlar qarzi', value: Panel.pul(k.qarz),

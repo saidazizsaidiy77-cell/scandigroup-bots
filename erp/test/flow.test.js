@@ -9488,6 +9488,16 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   //  guruhlarda), reja esa joriy oyning rejalari yig'indisi.
   const sd = (await admin('GET', '/api/sales/dashboard')).body;
   const { db: tdb } = require('../db');
+  //  ★ «CHIQIB KETDI» DAN QAYTARISH AYIRILADI: buyurtmalar summasi
+  //  minus oraliqda qabul qilingan qaytarish.
+  const kk = (await tdb.query(
+    `SELECT (SELECT COALESCE(SUM(amount), 0) FROM v_sales_orders
+              WHERE status = 'shipped' AND shipped_on BETWEEN $1::date AND $2::date)
+          - (SELECT COALESCE(SUM(i.qty * COALESCE(i.price, 0)), 0)
+               FROM cust_returns r JOIN cust_return_items i ON i.return_id = r.id
+              WHERE r.status = 'accepted' AND r.ret_on BETWEEN $1::date AND $2::date) AS s`,
+    [sd.dan, sd.gacha])).rows[0];
+  assert.equal(Number(sd.kpi.chiqdi).toFixed(2), Number(kk.s).toFixed(2));
   const ochiq = (await tdb.query(
     `SELECT COALESCE(SUM(i.qty * COALESCE(i.unit_price, 0)), 0)::numeric AS s
        FROM v_sales_orders o JOIN order_items i ON i.order_id = o.id
@@ -12378,6 +12388,9 @@ test("mijozdan qaytarish: yozish, qabul, qarz va ombor", async () => {
   const ok = await admin('POST', `/api/returns/${r1.body.id}/accept`,
     { items: [{ id: it1.id, dest: 'fg' }] });
   assert.equal(ok.status, 200, ok.text);
+  //  Savdo panelidagi «Chiqib ketdi» kartochkasidan ham ayiriladi.
+  const pan = (await admin('GET', '/api/sales/dashboard')).body;
+  assert.ok(Number(pan.kpi.qaytdi) >= 300, 'qaytarish kartochkaga tushdi');
 
   assert.equal(await balans(), b0 - 300, 'qarz sotilgan narxda kamaydi');
   const asl = await H.id(`SELECT qty, returned_qty, status FROM production_units WHERE id = $1`, [u.id]);
