@@ -13087,6 +13087,29 @@ test('mijoz: arxivga olish va o\'chirish', async () => {
     'arxivdagi nom qayta kiritilsa mijoz qaytadi');
 });
 
+//  ★ YANGI MAHSULOT VAQTINCHA NOM BILAN KIRITILADI, nomi keyin
+//  o'zgartiriladi: konver, buyurtma va hisobot nomni product_id orqali
+//  o'qiydi. O'lcham nomning bir qismi bo'lib qolishi shart.
+test('katalog: mahsulot nomini o\'zgartirish o\'lchamni saqlaydi', async () => {
+  const g = await H.id(
+    `SELECT group_id AS id FROM products WHERE size_label IS NOT NULL
+      AND route_template_id IS NOT NULL LIMIT 1`);
+  assert.ok(g, 'o\'lchamli guruh bor');
+  const f = await admin('POST', '/api/catalog/fasons', { names: 'Vaqtincha 77' });
+  assert.equal(f.status, 200, f.text);
+  const fid = (await H.id(`SELECT id FROM fasons WHERE name = 'Vaqtincha 77'`)).id;
+  const p = await admin('POST', '/api/catalog/products', { group_id: g.id, fason_id: fid });
+  assert.equal(p.status, 200, p.text);
+  const r = await admin('PATCH', '/api/catalog/fasons/' + fid, { name: 'Bellagio' });
+  assert.equal(r.status, 200, r.text);
+  const { db } = require('../db');
+  const rows = (await db.query(
+    `SELECT name, size_label FROM products WHERE fason_id = $1`, [fid])).rows;
+  assert.ok(rows.length);
+  for (const x of rows) assert.equal(x.name,
+    x.size_label ? 'Bellagio ' + x.size_label : 'Bellagio');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
