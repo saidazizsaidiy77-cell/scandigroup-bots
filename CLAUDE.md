@@ -2029,6 +2029,19 @@ chiqib ketgan buyurtmalar chiqadi («kam chiqqan» bilan bir xil shart),
 chiqqan kuni konvernikiga yaqini tepada. Bu TAKLIF — tanlash va sabab
 odamniki, tekshiruv `/attach` da; qo'lda raqam yozish ham qoladi.
 
+**★ «BUYURTMA CHIQMAGAN» EGASI HAM ALMASHTIRILADI** (zavod qarori,
+2026-10; K26-107). Konver chiqib ketgan, zakaz raqami esa hali
+chiqmagan buyurtmani ko'rsatadi — u hujjat emas, eskidan qolgan bron
+izi. Mahsulot boshqa buyurtma bilan ketgan bo'lsa pasportdagi
+**«+ hujjat»** uni o'sha yuk xatiga ko'chiradi (`/attach`); tirik
+bron turgan bo'lsa avval o'sha qaytariladi. Eski egasi auditda (`edi`).
+
+**★ CHIQIB KETGAN KONVERNING EGASINI BRON YOZMAYDI** (`stampUnit`,
+`modules/units.js`). Unda mijoz va zakaz raqami HUJJAT (`/ship`
+yozadi). Ilgari osilib qolgan bronni qaytarish egasini qayta yozardi:
+bron qolmasa konver egasiz bo'lib yuk xatidan tushardi (C26-208),
+boshqa bron qolsa o'sha buyurtmaniki bo'lib qolardi (K26-107).
+
 **★ EGASIZ CHIQIM UMUMAN BO'LMAGAN BO'LSA — OMBORGA**
 (`POST /api/sales/units/:id/unship`, pasportdagi **«↩ omborga»**).
 Ikkinchi javob ham bor: yozuv xato, mahsulot javonda. Konver `fg`

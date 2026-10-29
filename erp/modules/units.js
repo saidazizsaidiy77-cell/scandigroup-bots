@@ -4584,6 +4584,14 @@ module.exports.birlashtir = birlashtir;
 //  «bu Alisherniki» deb ko'radi va navbatni shunga qarab tuzadi. Bir
 //  nechta bo'lsa bo'sh qoladi: bittasini tanlab yozish qolganini
 //  yashirardi, ro'yxatning o'zi esa qatorni ochganda chiqadi.
+//
+//  ★ CHIQIB KETGAN KONVERGA TEGILMAYDI (zavod qarori, 2026-10). Unda
+//  mijoz va zakaz raqami bron EMAS, HUJJAT: `/ship` ularni yozadi va
+//  qarz shundan hisoblanadi. Eskidan osilib qolgan bronni qaytarish
+//  (`/unassign`) ilgari shu yerdan o'tib, egasini qayta yozardi:
+//  qolgan bron boshqa buyurtmaniki bo'lsa konver O'SHANIKI bo'lib
+//  qolardi, bron qolmasa — egasiz. C26-208 va K26-107 aynan shunday
+//  yuk xatidan tushib ketdi.
 async function stampUnit(client, unitId) {
   await client.query(
     `UPDATE production_units u SET
@@ -4594,7 +4602,7 @@ async function stampUnit(client, unitId) {
                   CASE WHEN COUNT(DISTINCT v.order_id) = 1
                        THEN MIN(v.customer_id) END AS customer_id
              FROM v_unit_bron v WHERE v.unit_id = $1) b
-     WHERE u.id = $1`, [unitId]);
+     WHERE u.id = $1 AND u.status NOT IN ('shipped', 'cancelled')`, [unitId]);
 }
 
 module.exports.scopeOf = scopeOf;

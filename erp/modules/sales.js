@@ -2039,10 +2039,28 @@ router.post('/units/:id/attach', need('sales.fix'), wrap(async (req, res) => {
     if (u.status !== 'shipped')
       throw new Error('Faqat chiqib ketgan konver — zavodda turganiga '
         + 'buyurtma oynasidan konver biriktiriladi');
-    if (u.customer_id || u.order_no)
+    //  ★ EGASI «CHIQMAGAN» BUYURTMA BO'LSA HAM (zavod qarori, 2026-10).
+    //  Konver chiqib ketgan, zakaz raqami esa hali chiqmagan buyurtmani
+    //  ko'rsatadi — ya'ni u HUJJAT emas, eskidan qolgan bron izi (yuk
+    //  xati yo'q, qarz esa yozilgan). Haqiqiy hujjatga ko'chirishning
+    //  yo'li shu: `/unship` mahsulotni omborga qaytarardi, holbuki u
+    //  mijozda. Tirik bron qolgan bo'lsa avval o'sha qaytariladi —
+    //  aks holda konver ikki buyurtmada turib qolardi.
+    const eski = u.order_no ? (await client.query(
+      `SELECT status FROM orders WHERE order_no = $1`, [u.order_no])).rows[0] : null;
+    const osilgan = u.order_no && eski && eski.status !== 'shipped';
+    if ((u.customer_id || u.order_no) && !osilgan)
       throw new Error(`${u.conveyor_no}: bu konverning egasi bor (`
         + `${u.order_no || 'mijozi yozilgan'}) — mijozni almashtirish `
         + 'buyurtma kartochkasidan qilinadi');
+    if (osilgan) {
+      const bron = (await client.query(
+        `SELECT string_agg(DISTINCT order_no, ', ') AS nolar
+           FROM v_unit_bron WHERE unit_id = $1`, [u.id])).rows[0].nolar;
+      if (bron)
+        throw new Error(`${u.conveyor_no}: ${bron} da hali broni turibdi — `
+          + 'avval o\'sha buyurtmadan konverni qaytaring');
+    }
 
     const o = (await client.query(
       `SELECT o.id, o.order_no, o.status, o.customer_id, c.name AS customer
@@ -2088,6 +2106,7 @@ router.post('/units/:id/attach', need('sales.fix'), wrap(async (req, res) => {
                        entity_id: o.id,
                        payload: { order_no: o.order_no,
                                   konver: 'egasiz chiqqan konver biriktirildi',
+                                  edi: u.order_no,
                                   conveyor_no: u.conveyor_no, qty: u.qty,
                                   mahsulot: u.product, narx, note: sabab } },
       client);

@@ -3937,6 +3937,40 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal(takror.status, 400, takror.text);
   assert.match(takror.body.error, /egasi bor/);
 
+  //  ★ CHIQIB KETGAN KONVERDAGI ESKI BRONNI QAYTARISH EGASINI
+  //  O'CHIRMAYDI. Ilgari `/unassign` → `stampUnit` konverga qolgan
+  //  bronlarning egasini yozardi: bron qolmasa konver egasiz bo'lib,
+  //  yuk xatidan tushib ketardi (C26-208 shunday bo'ldi).
+  const z2 = (await admin('POST', '/api/sales/orders', {
+    customer_id: mijoz, items: [{ product_id: PENAL, qty: 1, color: 'Sut',
+                                  unit_price: 250 }] })).body;
+  const z2q = (await admin('GET', '/api/sales/orders/' + z2.id)).body;
+  await dbq.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
+                   VALUES ($1, $2, 1)`, [tayyor.id, z2q.items[0].id]);
+  const ol = await admin('POST', `/api/sales/orders/${z2.id}/unassign`,
+    { unit_id: tayyor.id });
+  assert.equal(ol.status, 200, ol.text);
+  assert.equal((await H.id(`SELECT order_no FROM production_units WHERE id = $1`,
+    [tayyor.id])).order_no, z.order_no, 'chiqqan konverning hujjati joyida');
+
+  //  ★ EGASI CHIQMAGAN BUYURTMA — «+ hujjat» uni haqiqiy yuk xatiga
+  //  ko'chiradi (K26-107). Tirik bron turganda esa rad etiladi.
+  await dbq.query(`UPDATE production_units SET order_no = $2 WHERE id = $1`,
+    [tayyor.id, z2q.order.order_no]);
+  await dbq.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
+                   VALUES ($1, $2, 1)`, [tayyor.id, z2q.items[0].id]);
+  const bronli = await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: z.order_no, note: 'sinov' });
+  assert.equal(bronli.status, 400, bronli.text);
+  assert.match(bronli.body.error, /broni turibdi/);
+  assert.equal((await admin('POST', `/api/sales/orders/${z2.id}/unassign`,
+    { unit_id: tayyor.id })).status, 200);
+  const kochdi = await admin('POST', `/api/sales/units/${tayyor.id}/attach`,
+    { order_no: z.order_no, note: 'boshqa buyurtma bilan chiqqan' });
+  assert.equal(kochdi.status, 200, kochdi.text);
+  assert.equal((await H.id(`SELECT order_no FROM production_units WHERE id = $1`,
+    [tayyor.id])).order_no, z.order_no);
+
   //  ★ OMBORDA QOLIB KETGAN KONVER CHIQIB KETGAN BUYURTMAGA
   //  CHIQARILADI. Qo'shimcha qator (3 ta stul) — mahsulot mijozga
   //  ketgan, konver esa T/M da 5 talik bo'lib turibdi.

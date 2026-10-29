@@ -251,6 +251,10 @@ function qator(r) {
                >${esc(r.order_no)}</a>
              <span class="tag warn" title="Qarzga yozilgan, yuk xati yo'q"
                >buyurtma chiqmagan</span>${canFix ? `
+             <button title="Mahsulot boshqa buyurtma bilan chiqqan"
+               style="padding:4px 9px;font-size:12px"
+               onclick="biriktir(${r.id}, '${esc(r.conveyor_no)}', ${r.qty})"
+               >+ hujjat</button>
              <button title="Chiqim adashib yozilgan — mahsulot omborda"
                style="padding:4px 9px;font-size:12px"
                onclick="omborga(${r.id}, '${esc(r.conveyor_no)}', ${r.qty})"
