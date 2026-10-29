@@ -171,7 +171,7 @@ const TEKSHIRUVLAR = [
   {
     key: 'chiqqan_buyurtma_ochiq', soha: 'Savdo',
     title: "Konver chiqib ketgan, buyurtmasi esa chiqmagan — qarz bor, yuk xati yo'q",
-    fix: "Konver pasportida «↩ omborga» (mahsulot javonda bo'lsa) yoki buyurtmani chiqarish",
+    fix: "Konver pasportida «+ hujjat» (mahsulot boshqa buyurtma bilan chiqqan), «↩ omborga» (mahsulot javonda) yoki buyurtmani chiqarish",
     sql: `SELECT u.conveyor_no, u.order_no, u.qty, u.ship_on, o.status AS buyurtma
             FROM production_units u
             JOIN orders o ON o.order_no = u.order_no
