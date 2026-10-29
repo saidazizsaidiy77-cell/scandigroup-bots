@@ -9604,6 +9604,18 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   assert.ok(sd.mahsulotlar.some((m) => Number(m.chiqdi_qty) === 0
                                     && Number(m.chiqdi_amount) === 0), 'nol qator bor');
 
+  //  ★ ZERKALO: mijoz × mahsulot qatorlari har mahsulot bo'yicha
+  //  yuqoridagi ro'yxatga teng — ikki tomon bir manbadan.
+  assert.ok(Array.isArray(sd.kimNima));
+  for (const m of sd.mahsulotlar) {
+    const k = sd.kimNima.filter((x) => x.product_id === m.id);
+    assert.equal(k.reduce((a, x) => a + Number(x.amount), 0).toFixed(2),
+                 Number(m.chiqdi_amount).toFixed(2), m.name + ' zerkalo summa');
+    assert.equal(k.reduce((a, x) => a + Number(x.qty), 0),
+                 Number(m.chiqdi_qty), m.name + ' zerkalo dona');
+  }
+  assert.ok(sd.kimNima.length > 0, 'shu oy chiqqan mijoz bor');
+
   //  Doirasi bor savdo menejeri: paneli o'ziniki bo'lib ochiladi.
   const { db } = require('../db');
   await db.query(`INSERT INTO workers (name) VALUES ('Panel menejer')

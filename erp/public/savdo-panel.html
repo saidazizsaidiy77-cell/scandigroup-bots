@@ -39,6 +39,12 @@
   #tmTab tr.nol td{color:var(--muted)}
   #tmTab tfoot td{font-weight:600;border-top:2px solid var(--line,#e4e2dc)}
   #tmChips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+  /*  Zerkalo: qator bosilsa ostida ikkinchi tomon ochiladi. */
+  #tmTab tbody tr.och, #kmTab tbody tr.och{cursor:pointer}
+  #tmTab tr.ich td, #kmTab tr.ich td{background:var(--soft,#f6f5f1);font-size:13px;padding-top:4px;padding-bottom:4px}
+  #tmTab tr.ich td:first-child, #kmTab tr.ich td:first-child{padding-left:22px}
+  #kmChips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+  #kmQ{max-width:320px;margin:0 0 10px}
 </style>
 </head>
 <body>
@@ -94,6 +100,20 @@
   <div class="tbox"><table id="tmTab"></table></div>
 </div>
 
+<!--  ★ ZERKALO — KIM NIMA OLDI (zavod qarori, 2026-10). Yuqoridagi
+      jadvalda mahsulot bosilsa — qaysi mijozlarga ketgani; bu yerda
+      mijoz bosilsa — nimalarni olgani. Ikkalasi bitta qatorlardan
+      (`kimNima`), qoida ham o'sha: shu oy, qaytarish ayirilgan. -->
+<div class="card" style="margin-top:16px">
+  <h2>Shu oy — mijoz bo'yicha</h2>
+  <div id="kmChips"></div>
+  <input id="kmQ" type="search" placeholder="Mijoz yoki mahsulot…">
+  <div class="tbox"><table id="kmTab"></table></div>
+  <p class="muted" style="font-size:12px;margin:6px 0 0">Qatorni bossangiz
+    mijoz olgan mahsulotlar chiqadi; yuqoridagi jadvalda mahsulotni bossangiz —
+    u qaysi mijozlarga chiqqani.</p>
+</div>
+
 <div class="card" style="margin-top:16px">
   <h2>Oylar bo'yicha chiqib ketgan savdo</h2>
   <div id="oylar"></div>
@@ -137,6 +157,7 @@ function tezQoy(k) {
   load();
 }
 
+$('kmQ').oninput = () => kmChiz();
 $('tez').innerHTML = TEZ.map(([t, k]) =>
   `<button onclick="tezQoy('${k}')">${t}</button>`).join('');
 
@@ -148,6 +169,56 @@ const HOLAT = {
 //  Turkum tanlovi qayta yuklashda saqlanadi — ro'yxat har daqiqa
 //  yangilansa ham odam o'z tabida qoladi.
 let tmRows = [], tmTurkum = [], tmSel = null;
+//  Zerkalo qatorlari (mijoz × mahsulot) va qaysi qatorlar ochiq —
+//  daqiqalik yangilanishda ochilgani yopilib qolmasin.
+let kmRows = [], kmSel = '', tmOchiq = new Set(), kmOchiq = new Set();
+const ichQator = (a, b, q, u, sum) => `<tr class="ich"><td>${a}</td>
+  <td class="muted">${b}</td><td class="num">${Panel.son(q)} ${esc(u || 'dona')}</td>
+  <td class="num">${esc(Panel.pul(sum, true))}</td><td></td></tr>`;
+function tmOch(pid) { tmOchiq.has(pid) ? tmOchiq.delete(pid) : tmOchiq.add(pid); tmChiz(); }
+function kmOch(cid) { kmOchiq.has(cid) ? kmOchiq.delete(cid) : kmOchiq.add(cid); kmChiz(); }
+
+function kmChiz() {
+  $('kmChips').innerHTML = [{ code: '', name: 'Hammasi' }, ...tmTurkum].map((t) =>
+    `<button class="chip${t.code === kmSel ? ' on' : ''}" data-c="${esc(t.code)}">${esc(t.name)}</button>`).join('');
+  $('kmChips').querySelectorAll('button').forEach((b) =>
+    b.onclick = () => { kmSel = b.dataset.c; kmChiz(); });
+  const q = $('kmQ').value.trim().toLowerCase();
+  const rows = kmRows.filter((r) => (!kmSel || r.turkum === kmSel)
+    && (!q || (r.customer + ' ' + r.product + ' ' + (r.turi || '')).toLowerCase().includes(q)));
+  //  Mijoz bo'yicha guruh: summa qo'shiladi, dona esa O'LCHOV BIRLIGI
+  //  bo'yicha — stul DONA, penal KOMPLEKT.
+  const mj = new Map();
+  rows.forEach((r) => {
+    const k = r.customer_id == null ? 'x' : String(r.customer_id);
+    const m = mj.get(k) || mj.set(k, { k, name: r.customer, s: 0, u: {}, items: [] }).get(k);
+    m.s += Number(r.amount) || 0;
+    m.u[r.uom || 'dona'] = (m.u[r.uom || 'dona'] || 0) + (Number(r.qty) || 0);
+    m.items.push(r);
+  });
+  const list = [...mj.values()].sort((a, b) => b.s - a.s || a.name.localeCompare(b.name));
+  if (!list.length) {
+    $('kmTab').innerHTML = '<tbody><tr><td class="muted">Shu oy chiqqan mahsulot yo\'q.</td></tr></tbody>';
+    return;
+  }
+  const uj = (u) => Object.entries(u).map(([k, v]) => `${Panel.son(v)} ${esc(k)}`).join(' · ');
+  const jS = list.reduce((a, m) => a + m.s, 0), jU = {};
+  list.forEach((m) => Object.entries(m.u).forEach(([k, v]) => jU[k] = (jU[k] || 0) + v));
+  $('kmTab').innerHTML = `<thead><tr><th>Mijoz</th><th>Mahsulot</th>
+      <th class="num">Soni</th><th class="num">Summa</th><th></th></tr></thead>
+    <tbody>${list.map((m) => {
+      const och = kmOchiq.has(m.k);
+      return `<tr class="och" onclick="kmOch('${m.k}')">
+        <td>${och ? '▾' : '▸'} <b>${esc(m.name)}</b></td>
+        <td class="muted">${m.items.length} ta</td>
+        <td class="num">${uj(m.u)}</td><td class="num">${esc(Panel.pul(m.s, true))}</td><td></td></tr>`
+        + (och ? m.items.map((r) => ichQator(esc(r.product), esc(r.turi || ''),
+            r.qty, r.uom, r.amount)).join('') : '');
+    }).join('')}</tbody>
+    <tfoot><tr><td>Jami · ${list.length} ta mijoz</td><td></td>
+      <td class="num">${uj(jU)}</td><td class="num">${esc(Panel.pul(jS, true))}</td><td></td></tr></tfoot>`;
+}
+
 function tmChiz() {
   $('tmChips').innerHTML = tmTurkum.map((t) =>
     `<button class="chip${t.code === tmSel ? ' on' : ''}" data-c="${esc(t.code)}">${esc(t.name)}</button>`).join('');
@@ -173,11 +244,16 @@ function tmChiz() {
     <tbody>${rows.map((r) => {
       const ch = Number(r.chiqdi_qty) || 0, s = Number(r.chiqdi_amount) || 0;
       const za = Number(r.zavodda_qty) || 0, u = esc(r.uom || 'dona');
-      return `<tr class="${ch || s ? '' : 'nol'}">
-        <td><b>${esc(r.name)}</b></td><td class="muted">${esc(r.turi || '')}</td>
+      //  Zerkalo: chiqqan mahsulot bosilsa ostida kimlarga ketgani.
+      const kim = kmRows.filter((x) => x.product_id === r.id);
+      const och = kim.length && tmOchiq.has(r.id);
+      return `<tr class="${ch || s ? '' : 'nol'}${kim.length ? ' och' : ''}"${
+          kim.length ? ` onclick="tmOch(${r.id})"` : ''}>
+        <td>${kim.length ? (och ? '▾ ' : '▸ ') : ''}<b>${esc(r.name)}</b></td><td class="muted">${esc(r.turi || '')}</td>
         <td class="num">${Panel.son(ch)} ${u}</td>
         <td class="num">${esc(Panel.pul(s, true))}</td>
-        <td class="num">${Panel.son(za)} ${u}</td></tr>`;
+        <td class="num">${Panel.son(za)} ${u}</td></tr>`
+        + (och ? kim.map((x) => ichQator(esc(x.customer), '', x.qty, x.uom, x.amount)).join('') : '');
     }).join('')}</tbody>
     <tfoot><tr><td>Jami · ${rows.length} ta mahsulot</td><td></td>
       <td class="num">${uj('ch')}</td><td class="num">${esc(Panel.pul(jS, true))}</td>
@@ -280,7 +356,9 @@ async function load() {
   tmRows = d.mahsulotlar || [];
   tmTurkum = tk.map((r) => ({ code: r.code, name: r.name }));
   if (!tmTurkum.some((t) => t.code === tmSel)) tmSel = tmTurkum[0] && tmTurkum[0].code;
+  kmRows = d.kimNima || [];
   tmChiz();
+  kmChiz();
 
   Panel.bars($('oylar'), { rows: d.oylar });
   //  Yo'nalish va menejer — mahsulot emas, shuning uchun tur

@@ -3228,6 +3228,15 @@ yig'indini kartochkaga solishtiradi (dona — faqat `kpi_dona`).
 **Nol qator ham turadi**: so'rov MAHSULOTDAN boshlanadi (LEFT JOIN),
 xira bo'lib — «nima sotilmayapti» ham savol.
 
+**★ ZERKALO — KIM NIMA OLDI** (zavod qarori, 2026-10;
+`/api/sales/dashboard` dagi `kimNima`). Mahsulot jadvalida qator
+bosilsa ostida u QAYSI MIJOZLARGA chiqqani, pastdagi «Shu oy — mijoz
+bo'yicha» kartochkasida mijoz bosilsa u NIMALARNI olgani (turkum
+chiplari va qidiruv bilan). Ikki tomon BITTA qatorlar to'plamidan
+(mijoz × mahsulot), qoida `mahsulotlar` bilan aynan bir xil — shu oy,
+qaytarish ayirilgan, o'sha doira; test har mahsulot bo'yicha
+yig'indini solishtiradi.
+
 Birinchi ikki urinish (guruh bo'yicha jadval, keyin ikki chiziqli
 grafik) zavodga yoqmadi: savol «nechta sotdik» emas, «reja qanchaga
 bajariladi» edi.
