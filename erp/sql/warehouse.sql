@@ -904,3 +904,27 @@ CREATE TABLE IF NOT EXISTS cust_return_items (
 );
 CREATE INDEX IF NOT EXISTS idx_cust_ret_items_ret  ON cust_return_items(return_id);
 CREATE INDEX IF NOT EXISTS idx_cust_ret_items_unit ON cust_return_items(unit_id);
+
+--  ★ KIRIM HUJJATIDAN TUSHIB QOLGAN BO'LAKLAR TIKLANADI (zavod qarori,
+--  2026-10). `clonePart` kirim izini (`fg_receipt_id`, `buy_price`)
+--  ko'chirmasdi: matras qisman chiqarilganda ajralgan bo'lak hujjatdan
+--  tushib qolar, ta'minotchining qarzi va dalolatnoma kamayib borardi.
+--  Raqam o'sha (`conveyor_no`), iz qardosh bo'lakdan olinadi. Mijozdan
+--  qaytgan YANGI bo'lak tegilmaydi: chiqib ketgan asl qator hujjatda
+--  turibdi va unga iz qo'yilsa bitta matras ikki marta sanalardi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'matras-bolak-kirim') THEN
+    UPDATE production_units u
+       SET fg_receipt_id = k.fg_receipt_id,
+           buy_price     = COALESCE(u.buy_price, k.buy_price)
+      FROM (SELECT DISTINCT ON (conveyor_no) conveyor_no, fg_receipt_id, buy_price
+              FROM production_units
+             WHERE fg_receipt_id IS NOT NULL
+             ORDER BY conveyor_no, id) k
+     WHERE u.conveyor_no = k.conveyor_no
+       AND u.fg_receipt_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM cust_return_items ci WHERE ci.new_unit_id = u.id);
+    INSERT INTO migration_flags (key) VALUES ('matras-bolak-kirim');
+  END IF;
+END $$;
