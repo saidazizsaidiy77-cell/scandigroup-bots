@@ -145,19 +145,27 @@ async function load() {
 
   //  ★ JADVAL GRAFIKNING YONIDA TURADI (ko'rish imkoniyati cheklangan
   //  odam uchun ham, raqamni AYNAN o'qish kerak bo'lganda ham).
+  //  ★ TUSHUM — kassaga mijozdan KELGAN pul (zavod qarori,
+  //  2026-10). Savdoning yonida turadi: savdo «nima berdik»,
+  //  tushum «qancha pul keldi» — farqi mijozlar qarziga tushadi.
+  //  Foydaga ta'sir qilmaydi: foyda savdodan hisoblanadi.
+  const pul = jam('pul');
   $('jadval').innerHTML = `<table><thead><tr><th>Oy</th>
-      <th class="num">Savdo</th><th class="num">Harajat</th>
+      <th class="num">Savdo</th><th class="num">Tushum</th>
+      <th class="num">Harajat</th>
       <th class="num">Foyda</th></tr></thead><tbody>
     ${d.oylar.map((r) => {
       const f = Number(r.foyda) || 0;
       return `<tr><td>${esc(Panel.oyNom(r.mon))}</td>
         <td class="num">${Panel.son(r.tushum)}</td>
+        <td class="num">${Panel.son(r.pul)}</td>
         <td class="num">${Panel.son(r.harajat)}</td>
         <td class="num"${f < 0 ? ' style="color:var(--bad)"' : ''}>${
           Panel.son(f)}</td></tr>`;
     }).join('')}
     <tr><td><b>Jami</b></td>
       <td class="num"><b>${Panel.son(tushum)}</b></td>
+      <td class="num"><b>${Panel.son(pul)}</b></td>
       <td class="num"><b>${Panel.son(harajat)}</b></td>
       <td class="num"><b${foyda < 0 ? ' style="color:var(--bad)"' : ''}>${
         Panel.son(foyda)}</b></td></tr>
