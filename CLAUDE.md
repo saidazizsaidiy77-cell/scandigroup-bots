@@ -437,6 +437,16 @@ bitta manbadan hisoblanishi kerak, aks holda hujjatda 10 ta, qoldiqda
 8 ta bo'lib qolardi. `v_supplier_debt` va `v_supplier_ledger` endi
 ikkala kirimni ham o'qiydi.
 
+**★ BO'LINGAN MATRAS HUJJATDAN TUSHMAYDI** (zavod qarori, 2026-10;
+`clonePart`, `modules/units.js`). Konver qisman chiqarilganda yoki
+ko'chirilganda ajralgan bo'lak `fg_receipt_id`, `buy_price`, ombor va
+`fg_by` ni ham oladi. Ilgari olmasdi va bo'lak hujjatdan tushib qolardi:
+kirimda 10 ta turib 7 ta ko'rinardi, ta'minotchining qarzi va
+dalolatnoma kamayib borardi. Eski bo'laklar qardoshidan tiklandi
+(`migration_flags`: `matras-bolak-kirim`); mijozdan qaytgan yangi bo'lak
+tegilmaydi — asl qator hujjatda turibdi. «Tizim tekshiruvi» da
+`fg_kirim_bolak`.
+
 **★ BOSHLANG'ICH QOLDIG'I ODDIY YO'LDAN KIRADI** (zavod qarori,
 2026-09; `/qoldiq.html`). Javonda tizim ishga tushishidan oldin turgan
 matras hech kimning qarzi emas — uni kirim hujjati bilan kiritish

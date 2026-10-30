@@ -10449,6 +10449,29 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
   assert.equal(qoldiq.reduce((a, r) => a + Number(r.free), 0), 6,
     'oltitasi ham bo\'sh');
 
+  //  ★ BO'LINGANDA HAM HUJJATDA QOLADI: konver qisman chiqarilsa yoki
+  //  ko'chirilsa ajralgan bo'lak kirim izini olib ketishi shart — aks
+  //  holda hujjat ham, ta'minotchining qarzi ham kamayib borardi.
+  const { clonePart } = require('../modules/units');
+  const birinchi = (await db.query(
+    `SELECT * FROM production_units WHERE fg_receipt_id = $1 ORDER BY id LIMIT 1`,
+    [k.body.id])).rows[0];
+  const cl = await db.connect();
+  let bolak;
+  try {
+    bolak = await clonePart(cl, { user: { id: birinchi.created_by } }, birinchi, 1,
+                            { keepPlace: true });
+  } finally { cl.release(); }
+  const b2 = (await db.query(
+    `SELECT fg_receipt_id, buy_price, warehouse_id FROM production_units WHERE id = $1`,
+    [bolak])).rows[0];
+  assert.equal(b2.fg_receipt_id, k.body.id, 'bo\'lak hujjatda');
+  assert.equal(Number(b2.buy_price), Number(birinchi.buy_price), 'olingan narx ko\'chdi');
+  assert.equal(b2.warehouse_id, birinchi.warehouse_id, 'ombor ko\'chdi');
+  assert.equal((await db.query(`SELECT qty FROM v_fg_receipts WHERE id = $1`,
+    [k.body.id])).rows[0].qty, 6, 'hujjatda baribir 6 ta');
+  assert.equal(await qarz(), oldin + 350, 'qarz kamaymadi');
+
 
   //  ★ PANJARAGA TUSHMAYDI: «Zara matras» degan narsa zavodda yo'q.
   //  Ustun ekranda chizilmaydi, lekin tekshiruv SERVERDA — id ni

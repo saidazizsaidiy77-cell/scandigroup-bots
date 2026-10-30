@@ -226,6 +226,21 @@ const TEKSHIRUVLAR = [
            ORDER BY r.doc_on`,
   },
   {
+    key: 'fg_kirim_bolak', soha: "Ta'minot",
+    title: "Kirim hujjatli konverning bo'lagi hujjatdan tushib qolgan",
+    fix: "Migratsiya tiklaydi (matras-bolak-kirim); qolgan bo'lsa xabar bering",
+    sql: `SELECT u.conveyor_no, u.part, u.status, u.qty, r.doc_no
+            FROM production_units u
+            JOIN LATERAL (SELECT x.fg_receipt_id FROM production_units x
+                           WHERE x.conveyor_no = u.conveyor_no
+                             AND x.fg_receipt_id IS NOT NULL LIMIT 1) k ON true
+            JOIN fg_receipts r ON r.id = k.fg_receipt_id
+           WHERE u.fg_receipt_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM cust_return_items ci
+                              WHERE ci.new_unit_id = u.id)
+           ORDER BY u.conveyor_no, u.part`,
+  },
+  {
     key: 'fg_kirim_bekor', soha: "Ta'minot",
     title: "Bekor qilingan kirimning konveri omborda turibdi",
     fix: "Konverni ombor qoldig'ida bekor qiling",
