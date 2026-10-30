@@ -1076,7 +1076,22 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
     db.query(
       `WITH oy AS (
          SELECT generate_series($1::date, $2::date, INTERVAL '1 month')::date AS m)
+       --  ★ TUSHUM — kassaga MIJOZDAN kelgan pul, to'lov kuni
+       --  bo'yicha (zavod qarori, 2026-10). Savdo bilan yonma-yon:
+       --  «foyda bor, pul yo'q» degan farq shu ikki ustunda ko'rinadi.
+       --  Shart savdo KPI sidagi pul tushumi bilan BITTA
+       --  (zavodTushumi, modules/sales.js).
+       , pul AS (
+         SELECT date_trunc('month', op_date)::date AS m,
+                SUM(amount_usd)::numeric AS s
+           FROM cash_ops
+          WHERE from_kind = 'customer' AND status = 'ok'
+            AND op_date >= $1::date
+            AND op_date < ($2::date + INTERVAL '1 month')
+          GROUP BY 1)
        SELECT to_char(oy.m, 'YYYY-MM') AS mon,
+              COALESCE((SELECT s FROM pul WHERE pul.m = oy.m), 0)::numeric
+                AS pul,
               COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'income'), 0)::numeric
                 AS tushum,
               COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind <> 'income'), 0)::numeric
