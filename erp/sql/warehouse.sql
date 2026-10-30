@@ -755,9 +755,28 @@ CREATE INDEX IF NOT EXISTS idx_units_fg_receipt ON production_units(fg_receipt_i
 --  oylikdan yig'iladi (izoh: CLAUDE.md, «Tannarx»).
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS buy_price NUMERIC(14,2);
 
---  Hujjat va uning ichi bitta so'rovdan: qatorlar KONVERLAR bo'lib
---  chiqadi — raqami, soni va narxi bilan. Bekor qilingan konver
---  hujjatdan ham chiqadi: u qoldiqda ham yo'q.
+--  ★ HUJJATNING O'Z QATORLARI (zavod qarori, 2026-10). Ta'minotchi bilan
+--  hisob — KIRIM HUJJATI: nima keldi, nechta, qanchadan. Konverga keyin
+--  nima bo'lishi (mijozga chiqadi, bo'linadi, sanoqda tuzatiladi,
+--  bekor qilinadi) bu hisobga TEGMAYDI — u mijoz bilan bo'lgan ish.
+--  Ilgari hujjat qatorlarni jonli konverlardan o'qirdi va har o'zgarish
+--  ta'minotchining qarzini jimgina o'zgartirardi. Endi qator yozilganda
+--  QOTADI; konver faqat havola (`unit_id`).
+CREATE TABLE IF NOT EXISTS fg_receipt_lines (
+  id          SERIAL PRIMARY KEY,
+  receipt_id  INT NOT NULL REFERENCES fg_receipts(id),
+  unit_id     INT REFERENCES production_units(id) ON DELETE SET NULL,
+  conveyor_no TEXT,
+  product_id  INT NOT NULL REFERENCES products(id),
+  color       TEXT,
+  qty         INT NOT NULL CHECK (qty > 0),
+  buy_price   NUMERIC(14,2) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fg_receipt_lines_r ON fg_receipt_lines(receipt_id);
+
+--  Hujjat va uning ichi bitta so'rovdan: qatorlar HUJJATNIKI
+--  (`fg_receipt_lines`), konverdan emas — yuqoridagi izoh. Bekor
+--  qilingan HUJJAT esa qarzdan chiqadi (`status`), qatorlari tarixda.
 DROP VIEW IF EXISTS v_fg_receipts CASCADE;
 CREATE VIEW v_fg_receipts AS
 SELECT r.*,
@@ -777,19 +796,19 @@ SELECT r.*,
   LEFT JOIN workers cw ON cw.id = r.created_by
   LEFT JOIN workers xw ON xw.id = r.cancelled_by
   LEFT JOIN LATERAL (
-    SELECT COUNT(*) AS lines, SUM(u.qty) AS qty,
-           SUM(u.qty * COALESCE(u.buy_price, 0)) AS amount,
+    SELECT COUNT(*) AS lines, SUM(l.qty) AS qty,
+           SUM(l.qty * l.buy_price) AS amount,
            JSON_AGG(JSON_BUILD_OBJECT(
-             'unit_id', u.id, 'conveyor_no', u.conveyor_no,
-             'product_id', u.product_id, 'product', p.name,
-             'product_type', g.name, 'color', u.color,
-             'qty', u.qty, 'buy_price', u.buy_price,
-             'amount', ROUND(u.qty * COALESCE(u.buy_price, 0), 2))
-             ORDER BY u.id) AS items
-      FROM production_units u
-      JOIN products p       ON p.id = u.product_id
+             'unit_id', l.unit_id, 'conveyor_no', l.conveyor_no,
+             'product_id', l.product_id, 'product', p.name,
+             'product_type', g.name, 'color', l.color,
+             'qty', l.qty, 'buy_price', l.buy_price,
+             'amount', ROUND(l.qty * l.buy_price, 2))
+             ORDER BY l.id) AS items
+      FROM fg_receipt_lines l
+      JOIN products p       ON p.id = l.product_id
       JOIN product_groups g ON g.id = p.group_id
-     WHERE u.fg_receipt_id = r.id AND u.status <> 'cancelled') i ON true;
+     WHERE l.receipt_id = r.id) i ON true;
 
 
 -- ═══════════════════════════════════════════ SANOQ — QOLDIQNI TO'G'RILASH
@@ -926,5 +945,28 @@ BEGIN
        AND u.fg_receipt_id IS NULL
        AND NOT EXISTS (SELECT 1 FROM cust_return_items ci WHERE ci.new_unit_id = u.id);
     INSERT INTO migration_flags (key) VALUES ('matras-bolak-kirim');
+  END IF;
+END $$;
+
+--  ★ ESKI HUJJATLARNING QATORLARI (zavod qarori, 2026-10). Qatorlar
+--  jadvali paydo bo'lgunga qadar yozilgan kirimlar konverlardan bir
+--  marta to'ldiriladi — yuqoridagi bo'lak tiklanishidan KEYIN, ya'ni
+--  har konver raqami bo'yicha uning hamma bo'lagi (chiqib ketgani ham)
+--  qo'shiladi. Bekor qilingan hujjatda bekor qilingan konver ham
+--  sanaladi: u hujjat bilan birga bekor bo'lgan.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'fg-kirim-qatorlar') THEN
+    INSERT INTO fg_receipt_lines (receipt_id, unit_id, conveyor_no, product_id,
+                                  color, qty, buy_price)
+    SELECT r.id, MIN(u.id), u.conveyor_no, MIN(u.product_id), MIN(u.color),
+           SUM(u.qty), COALESCE(MAX(u.buy_price), 0)
+      FROM fg_receipts r
+      JOIN production_units u ON u.fg_receipt_id = r.id
+     WHERE (u.status <> 'cancelled' OR r.status = 'cancelled')
+       AND NOT EXISTS (SELECT 1 FROM fg_receipt_lines x WHERE x.receipt_id = r.id)
+     GROUP BY r.id, u.conveyor_no
+    HAVING SUM(u.qty) > 0;
+    INSERT INTO migration_flags (key) VALUES ('fg-kirim-qatorlar');
   END IF;
 END $$;

@@ -1824,6 +1824,13 @@ router.post('/fg/receipts', need(...FGRECEIPT), wrap(async (req, res) => {
       await client.query(
         `UPDATE production_units SET fg_receipt_id = $2, buy_price = $3
           WHERE id = $1`, [u.id, doc.id, usd]);
+      //  ★ HUJJAT QATORI QOTADI: ta'minotchi bilan hisob shundan yuradi,
+      //  konverga keyin nima bo'lishidan emas (izoh: sql/warehouse.sql).
+      await client.query(
+        `INSERT INTO fg_receipt_lines (receipt_id, unit_id, conveyor_no, product_id,
+                                       color, qty, buy_price)
+         SELECT $1, id, conveyor_no, product_id, color, qty, $3
+           FROM production_units WHERE id = $2`, [doc.id, u.id, usd]);
     }
 
     await audit(req, { module: 'warehouse', action: 'fg-receipt',

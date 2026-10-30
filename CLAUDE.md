@@ -430,12 +430,21 @@ material» bilan bir xil qoida.
 
 **Mol HUJJAT bilan kiradi** (`F26-0001`) va hujjat IKKI ishni birga
 qiladi: omborni to'ldiradi va **ta'minotchining oldidagi qarzni
-oshiradi** — xom ashyo kirimi bilan aynan bir xil sabab. Qatorlari
-alohida jadvalda emas, KONVERLARNING O'ZIDA
-(`production_units.fg_receipt_id`): «omborda nechta bor» degan savol
-bitta manbadan hisoblanishi kerak, aks holda hujjatda 10 ta, qoldiqda
-8 ta bo'lib qolardi. `v_supplier_debt` va `v_supplier_ledger` endi
-ikkala kirimni ham o'qiydi.
+oshiradi** — xom ashyo kirimi bilan aynan bir xil sabab.
+`v_supplier_debt` va `v_supplier_ledger` ikkala kirimni ham o'qiydi.
+
+**★ TA'MINOTCHI HISOBI — HUJJATNING O'Z QATORLARIDAN** (zavod qarori,
+2026-10; `fg_receipt_lines`). Biz matrasni ta'minotchidan sotib olamiz
+va mijozga sotamiz — bular IKKI alohida hisob. Ilgari hujjat
+qatorlarni jonli konverlardan o'qirdi (`fg_receipt_id`) va mijozga
+chiqish, bo'linish, sanoq yoki konverni bekor qilish ta'minotchining
+qarzini jimgina o'zgartirardi — solishtirma dalolatnoma to'g'ri
+chiqmasdi. Endi qator hujjat yozilganda QOTADI (mahsulot, rang, soni,
+dollardagi narx), `v_fg_receipts` faqat shundan o'qiydi; konver —
+havola (`unit_id`). Qarz faqat hujjatni BEKOR qilish va ta'minotchiga
+qaytarish bilan o'zgaradi. Eski hujjatlar bir martalik to'ldirildi
+(`migration_flags`: `fg-kirim-qatorlar`). Ombor qoldig'i esa
+konverlardan sanalaveradi.
 
 **★ BO'LINGAN MATRAS HUJJATDAN TUSHMAYDI** (zavod qarori, 2026-10;
 `clonePart`, `modules/units.js`). Konver qisman chiqarilganda yoki
