@@ -10472,6 +10472,18 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
     [k.body.id])).rows[0].qty, 6, 'hujjatda baribir 6 ta');
   assert.equal(await qarz(), oldin + 350, 'qarz kamaymadi');
 
+  //  ★ KONVERGA NIMA BO'LISHI TA'MINOTCHI HISOBIGA TEGMAYDI: hujjat
+  //  qatorlari qotgan. Bo'lak bekor qilinsa ham, soni sanoqda o'zgarsa
+  //  ham kirim 6 ta va 350 $ bo'lib qoladi.
+  await db.query(`UPDATE production_units SET status = 'cancelled' WHERE id = $1`, [bolak]);
+  await db.query(`UPDATE production_units SET qty = qty - 1 WHERE id = $1`, [birinchi.id]);
+  const qotgan = (await db.query(`SELECT qty, amount FROM v_fg_receipts WHERE id = $1`,
+    [k.body.id])).rows[0];
+  assert.equal(qotgan.qty, 6, 'hujjatda 6 ta qoldi');
+  assert.equal(Number(qotgan.amount), 350, 'summa qotgan');
+  assert.equal(await qarz(), oldin + 350, 'konver o\'zgarishi qarzga tegmadi');
+  await db.query(`UPDATE production_units SET qty = qty + 1 WHERE id = $1`, [birinchi.id]);
+
 
   //  ★ PANJARAGA TUSHMAYDI: «Zara matras» degan narsa zavodda yo'q.
   //  Ustun ekranda chizilmaydi, lekin tekshiruv SERVERDA — id ni
