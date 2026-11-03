@@ -3112,6 +3112,14 @@ ikki marta kirim bo'lib ko'rinardi.
 Shuning uchun «foyda bor, pul yo'q» degan holat aynan shu ikki hisobotni
 yonma-yon qo'yganda ko'rinadi.
 
+**★ MOLIYA PANELIDA TUSHUM USTUNI** (zavod qarori, 2026-10;
+`/moliya-panel.html`, «Oylik natija», `/api/cash/dashboard` dagi
+`oylar.pul`). Savdo bilan harajat yonida — kassaga MIJOZDAN kelgan pul,
+to'lov kuni bo'yicha. Shart savdo KPI sidagi pul tushumi bilan BITTA
+(`zavodTushumi`): `from_kind = 'customer'`, `status = 'ok'`. Foydaga
+ta'sir qilmaydi — foyda savdodan; tushum bilan savdo farqi mijozlar
+qarziga tushadi. Test har oyni `cash_ops` ga solishtiradi.
+
 **Sof aylanma kapital** (`/aylanma-kapital.html`,
 `GET /api/cash/working-capital`) — uchinchi savol: «qo'limizda nima
 qoldi». Foyda-zarar «qancha ishladik», pul oqimi «pul qayerda» deydi,

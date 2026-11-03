@@ -9495,6 +9495,26 @@ test('KPI: reja qo\'yiladi, fakt o\'sha view\'lardan chiqadi', async () => {
     { bolim: 'sales', metric: 'chiqdi', mon: oy, target: 1 })).status, 403);
 });
 
+//  ★ MOLIYA PANELIDA TUSHUM — kassaga mijozdan kelgan pul, oy
+//  bo'yicha. Har oy cash_ops dagi mijoz to'lovlariga teng bo'lishi
+//  shart (savdo KPI sidagi pul tushumi bilan bitta shart).
+test('moliya paneli: oylik tushum mijoz to\'lovlariga teng', async () => {
+  const { db: tdb } = require('../db');
+  const d = (await admin('GET', '/api/cash/dashboard')).body;
+  assert.ok(d.oylar.length > 0);
+  let jami = 0;
+  for (const r of d.oylar) {
+    const k = Number((await tdb.query(
+      `SELECT COALESCE(SUM(amount_usd), 0) AS s FROM cash_ops
+        WHERE from_kind = 'customer' AND status = 'ok'
+          AND to_char(op_date, 'YYYY-MM') = $1`, [r.mon])).rows[0].s);
+    assert.equal(Number(r.pul), k, r.mon);
+    jami += k;
+  }
+  assert.ok(jami > 0, 'testda mijoz to\'lovi bor — joriy oyda nol chiqmasligi kerak');
+});
+
+
 //  ★ TO'RTALA PANEL HAM OCHILADI, doirasi bor xodimda ham (zavod
 //  qarori, 2026-09). Panel bosh sahifada turadi, ya'ni har kirgan odam
 //  uni birinchi bo'lib ochadi — bitta yiqilgan so'rov butun ekranni
@@ -13296,3 +13316,4 @@ test('yakun', async () => {
   server.close();
   await require('../db').db.end();
 });
+
