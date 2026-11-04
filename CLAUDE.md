@@ -3459,6 +3459,14 @@ ikki odamni bir-biriga ham (`modules/admin.js`).
 **Reja qo'yish huquqi `sales.kpi`** — FAQAT administrator (yuqorida).
 Tugma huquqi yo'q odamda umuman chizilmaydi, tekshiruv esa serverda.
 
+**★ REJANI TAHRIRLASH — HAR VARAQDA «✎ Tahrirlash»** (zavod qarori,
+2026-11; `planYukla`, `public/savdo-kpi.html`). Oyna o'sha xodimning
+mavjud rejasi bilan ochiladi va oynada xodim yoki oy almashsa reja
+serverdan QAYTA o'qiladi. Ilgari kataklar faqat ochilishda, tepadagi
+tanlovdan to'lardi: boshqa xodim tanlansa eski raqamlar qolar va
+«Saqlash» uning rejasini jimgina almashtirardi (`POST /kpi` oyning
+rejasini butunlay qayta yozadi).
+
 **★ OY OXIRIGA TAXMINIY FAKT = FAKT + JARAYONDAGI BUYURTMALAR**
 (zavod qarori, 2026-10; ilgari «prognoz» sur'atdan edi — fakt ÷ o'tgan
 kunlar ulushi — va oy boshidagi bitta katta yuk uni o'n barobar
