@@ -243,5 +243,69 @@ const Panel = (() => {
     ulash(el);
   }
 
-  return { RANG, KUL, pul, son, oyNom, kpi, bars, bars2, rank, share, esc, ulash };
+
+  //  ★ KPI REJASI BO'YICHA — TURKUM KARTOCHKALARI (zavod qarori, 2026-10
+  //  va 2026-11). BITTA joyda: savdo paneli (joriy oy) va KPI sahifasi
+  //  (tanlangan oy) shundan chizadi. `zavod` — joriy oymi: «zavodda» va
+  //  «chiqsa» bugungi holat, o'tgan oyda chizilmaydi.
+  const kpiTurkum = (tk, tushum, zavod) => {
+  const foiz = (a, b) => b ? Math.round(a / b * 100) : null;
+  const bar = (ch, za, re) => {
+    const max = Math.max(1, re || 0, ch + za);
+    const w = (v) => Math.max(0, Math.min(100, v / max * 100));
+    return `<div class="kbar">
+      <i class="kza" style="width:${w(ch + za)}%"></i>
+      <i class="kch" style="width:${w(ch)}%"></i>
+      ${re ? `<span class="kre" style="left:calc(${w(re)}% - 1px)"></span>` : ''}</div>`;
+  };
+  const jCh = tk.reduce((a, r) => a + Number(r.chiqdi_amount || 0), 0);
+  const jZa = tk.reduce((a, r) => a + Number(r.zavodda_amount || 0), 0);
+  const jRe = tk.reduce((a, r) => a + Number(r.reja_amount || 0), 0);
+  const jf = foiz(jCh, jRe), jfz = foiz(jCh + jZa, jRe);
+  //  ★ PUL TUSHUMI — turkumlar bilan YONMA-YON, lekin jamiga
+  //  qo'shilmaydi: u savdo emas, kassaga KELGAN pul. Chiziq o'sha
+  //  shaklda: to'q — tushdi, chiziqli — kutilmoqda (pul kirim sanasi
+  //  shu oyga qo'yilgan buyurtmalar), belgi — reja.
+  const tushumKart = (t) => {
+    if (!t) return '';
+    const fa = Number(t.fakt) || 0, ku = Number(t.kutilmoqda) || 0;
+    const re = Number(t.reja) || 0;
+    const f = foiz(fa, re), fz = foiz(fa + ku, re);
+    return `<div class="kcard">
+      <div class="knom">Pul tushumi</div>
+      <div class="kfoiz">${f == null ? '—' : f + '% <small>bajarildi</small>'}</div>
+      ${bar(fa, ku, re)}
+      <div class="kqator"><span>Reja</span><span><b>${esc(pul(re, true))}</b></span></div>
+      <div class="kqator"><span>Tushdi</span><span><b>${esc(pul(fa, true))}</b></span></div>
+      <div class="kqator"><span>Kutilmoqda</span><span><b>${esc(pul(ku, true))}</b></span></div>
+      <div class="kqator"><span>Tushsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>
+    </div>`;
+  };
+  const jami = `
+    <div class="kjami">
+      <span><span class="muted">Jami chiqdi</span> <b>${esc(pul(jCh, true))}</b></span>
+      <span><span class="muted">Reja</span> <b>${jRe ? esc(pul(jRe, true)) : '—'}</b></span>
+      <span><span class="muted">Bajarildi</span> <b>${jf == null ? '—' : jf + '%'}</b></span>
+      ${zavod ? `<span><span class="muted">Chiqsa</span> <b>${jfz == null ? '—' : jfz + '%'}</b></span>` : ''}
+    </div>${bar(jCh, jZa, jRe)}`;
+  const kartlar = tk.map((r) => {
+    const ch = Number(r.chiqdi_qty) || 0, za = Number(r.zavodda_qty) || 0;
+    const re = Number(r.reja_qty) || 0, u = esc(r.uom || 'dona');
+    const f = foiz(ch, re), fz = foiz(ch + za, re);
+    return `<div class="kcard">
+      <div class="knom">${esc(r.name)}</div>
+      <div class="kfoiz">${f == null ? '<small>reja qo\'yilmagan</small>'
+        : f + '% <small>bajarildi</small>'}</div>
+      ${bar(ch, za, re)}
+      <div class="kqator"><span>Reja</span><span>${re ? `<b>${son(re)}</b> ${u}` : '—'}</span></div>
+      <div class="kqator"><span>Chiqdi</span><span><b>${son(ch)}</b> ${u}</span></div>
+      ${zavod ? `<div class="kqator"><span>Zavodda</span><span><b>${son(za)}</b> ${u}</span></div>` : ''}
+      ${zavod ? `<div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>` : ''}
+    </div>`;
+  }).join('') + tushumKart(tushum)
+    || '<p class="muted" style="font-size:13px">Turkum yo\'q.</p>';
+    return { jami, kartlar };
+  };
+
+  return { RANG, KUL, pul, son, kpiTurkum, oyNom, kpi, bars, bars2, rank, share, esc, ulash };
 })();

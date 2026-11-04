@@ -64,6 +64,10 @@ async function loadWorker(workerId) {
     //  Qo'shimchasi faqat doirasi BOR xodimga qo'shiladi: doirasi yo'q
     //  (rahbariyat) hammasini ko'radi va bitta katakcha uni bitta tsexga
     //  qamab qo'ymasin (`v_worker_shop_scope` bilan bir xil qoida).
+    //  Faqat ROLNING o'z tsexi, qo'shimchalarsiz: ish haqi doirasi
+    //  (izoh: modules/payroll.js) — qo'shimcha tsex mahsulotni KO'RISH
+    //  uchun beriladi, o'sha tsexning odamlari esa uniki emas.
+    scope_shop_main: asosiy,
     scope_shop_ids: asosiy.length
       ? [...new Set([...asosiy, ...extra.rows.map((r) => r.shop_id)])] : [],
     // Savdo yo'nalishi: bo'sh bo'lsa hamma kanal (izoh: sql/units.sql)

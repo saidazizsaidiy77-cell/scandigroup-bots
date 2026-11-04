@@ -630,3 +630,23 @@ input.auto{color:var(--accent-ink)}
 .pbar-col.pbar-2{gap:2px;justify-content:center}
 .pbar-col.pbar-2>i{width:auto;flex:1;max-width:20px;margin:0;
   border-radius:4px 4px 0 0}
+
+/* KPI turkum kartochkalari — savdo paneli va KPI sahifasi (panel.js, kpiTurkum) */
+/*  Turkum kartochkalari: kompyuterda to'rttadan, telefonda bittadan. */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:18px}
+.kcard{border:1px solid var(--line,#e4e2dc);border-radius:12px;padding:14px 16px}
+.kcard .knom{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kcard .kfoiz{font-size:30px;font-weight:600;line-height:1.1;margin:6px 0 10px;
+              font-variant-numeric:tabular-nums}
+.kcard .kfoiz small{font-size:13px;font-weight:400;color:var(--muted)}
+.kbar{position:relative;height:10px;border-radius:5px;background:var(--surface-2,#ecebe6);
+      overflow:hidden;margin-bottom:10px}
+.kbar i{position:absolute;top:0;bottom:0;left:0}
+.kbar .kch{background:#8a5a00}
+.kbar .kza{background:repeating-linear-gradient(45deg,#8a5a0066 0 4px,#8a5a0026 4px 8px)}
+.kbar .kre{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text,#222)}
+.kqator{display:flex;justify-content:space-between;gap:8px;font-size:13px;
+        padding:3px 0;font-variant-numeric:tabular-nums}
+.kqator span:first-child{color:var(--muted)}
+.kjami{display:flex;flex-wrap:wrap;gap:6px 28px;align-items:baseline;margin:4px 0 14px}
+.kjami b{font-size:20px;font-variant-numeric:tabular-nums}
