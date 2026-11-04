@@ -2946,6 +2946,76 @@ function xomXato(royxat) {
   return e;
 }
 
+//  ★ ISHBAY OYLIK — BO'LIMDAN KETAYOTGANDA (zavod qarori, 2026-11;
+//  izoh: sql/cash.sql). Narxi bor bo'limdan (`sections.piece_rate`)
+//  konver OLDINGA o'tganda o'sha bo'limning xodimiga dona × narx
+//  yoziladi. Orqaga qaytarish ishbay emas — ish takrorlanadi, lekin
+//  pul ikkinchi marta yozilmasin.
+//
+//  ★ BITTA RAQAM — BIR MARTA. Konver bo'linadi va bo'laklar oldinga-
+//  orqaga yuradi: shu bo'limda shu RAQAM uchun allaqachon yozilgan dona
+//  ayiriladi va raqamning umumiy donasidan oshmaydi. Aks holda qaytib
+//  kelgan bo'lak qayta o'tganda ish ikki marta to'lanardi.
+//
+//  Savol BITTA joyda: o'tkazishdan oldingi to'plangan savol ham,
+//  o'tkazishning o'zi ham shundan o'tadi (xom ashyo bilan bir xil sabab).
+async function ishbayKerak(client, unitId, targetId, qty) {
+  const u = (await client.query(
+    `SELECT u.id, u.conveyor_no, u.product_id, u.qty, u.current_section_id,
+            s.name AS section, s.piece_rate
+       FROM production_units u
+       JOIN sections s ON s.id = u.current_section_id
+      WHERE u.id = $1 AND u.status = 'production' AND s.piece_rate > 0`,
+    [unitId])).rows[0];
+  if (!u) return null;
+  const route = (await client.query(
+    `SELECT section_id, step_no FROM v_product_route WHERE product_id = $1
+      ORDER BY step_no`, [u.product_id])).rows;
+  const cur = route.findIndex((r) => r.section_id === u.current_section_id);
+  if (cur < 0) return null;
+  const to = targetId ? route.findIndex((r) => r.section_id === Number(targetId)) : cur + 1;
+  if (!(to > cur) || to >= route.length) return null;
+  const n = qty == null || qty === '' ? u.qty : Number(qty);
+  const { rows: [h] } = await client.query(
+    `SELECT (SELECT COALESCE(SUM(qty), 0) FROM production_units
+              WHERE conveyor_no = $1 AND status <> 'cancelled') AS jami,
+            (SELECT COALESCE(SUM(qty), 0) FROM piece_work
+              WHERE conveyor_no = $1 AND section_id = $2) AS yozilgan`,
+    [u.conveyor_no, u.current_section_id]);
+  const dona = Math.min(n, Number(h.jami) - Number(h.yozilgan));
+  if (!(dona > 0)) return null;
+  return { id: u.id, conveyor_no: u.conveyor_no, product_id: u.product_id,
+           section_id: u.current_section_id, section: u.section,
+           rate: Number(u.piece_rate), qty: dona };
+}
+
+//  Bo'limning xodimlari — shtatdagi joyi o'sha bo'lim (`workers.section_id`).
+//  Ro'yxat kodga yozilmaydi (4-qoida): xodim Xodimlar sahifasida bo'limga
+//  biriktiriladi va shu zahoti shu yerda chiqadi.
+async function bolimXodimlari(client, sectionId) {
+  return (await client.query(
+    `SELECT id, name FROM workers WHERE active AND section_id = $1 ORDER BY name`,
+    [sectionId])).rows;
+}
+
+//  Belgi bilan qaytadi — sahifa unga qarab «kim bajardi» oynasini
+//  ochadi (xom ashyo savoli bilan bir xil idiom).
+async function ishbayXato(client, royxat) {
+  const bolim = new Map();
+  for (const x of royxat) {
+    if (!bolim.has(x.section_id))
+      bolim.set(x.section_id, { section_id: x.section_id, section: x.section,
+                                rate: x.rate, units: [],
+                                staff: await bolimXodimlari(client, x.section_id) });
+    bolim.get(x.section_id).units.push({ id: x.id, conveyor_no: x.conveyor_no, qty: x.qty });
+  }
+  const e = new Error(`Ishbay: «${[...bolim.values()].map((b) => b.section).join('», «')}» ` +
+    "bo'limida ishni kim bajarganini tanlang");
+  e.code = 'ishbay';
+  e.sections = [...bolim.values()];
+  return e;
+}
+
 //  ★ KONVER BO'LAKLARI
 //
 //  Bitta o'tkazishda konverning HAMMASI emas, bir qismi ketishi mumkin:
@@ -2957,7 +3027,7 @@ function xomXato(royxat) {
 //  o'chiriladi (tarixi qo'shilgan qatorga ko'chiriladi). Shu sababdan
 //  ustalar donama-dona o'tkazsa ham qatorlar ko'payib ketmaydi.
 async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_defect,
-                                      defect_reason, note, plan_on }) {
+                                      defect_reason, note, plan_on, ishchi }) {
   const u = (await client.query(
     `SELECT * FROM production_units WHERE id = $1 FOR UPDATE`, [unit_id])).rows[0];
   if (!u) throw new Error('Konver topilmadi');
@@ -3073,6 +3143,20 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
     throw new Error(`${u.conveyor_no}: bu yerda ${u.qty} ta bor, ${n} tasini o'tkazib bo'lmaydi`);
   if (defect > n) throw new Error(`${u.conveyor_no}: brak soni o'tkazilayotgan sondan ko'p`);
 
+  //  ★ ISHBAY — joyidan qimirlamasidan OLDIN: bo'limi o'zgargach
+  //  qaysi bo'limning ishi ekani yo'qoladi.
+  const ish = await ishbayKerak(client, u.id, target, n);
+  let ishKim = null;
+  if (ish) {
+    ishKim = Number((ishchi || {})[ish.section_id]) || null;
+    if (!ishKim) throw await ishbayXato(client, [ish]);
+    const ok = (await client.query(
+      `SELECT 1 FROM workers WHERE id = $1 AND active AND section_id = $2`,
+      [ishKim, ish.section_id])).rowCount;
+    if (!ok) throw new Error(`${u.conveyor_no}: tanlangan xodim «${ish.section}» ` +
+                             "bo'limida emas");
+  }
+
   const row = await placePieces(client, req, u, target, n,
                                 moved_on || new Date().toISOString().slice(0, 10));
 
@@ -3123,6 +3207,14 @@ async function moveOne(client, req, { unit_id, section_id, moved_on, qty, qty_de
      VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), $5,$6,$7,$8,$9) RETURNING id`,
     [row, target, u.current_section_id || null, moved_on || null,
      n, defect, defect_reason || null, req.user.id, note || null])).rows[0];
+
+  if (ish)
+    await client.query(
+      `INSERT INTO piece_work (move_id, conveyor_no, product_id, section_id,
+                               worker_id, qty, rate, work_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8::date, CURRENT_DATE), $9)`,
+      [move.id, u.conveyor_no, u.product_id, ish.section_id, ishKim,
+       ish.qty, ish.rate, moved_on || null, req.user.id]);
 
   // Lak va Qadoqlash tsexiga kirish sanasi jurnalda alohida ustun. Reja
   // sanasini tsex boshlig'i qo'yadi, faktni esa konver o'sha tsexga
@@ -3899,8 +3991,30 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
     }
     if (yoq.length) throw xomXato(yoq);
 
+    //  ★ ISHBAY SAVOLI HAM BIR YO'LA — bo'lim bo'yicha: bitta bo'limdagi
+    //  o'nta konverga bitta xodim tanlanadi.
+    //  Doirasi yetmaydigan konver bu yerda SO'RALMAYDI: u o'tkazishning
+    //  o'zida «doirangizda emas» bilan to'xtaydi, savol esa begona
+    //  bo'limning xodimlar ro'yxatini ochib qo'yardi.
+    const ishchi = req.body.ishchi || {};
+    const scope = scopeOf(req);
+    const ish = [];
+    for (const it of items) {
+      const r = await ishbayKerak(client, it.unit_id, it.section_id, it.qty);
+      if (!r || Number(ishchi[r.section_id])) continue;
+      if (scope) {
+        const egasi = (await client.query(
+          `SELECT COALESCE(g.owner_shop_id, s.shop_id) AS shop_id
+             FROM sections s, products p JOIN product_groups g ON g.id = p.group_id
+            WHERE s.id = $1 AND p.id = $2`, [r.section_id, r.product_id])).rows[0];
+        if (!egasi || !scope.includes(egasi.shop_id)) continue;
+      }
+      ish.push(r);
+    }
+    if (ish.length) throw await ishbayXato(client, ish);
+
     const moved = [];
-    for (const it of items) moved.push(await moveOne(client, req, it));
+    for (const it of items) moved.push(await moveOne(client, req, { ...it, ishchi }));
     await client.query('COMMIT');
     res.json({ moved });
   } catch (e) {
@@ -3909,7 +4023,7 @@ router.post('/move', need('production.entry'), wrap(async (req, res) => {
     //  «Bu bo'limda biriktirilmaydi» tugmasini chizadi.
     return res.status(400).json({ error: e.message, code: e.code,
                                   unit_id: e.unit_id, section_id: e.section_id,
-                                  units: e.units });
+                                  units: e.units, sections: e.sections });
   } finally {
     client.release();
   }

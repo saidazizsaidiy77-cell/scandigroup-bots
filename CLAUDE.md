@@ -3083,6 +3083,32 @@ Ishdan ketgan xodim hisobi yopilmaguncha ro'yxatda turadi.
 Huquqi: ko'rish `payroll.view` (direktor `%.view` bilan oladi),
 yozish `payroll.manage` (buxgalter, administrator).
 
+**★ ISHBAY — BO'LIMDAN O'TGANDA O'ZI HISOBLANADI** (zavod qarori,
+2026-11; `sections.piece_rate`, `piece_work`, `sql/cash.sql`). Stul
+tsexida ish DONA bilan to'lanadi, narx bir stul uchun, dollarda:
+
+    Zborka karkas 3,8 · Shkurka karkas 2,2 · Astar sepish 1,3 ·
+    Astar shkurka 2,2 · Lak karkas 2,6 · Qoplash 4
+
+Narx BO'LIMDA (4-qoida), boshlang'ichi bir martalik (`migration_flags`:
+`ishbay-stul`). Konver narxi bor bo'limdan OLDINGA o'tganda tsex
+ekranida **«Kim bajardi?»** oynasi chiqadi (`code: 'ishbay'`, bo'lim
+bo'yicha bitta savol, xom ashyo savoli bilan bir xil idiom) — ro'yxatda
+o'sha bo'limga biriktirilgan xodimlar (`workers.section_id`); boshqa
+bo'limning xodimi server rad etadi. Yozuv harakatga bog'langan
+(`move_id`, `ON DELETE CASCADE`): o'tkazish orqaga qaytarilsa ishbay
+ham o'chadi. Narx yozuv bilan qotadi.
+
+**Bitta raqam — bir marta**: orqaga qaytarish ishbay emas, va shu
+bo'limda shu raqam uchun yozilgan dona raqamning umumiy donasidan
+oshmaydi — qaytib kelgan bo'lak qayta o'tganda ikkinchi marta
+to'lanmaydi. Doirasi yetmaydigan konverda savol berilmaydi (begona
+bo'limning xodimlari ochilib qolmasin).
+
+Ish haqi sahifasida ishbay «Hisoblandi, $» ga O'ZI qo'shiladi (ish
+bajarilgan kunning oyi), qator ostida «shundan ishbay», ochilganda
+bo'lim va mahsulot bo'yicha jadval.
+
 **★ TA'MINOTCHIGA PUL BERAYOTGANDA QARZI KO'RINADI** (zavod qarori,
 2026-10; `/api/cash/refs` dagi `suppliers.balance`). Buyurtmada
 mijozning balansi chiqqani bilan bir xil sabab: «unga qancha

@@ -63,6 +63,22 @@ const xomsiz = () => require('../db').db.query(
     WHERE u.status = 'production'
    ON CONFLICT DO NOTHING`);
 
+//  Ishbay narxi bor bo'limlarning har biriga bittadan xodim — o'tkazishda
+//  «kim bajardi» shu ro'yxatdan tanlanadi (izoh: sql/cash.sql).
+//  Qaytaradi: { section_id: worker_id } — `/move` ning `ishchi` maydoni.
+const ishchilar = async () => {
+  const { db } = require('../db');
+  await db.query(
+    `INSERT INTO workers (name, section_id)
+     SELECT 'Ishbay · ' || s.code, s.id FROM sections s
+      WHERE s.piece_rate > 0
+        AND NOT EXISTS (SELECT 1 FROM workers w WHERE w.name = 'Ishbay · ' || s.code)`);
+  const { rows } = await db.query(
+    `SELECT w.section_id, w.id FROM workers w
+      WHERE w.name LIKE 'Ishbay · %' AND w.section_id IS NOT NULL`);
+  return Object.fromEntries(rows.map((r) => [r.section_id, r.id]));
+};
+
 const newUnit = async (extra = {}) => {
   const r = await admin('POST', '/api/units/', {
     items: [{ product_id: PENAL, qty: 1, section_id: ARRA, ...extra }] });
@@ -732,8 +748,9 @@ test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', asyn
   //  Keyingi qadam — O'Z tsexining astar bo'limi, ya'ni topshirish ham
   //  so'ralmaydi: konver hech kimning qo'liga o'tmayapti.
   const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  const ishchi = await ishchilar();
   await xomsiz();
-  const mv = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+  const mv = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }], ishchi });
   assert.equal(mv.status, 200, mv.text);
   assert.equal((await H.id(`SELECT current_section_id s FROM production_units WHERE id=$1`,
     [u.id])).s, STU_AST, 'astar bo\'limi ham stul tsexiniki');
@@ -768,7 +785,7 @@ test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', asyn
   //  STU-QOPL → STU-QAD.
   for (let i = 0; i < 4; i++) {
     await xomsiz();
-    const step = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }] });
+    const step = await stul('POST', '/api/units/move', { items: [{ unit_id: u.id }], ishchi });
     assert.equal(step.status, 200, `${i + 1}-qadam: ${step.text}`);
   }
   const oxir = await H.id(
@@ -782,6 +799,104 @@ test('stul o\'z tsexidan chiqmaydi: marshrut boshidan oxirigacha stulniki', asyn
   //  (`sections.milestone`, STU-LAK) va o'qilishi bitta joyda:
   //  COALESCE(bo'limniki, tsexniki).
   assert.ok(oxir.lak_yozildi, 'lak bo\'limiga kirish sanasi yozildi');
+});
+
+//  ★ ISHBAY OYLIK (zavod qarori, 2026-11; izoh: sql/cash.sql). Narxi bor
+//  bo'limdan konver OLDINGA o'tganda «kim bajardi» so'raladi va pul o'sha
+//  xodimga yoziladi: dona × bo'limning narxi.
+test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
+  const { db } = require('../db');
+  const sec = async (code) => (await H.id(
+    `SELECT id, piece_rate::float AS rate FROM sections WHERE code = $1`, [code]));
+  const ZBOR = await sec('STU-ZBOR'), SHKUR = await sec('STU-SHKUR');
+  //  Zavod bergan narxlar bazada (4-qoida)
+  assert.equal(ZBOR.rate, 3.8);
+  assert.equal(SHKUR.rate, 2.2);
+  assert.equal((await sec('STU-QOPL')).rate, 4);
+  assert.equal((await sec('STU-ROVER')).rate, null, 'Rover karkasda ishbay yo\'q');
+
+  //  Marshrutida Zborka bor stul va Zborkadan keyingi bo'lim
+  const yol = await H.id(
+    `SELECT r.product_id AS id, n.section_id AS keyin
+       FROM v_product_route r
+       JOIN v_product_route n ON n.product_id = r.product_id AND n.step_no = r.step_no + 1
+      WHERE r.section_id = $1 ORDER BY r.product_id LIMIT 1`, [ZBOR.id]);
+  assert.ok(yol, 'Zborkadan o\'tadigan stul bor');
+  const KEYIN = yol.keyin;
+  const yarat = await admin('POST', '/api/units/', {
+    items: [{ product_id: yol.id, qty: 10, section_id: ZBOR.id }] });
+  assert.equal(yarat.status, 200, yarat.text);
+  const u = yarat.body.created[0];
+  const ishchi = await ishchilar();
+  const kim = ishchi[ZBOR.id];
+
+  //  Xodim tanlanmasa — savol, belgi bilan va bo'limning xodimlari bilan
+  await xomsiz();
+  const sor = await admin('POST', '/api/units/move', { items: [{ unit_id: u.id, qty: 4 }] });
+  assert.equal(sor.status, 400, sor.text);
+  assert.equal(sor.body.code, 'ishbay');
+  const b = sor.body.sections[0];
+  assert.equal(b.section_id, ZBOR.id);
+  assert.equal(b.units[0].qty, 4);
+  assert.ok(b.staff.some((w) => w.id === kim), 'bo\'lim xodimi ro\'yxatda');
+
+  //  Boshqa bo'limning xodimi qabul qilinmaydi
+  const begona = await admin('POST', '/api/units/move', {
+    items: [{ unit_id: u.id, qty: 4 }], ishchi: { [ZBOR.id]: ishchi[SHKUR.id] } });
+  assert.equal(begona.status, 400);
+  assert.match(begona.body.error, /bo'limida emas/);
+
+  //  4 dona o'tdi → 4 × 3,8 = 15,2 $
+  const mv = await admin('POST', '/api/units/move', {
+    items: [{ unit_id: u.id, qty: 4 }], ishchi });
+  assert.equal(mv.status, 200, mv.text);
+  const yoz = await H.id(
+    `SELECT worker_id, qty, amount::float AS amount FROM piece_work
+      WHERE conveyor_no = $1 AND section_id = $2`, [u.conveyor_no, ZBOR.id]);
+  assert.equal(yoz.worker_id, kim);
+  assert.equal(yoz.qty, 4);
+  assert.equal(yoz.amount, 15.2);
+
+  //  Orqaga qaytarish ishbay emas; qaytib kelgan bo'lak qayta o'tganda
+  //  ikkinchi marta to'lanmaydi — raqamning umumiy donasidan oshmaydi.
+  const shkurda = (await H.id(
+    `SELECT id FROM production_units WHERE conveyor_no = $1 AND current_section_id = $2`,
+    [u.conveyor_no, KEYIN])).id;
+  await xomsiz();
+  assert.equal((await admin('POST', '/api/units/move', {
+    items: [{ unit_id: shkurda, section_id: ZBOR.id }] })).status, 200);
+  await xomsiz();
+  const hammasi = (await H.id(
+    `SELECT id FROM production_units WHERE conveyor_no = $1 AND current_section_id = $2`,
+    [u.conveyor_no, ZBOR.id])).id;
+  assert.equal((await admin('POST', '/api/units/move', {
+    items: [{ unit_id: hammasi }], ishchi })).status, 200);
+  const jami = await H.id(
+    `SELECT SUM(qty)::int AS qty, SUM(amount)::float AS amount FROM piece_work
+      WHERE conveyor_no = $1 AND section_id = $2`, [u.conveyor_no, ZBOR.id]);
+  assert.equal(jami.qty, 10, 'raqamning 10 donasidan oshmaydi');
+  assert.equal(Math.round(jami.amount * 100) / 100, 38);
+
+  //  Ish haqida «hisoblandi» ga o'zi qo'shiladi (dollarda)
+  const oy = new Date().toISOString().slice(0, 7);
+  const ph = (await admin('GET', '/api/payroll?month=' + oy)).body;
+  const q = ph.rows.find((r) => r.id === kim);
+  assert.ok(q, 'xodim ish haqi ro\'yxatida');
+  assert.equal(Number(q.piece_usd), 38);
+  assert.ok(Number(q.acc_usd) >= 38);
+  const t = (await admin('GET', `/api/payroll/worker/${kim}?month=${oy}`)).body;
+  assert.equal(t.piece.reduce((a, p) => a + Number(p.amount), 0), 38);
+
+  //  Oxirgi o'tkazish orqaga qaytarilsa ishbay ham o'chadi
+  const oxirgi = (await H.id(
+    `SELECT id FROM production_units WHERE conveyor_no = $1 AND current_section_id = $2`,
+    [u.conveyor_no, KEYIN])).id;
+  assert.equal((await admin('POST', '/api/units/undo', { unit_id: oxirgi })).status, 200);
+  const qoldi = await H.id(
+    `SELECT COALESCE(SUM(qty), 0)::int AS qty FROM piece_work
+      WHERE conveyor_no = $1 AND section_id = $2`, [u.conveyor_no, ZBOR.id]);
+  assert.ok(qoldi.qty < 10, 'qaytarilgan o\'tkazishning ishbayi o\'chdi');
+  await db.query(`SELECT 1`);
 });
 
 test('jurnaldagi tsex filtri konverni egasiga qarab ajratadi', async () => {
@@ -4193,12 +4308,28 @@ test('qarzdorlik oraliq bo\'yicha hisoblanadi', async () => {
 
   //  Keyingi oy: chiqib ketgan mahsulot endi «boshiga» da turadi va
   //  aylanma bo'sh bo'ladi — qarz esa o'zgarmaydi.
+  //
+  //  ★ «KEYINGI OY» — BUGUNDAN KEYINGISI, qotib qolgan noyabr emas.
+  //  Kunlik reja testi mahsulotni BUGUNGI kun bilan chiqaradi: suite
+  //  noyabrda yurganda «noyabr bo'sh» degan shart kalendar tufayli
+  //  qizil bo'lardi. Shuning uchun oktabr boshidan bugungi oyning
+  //  oxirigacha bitta oraliq olinadi va undan keyingi oy solishtiriladi.
+  const bugun = new Date();
+  const oyBoshi = (n) => {
+    const d = new Date(Date.UTC(bugun.getFullYear(), bugun.getMonth() + n, 1));
+    return d.toISOString().slice(0, 10);
+  };
+  const shuOyOxiri = new Date(Date.UTC(bugun.getFullYear(), bugun.getMonth() + 1, 0))
+    .toISOString().slice(0, 10);
+  const shu = (await admin('GET',
+    `/api/sales/debts?from=2026-10-01&to=${shuOyOxiri}`)).body.rows
+    .find((x) => x.id === mijoz);
   const noy = (await admin('GET',
-    '/api/sales/debts?from=2026-11-01&to=2026-11-30')).body;
+    `/api/sales/debts?from=${oyBoshi(1)}&to=${oyBoshi(2)}`)).body;
   const r2 = noy.rows.find((x) => x.id === mijoz);
-  assert.equal(Number(r2.opening), Number(r.closing));
+  assert.equal(Number(r2.opening), Number(shu.closing));
   assert.equal(Number(r2.debit), 0);
-  assert.equal(Number(r2.closing), Number(r.closing));
+  assert.equal(Number(r2.closing), Number(shu.closing));
 
   //  Oxiriga — `v_customer_sales.balance` bilan bir xil: ikki hisob bir
   //  narsani aytishi kerak, aks holda qaysi biri to'g'ri degan savol chiqadi.
@@ -8363,7 +8494,10 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
       { item_id: q.id, unit_id: u.id, qty: 2 })).status, 200);
     assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
     const sh = await admin('POST', `/api/sales/orders/${z.id}/ship`,
-      { ship_on: '2026-11-20' });
+      //  ★ BOSHQA HECH KIM TEGMAYDIGAN OY: kunlik reja testi BUGUNGI kun
+      //  bilan chiqaradi va qotib qolgan joriy oy kalendar almashganda
+      //  yig'indini begona summa bilan to'ldirardi.
+      { ship_on: '2030-06-20' });
     assert.equal(sh.status, 200, sh.text);
   };
   const penal = kat.products.find((p) => p.group_code === 'PENAL');
@@ -8372,7 +8506,7 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
   await sot(penal.id, 300);
   await sot(stul.id, 50);
 
-  const pl = (await admin('GET', '/api/cash/pl?from=2026-11&to=2026-11')).body;
+  const pl = (await admin('GET', '/api/cash/pl?from=2030-06&to=2030-06')).body;
   const tushum = pl.rows.filter((r) => r.kind === 'income');
   const summa = (nom) => Number((tushum.find((r) => r.item_name === nom) || {})
     .amount_usd || 0);

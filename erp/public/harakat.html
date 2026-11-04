@@ -558,7 +558,7 @@ function kindOf(id) {
 //  belgi tsexda (`shops.plan_auto`, izoh: sql/register.sql).
 const qabulmi = (id) => (data.inbox || []).some(u => u.id === id);
 
-async function apply(ids, qty, planOn) {
+async function apply(ids, qty, planOn, ishchi) {
   const send = ids.filter(id => kindOf(id) === 'send');
   const move = ids.filter(id => kindOf(id) !== 'send');
 
@@ -570,6 +570,7 @@ async function apply(ids, qty, planOn) {
     if (move.length)
       await App.api('/api/units/move', {
         method: 'POST', body: JSON.stringify({
+          ...(ishchi ? { ishchi } : {}),
           items: move.map(id => ({
             unit_id: id,
             ...(qty == null ? {} : { qty }),
@@ -597,8 +598,56 @@ async function apply(ids, qty, planOn) {
     //  Tugma xatoning BELGISIGA qarab chiziladi (`code`), matnini
     //  o'qib emas: matn ertaga o'zgarsa tugma jimgina yo'qolardi.
     if (e.code === 'xom-ashyo-yoq') return xomYoq(e, ids, qty, planOn);
+    if (e.code === 'ishbay' && Array.isArray(e.sections))
+      return ishbayOch(e.sections, ids, qty, planOn, ishchi);
     toast(e.message, true);
   }
+}
+
+//  ★ ISHBAY — KIM BAJARDI (zavod qarori, 2026-11; izoh: sql/cash.sql).
+//  Narxi bor bo'limdan konver oldinga o'tganda ish o'sha bo'limning
+//  xodimiga yoziladi. Savol BO'LIM bo'yicha bitta: o'nta konver bitta
+//  bo'limdan ketsa bitta odam tanlanadi. Ro'yxat — o'sha bo'limga
+//  biriktirilgan xodimlar (Xodimlar sahifasidagi «Bo'lim»).
+function ishbayOch(sections, ids, qty, planOn, oldin) {
+  $('ibBox')?.remove();
+  const pul = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="ibBox" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:440px">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <h2 style="margin:0">Kim bajardi?</h2>
+          <button onclick="$('ibBox').remove()">Yopish</button></div>
+        ${sections.map((b) => {
+          const dona = b.units.reduce((a, u) => a + Number(u.qty), 0);
+          return `<div style="margin-bottom:14px">
+            <label>${esc(b.section)} · ${dona} dona × ${pul(b.rate)} $ =
+              <b>${pul(dona * b.rate)} $</b></label>
+            ${b.staff.length ? `<select data-sec="${b.section_id}" style="font-size:16px">
+                <option value="">— xodimni tanlang —</option>
+                ${b.staff.map((w) => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+              </select>`
+              : `<div class="tag bad" style="white-space:normal">Bu bo'limga xodim
+                  biriktirilmagan — Xodimlar sahifasida «Bo'lim» ni belgilang</div>`}
+            <div class="muted" style="font-size:12px;margin-top:4px">
+              ${b.units.map((u) => esc(u.conveyor_no) + ' · ' + u.qty).join(', ')}</div>
+          </div>`; }).join('')}
+        <button class="primary" style="width:100%" id="ibOk">Saqlash va o'tkazish</button>
+        <div id="ibMsg"></div>
+      </div></div>`);
+  $('ibOk').onclick = () => {
+    const tanlov = { ...(oldin || {}) };
+    for (const el of document.querySelectorAll('#ibBox select[data-sec]')) {
+      if (!el.value) {
+        $('ibMsg').innerHTML = `<div class="tag bad" style="margin-top:10px">Xodim tanlanmagan</div>`;
+        return;
+      }
+      tanlov[el.dataset.sec] = Number(el.value);
+    }
+    if (sections.some((b) => !b.staff.length)) return;
+    $('ibBox').remove();
+    apply(ids, qty, planOn, tanlov);
+  };
 }
 
 //  Ikkinchi yo'l ham SHU OYNADA: usta ekrandan chiqmasdan yo material

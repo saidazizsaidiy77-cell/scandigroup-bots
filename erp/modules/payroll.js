@@ -32,6 +32,14 @@ const bugungiOy = () => {
 //  To'langan pulning OYI: foyda-zarar oyi, u bo'lmasa to'lov kuni.
 //  Oylikda `pl_month` majburiy (harajat), ta'minotchiga to'lovda esa
 //  `staff_id` umuman bo'lmaydi.
+//  ★ ISHBAY — HISOBLANGANGA O'ZI QO'SHILADI (izoh: sql/cash.sql).
+//  Dollarda, ish bajarilgan kunning oyi bo'yicha. Buxgalter uni qo'lda
+//  terib o'tirmaydi: konver bo'limdan o'tgan zahoti shu yerda.
+const ISHBAY = `
+  SELECT worker_id, 'USD'::text AS currency, amount,
+         date_trunc('month', work_date)::date AS month
+    FROM piece_work`;
+
 const TOLOV = `
   SELECT o.staff_id AS worker_id, o.currency, o.amount,
          COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) AS month
@@ -43,6 +51,8 @@ router.get('/', need(...KO), wrap(async (req, res) => {
   const { rows } = await db.query(`
     WITH h AS (
       SELECT worker_id, currency, amount, month, 1 AS ishora FROM payroll_accruals
+      UNION ALL
+      SELECT worker_id, currency, amount, month, 1 FROM (${ISHBAY}) i
       UNION ALL
       SELECT worker_id, currency, amount, month, -1 FROM (${TOLOV}) t
     ), s AS (
@@ -63,6 +73,9 @@ router.get('/', need(...KO), wrap(async (req, res) => {
            COALESCE(s.acc_usd, 0)::numeric(18,2)  AS acc_usd,
            COALESCE(s.paid_uzs, 0)::numeric(18,2) AS paid_uzs,
            COALESCE(s.paid_usd, 0)::numeric(18,2) AS paid_usd,
+           (SELECT COALESCE(SUM(p.amount), 0) FROM piece_work p
+             WHERE p.worker_id = w.id
+               AND date_trunc('month', p.work_date)::date = $1)::numeric(18,2) AS piece_usd,
            (SELECT note FROM payroll_accruals a
              WHERE a.worker_id = w.id AND a.month = $1
              ORDER BY a.currency DESC LIMIT 1) AS note
@@ -94,7 +107,7 @@ router.get('/', need(...KO), wrap(async (req, res) => {
 router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
   const m = oy(req.query.month) || bugungiOy();
   const id = Number(req.params.id) || 0;
-  const [acc, paid] = await Promise.all([
+  const [acc, paid, piece] = await Promise.all([
     db.query(`SELECT currency, amount, note FROM payroll_accruals
                WHERE worker_id = $1 AND month = $2 ORDER BY currency DESC`, [id, m]),
     db.query(`SELECT o.id, o.doc_no, o.op_date, o.currency, o.amount, o.note,
@@ -104,8 +117,20 @@ router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
                WHERE o.status = 'ok' AND o.staff_id = $1
                  AND COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) = $2
                ORDER BY o.op_date, o.id`, [id, m]),
+    //  Ishbay — bo'lim va mahsulot bo'yicha jamlab: oyiga yuzlab
+    //  o'tkazish bo'ladi va har biri alohida qator o'qilmasdi.
+    db.query(`SELECT s.name AS section, pr.name AS product, p.rate,
+                     SUM(p.qty)::int AS qty, SUM(p.amount)::numeric(14,2) AS amount,
+                     string_agg(DISTINCT p.conveyor_no, ', ') AS konverlar
+                FROM piece_work p
+                JOIN sections s ON s.id = p.section_id
+                LEFT JOIN products pr ON pr.id = p.product_id
+               WHERE p.worker_id = $1
+                 AND date_trunc('month', p.work_date)::date = $2
+               GROUP BY s.name, s.sort, pr.name, p.rate
+               ORDER BY s.sort, pr.name`, [id, m]),
   ]);
-  res.json({ accruals: acc.rows, payments: paid.rows });
+  res.json({ accruals: acc.rows, payments: paid.rows, piece: piece.rows });
 }));
 
 //  Hisoblanganini yozish. Bo'sh yoki nol — «yo'q» degani: o'sha oyning
