@@ -620,7 +620,14 @@ CREATE INDEX IF NOT EXISTS idx_unit_req_pending ON unit_requests(shop_id, create
 
 --  Bitta raqam ikki marta navbatga tushmasin: ikkinchisi tasdiqlanganda
 --  konver raqami band bo'lib chiqardi va direktor sababini bilmasdi.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unit_req_no ON unit_requests(conveyor_no)
+--
+--  ★ BITTA RAQAM — BIR NECHTA RANG (zavod qarori, 2026-11): raqam
+--  endi rang qatorlarida takrorlanadi (5 tasi oq, 5 tasi venge), shuning
+--  uchun kalit raqam + rang + mato. Ikkinchi so'rov baribir o'sha
+--  raqamni ololmaydi — `requestOne` dagi «band» tekshiruvi.
+DROP INDEX IF EXISTS idx_unit_req_no;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unit_req_no_rang
+  ON unit_requests (conveyor_no, lower(COALESCE(color, '')), lower(COALESCE(fabric, '')))
   WHERE status = 'pending' AND conveyor_no IS NOT NULL;
 
 --  DROP + CREATE, `CREATE OR REPLACE` EMAS: `steps` ustuni bigint edi

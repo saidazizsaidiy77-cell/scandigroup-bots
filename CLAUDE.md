@@ -822,6 +822,26 @@ jurnalida (`request-edit`, `edi`/`boldi`), tasdiqlovchi tuzatsa
 so'rovchiga Telegram ketadi — nima o'zgargani bilan. Tasdiqlash esa
 eskicha: ekranda turgan holida ochiladi.
 
+**★ BITTA RAQAM — BIR NECHTA RANG** (zavod qarori, 2026-11;
+`requestOne` dagi `lines`, so'rov oynasidagi **«+ Boshqa rang»**).
+10 talik konverning 5 tasi bir rangda, 5 tasi boshqasida bo'ladi,
+raqami esa BITTA — zavod uni mahsulotga shunday yozadi. Har rang
+qatori ALOHIDA so'rov qatori bo'ladi (o'z soni, rangi, matosi), raqam
+umumiy; kalit raqam + rang + mato (`idx_unit_req_no_rang`). Bir xil
+rang ikki qatorda rad etiladi, zahirada va buyurtma qatoriga
+so'rovda bitta rang.
+
+**Bitta konver — bitta qaror**: qatorlardan biri tasdiqlansa yoki rad
+etilsa butun raqam birga hal bo'ladi — yarmi jurnalda, yarmi navbatda
+qolmaydi. Tasdiqlanganda bo'lak bo'lib ochiladi (`createOne` dagi
+`qism`, `part` 1, 2…) — konver bo'linishi bilan bir xil idiom, ya'ni
+jurnal, muddat, ombor va tannarx eskicha ishlaydi.
+
+**Rangi boshqa bo'lak QO'SHILMAYDI** (`placePieces`): bo'laklar bir
+bo'limda uchrashsa ham rang yoki mato boshqa bo'lsa alohida qator
+bo'lib qoladi — aks holda bittasining rangi jimgina yo'qolardi. Ombor
+ichidagi qo'shilish allaqachon rangni tekshirardi.
+
 Chegara so'rashda ham bor: tsexi biriktirilgan xodim FAQAT o'z
 tsexining mahsulotiga so'rov yozadi (mahsulot qaysi tsexniki —
 `owner_shop_id`, bo'lmasa marshrutning birinchi qadami). Doirasi

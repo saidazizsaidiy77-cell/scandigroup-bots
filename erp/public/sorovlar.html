@@ -55,7 +55,8 @@
              style="background:var(--bg);cursor:default">
       <div class="hint">tizim qo'yadi</div></div>
     <div><label>Soni</label>
-      <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
+      <input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"
+             oninput="rangJami()"></div>
     <div><label>Boshlanish sanasi</label>
       <input id="fStart" type="date" onchange="taklif()"></div>
     <!--  Keyingi tsexga topshirish sanasi. Korpusda MAJBURIY: yo'l uzun,
@@ -74,6 +75,15 @@
     <div id="fabricBox"><label>Matosi <span class="muted" id="fabricReq"
         style="text-transform:none;letter-spacing:0">— majburiy</span></label>
       <select id="fFabric" onchange="maydonlar()"></select></div>
+    <!--  ★ BITTA RAQAM — BIR NECHTA RANG (zavod qarori, 2026-11).
+          10 talik konverning 5 tasi bir rangda, 5 tasi boshqasida
+          bo'ladi, raqami esa bitta. Yuqoridagi soni/rang — birinchi
+          qator, bu yerdagilar qolgani; tasdiqlanganda hammasi bitta
+          raqam ostida bo'lak bo'lib ochiladi. -->
+    <div class="wide" id="rangBox">
+      <div id="rangQator"></div>
+      <button type="button" onclick="rangQosh()" style="margin-top:6px">+ Boshqa rang</button>
+      <span class="hint" id="rangJami" style="margin-left:8px"></span></div>
     <div class="wide"><label>Izoh</label>
       <input id="fNote" placeholder="ixtiyoriy"></div>
     <!--  Zahira — buyurtmasiz, oldindan ishlanadigan mahsulot. Kutish
@@ -192,7 +202,12 @@ function maydonlar() {
   $('fabricBox').hidden = !matoli;
   $('fColor').disabled  = zahira;
   $('fFabric').disabled = zahira;
-  if (zahira) { $('fColor').value = ''; $('fFabric').value = ''; }
+  if (zahira) { $('fColor').value = ''; $('fFabric').value = '';
+                $('rangQator').innerHTML = ''; }
+  $('rangBox').hidden = zahira;
+  document.querySelectorAll('#rangQator .rFabric')
+    .forEach((el) => { el.parentElement.hidden = !matoli; });
+  rangJami();
   const belgi = (id, on) => {
     const el = $(id);
     if (el) el.textContent = on ? '— majburiy' : '';
@@ -252,8 +267,6 @@ async function load() {
           esc(p.group_name)}</option>`).join('');
     //  Bo'sh qiymat birinchi: rang zahiraga kiritilayotganda hali
     //  ma'lum bo'lmaydi — mijoz aytganda bo'yaladi.
-    const royxat = (v) => '<option value="">\u2014 yo\'q \u2014</option>'
-      + v.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     ranglar = sug.colors; matolar = sug.fabrics;
     $('fColor').innerHTML  = royxat(sug.colors);
     $('fFabric').innerHTML = royxat(sug.fabrics);
@@ -333,6 +346,45 @@ function draw() {
   }).join('') : '<tr><td colspan="10" class="muted">So\'rov yo\'q</td></tr>';
 }
 
+//  Bo'sh qiymat birinchi: rang zahiraga kiritilayotganda hali
+//  ma'lum bo'lmaydi — mijoz aytganda bo'yaladi.
+function royxat(v) {
+  return '<option value="">\u2014 yo\'q \u2014</option>'
+    + (v || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+//  Qo'shimcha rang qatori: rang, mato (matoli guruhda) va soni.
+function rangQosh() {
+  const matoli = !!tanlangan()?.needs_fabric;
+  const d = document.createElement('div');
+  d.className = 'row rq';
+  d.style.cssText = 'gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:6px';
+  d.innerHTML = `
+    <div style="flex:2;min-width:140px"><label>Rangi</label>
+      <select class="rColor">${royxat(ranglar)}</select></div>
+    <div style="flex:2;min-width:140px" ${matoli ? '' : 'hidden'}><label>Matosi</label>
+      <select class="rFabric">${royxat(matolar)}</select></div>
+    <div style="flex:1;min-width:80px"><label>Soni</label>
+      <input class="rQty" type="number" min="1" step="1" value="1" inputmode="numeric"
+             oninput="rangJami()"></div>
+    <button type="button" onclick="this.parentElement.remove();rangJami()"
+            title="Olib tashlash">×</button>`;
+  $('rangQator').appendChild(d);
+  rangJami();
+}
+function rangQatorlari() {
+  return [...document.querySelectorAll('#rangQator .rq')].map((d) => ({
+    color:  d.querySelector('.rColor').value || null,
+    fabric: d.querySelector('.rFabric').value || null,
+    qty:    Number(d.querySelector('.rQty').value) || 0,
+  }));
+}
+function rangJami() {
+  const ex = rangQatorlari();
+  $('rangJami').textContent = ex.length
+    ? `Jami: ${ex.reduce((a, l) => a + l.qty, Number($('fQty').value) || 0)} ta · `
+      + `${ex.length + 1} rang, raqam bitta` : '';
+}
+
 async function send() {
   const it = {
     product_id:  Number($('fProduct').value) || null,
@@ -346,12 +398,18 @@ async function send() {
   };
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
+  const ex = it.is_stock ? [] : rangQatorlari();
+  if (ex.length) {
+    it.lines = [{ qty: it.qty, color: it.color, fabric: it.fabric }, ...ex];
+    if (it.lines.some((l) => l.qty <= 0)) return alert('Soni kiritilmagan');
+  }
   //  Serverdagi qoidaning O'ZI (`requestOne`), shu yerda esa uning
   //  ko'rinishi: xodim saqlashni bosgandan keyin emas, oldin bilsin.
   const p = tanlangan();
   if (p?.sales_can_request && !it.is_stock) {
-    const yoq = [!it.color && 'rang',
-                 p.needs_fabric && !it.fabric && 'mato'].filter(Boolean);
+    const yoq = [(it.lines || [it]).some((l) => !l.color) && 'rang',
+                 p.needs_fabric && (it.lines || [it]).some((l) => !l.fabric) && 'mato']
+      .filter(Boolean);
     if (yoq.length) return alert(
       yoq.join(' va ') + ' tanlanmagan — bilinmasa «zahira» deb belgilang');
   }
@@ -368,6 +426,7 @@ async function send() {
     $('fNo').value = ''; $('fQty').value = 1;
     $('fColor').value = ''; $('fFabric').value = '';
     $('fNote').value = ''; $('fStock').checked = false; $('fPlan').value = '';
+    $('rangQator').innerHTML = '';
     maydonlar();
     //  Keyingi raqam darrov taklif qilinadi: qator ketma-ket
     //  kiritilganda har safar qo'lda terib o'tirmasin.
@@ -441,8 +500,17 @@ async function eSaqla(id) {
   } catch (e) { alert(e.message); }
 }
 
+//  Bitta raqamning boshqa rang qatorlari (kutayotganlari).
+function qoshni(id) {
+  const r = data.rows.find((x) => x.id === id);
+  return r ? data.rows.filter((x) => x.id !== id && x.status === 'pending'
+                              && x.conveyor_no === r.conveyor_no) : [];
+}
+
 async function approve(id) {
-  if (!confirm('Konver ochilsinmi? So\'ralgan soni bilan ochiladi.')) return;
+  const n = qoshni(id).length;
+  if (!confirm('Konver ochilsinmi? So\'ralgan soni bilan ochiladi.'
+      + (n ? `\n\nShu raqamning ${n + 1} ta rang qatori BIRGA ochiladi.` : ''))) return;
   try {
     const r = await App.api(`/api/units/requests/${id}/approve`, { method: 'POST' });
     alert('Konver ochildi: ' + r.conveyor_no);
@@ -453,7 +521,9 @@ async function approve(id) {
 async function reject(id, boss) {
   //  Sabab so'raladi: boshliq nega bo'lmaganini bilmasa, o'sha so'rovni
   //  ertaga yana yozardi.
-  const note = prompt(boss ? 'Rad etish sababi:' : 'Bekor qilish sababi:');
+  const n = qoshni(id).length;
+  const note = prompt((boss ? 'Rad etish sababi:' : 'Bekor qilish sababi:')
+    + (n ? ` (shu raqamning ${n + 1} ta rang qatori birga)` : ''));
   if (note === null) return;
   try {
     await App.api(`/api/units/requests/${id}/reject`,
