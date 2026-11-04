@@ -3109,6 +3109,9 @@ bo'limining tsexi). Hisoblandi, ishbay va to'landi hujjatlari bilan,
 faqat O'QISH: yozish `payroll.manage` da qoladi. Doirasi yo'q
 boshliqqa hech kim ko'rinmaydi. Chegara SERVERDA (`tsexlar`,
 `modules/payroll.js`) — boshqa tsexning xodimi so'ralsa 403.
+Sahifaning O'Z kirish tekshiruvi ham (`App.start`, `ish-haqi.html`)
+shu huquqni oladi — menyu bilan API ochiq bo'lib, sahifa «Ruxsat yo'q»
+deb turgan edi: huquq MENYUDA, API da va SAHIFADA — uch joyda yoziladi.
 
 **★ ISHBAY — BO'LIMDAN O'TGANDA O'ZI HISOBLANADI** (zavod qarori,
 2026-11; `sections.piece_rate`, `piece_work`, `sql/cash.sql`). Stul
