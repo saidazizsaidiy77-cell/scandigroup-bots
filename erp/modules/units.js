@@ -1378,8 +1378,26 @@ async function sorovTekshir(client, req, it, shopId, yozish = true) {
 //  biriktiriladi (izoh: `/requests/:id/approve`).
 async function requestOne(client, req, it, scope = null, orderItemId = null) {
     if (!it.product_id) throw new Error('Mahsulot tanlanmagan');
-    const qty = Number(it.qty) || 0;
-    if (qty <= 0) throw new Error('Soni kiritilmagan');
+    //  ★ BITTA RAQAM — BIR NECHTA RANG (zavod qarori, 2026-11).
+    //  10 talik konverning 5 tasi bir rangda, 5 tasi boshqasida
+    //  bo'ladi va raqami BITTA. `lines` — rang qatorlari: har biri
+    //  o'z soni, rangi va matosi bilan ALOHIDA so'rov qatori bo'ladi,
+    //  raqami esa umumiy. Tasdiqlashda hammasi birga ochiladi va
+    //  bo'laklar (`part`) bo'lib turadi — konver bo'linishi bilan bir
+    //  xil idiom.
+    const qatorlar = Array.isArray(it.lines) && it.lines.length
+      ? it.lines.map((l) => ({ qty: l.qty, color: l.color, fabric: l.fabric }))
+      : [{ qty: it.qty, color: it.color, fabric: it.fabric }];
+    if (qatorlar.length > 1 && orderItemId)
+      throw new Error('Buyurtma qatoriga bitta rang so\'raladi');
+    if (qatorlar.length > 1 && it.is_stock === true)
+      throw new Error('Zahirada rang tanlanmaydi — bitta qator yetarli');
+    for (const l of qatorlar)
+      if ((Number(l.qty) || 0) <= 0) throw new Error('Soni kiritilmagan');
+    const kalit = (l) => `${trim(l.color) || ''}|${trim(l.fabric) || ''}`.toLowerCase();
+    if (new Set(qatorlar.map(kalit)).size < qatorlar.length)
+      throw new Error('Bir xil rang ikki qatorda — sonini bitta qatorga yozing');
+    const qty = qatorlar.reduce((a, l) => a + Number(l.qty), 0);
 
     //  ★ RAQAMNI TIZIM QO'YADI, XODIM EMAS (zavod qarori, 2026-09).
     //
@@ -1432,7 +1450,9 @@ async function requestOne(client, req, it, scope = null, orderItemId = null) {
     if (scope && (!shopId || !scope.includes(shopId)))
       throw new Error('Bu mahsulot boshqa tsexniki');
 
-    const due = await sorovTekshir(client, req, it, shopId);
+    let due = null;
+    for (const l of qatorlar)
+      due = await sorovTekshir(client, req, { ...it, ...l }, shopId);
 
     //  Bo'lim berilsa marshrutda borligi tekshiriladi — `createOne()`
     //  dagi bilan bir xil qoida. Tasdiqlash paytida emas, SHU YERDA:
@@ -1445,18 +1465,23 @@ async function requestOne(client, req, it, scope = null, orderItemId = null) {
       if (!ok) throw new Error('Tanlangan bo\'lim bu mahsulot marshrutida yo\'q');
     }
 
-    const q = (await client.query(
+    const ids = [];
+    for (const l of qatorlar) ids.push((await client.query(
       `INSERT INTO unit_requests
          (product_id, qty, color, fabric, started_on, section_id, note,
           shop_id, created_by, conveyor_no, is_stock, next_on, order_item_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-      [it.product_id, qty, trim(it.color), trim(it.fabric),
+      [it.product_id, Number(l.qty), trim(l.color), trim(l.fabric),
        it.started_on || null, it.section_id || null, it.note || null,
        shopId, req.user.id, no, it.is_stock === true, due,
-       orderItemId])).rows[0];
+       orderItemId])).rows[0].id);
   //  Izoh xabarga ham chiqadi: tasdiqlovchi telefonda o'qiydi va
   //  sahifani ochmasdan qaror qiladi (izoh: pastda, `notify.queue`).
-  return { id: q.id, no, qty, note: it.note ? String(it.note).trim() : null };
+  return { id: ids[0], ids, no, qty,
+           ranglar: qatorlar.length > 1
+             ? qatorlar.map((l) => `${l.qty} ${[trim(l.color), trim(l.fabric)]
+                 .filter(Boolean).join(' · ') || 'rangsiz'}`).join(', ') : null,
+           note: it.note ? String(it.note).trim() : null };
 }
 
 router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
@@ -1496,12 +1521,13 @@ router.post('/requests', need(...REQUEST), wrap(async (req, res) => {
       //  faqat raqam va donani ko'rardi, ya'ni izohni o'qish uchun
       //  kompyuterga borishi kerak edi.
       body: created.map((c) => `${c.no} · ${c.qty} ta`
+            + (c.ranglar ? ` (${c.ranglar})` : '')
             + (c.note ? `\n   ${c.note}` : '')).join('\n')
             + `\n\nKim so'radi: ${req.user.name}`,
     }, client);
 
     await client.query('COMMIT');
-    res.json({ created: created.map((c) => c.id) });
+    res.json({ created: created.flatMap((c) => c.ids) });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
@@ -1529,82 +1555,104 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
     if (q.status !== 'pending') throw new Error('Bu so\'rov allaqachon hal qilingan');
 
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('conveyor_no'))`);
-    const u = await createOne(client, req, {
-      product_id: q.product_id, qty: q.qty, color: q.color, fabric: q.fabric,
-      started_on: q.started_on, section_id: q.section_id,
-      entered_section_on: q.started_on, note: q.note,
-      //  So'ralgan raqam bilan ochiladi. Bo'sh bo'lsa (ustun
-      //  qo'shilgunga qadar yozilgan so'rov) tizim o'zi beradi.
-      conveyor_no: q.conveyor_no,
-      //  Zahira belgisi ham so'rovdan keladi: buyurtmasiz ishlanayotgani
-      //  kiritayotgan odamga boshidan ma'lum.
-      is_stock: q.is_stock,
-    });
+    //  ★ BITTA RAQAMNING HAMMA RANG QATORI BIRGA OCHILADI (zavod
+    //  qarori, 2026-11): bitta konver — bitta qaror. Biri ochilib,
+    //  ikkinchisi navbatda qolsa raqam yarmi jurnalda, yarmi so'rovda
+    //  turardi.
+    const guruh = [q, ...(q.conveyor_no ? (await client.query(
+      `SELECT * FROM unit_requests
+        WHERE conveyor_no = $1 AND id <> $2 AND status = 'pending'
+        ORDER BY id FOR UPDATE`, [q.conveyor_no, id])).rows : [])];
+    const jamiQty = guruh.reduce((a, g) => a + Number(g.qty), 0);
+    let u0 = null;
+    for (let qi = 0; qi < guruh.length; qi++) {
+      const q = guruh[qi];
+      const id = q.id;
+      const u = await createOne(client, req, {
+        product_id: q.product_id, qty: q.qty, color: q.color, fabric: q.fabric,
+        started_on: q.started_on, section_id: q.section_id,
+        entered_section_on: q.started_on, note: q.note,
+        //  So'ralgan raqam bilan ochiladi. Bo'sh bo'lsa (ustun
+        //  qo'shilgunga qadar yozilgan so'rov) tizim o'zi beradi.
+        conveyor_no: q.conveyor_no,
+        //  Rang qatorining ikkinchisi — o'sha raqamning keyingi bo'lagi.
+        qism: qi > 0,
+        //  Zahira belgisi ham so'rovdan keladi: buyurtmasiz ishlanayotgani
+        //  kiritayotgan odamga boshidan ma'lum.
+        is_stock: q.is_stock,
+      });
 
-    //  Kiritayotganda qo'yilgan «keyingi tsexga topshirish» sanasi
-    //  konverga ko'chadi — qaysi ustunga ekanini bitta qoida hal qiladi.
-    if (q.next_on) {
-      const keyingi = await keyingiTsex(client, q.product_id, null, null, q.shop_id);
-      const set = planUstunlar(keyingi?.milestone, q.next_on);
-      await client.query(
-        `UPDATE production_units SET ${
-          set.map((c, i) => `${c[0]} = $${i + 2}::date`).join(', ')} WHERE id = $1`,
-        [u.id, ...set.map((c) => c[1])]);
-    }
-
-    //  ★ SAVDODAN KELGAN SO'ROV BO'LSA — KONVER O'SHA QATORGA O'ZI
-    //  BIRIKTIRILADI (`order_item_id`, izoh: `sql/sales.sql`).
-    //
-    //  Tugmani menejer buyurtma ekranidan bosgan va uning savoli bitta:
-    //  mijozga shu mahsulot chiqadimi. Bron qo'lda qoldirilsa u har
-    //  kuni so'rovlar ro'yxatini ochib, tasdiqlanganini kutib o'tirardi
-    //  — keyin esa tasdiqlangan konverni jurnaldan qidirib topardi.
-    //
-    //  Soni QATOR YOPILMAGANI bilan cheklanadi: so'rov yozilgandan
-    //  keyin o'sha qatorga boshqa konver biriktirilgan bo'lishi mumkin
-    //  va o'shanda buyurtma keragidan ko'p mahsulotni ushlab turardi.
-    //
-    //  Chiqish sanasi TEKSHIRILMAYDI (`assertMuddat`): konver aynan shu
-    //  buyurtma uchun so'ralgan va menejer buni bilib so'ragan — bu
-    //  yerda rad etish tasdiqlashning O'ZINI yiqitardi.
-    //  ★ YOPILGAN BUYURTMAGA BIRIKTIRILMAYDI (zavod qarori, 2026-10).
-    //  So'rov bugun yoziladi, tasdiq esa ertaga keladi — oradagi kunda
-    //  buyurtma chiqib ketgan yoki bekor qilingan bo'lishi mumkin.
-    //  Shart yo'q edi va natijasi ekranda ko'rindi: buyurtma «Chiqib
-    //  ketdi» bo'lib turar, ichida esa tsexda yurgan konverning TIRIK
-    //  broni bo'lardi. Ikki zarari bor edi. Birinchisi — konver
-    //  BAND bo'lib qolardi: u mijozga allaqachon berilgan buyurtmani
-    //  kutib turar va boshqa buyurtmaga taklif qilinmasdi. Ikkinchisi
-    //  — «Qaysi konver chiqdi» kartochkasi o'sha tirik bronni
-    //  ko'rsatib, HAQIQATDA chiqqan konverlarni yashirardi.
-    //
-    //  So'rovning O'ZI tasdiqlanaveradi va konver ochiladi: tsex
-    //  mahsulotni allaqachon rejaga olgan va tasdiqni rad etish
-    //  ishlab chiqarishni to'xtatardi — u zahira bo'lib qoladi,
-    //  savdo esa kerak bo'lsa qo'lda biriktiradi.
-    if (q.order_item_id) {
-      const kerak = (await client.query(
-        `SELECT i.qty - COALESCE(SUM(r.qty), 0) AS qoldi
-           FROM order_items i
-           JOIN orders o ON o.id = i.order_id
-                        AND o.status NOT IN ('shipped', 'cancelled')
-           LEFT JOIN unit_reservations r ON r.order_item_id = i.id
-          WHERE i.id = $1 GROUP BY i.qty`, [q.order_item_id])).rows[0];
-      const n = Math.min(q.qty, Number(kerak?.qoldi) || 0);
-      if (n > 0) {
+      //  Kiritayotganda qo'yilgan «keyingi tsexga topshirish» sanasi
+      //  konverga ko'chadi — qaysi ustunga ekanini bitta qoida hal qiladi.
+      if (q.next_on) {
+        const keyingi = await keyingiTsex(client, q.product_id, null, null, q.shop_id);
+        const set = planUstunlar(keyingi?.milestone, q.next_on);
         await client.query(
-          `INSERT INTO unit_reservations (unit_id, order_item_id, qty, created_by)
-           VALUES ($1,$2,$3,$4)
-           ON CONFLICT (unit_id, order_item_id) DO UPDATE SET qty = $3`,
-          [u.id, q.order_item_id, n, req.user.id]);
-        await stampUnit(client, u.id);
-        await client.query(
-          `UPDATE orders SET status = 'reserved'
-            WHERE id = (SELECT order_id FROM order_items WHERE id = $1)
-              AND status = 'new'`, [q.order_item_id]);
+          `UPDATE production_units SET ${
+            set.map((c, i) => `${c[0]} = $${i + 2}::date`).join(', ')} WHERE id = $1`,
+          [u.id, ...set.map((c) => c[1])]);
       }
-    }
 
+      //  ★ SAVDODAN KELGAN SO'ROV BO'LSA — KONVER O'SHA QATORGA O'ZI
+      //  BIRIKTIRILADI (`order_item_id`, izoh: `sql/sales.sql`).
+      //
+      //  Tugmani menejer buyurtma ekranidan bosgan va uning savoli bitta:
+      //  mijozga shu mahsulot chiqadimi. Bron qo'lda qoldirilsa u har
+      //  kuni so'rovlar ro'yxatini ochib, tasdiqlanganini kutib o'tirardi
+      //  — keyin esa tasdiqlangan konverni jurnaldan qidirib topardi.
+      //
+      //  Soni QATOR YOPILMAGANI bilan cheklanadi: so'rov yozilgandan
+      //  keyin o'sha qatorga boshqa konver biriktirilgan bo'lishi mumkin
+      //  va o'shanda buyurtma keragidan ko'p mahsulotni ushlab turardi.
+      //
+      //  Chiqish sanasi TEKSHIRILMAYDI (`assertMuddat`): konver aynan shu
+      //  buyurtma uchun so'ralgan va menejer buni bilib so'ragan — bu
+      //  yerda rad etish tasdiqlashning O'ZINI yiqitardi.
+      //  ★ YOPILGAN BUYURTMAGA BIRIKTIRILMAYDI (zavod qarori, 2026-10).
+      //  So'rov bugun yoziladi, tasdiq esa ertaga keladi — oradagi kunda
+      //  buyurtma chiqib ketgan yoki bekor qilingan bo'lishi mumkin.
+      //  Shart yo'q edi va natijasi ekranda ko'rindi: buyurtma «Chiqib
+      //  ketdi» bo'lib turar, ichida esa tsexda yurgan konverning TIRIK
+      //  broni bo'lardi. Ikki zarari bor edi. Birinchisi — konver
+      //  BAND bo'lib qolardi: u mijozga allaqachon berilgan buyurtmani
+      //  kutib turar va boshqa buyurtmaga taklif qilinmasdi. Ikkinchisi
+      //  — «Qaysi konver chiqdi» kartochkasi o'sha tirik bronni
+      //  ko'rsatib, HAQIQATDA chiqqan konverlarni yashirardi.
+      //
+      //  So'rovning O'ZI tasdiqlanaveradi va konver ochiladi: tsex
+      //  mahsulotni allaqachon rejaga olgan va tasdiqni rad etish
+      //  ishlab chiqarishni to'xtatardi — u zahira bo'lib qoladi,
+      //  savdo esa kerak bo'lsa qo'lda biriktiradi.
+      if (q.order_item_id) {
+        const kerak = (await client.query(
+          `SELECT i.qty - COALESCE(SUM(r.qty), 0) AS qoldi
+             FROM order_items i
+             JOIN orders o ON o.id = i.order_id
+                          AND o.status NOT IN ('shipped', 'cancelled')
+             LEFT JOIN unit_reservations r ON r.order_item_id = i.id
+            WHERE i.id = $1 GROUP BY i.qty`, [q.order_item_id])).rows[0];
+        const n = Math.min(q.qty, Number(kerak?.qoldi) || 0);
+        if (n > 0) {
+          await client.query(
+            `INSERT INTO unit_reservations (unit_id, order_item_id, qty, created_by)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (unit_id, order_item_id) DO UPDATE SET qty = $3`,
+            [u.id, q.order_item_id, n, req.user.id]);
+          await stampUnit(client, u.id);
+          await client.query(
+            `UPDATE orders SET status = 'reserved'
+              WHERE id = (SELECT order_id FROM order_items WHERE id = $1)
+                AND status = 'new'`, [q.order_item_id]);
+        }
+      }
+
+      await client.query(
+        `UPDATE unit_requests
+            SET status = 'approved', decided_by = $2, decided_at = NOW(),
+                decide_note = $3, unit_id = $4
+          WHERE id = $1`, [id, req.user.id, req.body.note || null, u.id]);
+      u0 = u0 || u;
+    }
     //  ── ★ TASDIQLANGACH TSEX BOSHLIG'IGA XABAR ────────────────
     //
     //  Konver bo'limsiz ochiladi va tsexning «Boshlanmagan» ro'yxatida
@@ -1618,8 +1666,8 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
     //  ism, na tsex yozilmaydi (4-qoida). Menyudagi belgi ham bor
     //  (`nav.js`) — ikkalasi bir-biriga bog'liq emas: belgi sayt ochiq
     //  bo'lganda ko'rinadi, boshliqning cho'ntagida esa telefon turadi.
-    if (!q.section_id) {
-      const tsex = await shopOfProduct(client, q.product_id);
+    if (!guruh[0].section_id) {
+      const tsex = await shopOfProduct(client, guruh[0].product_id);
       if (tsex) {
         const kimga = (await client.query(
           `SELECT DISTINCT w.id FROM workers w
@@ -1632,21 +1680,17 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
           await notify.queue({
             worker_id: k.id, module: 'production', kind: 'unit_new',
             title: 'Yangi konver — boshlanmagan',
-            body: `${u.conveyor_no} · ${q.qty} ta`
+            body: `${u0.conveyor_no} · ${jamiQty} ta`
                   + `\nBo'limlar ekranidan yo'lga chiqaring.`,
           }, client);
       }
     }
 
-    await client.query(
-      `UPDATE unit_requests
-          SET status = 'approved', decided_by = $2, decided_at = NOW(),
-              decide_note = $3, unit_id = $4
-        WHERE id = $1`, [id, req.user.id, req.body.note || null, u.id]);
     await audit(req, { module: 'production', action: 'approve', entity: 'unit_requests',
-                       entity_id: id, payload: { unit_id: u.id } }, client);
+                       entity_id: id, payload: { unit_id: u0.id,
+                         qatorlar: guruh.map((g) => g.id) } }, client);
     await client.query('COMMIT');
-    res.json({ conveyor_no: u.conveyor_no, unit_id: u.id });
+    res.json({ conveyor_no: u0.conveyor_no, unit_id: u0.id, qatorlar: guruh.length });
   } catch (e) {
     await client.query('ROLLBACK');
     if (e.code === '23505')
@@ -1697,6 +1741,17 @@ router.patch('/requests/:id', need(...REQUEST), wrap(async (req, res) => {
     };
     if (it.qty <= 0) throw new Error('Soni kiritilmagan');
     if (it.is_stock) { it.color = null; it.fabric = null; }
+    //  Rang qatorlari bitta raqamda (izoh: requestOne): tahrir ikkita
+    //  qatorni bir xil rangga keltirib qo'ymasin.
+    const qoshni = (await client.query(
+      `SELECT color, fabric FROM unit_requests
+        WHERE conveyor_no = $1 AND id <> $2 AND status = 'pending'`,
+      [q.conveyor_no, id])).rows;
+    if (qoshni.length && it.is_stock)
+      throw new Error('Bir necha rangli so\'rov zahira bo\'lmaydi');
+    const k = (c, f) => `${trim(c) || ''}|${trim(f) || ''}`.toLowerCase();
+    if (qoshni.some((r) => k(r.color, r.fabric) === k(it.color, it.fabric)))
+      throw new Error('Bu rang shu raqamning boshqa qatorida bor');
     const due = await sorovTekshir(client, req, it, q.shop_id, false);
     await client.query(
       `UPDATE unit_requests
@@ -1746,7 +1801,11 @@ router.post('/requests/:id/reject', need(...REQUEST), wrap(async (req, res) => {
     `UPDATE unit_requests
         SET status = CASE WHEN $3::boolean THEN 'rejected' ELSE 'cancelled' END,
             decided_by = $2, decided_at = NOW(), decide_note = $4
-      WHERE id = $1 AND status = 'pending'
+      WHERE status = 'pending'
+        --  Bitta raqamning rang qatorlari BIRGA hal qilinadi
+        --  (izoh: /requests/:id/approve).
+        AND (id = $1 OR conveyor_no = (SELECT conveyor_no FROM unit_requests
+                                        WHERE id = $1 AND status = 'pending'))
         --  Tasdiqlovchi bo'lmagan xodim faqat o'zi yozgan so'rovni
         --  bekor qiladi: boshqa tsexning navbatini tozalab bo'lmaydi.
         AND ($3::boolean OR created_by = $2)
@@ -1755,7 +1814,8 @@ router.post('/requests/:id/reject', need(...REQUEST), wrap(async (req, res) => {
     error: 'So\'rov topilmadi yoki allaqachon hal qilingan' });
   await audit(req, { module: 'production', action: rows[0].status,
                      entity: 'unit_requests', entity_id: id,
-                     payload: { note: req.body.note || null } });
+                     payload: { note: req.body.note || null,
+                                qatorlar: rows.map((r) => r.id) } });
   res.json({ ok: true, status: rows[0].status });
 }));
 
@@ -1867,7 +1927,7 @@ async function createOne(client, req, it) {
         entered_section_on, customer_id, unit_price, ship_on, next_shop_planned_on,
         status, is_opening, note, created_by,
         color, fabric, lak_planned_on, lak_on, pack_planned_on, pack_on,
-        fg_planned_on, is_stock, warehouse_id)
+        fg_planned_on, is_stock, warehouse_id, part)
      VALUES ($1,$2,$3,$4, COALESCE($5::date, CURRENT_DATE), $6,
              COALESCE($7::date, CURRENT_DATE), $8,$9,$10,$11,
              $12, $13, $14, $15,
@@ -1876,7 +1936,14 @@ async function createOne(client, req, it) {
              -- Ko'rsatilmasa T/M ombor: boshlang'ich qoldiqning katta
              -- qismi o'sha yerda va har qatorda tanlash so'ralmaydi.
              CASE WHEN $24::text IS NULL THEN NULL
-                  ELSE (SELECT id FROM warehouses WHERE code = $24) END)
+                  ELSE (SELECT id FROM warehouses WHERE code = $24) END,
+             -- Rang qatorining ikkinchisi o'sha raqamning keyingi bo'lagi
+             -- (izoh: requestOne). Oddiy yo'lda 1: takror raqam 23505
+             -- bilan rad etilaveradi.
+             CASE WHEN $25::boolean
+                  THEN (SELECT COALESCE(MAX(part), 0) + 1 FROM production_units
+                         WHERE conveyor_no = $1)
+                  ELSE 1 END)
      RETURNING id, conveyor_no`,
     [String(it.conveyor_no).trim(), it.order_no || null, it.product_id,
      Number(it.qty) || 1, it.started_on || null, it.section_id || null,
@@ -1888,7 +1955,8 @@ async function createOne(client, req, it) {
      it.lak_planned_on || null, lakOn,
      it.pack_planned_on || null, packOn,
      it.fg_planned_on || null, !!it.is_stock,
-     (isExit || it.fg_on) ? (it.warehouse_code || 'TM') : null])).rows[0];
+     (isExit || it.fg_on) ? (it.warehouse_code || 'TM') : null,
+     it.qism === true])).rows[0];
 
   if (it.section_id) {
     await client.query(
@@ -2764,7 +2832,13 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
     `SELECT id FROM production_units
       WHERE conveyor_no = $1 AND id <> $2 AND status = 'production'
         AND current_section_id = $3
-      ORDER BY id LIMIT 1 FOR UPDATE`, [u.conveyor_no, u.id, toSection])).rows[0] : null;
+        --  ★ RANGI BOSHQA BO'LAK QO'SHILMAYDI (zavod qarori, 2026-11).
+        --  Bitta raqamda ikki rang bo'ladi (5 tasi oq, 5 tasi venge) va
+        --  qo'shilsa bittasining rangi jimgina yo'qolardi.
+        AND color IS NOT DISTINCT FROM $4
+        AND fabric IS NOT DISTINCT FROM $5
+      ORDER BY id LIMIT 1 FOR UPDATE`,
+    [u.conveyor_no, u.id, toSection, u.color ?? null, u.fabric ?? null])).rows[0] : null;
   const whole = n >= u.qty;
 
   if (sibling) {

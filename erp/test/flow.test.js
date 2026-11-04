@@ -13545,6 +13545,64 @@ test('qoplash bo\'limi SP konveriga xom ashyo yozadi', async () => {
     { items: [{ unit_id: sp2.id }] })).status, 200);
 });
 
+/* ★ BITTA RAQAM — BIR NECHTA RANG (zavod qarori, 2026-11): 10 talikning
+ *  5 tasi oq, 5 tasi venge, raqami bitta. Tasdiqlanganda bo'lak bo'lib
+ *  ochiladi va bo'limda uchrashsa ham QO'SHILMAYDI — rang yo'qolmasin. */
+test('konver so\'rovi: bitta raqam — bir nechta rang', async () => {
+  const { db } = require('../db');
+  const asos = { product_id: PENAL, started_on: '2026-11-02', next_on: '2026-11-20' };
+
+  //  Bir xil rang ikki qatorda — rad etiladi.
+  assert.equal((await admin('POST', '/api/units/requests', { ...asos,
+    lines: [{ qty: 5, color: 'Oq' }, { qty: 5, color: 'oq' }] })).status, 400);
+
+  const q = await admin('POST', '/api/units/requests', { ...asos, note: 'ikki rang',
+    lines: [{ qty: 5, color: 'Oq' }, { qty: 5, color: 'Venge' }] });
+  assert.equal(q.status, 200, q.text);
+  assert.equal(q.body.created.length, 2);
+  const rq = (await db.query(`SELECT conveyor_no, qty, color FROM unit_requests
+                          WHERE id = ANY($1) ORDER BY id`, [q.body.created])).rows;
+  assert.equal(rq[0].conveyor_no, rq[1].conveyor_no, 'raqam bitta');
+  const no = rq[0].conveyor_no;
+
+  //  Tahrir ikkala qatorni bir rangga keltirmaydi.
+  assert.equal((await admin('PATCH', `/api/units/requests/${q.body.created[1]}`,
+    { color: 'Oq' })).status, 400);
+
+  //  Bittasi tasdiqlansa — hammasi birga ochiladi.
+  const ok = await admin('POST', `/api/units/requests/${q.body.created[0]}/approve`);
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.conveyor_no, no);
+  assert.equal(ok.body.qatorlar, 2);
+  const st = (await db.query(`SELECT status FROM unit_requests WHERE id = ANY($1)`,
+    [q.body.created])).rows;
+  assert.ok(st.every((r) => r.status === 'approved'));
+  const us = (await db.query(`SELECT id, part, qty, color FROM production_units
+                          WHERE conveyor_no = $1 ORDER BY part`, [no])).rows;
+  assert.deepEqual(us.map((u) => [u.part, u.qty, u.color]),
+                   [[1, 5, 'Oq'], [2, 5, 'Venge']]);
+
+  //  Ikkalasi birinchi bo'limga kiradi — uchrashsa ham qo'shilmaydi.
+  const mv = await admin('POST', '/api/units/move',
+    { items: us.map((u) => ({ unit_id: u.id })) });
+  assert.equal(mv.status, 200, mv.text);
+  const keyin = (await db.query(`SELECT qty, color, current_section_id FROM production_units
+                             WHERE conveyor_no = $1 ORDER BY part`, [no])).rows;
+  assert.equal(keyin.length, 2, 'rangi boshqa bo\'lak qo\'shilmaydi');
+  assert.equal(keyin[0].current_section_id, keyin[1].current_section_id);
+  assert.deepEqual(keyin.map((u) => u.color), ['Oq', 'Venge']);
+
+  //  Rad etish ham butun guruhga.
+  const q2 = await admin('POST', '/api/units/requests', { ...asos,
+    lines: [{ qty: 2, color: 'Oq' }, { qty: 3, color: 'Sut' }] });
+  assert.equal(q2.status, 200, q2.text);
+  assert.equal((await admin('POST', `/api/units/requests/${q2.body.created[1]}/reject`,
+    { note: 'kerak emas' })).status, 200);
+  const st2 = (await db.query(`SELECT status FROM unit_requests WHERE id = ANY($1)`,
+    [q2.body.created])).rows;
+  assert.ok(st2.every((r) => r.status === 'rejected'));
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
