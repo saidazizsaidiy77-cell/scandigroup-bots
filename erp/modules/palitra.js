@@ -36,10 +36,12 @@ async function royxat(q, kind, { hammasi = false } = {}) {
      ), y AS (
        SELECT LOWER(TRIM(name)) AS k FROM unit_palette WHERE kind = $1 AND hidden
      )
-     SELECT MIN(k.name) AS name, SUM(k.n)::int AS n,
-            (LOWER(MIN(k.name)) IN (SELECT k FROM y)) AS hidden
+     --  Yozilishi — eng ko'p ishlatilgani (konverdagisi): MIN bazaning
+     --  saralash qoidasiga bog'liq va «Dora» o'rniga «dora» chiqardi.
+     SELECT (ARRAY_AGG(k.name ORDER BY k.n DESC, k.name COLLATE "C"))[1] AS name,
+            SUM(k.n)::int AS n, (LOWER(k.name) IN (SELECT k FROM y)) AS hidden
        FROM k GROUP BY LOWER(k.name)
-      ORDER BY SUM(k.n) DESC, MIN(k.name)`, [kind]);
+      ORDER BY SUM(k.n) DESC, 1`, [kind]);
   return hammasi ? rows : rows.filter((r) => !r.hidden).map((r) => r.name);
 }
 
