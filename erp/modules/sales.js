@@ -2721,6 +2721,100 @@ async function kutilganPuli(mon) {
     [mon])).rows[0].s);
 }
 
+//  ★ TURKUM BO'YICHA KPI — REJA · CHIQDI · ZAVODDA (izoh: /dashboard).
+//  BITTA joyda: savdo paneli JORIY oyni, KPI sahifasi esa tanlangan
+//  oyni so'raydi (zavod qarori, 2026-11) — ikki nusxa yozilsa bir kun
+//  bir-biridan ajralib ketardi. «Zavodda» faqat joriy oyda: u bugungi
+//  holat va o'tgan oyning savoli emas.
+function turkumKpi(mon, chans, own) {
+  return db.query(
+      `WITH oy AS (SELECT COALESCE($3::date, date_trunc('month', CURRENT_DATE)::date) AS m),
+       chiq AS (
+         SELECT g.sales_category AS c,
+                SUM(u.qty) FILTER (WHERE g.kpi_dona) AS q,
+                SUM(u.total_amount) AS s
+           FROM production_units u
+           JOIN products p       ON p.id = u.product_id
+           JOIN product_groups g ON g.id = p.group_id
+           LEFT JOIN customers cu ON cu.id = u.customer_id, oy
+          WHERE u.status = 'shipped' AND u.ship_on >= oy.m
+            AND u.ship_on < (oy.m + INTERVAL '1 month')::date
+            AND ($1::text[] IS NULL OR cu.channel = ANY($1))
+            AND ($2::int IS NULL OR mijoz_meniki(u.customer_id, $2))
+          GROUP BY 1
+         UNION ALL
+         SELECT g.sales_category,
+                -SUM(i.qty) FILTER (WHERE g.kpi_dona),
+                -SUM(i.qty * COALESCE(i.price, 0))
+           FROM cust_returns r
+           JOIN cust_return_items i ON i.return_id = r.id
+           JOIN production_units u  ON u.id = i.unit_id
+           JOIN products p          ON p.id = u.product_id
+           JOIN product_groups g    ON g.id = p.group_id
+           LEFT JOIN customers cu   ON cu.id = r.customer_id, oy
+          WHERE r.status = 'accepted' AND r.ret_on >= oy.m
+            AND r.ret_on < (oy.m + INTERVAL '1 month')::date
+            AND ($1::text[] IS NULL OR cu.channel = ANY($1))
+            AND ($2::int IS NULL OR mijoz_meniki(r.customer_id, $2))
+          GROUP BY 1),
+       zav AS (
+         SELECT g.sales_category AS c,
+                SUM(i.qty) FILTER (WHERE g.kpi_dona) AS q,
+                SUM(i.qty * COALESCE(i.unit_price, 0)) AS s
+           FROM v_sales_orders o
+           JOIN order_items i    ON i.order_id = o.id
+           JOIN products p       ON p.id = i.product_id
+           JOIN product_groups g ON g.id = p.group_id, oy
+          WHERE o.status NOT IN ('shipped', 'cancelled')
+            --  «Zavodda» — BUGUNGI holat: o'tgan oyda u savol emas.
+            AND oy.m = date_trunc('month', CURRENT_DATE)::date
+            AND ($1::text[] IS NULL OR o.channel = ANY($1))
+            AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
+          GROUP BY 1),
+       reja AS (
+         SELECT t.category AS c,
+                SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
+                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT')      AS s
+           FROM sales_kpi_targets t
+           --  Ishdan ketgan xodimning rejasi sanalmaydi: u bu oy
+           --  hech narsa sotmaydi va jami rejani yolg'on oshirardi.
+           --  ★ BOSHLIQNING REJASI HAM SANALADI — dona ham, dollar ham
+           --  (zavod qarori, 2026-10 va 2026-11). Uning o'z mijozlari bor
+           --  (eksport) va rejasi menejerlarnikiga kirmaydi; dollar rejasi
+           --  ilgari tashlab yuborilardi va eksport rejasi jamidan tushib
+           --  qolgan edi. PUL TUSHUMI rejasi esa alohida kartochkada.
+           JOIN workers w ON w.id = t.worker_id AND w.active, oy
+          WHERE t.mon = oy.m AND t.category IS NOT NULL
+            AND ($2::int IS NULL OR t.worker_id = $2)
+          GROUP BY 1)
+       SELECT sc.code, sc.name,
+              (SELECT MIN(g.uom) FROM product_groups g
+                WHERE g.sales_category = sc.code AND g.kpi_dona AND g.active) AS uom,
+              COALESCE((SELECT SUM(q) FROM chiq WHERE c = sc.code), 0)::int     AS chiqdi_qty,
+              COALESCE((SELECT SUM(s) FROM chiq WHERE c = sc.code), 0)::numeric AS chiqdi_amount,
+              COALESCE((SELECT q FROM zav WHERE c = sc.code), 0)::int           AS zavodda_qty,
+              COALESCE((SELECT s FROM zav WHERE c = sc.code), 0)::numeric       AS zavodda_amount,
+              (SELECT q FROM reja WHERE c = sc.code)::numeric                   AS reja_qty,
+              (SELECT s FROM reja WHERE c = sc.code)::numeric                   AS reja_amount
+         FROM sales_categories sc
+        WHERE sc.active
+        ORDER BY sc.sort, sc.name`, [chans, own, mon]);
+}
+
+//  Pul tushumi kartochkasi (izoh: /dashboard). Reja — o'sha oyda belgili
+//  faol xodimlarga qo'yilgan TUSHUM rejasi; rejasi yo'q oyda null.
+async function tushumKpi(mon) {
+  const reja = Number((await db.query(
+    `SELECT COALESCE(SUM(t.plan), 0) AS s
+       FROM sales_kpi_targets t
+       JOIN workers w ON w.id = t.worker_id AND w.active
+                     AND COALESCE(w.kpi_bonus_tushum, false)
+      WHERE t.mon = $1::date AND t.indicator = 'TUSHUM'
+        AND t.category IS NULL`, [mon])).rows[0].s);
+  return reja > 0 ? { reja, fakt: await zavodTushumi(mon),
+                      kutilmoqda: await kutilganPuli(mon) } : null;
+}
+
 router.get('/dashboard', need(...READ), wrap(async (req, res) => {
   const chans = channelsOf(req);
   const own = ownOf(req);
@@ -2894,74 +2988,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
     //  uchun konverning o'zidan, bir marta. ZAVODDA — «Zavodda
     //  turibdi» kartochkasi bilan bir xil shart (bekor va chiqib
     //  ketgansiz). Oraliq filtriga BOG'LIQ EMAS — savolning o'zi «shu oy».
-    db.query(
-      `WITH oy AS (SELECT date_trunc('month', CURRENT_DATE)::date AS m),
-       chiq AS (
-         SELECT g.sales_category AS c,
-                SUM(u.qty) FILTER (WHERE g.kpi_dona) AS q,
-                SUM(u.total_amount) AS s
-           FROM production_units u
-           JOIN products p       ON p.id = u.product_id
-           JOIN product_groups g ON g.id = p.group_id
-           LEFT JOIN customers cu ON cu.id = u.customer_id, oy
-          WHERE u.status = 'shipped' AND u.ship_on >= oy.m
-            AND ($1::text[] IS NULL OR cu.channel = ANY($1))
-            AND ($2::int IS NULL OR mijoz_meniki(u.customer_id, $2))
-          GROUP BY 1
-         UNION ALL
-         SELECT g.sales_category,
-                -SUM(i.qty) FILTER (WHERE g.kpi_dona),
-                -SUM(i.qty * COALESCE(i.price, 0))
-           FROM cust_returns r
-           JOIN cust_return_items i ON i.return_id = r.id
-           JOIN production_units u  ON u.id = i.unit_id
-           JOIN products p          ON p.id = u.product_id
-           JOIN product_groups g    ON g.id = p.group_id
-           LEFT JOIN customers cu   ON cu.id = r.customer_id, oy
-          WHERE r.status = 'accepted' AND r.ret_on >= oy.m
-            AND ($1::text[] IS NULL OR cu.channel = ANY($1))
-            AND ($2::int IS NULL OR mijoz_meniki(r.customer_id, $2))
-          GROUP BY 1),
-       zav AS (
-         SELECT g.sales_category AS c,
-                SUM(i.qty) FILTER (WHERE g.kpi_dona) AS q,
-                SUM(i.qty * COALESCE(i.unit_price, 0)) AS s
-           FROM v_sales_orders o
-           JOIN order_items i    ON i.order_id = o.id
-           JOIN products p       ON p.id = i.product_id
-           JOIN product_groups g ON g.id = p.group_id
-          WHERE o.status NOT IN ('shipped', 'cancelled')
-            AND ($1::text[] IS NULL OR o.channel = ANY($1))
-            AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
-          GROUP BY 1),
-       reja AS (
-         SELECT t.category AS c,
-                SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
-                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT')      AS s
-           FROM sales_kpi_targets t
-           --  Ishdan ketgan xodimning rejasi sanalmaydi: u bu oy
-           --  hech narsa sotmaydi va jami rejani yolg'on oshirardi.
-           --  ★ BOSHLIQNING REJASI HAM SANALADI — dona ham, dollar ham
-           --  (zavod qarori, 2026-10 va 2026-11). Uning o'z mijozlari bor
-           --  (eksport) va rejasi menejerlarnikiga kirmaydi; dollar rejasi
-           --  ilgari tashlab yuborilardi va eksport rejasi jamidan tushib
-           --  qolgan edi. PUL TUSHUMI rejasi esa alohida kartochkada.
-           JOIN workers w ON w.id = t.worker_id AND w.active, oy
-          WHERE t.mon = oy.m AND t.category IS NOT NULL
-            AND ($2::int IS NULL OR t.worker_id = $2)
-          GROUP BY 1)
-       SELECT sc.code, sc.name,
-              (SELECT MIN(g.uom) FROM product_groups g
-                WHERE g.sales_category = sc.code AND g.kpi_dona AND g.active) AS uom,
-              COALESCE((SELECT SUM(q) FROM chiq WHERE c = sc.code), 0)::int     AS chiqdi_qty,
-              COALESCE((SELECT SUM(s) FROM chiq WHERE c = sc.code), 0)::numeric AS chiqdi_amount,
-              COALESCE((SELECT q FROM zav WHERE c = sc.code), 0)::int           AS zavodda_qty,
-              COALESCE((SELECT s FROM zav WHERE c = sc.code), 0)::numeric       AS zavodda_amount,
-              (SELECT q FROM reja WHERE c = sc.code)::numeric                   AS reja_qty,
-              (SELECT s FROM reja WHERE c = sc.code)::numeric                   AS reja_amount
-         FROM sales_categories sc
-        WHERE sc.active
-        ORDER BY sc.sort, sc.name`, [chans, own]),
+    turkumKpi(null, chans, own),
   ]);
 
   //  ★ TURKUM ICHIDA — QAYSI MAHSULOTDAN NECHTA (zavod qarori, 2026-10).
@@ -2983,7 +3010,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
        SELECT u.product_id AS pid, SUM(u.qty) AS q, SUM(u.total_amount) AS s
          FROM production_units u
          LEFT JOIN customers cu ON cu.id = u.customer_id, oy
-        WHERE u.status = 'shipped' AND u.ship_on >= oy.m
+        WHERE u.status = 'shipped' AND u.ship_on >= oy.m AND u.ship_on < (oy.m + INTERVAL '1 month')::date
           AND ($1::text[] IS NULL OR cu.channel = ANY($1))
           AND ($2::int IS NULL OR mijoz_meniki(u.customer_id, $2))
         GROUP BY 1
@@ -2993,7 +3020,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          JOIN cust_return_items i ON i.return_id = r.id
          JOIN production_units u  ON u.id = i.unit_id
          LEFT JOIN customers cu   ON cu.id = r.customer_id, oy
-        WHERE r.status = 'accepted' AND r.ret_on >= oy.m
+        WHERE r.status = 'accepted' AND r.ret_on >= oy.m AND r.ret_on < (oy.m + INTERVAL '1 month')::date
           AND ($1::text[] IS NULL OR cu.channel = ANY($1))
           AND ($2::int IS NULL OR mijoz_meniki(r.customer_id, $2))
         GROUP BY 1),
@@ -3034,7 +3061,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
               SUM(u.qty) AS q, SUM(u.total_amount) AS s
          FROM production_units u
          LEFT JOIN customers cu ON cu.id = u.customer_id, oy
-        WHERE u.status = 'shipped' AND u.ship_on >= oy.m
+        WHERE u.status = 'shipped' AND u.ship_on >= oy.m AND u.ship_on < (oy.m + INTERVAL '1 month')::date
           AND ($1::text[] IS NULL OR cu.channel = ANY($1))
           AND ($2::int IS NULL OR mijoz_meniki(u.customer_id, $2))
         GROUP BY 1, 2
@@ -3044,7 +3071,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
          JOIN cust_return_items i ON i.return_id = r.id
          JOIN production_units u  ON u.id = i.unit_id
          LEFT JOIN customers cu   ON cu.id = r.customer_id, oy
-        WHERE r.status = 'accepted' AND r.ret_on >= oy.m
+        WHERE r.status = 'accepted' AND r.ret_on >= oy.m AND r.ret_on < (oy.m + INTERVAL '1 month')::date
           AND ($1::text[] IS NULL OR cu.channel = ANY($1))
           AND ($2::int IS NULL OR mijoz_meniki(r.customer_id, $2))
         GROUP BY 1, 2)
@@ -3073,15 +3100,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
   if (!own) {
     const mon = (await db.query(
       `SELECT to_char(date_trunc('month', CURRENT_DATE), 'YYYY-MM-DD') AS m`)).rows[0].m;
-    const reja = Number((await db.query(
-      `SELECT COALESCE(SUM(t.plan), 0) AS s
-         FROM sales_kpi_targets t
-         JOIN workers w ON w.id = t.worker_id AND w.active
-                       AND COALESCE(w.kpi_bonus_tushum, false)
-        WHERE t.mon = $1::date AND t.indicator = 'TUSHUM'
-          AND t.category IS NULL`, [mon])).rows[0].s);
-    if (reja > 0) tushum = { reja, fakt: await zavodTushumi(mon),
-                             kutilmoqda: await kutilganPuli(mon) };
+    tushum = await tushumKpi(mon);
   }
 
 
@@ -4008,6 +4027,19 @@ const kpiHammasi = (req) => req.user.permissions.includes('sales.kpi')
 
 //  Reja QO'YADIGAN odam — ekrandagi tugma shu belgidan chiziladi.
 const kpiYozadi = (req) => req.user.permissions.includes('sales.kpi');
+
+//  ★ KPI SAHIFASIDA UMUMIY KO'RINISH (zavod qarori, 2026-11). Savdo
+//  panelidagi «KPI rejasi bo'yicha» bloki — lekin TANLANGAN oy uchun:
+//  qoida va doira panel bilan bitta (`turkumKpi`, `tushumKpi`).
+router.get('/kpi/umumiy', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
+  const K = KPI_OY(req.query.mon);
+  const own = ownOf(req);
+  const joriy = (await db.query(
+    `SELECT $1::date = date_trunc('month', CURRENT_DATE)::date AS j`, [K.mon])).rows[0].j;
+  res.json({ mon: K.mon, joriy,
+             turkum: (await turkumKpi(K.mon, channelsOf(req), own)).rows,
+             tushum: own ? null : await tushumKpi(K.mon) });
+}));
 
 router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const K = KPI_OY(req.query.mon);

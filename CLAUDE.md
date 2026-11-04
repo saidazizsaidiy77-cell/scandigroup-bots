@@ -3103,8 +3103,10 @@ yozish `payroll.manage` (buxgalter, administrator).
 
 **★ TSEX BOSHLIG'I O'Z ODAMLARINI KO'RADI** (`payroll.shop`, zavod
 qarori 2026-11). `tsex_usta` da «Ish haqi» sahifasi ochiq, lekin FAQAT
-o'z tsexining xodimlari — tsex doirasi (`scope_shop_ids`, qo'shimcha
-tsexlar bilan) va xodimning tsexi (`workers.shop_id`, bo'sh bo'lsa
+o'z tsexining xodimlari — ROLNING tsexi (`scope_shop_main`), **qo'shimcha
+tsexlarsiz** (zavod qarori, 2026-11: qo'shimcha tsex boshliqqa u
+yerdagi O'Z mahsulotini ko'rish uchun beriladi — stul lak tsexida —
+o'sha tsexning odamlari esa uniki emas) va xodimning tsexi (`workers.shop_id`, bo'sh bo'lsa
 bo'limining tsexi). Hisoblandi, ishbay va to'landi hujjatlari bilan,
 faqat O'QISH: yozish `payroll.manage` da qoladi. Doirasi yo'q
 boshliqqa hech kim ko'rinmaydi. Chegara SERVERDA (`tsexlar`,
@@ -3317,6 +3319,16 @@ chiplari va qidiruv bilan). Ikki tomon BITTA qatorlar to'plamidan
 (mijoz × mahsulot), qoida `mahsulotlar` bilan aynan bir xil — shu oy,
 qaytarish ayirilgan, o'sha doira; test har mahsulot bo'yicha
 yig'indini solishtiradi.
+
+**★ KPI SAHIFASIDA HAM — TANLANGAN OY BO'YICHA** (zavod qarori,
+2026-11; `GET /api/sales/kpi/umumiy?mon=`, `/savdo-kpi.html`). Shu blok
+KPI varag'ining tepasida, «Oy» filtriga ergashadi. So'rov BITTA joyda
+(`turkumKpi`, `tushumKpi`, `modules/sales.js`), chizish ham bitta
+(`Panel.kpiTurkum`, `public/panel.js`; CSS `style.css` da) — panel
+joriy oyni, KPI sahifasi tanlanganini so'raydi; test joriy oyda ikkalasini
+solishtiradi. «Chiqdi» oyning ICHIDA (`ship_on < oy + 1 oy`, mahsulot
+va «kim nima» jadvallarida ham); **«Zavodda» va «Chiqsa» faqat JORIY
+oyda** — ular bugungi holat, o'tgan oyning savoli emas.
 
 Birinchi ikki urinish (guruh bo'yicha jadval, keyin ikki chiziqli
 grafik) zavodga yoqmadi: savol «nechta sotdik» emas, «reja qanchaga

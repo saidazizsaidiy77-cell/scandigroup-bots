@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="stylesheet" href="/style.css">
 <script src="/app.js"></script>
+<script src="/panel.js"></script>
 </head>
 <body>
 
@@ -43,6 +44,21 @@
         bo'lishi kerak bo'lgani, uchinchisi shu sur'atda oy oxirida
         NIMA bo'lishi. Tushuntirilmagan ustun savol beradi. -->
   <p class="muted" id="izoh" style="margin:12px 0 0;font-size:12px"></p>
+</div>
+
+<!--  ★ UMUMIY KO'RINISH — SAVDO PANELIDAGI BLOK, TANLANGAN OY UCHUN
+      (zavod qarori, 2026-11; `/api/sales/kpi/umumiy`, `Panel.kpiTurkum`).
+      «Zavodda» va «chiqsa» faqat joriy oyda: ular bugungi holat. -->
+<div class="card" id="umumiyCard" style="margin-top:16px" hidden>
+  <h2 id="umumiySar">KPI rejasi bo'yicha</h2>
+  <div id="turkumJami"></div>
+  <div id="turkum" class="kgrid"></div>
+  <p class="muted" style="font-size:12px;margin-top:12px">
+    <b>Reja</b> — shu oyga barcha menejerlarga qo'yilgan KPI rejasi
+    yig'indisi. <b>Chiqdi</b> — o'sha oy zavoddan chiqib ketgani (mijozdan
+    qaytgani ayirilgan). <b>Zavodda</b> va <b>Chiqsa</b> — faqat joriy oyda:
+    buyurtma yozilgan, lekin hali chiqmagan. Matras donaga kirmaydi.
+    <b>Pul tushumi</b> jamiga qo'shilmaydi: u savdo emas, pul.</p>
 </div>
 
 <div id="royxat"></div>
@@ -90,9 +106,27 @@ const bajCls = (v) => {
   return p >= 80 ? 'ok' : p >= 50 ? 'warn' : 'bad';
 };
 
+const OYLAR = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul',
+  'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
+//  Umumiy blok — xodim filtridan QAT'I NAZAR, faqat OY bo'yicha: savol
+//  «zavod shu oyda rejani qanchaga bajardi». Doirasi bor menejerga server
+//  o'zinikini beradi (savdo paneli bilan bir xil qoida).
+function umumiy() {
+  App.api('/api/sales/kpi/umumiy?' + new URLSearchParams({ mon: $('fMon').value || '' }))
+    .then((r) => {
+      const [y, m] = r.mon.split('-').map(Number);
+      $('umumiySar').textContent = `${OYLAR[m - 1]} ${y} — KPI rejasi bo'yicha`;
+      const kb = Panel.kpiTurkum(r.turkum || [], r.tushum, r.joriy);
+      $('turkumJami').innerHTML = kb.jami;
+      $('turkum').innerHTML = kb.kartlar;
+      $('umumiyCard').hidden = false;
+    }).catch(() => { $('umumiyCard').hidden = true; });
+}
+
 function load() {
   const q = new URLSearchParams({ mon: $('fMon').value || '' });
   if ($('fWorker').value) q.set('worker_id', $('fWorker').value);
+  umumiy();
   App.api('/api/sales/kpi?' + q).then((r) => { d = r; draw(); })
     .catch((e) => { $('royxat').innerHTML =
       `<div class="card"><p class="muted">${esc(e.message)}</p></div>`; });

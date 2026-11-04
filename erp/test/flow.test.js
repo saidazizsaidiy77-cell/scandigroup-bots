@@ -903,6 +903,17 @@ test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
   const sp2 = await stul('GET', '/api/payroll?month=' + oy);
   assert.ok(!sp2.body.rows.some((r) => r.id === begonaX.id), 'begona tsex ko\'rinmaydi');
   assert.equal((await stul('GET', `/api/payroll/worker/${begonaX.id}?month=${oy}`)).status, 403);
+  //  Qo'shimcha tsex — MAHSULOTNI ko'rish uchun; o'sha tsexning
+  //  xodimlari ish haqida ko'rinmaydi (zavod qarori, 2026-11).
+  const usta = await H.id(`SELECT id FROM workers WHERE name = 'Stul ustasi'`);
+  await H.id(
+    `INSERT INTO worker_extra_shops (worker_id, shop_id)
+     SELECT $1, s.shop_id FROM sections s JOIN workers w ON w.section_id = s.id
+      WHERE w.id = $2 RETURNING shop_id`, [usta.id, begonaX.id]);
+  const sp3 = await stul('GET', '/api/payroll?month=' + oy);
+  assert.ok(!sp3.body.rows.some((r) => r.id === begonaX.id), 'qo\'shimcha tsex xodimi ko\'rinmaydi');
+  assert.ok(sp3.body.rows.some((r) => r.id === kim), 'o\'z tsexi qoladi');
+  await H.id(`DELETE FROM worker_extra_shops WHERE worker_id = $1 RETURNING worker_id`, [usta.id]);
   await H.id(`UPDATE workers SET active = false WHERE id = $1 RETURNING id`, [begonaX.id]);
   assert.equal((await stul('GET', `/api/payroll/worker/${kim}?month=${oy}`)).status, 200);
   assert.equal((await stul('PUT', '/api/payroll/accrual',
@@ -9801,6 +9812,18 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   const faol = (await tdb.query(
     `SELECT COUNT(*)::int n FROM sales_categories WHERE active`)).rows[0].n;
   assert.equal(sd.turkum.length, faol, 'har turkum o\'z kartochkasida');
+
+  //  ★ KPI SAHIFASIDAGI UMUMIY BLOK — panel bilan BITTA manba; joriy
+  //  oyda raqamlar AYNAN teng, o'tgan oyda «zavodda» yo'q (bugungi holat).
+  const shuOy = new Date().toISOString().slice(0, 7);
+  const ku = (await admin('GET', '/api/sales/kpi/umumiy?mon=' + shuOy)).body;
+  assert.equal(ku.joriy, true);
+  const sdNow = (await admin('GET', '/api/sales/dashboard')).body;
+  assert.deepEqual(ku.turkum, sdNow.turkum, 'panel bilan bir xil');
+  const otgan = (await admin('GET', '/api/sales/kpi/umumiy?mon=2020-01')).body;
+  assert.equal(otgan.joriy, false);
+  assert.ok(otgan.turkum.every((r) => Number(r.zavodda_qty) === 0
+    && Number(r.chiqdi_amount) === 0), 'o\'tgan oyda zavodda va chiqdi yo\'q');
 
   //  ★ TURKUM ICHIDA MAHSULOTLAR: yig'indi turkum kartochkasiga teng
   //  (summa hammasi, dona — faqat kpi_dona guruhlarda), NOL mahsulot
