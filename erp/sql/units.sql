@@ -713,3 +713,27 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('izoh-zakaz-takror');
   END IF;
 END $$;
+
+-- ═══════════════════════════════════════════ RANG VA MATO RO'YXATI
+--
+--  ★ YANGI RANGNI FAQAT ADMINISTRATOR VA ISHLAB CHIQARISH BOSHLIG'I
+--  QO'SHADI (zavod qarori, 2026-11; `modules/palitra.js`,
+--  `/ranglar.html`). Ro'yxat konverlardan yig'iladi (qaysi rang
+--  ishlatilgan bo'lsa), bu jadval esa ikki narsani qo'shadi:
+--
+--    hidden = false   konverga hali yozilmagan, lekin ro'yxatda
+--                     turishi kerak bo'lgan rang (oldindan qo'shilgan)
+--    hidden = true    ro'yxatdan OLIB TASHLANGAN: adashib yozilgan
+--                     («200x220» — matrasning o'lchami rang bo'lib
+--                     kirib qolgan). Konverdagi yozuvga TEGILMAYDI —
+--                     buyurtma va bron o'sha matnga bog'langan.
+CREATE TABLE IF NOT EXISTS unit_palette (
+  id         SERIAL PRIMARY KEY,
+  kind       TEXT NOT NULL CHECK (kind IN ('color', 'fabric')),
+  name       TEXT NOT NULL CHECK (TRIM(name) <> ''),
+  hidden     BOOLEAN NOT NULL DEFAULT false,
+  created_by INT REFERENCES workers(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS unit_palette_name_uq
+  ON unit_palette (kind, LOWER(TRIM(name)));

@@ -1030,13 +1030,7 @@ const RANG = ['warehouse.manage', 'production.manage'];
 //  tepada. Ombor mudirida savdo huquqi yo'q, ya'ni savdoning
 //  `/suggest` yo'li unga ochilmaydi.
 router.get('/fg/colors', need(...RANG), wrap(async (_req, res) => {
-  const { rows } = await db.query(
-    `SELECT TRIM(color) AS color, COUNT(*)::int AS n
-       FROM production_units
-      WHERE NULLIF(TRIM(color), '') IS NOT NULL
-      GROUP BY TRIM(color)
-      ORDER BY n DESC, TRIM(color)`);
-  res.json({ colors: rows.map((r) => r.color) });
+  res.json({ colors: await require('./palitra').royxat(db, 'color') });
 }));
 
 router.post('/fg/recolor', need(...RANG), wrap(async (req, res) => {
@@ -1066,11 +1060,8 @@ router.post('/fg/recolor', need(...RANG), wrap(async (req, res) => {
       [perms, ids, u.at_wh])).rows[0];
     if (!wh) throw new Error('Bu ombor sizga ochiq emas');
 
-    const bor = (await client.query(
-      `SELECT TRIM(color) AS color FROM production_units
-        WHERE LOWER(TRIM(color)) = LOWER($1) LIMIT 1`, [rang])).rows[0];
-    if (!bor) throw new Error(`Rang «${rang}» ro'yxatda yo'q — boridan tanlang`);
-    const yangiRang = bor.color;     // yozilishi bazadagidek bo'lsin
+    //  Ro'yxat va tekshiruv BITTA joyda (`palitra`).
+    const yangiRang = await require('./palitra').tekshir(client, req, 'color', rang);
     const eskiRang = String(u.color || '').trim();
     if (eskiRang.toLowerCase() === yangiRang.toLowerCase())
       throw new Error(`${u.conveyor_no}: rangi allaqachon «${yangiRang}»`);
@@ -1748,7 +1739,13 @@ router.get('/fg/buyable', need(...READ), wrap(async (_req, res) => {
        SELECT rate, created_at FROM cash_ops
         WHERE rate IS NOT NULL AND status = 'ok') t
       ORDER BY created_at DESC LIMIT 1`)).rows[0]?.rate || null;
-  res.json({ rows, suppliers, rate });
+  //  ★ RANG FAQAT BORIDAN (zavod qarori, 2026-11) — so'rov va buyurtma
+  //  oynalaridagi bilan bir xil qoida. Bu katak ilgari erkin matn edi va
+  //  unga matrasning modeli, o'lchami yozilib ketgan («200x220»): rang
+  //  ro'yxati konverlardan yig'iladi, ya'ni o'sha yozuv zavodning HAMMA
+  //  rang ro'yxatiga tarqalib ketardi. Yangi rang jurnal orqali kiradi.
+  const colors = await require('./palitra').royxat(db, 'color');
+  res.json({ rows, suppliers, rate, colors });
 }));
 
 //  { supplier_id, doc_on, supplier_doc, ccy, rate, note,
@@ -1804,6 +1801,9 @@ router.post('/fg/receipts', need(...FGRECEIPT), wrap(async (req, res) => {
       //  qoldiqda u ixtiyoriy, bu yerda esa yo'q.
       const narx = Number(it.price);
       if (!(narx > 0)) throw new Error('Har qatorda narx yozilishi kerak');
+      //  Rang faqat boridan — tekshiruv SERVERDA: ro'yxatni chetlab,
+      //  qo'lda yuborilgan matn ham qabul qilinmaydi.
+      it.color = await require('./palitra').tekshir(client, req, 'color', it.color);
       //  Dollarga o'sha hujjatning kursi bilan aylanadi va u qator
       //  bilan QOTIB qoladi: ertaga kurs o'zgarsa kechagi kirim qayta
       //  hisoblanmaydi (kassadagi idiom).

@@ -1085,13 +1085,10 @@ async function noStyleOf(client, productId) {
 //  qilinadi. Bu spravochnik: unda na narx bor, na mijoz.
 router.get('/suggest', need('production.view', 'production.request'),
   wrap(async (_req, res) => {
-  const { rows } = await db.query(
-    `SELECT 'color' AS field, color AS value, COUNT(*) AS n
-       FROM production_units WHERE color IS NOT NULL GROUP BY color
-     UNION ALL
-     SELECT 'fabric', fabric, COUNT(*)
-       FROM production_units WHERE fabric IS NOT NULL GROUP BY fabric
-     ORDER BY n DESC, value`);
+  //  Ro'yxat BITTA joydan (`palitra.royxat`): olib tashlangan rang
+  //  hech qaysi ekranda chiqmasin.
+  const { royxat } = require('./palitra');
+  const [colors, fabrics] = [await royxat(db, 'color'), await royxat(db, 'fabric')];
   // Har mahsulotning OXIRGI narxi. Qoldiq kiritayotgan xodim yuzlab
   // qatorga bir xil narxni qayta terib chiqmasin — katak o'zi to'ladi,
   // lekin faqat BO'SH bo'lsa: qo'lda yozilgan narx hech qachon
@@ -1102,8 +1099,7 @@ router.get('/suggest', need('production.view', 'production.request'),
       WHERE unit_price IS NOT NULL AND unit_price > 0
       ORDER BY product_id, id DESC`);
   res.json({
-    colors:  rows.filter((r) => r.field === 'color').map((r) => r.value),
-    fabrics: rows.filter((r) => r.field === 'fabric').map((r) => r.value),
+    colors, fabrics,
     prices:  Object.fromEntries(prices.rows.map((r) => [r.product_id, Number(r.unit_price)])),
   });
 }));
@@ -1347,15 +1343,12 @@ async function sorovTekshir(client, req, it, shopId, yozish = true) {
   //  Solishtirish katta-kichik harfga qaramaydi: ro'yxatdan
   //  tanlangani baribir aynan mos tushadi, bu tekshiruv esa qo'lda
   //  yuborilgan so'rov uchun.
-  for (const [maydon, nom] of [['color', 'Rang'], ['fabric', 'Mato']]) {
-    const v = trim(it[maydon]);
-    if (!v) continue;
-    const bor = (await client.query(
-      `SELECT 1 FROM production_units
-        WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
-    if (!bor) throw new Error(
-      `${nom} «${v}» ro'yxatda yo'q \u2014 boridan tanlang`);
-  }
+  //  Tekshiruv BITTA joyda (`palitra.tekshir`): yangi rangni faqat
+  //  `production.manage` kiritadi, olib tashlangani hech kimga
+  //  o'tmaydi.
+  const { tekshir } = require('./palitra');
+  for (const maydon of ['color', 'fabric'])
+    await tekshir(client, req, maydon, it[maydon]);
 
   //  ★ KEYINGI TSEXGA TOPSHIRISH SANASI MAJBURIY — sanasi
   //  MARSHRUTDAN o'zi chiqmaydigan tsexda (izoh: `sql/register.sql`,
@@ -2253,6 +2246,20 @@ router.patch('/:id', need(...UNITS), wrap(async (req, res) => {
           error: `${oldUnit.conveyor_no}: ${bron} tasi buyurtmada — ` +
                  `avval konverni qaytaring` });
     }
+  }
+
+  //  ★ RANG VA MATO — ro'yxat bilan BITTA tekshiruv (`palitra.tekshir`).
+  //  Turgan qiymat tegilmasa so'ralmaydi; o'zgargani esa ro'yxatdan
+  //  bo'lishi kerak, yangisini faqat `production.manage` kiritadi.
+  if (trim(color) || trim(fabric)) {
+    const { tekshir } = require('./palitra');
+    const eski = (await db.query(
+      `SELECT color, fabric FROM production_units WHERE id = $1`,
+      [req.params.id])).rows[0] || {};
+    try {
+      await tekshir(db, req, 'color', color, eski.color, { yangi: true });
+      await tekshir(db, req, 'fabric', fabric, eski.fabric, { yangi: true });
+    } catch (e) { return res.status(400).json({ error: e.message }); }
   }
 
   const { rows } = await db.query(

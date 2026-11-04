@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ranglar va matolar · ZELTA ERP</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<!-- Telefonga o'rnatiladigan ilova: bosh ekranda ZELTA belgisi, brauzer
+     paneli ko'rinmaydi. Oddiy havola bo'lib ochilishi ham buzilmaydi. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Ranglar va matolar</h1></div>
+  <div class="row" id="erpUser"></div>
+</div>
+
+<!--  ★ YANGI RANGNI FAQAT ADMINISTRATOR VA ISHLAB CHIQARISH BOSHLIG'I
+      QO'SHADI (zavod qarori, 2026-11; izoh: sql/units.sql). Qolganlar
+      so'rov, buyurtma va kirim oynalarida faqat ro'yxatdan tanlaydi. -->
+<div class="card" style="margin-bottom:16px">
+  <p class="muted" style="font-size:13px">
+    Bu ro'yxat so'rov, buyurtma, matras kirimi va jurnaldagi tanlovlarda turadi.
+    Yangi rang va matoni faqat shu yerdan qo'shasiz — boshqa xodimlar ro'yxatdan
+    tanlaydi. <b>Olib tashlash</b> nomni ro'yxatdan chiqaradi; konverlarda turgan
+    yozuvga tegilmaydi.</p>
+</div>
+
+<div class="grid g2">
+  <div class="card"><h2>Ranglar</h2><div id="color"></div></div>
+  <div class="card"><h2>Matolar</h2><div id="fabric"></div></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let data = { colors: [], fabrics: [] };
+
+async function load() {
+  data = await App.api('/api/palitra');
+  chiz('color', data.colors);
+  chiz('fabric', data.fabrics);
+}
+
+function chiz(kind, rows) {
+  const faol = rows.filter((r) => !r.hidden), olingan = rows.filter((r) => r.hidden);
+  const qator = (r) => `<tr>
+      <td>${r.hidden ? `<s class="muted">${esc(r.name)}</s>` : `<b>${esc(r.name)}</b>`}</td>
+      <td class="num muted" style="font-size:12px">${r.n ? r.n + ' konver' : '—'}</td>
+      <td class="num"><button onclick='amal(${JSON.stringify(kind)}, ${JSON.stringify(r.name)}, ${r.hidden})'
+        >${r.hidden ? 'Qaytarish' : 'Olib tashlash'}</button></td></tr>`;
+  $(kind).innerHTML = `
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <input id="${kind}New" placeholder="${kind === 'color' ? 'Yangi rang' : 'Yangi mato'}"
+        style="flex:1" onkeydown="if(event.key==='Enter')qosh('${kind}')">
+      <button class="primary" onclick="qosh('${kind}')">+ Qo'shish</button></div>
+    <div id="${kind}Msg"></div>
+    <table><tbody>${faol.map(qator).join('') ||
+      '<tr><td class="muted">Ro\'yxat bo\'sh</td></tr>'}</tbody></table>
+    ${olingan.length ? `<p class="muted" style="font-size:12px;margin:14px 0 4px">
+      Olib tashlanganlar</p><table><tbody>${olingan.map(qator).join('')}</tbody></table>` : ''}`;
+}
+
+const xabar = (kind, t) => { $(kind + 'Msg').innerHTML = t
+  ? `<div class="tag bad" style="margin-bottom:10px;white-space:normal">${esc(t)}</div>` : ''; };
+
+async function qosh(kind) {
+  const name = $(kind + 'New').value.trim();
+  if (!name) return xabar(kind, 'Nomini yozing');
+  //  Bir xil nom katta-kichik harf bilan ikkinchi marta qo'shilmasin.
+  const bor = (kind === 'color' ? data.colors : data.fabrics)
+    .find((r) => r.name.toLowerCase() === name.toLowerCase() && !r.hidden);
+  if (bor) return xabar(kind, `«${bor.name}» ro'yxatda allaqachon bor`);
+  try {
+    await App.api('/api/palitra', { method: 'POST', body: JSON.stringify({ kind, name }) });
+    await load();
+  } catch (e) { xabar(kind, e.message); }
+}
+
+async function amal(kind, name, hidden) {
+  if (!hidden && !confirm(`«${name}» ro'yxatdan olib tashlansinmi? Konverlardagi yozuvga tegilmaydi.`))
+    return;
+  try {
+    await App.api(hidden ? '/api/palitra' : '/api/palitra/hide',
+      { method: 'POST', body: JSON.stringify({ kind, name }) });
+    await load();
+  } catch (e) { xabar(kind, e.message); }
+}
+
+App.start(load, 'production.manage');
+</script>
+</body>
+</html>

@@ -746,6 +746,24 @@ rang — zavodning qarori, terish xatosi emas: u jurnal orqali
 bo'ladi. Tekshiruv serverda, katta-kichik harfga qaramaydi. Bo'sh
 qoldirish mumkin: zahiraga kiritilayotganda rang hali ma'lum emas.
 
+**★ RANG VA MATO RO'YXATI — BITTA JOYDA** (zavod qarori, 2026-11;
+`unit_palette`, `modules/palitra.js`, Ma'lumotnomalar → **«Ranglar va
+matolar»**, `/ranglar.html`). Ro'yxat konverlardan yig'iladi va
+matras kirimidagi erkin katakdan «200x220», «Dora» kabi yozuvlar butun
+zavodning rang ro'yxatiga tarqalgan edi. Endi ro'yxat = konverlarda
+ishlatilgani + oldindan QO'SHILGANI − OLIB TASHLANGANI (`royxat`),
+tekshiruv bitta (`tekshir`): so'rov, buyurtma, matras kirimi, ombordagi
+rangni tuzatish va jurnal shundan o'tadi.
+
+**Yangi rangni faqat sahifa qo'shadi** (`production.manage` —
+administrator va ishlab chiqarish boshlig'i); so'rov, buyurtma va
+kirimda HAMMA faqat ro'yxatdan tanlaydi. Istisno — jurnal tahriri
+(`yangi: true`), u allaqachon faqat o'sha ikki rolga ochiq. **Olib
+tashlash konverga TEGMAYDI** (`hidden`): buyurtma va bron o'sha matnga
+bog'langan — nom faqat ro'yxatlardan chiqadi va yangi yozuvda qabul
+qilinmaydi; turgan qiymat tegilmasa tekshirilmaydi. Matras kirimidagi
+«Rangi» ham endi ochilma.
+
 **Zahira belgisi ham so'rovda** (`is_stock`): buyurtmasiz, oldindan
 ishlanayotgani kiritayotgan odamga boshidan ma'lum — tasdiqlangandan
 keyin jurnaldan qidirib belgilash ortiqcha ish bo'lardi.

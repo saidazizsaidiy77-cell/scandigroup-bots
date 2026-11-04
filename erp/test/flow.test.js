@@ -899,6 +899,50 @@ test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
   await db.query(`SELECT 1`);
 });
 
+//  ★ RANG VA MATO RO'YXATI (zavod qarori, 2026-11; modules/palitra.js).
+//  Yangisini faqat `production.manage` qo'shadi; olib tashlangani hech
+//  qaysi ro'yxatda chiqmaydi va qabul qilinmaydi, konverga esa tegilmaydi.
+test('ranglar: qo\'shish va ro\'yxatdan olib tashlash', async () => {
+  const OWEN = (await H.id(`SELECT id FROM products WHERE sku='STU-OWEN'`)).id;
+  //  Konverga adashib yozilgan «rang»
+  const u = (await admin('POST', '/api/units/', {
+    items: [{ product_id: OWEN, qty: 1, color: 'Dora-sinov' }] })).body.created[0];
+  const sug = async () => (await admin('GET', '/api/units/suggest')).body.colors;
+  assert.ok((await sug()).includes('Dora-sinov'));
+
+  //  Sahifa faqat `production.manage` ga
+  const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  assert.equal((await stul('GET', '/api/palitra')).status, 403);
+
+  //  Olib tashlash: ro'yxatdan chiqadi, konver o'z yozuvini saqlaydi
+  assert.equal((await admin('POST', '/api/palitra/hide',
+    { kind: 'color', name: 'dora-sinov ' })).status, 200);
+  assert.ok(!(await sug()).includes('Dora-sinov'));
+  assert.equal((await H.id(`SELECT color AS id FROM production_units WHERE id=$1`,
+    [u.id])).id, 'Dora-sinov');
+  const p = (await admin('GET', '/api/palitra')).body.colors
+    .find((r) => r.name === 'Dora-sinov');
+  assert.ok(p && p.hidden, 'sahifada «olib tashlanganlar» da turadi');
+  //  Olib tashlangani so'rovda ham qabul qilinmaydi
+  const mato = (await admin('GET', '/api/units/suggest')).body.fabrics[0];
+  const sor = await admin('POST', '/api/units/requests',
+    { items: [{ product_id: OWEN, qty: 1, color: 'Dora-sinov', fabric: mato }] });
+  assert.equal(sor.status, 400, sor.text);
+  assert.match(sor.body.error, /olib tashlangan/);
+
+  //  Oldindan qo'shilgan rang konversiz ham ro'yxatda turadi
+  assert.equal((await admin('POST', '/api/palitra',
+    { kind: 'color', name: 'Yangi sinov rangi' })).status, 200);
+  assert.ok((await sug()).includes('Yangi sinov rangi'));
+  const sales = (await admin('GET', '/api/sales/suggest')).body.colors;
+  assert.ok(sales.includes('Yangi sinov rangi') && !sales.includes('Dora-sinov'));
+
+  //  Qaytarish
+  assert.equal((await admin('POST', '/api/palitra',
+    { kind: 'color', name: 'Dora-sinov' })).status, 200);
+  assert.ok((await sug()).includes('Dora-sinov'));
+});
+
 test('jurnaldagi tsex filtri konverni egasiga qarab ajratadi', async () => {
   const STU_SHKUR = (await H.id(`SELECT id FROM sections WHERE code='STU-SHKUR'`)).id;
   const BOY_AST1  = (await H.id(`SELECT id FROM sections WHERE code='BOY-AST1'`)).id;
@@ -10542,6 +10586,17 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
     { items: [{ product_id: mat, qty: 2, price: 50 }] })).status, 400);
   assert.equal((await admin('POST', '/api/warehouse/fg/receipts',
     { supplier_id: tam, items: [{ product_id: mat, qty: 2 }] })).status, 400);
+  //  ★ RANG FAQAT BORIDAN: matrasning o'lchami rang bo'lib yozilsa
+  //  u butun zavodning rang ro'yxatiga tarqalardi. Yangi rangni faqat
+  //  `production.manage` kiritadi — ombor mudiri ro'yxatdan tanlaydi.
+  const mudir0 = await xodim('Sinov rang mudiri', 'omborchi');
+  const yoqRang = await mudir0('POST', '/api/warehouse/fg/receipts', { supplier_id: tam,
+    items: [{ product_id: mat, qty: 1, price: 10, color: '200x220' }] });
+  assert.equal(yoqRang.status, 400, yoqRang.text);
+  assert.match(yoqRang.body.error, /ro'yxatda yo'q/);
+  const ref = (await mudir0('GET', '/api/warehouse/fg/buyable')).body;
+  assert.ok(ref.colors.includes('Oq'), 'kirim oynasida rang ro\'yxati bor');
+  assert.ok(!ref.colors.includes('200x220'));
 
   const k = await admin('POST', '/api/warehouse/fg/receipts', {
     supplier_id: tam, doc_on: '2026-09-20', supplier_doc: 'NAK-77',
