@@ -106,6 +106,10 @@ INSERT INTO permissions (code, module, name) VALUES
   -- Maosh (rejada)
   ('payroll.view',      'payroll',    'Maosh hisobotlarini ko''rish'),
   ('payroll.manage',    'payroll',    'Maosh hisoblash va to''lash'),
+  --  ★ O'Z TSEXINING ISH HAQI (zavod qarori, 2026-11): tsex boshlig'i
+  --  o'z odamlarining hisoblangan va to'langanini KO'RADI — faqat
+  --  o'qish va faqat tsex doirasidagi xodimlar (`modules/payroll.js`).
+  ('payroll.shop',      'payroll',    'O''z tsexining ish haqini ko''rish'),
   -- Boshqaruv
   ('admin.users',       'admin',      'Xodim va rollarni boshqarish'),
   ('admin.audit',       'admin',      'Audit jurnalini ko''rish')
@@ -301,6 +305,7 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  belgisi qo'yilmagan boshliqda sahifa bo'sh turadi — server ham
   --  rad etadi (`modules/cash.js`, `can_hold_cash`).
   ('tsex_usta',    'cash.entry'),
+  ('tsex_usta',    'payroll.shop'),
   --  Ta'minotchi ham: u bozorga naqd pul bilan boradi va qaytib kelib
   --  nimaga sarflaganini yozadi — bu roldagi odamning asosiy ishi.
   --  Yuqoridagi izoh («ta'minotchi bozorga ketgan») buni allaqachon

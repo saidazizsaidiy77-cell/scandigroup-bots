@@ -17,8 +17,21 @@ const { db, wrap, audit } = require('../db');
 const { need } = require('../auth');
 
 const router = express.Router();
-const KO = ['payroll.view', 'payroll.manage'];
+const KO = ['payroll.view', 'payroll.manage', 'payroll.shop'];
 const YOZ = 'payroll.manage';
+
+//  ★ TSEX BOSHLIG'I — FAQAT O'Z ODAMLARI (zavod qarori, 2026-11;
+//  `payroll.shop`). To'liq huquqi (view/manage) bor odamda chegara yo'q
+//  (null). Qolganida — tsex doirasi (`scope_shop_ids`, qo'shimcha
+//  tsexlar bilan) va xodimning shtatdagi tsexi (`workers.shop_id`, bo'sh
+//  bo'lsa bo'limining tsexi).
+//  Doirasi yo'q bo'lsa BO'SH massiv: hech kim ko'rinmaydi — butun
+//  zavodning oyligini ochib qo'yish yo'l emas. Chegara SERVERDA.
+const tsexlar = (req) => {
+  const p = req.user.permissions;
+  if (p.includes('payroll.view') || p.includes('payroll.manage')) return null;
+  return req.user.scope_shop_ids || [];
+};
 
 const oy = (v) => {
   const m = String(v || '').slice(0, 7);
@@ -48,6 +61,7 @@ const TOLOV = `
 
 router.get('/', need(...KO), wrap(async (req, res) => {
   const m = oy(req.query.month) || bugungiOy();
+  const sh = tsexlar(req);
   const { rows } = await db.query(`
     WITH h AS (
       SELECT worker_id, currency, amount, month, 1 AS ishora FROM payroll_accruals
@@ -85,8 +99,9 @@ router.get('/', need(...KO), wrap(async (req, res) => {
       LEFT JOIN shops    sh ON sh.id = w.shop_id
      --  Ishdan ketgan xodim ham turadi, agar hisobi yopilmagan bo'lsa:
      --  unga qarzimiz qolgan va u jimgina ro'yxatdan tushib ketmasin.
-     WHERE w.active OR s.worker_id IS NOT NULL
-     ORDER BY sh.name NULLS LAST, w.name`, [m]);
+     WHERE (w.active OR s.worker_id IS NOT NULL)
+       AND ($2::int[] IS NULL OR COALESCE(w.shop_id, sc.shop_id) = ANY($2))
+     ORDER BY sh.name NULLS LAST, w.name`, [m, sh]);
   for (const r of rows) {
     r.close_uzs = (Number(r.open_uzs) + Number(r.acc_uzs) - Number(r.paid_uzs)).toFixed(2);
     r.close_usd = (Number(r.open_usd) + Number(r.acc_usd) - Number(r.paid_usd)).toFixed(2);
@@ -107,6 +122,11 @@ router.get('/', need(...KO), wrap(async (req, res) => {
 router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
   const m = oy(req.query.month) || bugungiOy();
   const id = Number(req.params.id) || 0;
+  const sh = tsexlar(req);
+  if (sh && !(await db.query(`SELECT 1 FROM workers w LEFT JOIN sections sc ON sc.id = w.section_id
+      WHERE w.id = $1 AND COALESCE(w.shop_id, sc.shop_id) = ANY($2)`,
+    [id, sh])).rowCount)
+    return res.status(403).json({ error: 'Bu xodim sizning tsexingizda emas' });
   const [acc, paid, piece] = await Promise.all([
     db.query(`SELECT currency, amount, note FROM payroll_accruals
                WHERE worker_id = $1 AND month = $2 ORDER BY currency DESC`, [id, m]),

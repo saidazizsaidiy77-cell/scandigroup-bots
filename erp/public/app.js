@@ -237,7 +237,7 @@ const App = (() => {
     { code: 'warehouse',  name: 'Ombor',                perm: ['warehouse.view', 'warehouse.move', 'warehouse.manage'] },
     { code: 'production', name: 'Ishlab chiqarish',     perm: ['production.view', 'production.entry', 'production.units', 'production.manage', 'production.request', 'production.approve'] },
     { code: 'assets',     name: 'Asosiy vositalar',     perm: ['assets.view', 'assets.manage'] },
-    { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'admin.users'] },
+    { code: 'payroll',    name: 'Xodimlar va ish haqi', perm: ['payroll.view', 'payroll.manage', 'payroll.shop', 'admin.users'] },
     //  Hisobotlar ikki xil: ishlab chiqarishniki (`production.reports`)
     //  va pulniki (`cash.*`). Buxgalterda ishlab chiqarish huquqi yo'q,
     //  lekin foyda-zararni u ko'radi — shuning uchun ikkalasi ham.
@@ -525,7 +525,8 @@ const App = (() => {
     { href: '/ish-haqi.html', mod: 'payroll', nav: 'Ish haqi',
       title: 'Ish haqi', lead: 'Hisoblandi · to\'landi',
       text: "Har xodim oyma-oy: boshiga + hisoblandi − to'landi = oxiriga",
-      perm: ['payroll.view', 'payroll.manage'] },
+      //  Tsex boshlig'i — faqat o'z tsexining odamlari (payroll.shop).
+      perm: ['payroll.view', 'payroll.manage', 'payroll.shop'] },
     { href: '/xodimlar.html', mod: 'payroll', nav: 'Xodimlar',
       title: 'Xodimlar', lead: 'Rollar va kirish',
       text: "Xodim qo'shish, PIN berish, rol va tsex biriktirish",

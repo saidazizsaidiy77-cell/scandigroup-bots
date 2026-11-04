@@ -3101,6 +3101,15 @@ Ishdan ketgan xodim hisobi yopilmaguncha ro'yxatda turadi.
 Huquqi: ko'rish `payroll.view` (direktor `%.view` bilan oladi),
 yozish `payroll.manage` (buxgalter, administrator).
 
+**★ TSEX BOSHLIG'I O'Z ODAMLARINI KO'RADI** (`payroll.shop`, zavod
+qarori 2026-11). `tsex_usta` da «Ish haqi» sahifasi ochiq, lekin FAQAT
+o'z tsexining xodimlari — tsex doirasi (`scope_shop_ids`, qo'shimcha
+tsexlar bilan) va xodimning tsexi (`workers.shop_id`, bo'sh bo'lsa
+bo'limining tsexi). Hisoblandi, ishbay va to'landi hujjatlari bilan,
+faqat O'QISH: yozish `payroll.manage` da qoladi. Doirasi yo'q
+boshliqqa hech kim ko'rinmaydi. Chegara SERVERDA (`tsexlar`,
+`modules/payroll.js`) — boshqa tsexning xodimi so'ralsa 403.
+
 **★ ISHBAY — BO'LIMDAN O'TGANDA O'ZI HISOBLANADI** (zavod qarori,
 2026-11; `sections.piece_rate`, `piece_work`, `sql/cash.sql`). Stul
 tsexida ish DONA bilan to'lanadi, narx bir stul uchun, dollarda:
@@ -3887,7 +3896,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 
 | Rol | Huquq | Ko'radi |
 |---|---|---|
-| `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi. **Konver so'rovi xodim belgisida** (`can_request_unit`): stol va stulni savdo so'raydi, ya'ni o'sha tsex boshlig'ida sahifa yopiladi |
+| `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry`, `payroll.shop` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi. **Konver so'rovi xodim belgisida** (`can_request_unit`): stol va stulni savdo so'raydi, ya'ni o'sha tsex boshlig'ida sahifa yopiladi |
 | `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»**, va belgisi qo'yilgan bo'lsa **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi (`sees_warehouse`, xodim bo'yicha). Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*`, `materials.view` | faqat «Ombor» bo'limi — barcha omborlar, xom ashyonikini ham (faqat KO'RISH) |
