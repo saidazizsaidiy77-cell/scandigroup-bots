@@ -9747,8 +9747,8 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   assert.equal(sd.turkum.reduce((a, r) => a + Number(r.reja_qty || 0), 0),
                Number(reja.s));
 
-  //  ★ BOSHLIQNING (kpi_bonus_tushum) DONA rejasi SANALADI, dollar
-  //  rejasi esa YO'Q (zavod qarori, 2026-10).
+  //  ★ BOSHLIQNING (kpi_bonus_tushum) rejasi SANALADI — dona ham,
+  //  dollar ham (zavod qarori, 2026-11: uning o'z eksport mijozlari bor).
   const bosh = (await tdb.query(
     `INSERT INTO workers (name, kpi_bonus_tushum) VALUES ('Panel boshliq', true)
      RETURNING id`)).rows[0].id;
@@ -9759,7 +9759,7 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
             ($1, date_trunc('month', CURRENT_DATE), 'SEGMENT', 'STUL', 9000)`, [bosh]);
   const sd2 = (await admin('GET', '/api/sales/dashboard')).body;
   assert.equal(Number(stul(sd2).reja_qty || 0) - Number(stul(sd).reja_qty || 0), 150);
-  assert.equal(Number(stul(sd2).reja_amount || 0), Number(stul(sd).reja_amount || 0));
+  assert.equal(Number(stul(sd2).reja_amount || 0) - Number(stul(sd).reja_amount || 0), 9000);
   //  ★ PUL TUSHUMI KARTOCHKASI: reja — belgili xodimning TUSHUM rejasi,
   //  fakt — KPI varag'idagi bilan BITTA manba (`zavodTushumi`).
   assert.equal(sd2.tushum, null, 'TUSHUM rejasi yo\'q — kartochka yo\'q');
@@ -9773,7 +9773,7 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
       WHERE from_kind = 'customer' AND status = 'ok'
         AND date_trunc('month', op_date) = date_trunc('month', CURRENT_DATE)`)).rows[0];
   assert.equal(Number(sd3.tushum.fakt).toFixed(2), Number(kassa.s).toFixed(2));
-  assert.equal(Number(stul(sd3).reja_amount || 0), Number(stul(sd).reja_amount || 0),
+  assert.equal(Number(stul(sd3).reja_amount || 0), Number(stul(sd2).reja_amount || 0),
                'tushum rejasi turkum jamiga qo\'shilmaydi');
   await tdb.query(`DELETE FROM sales_kpi_targets WHERE worker_id = $1`, [bosh]);
   await tdb.query(`UPDATE workers SET active = false WHERE id = $1`, [bosh]);
