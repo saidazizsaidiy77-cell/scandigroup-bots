@@ -68,6 +68,7 @@ async function startServer() {
   app.use('/api', require('../modules/production'));
   app.use('/api/admin', require('../modules/admin'));
   app.use('/api/units', require('../modules/units'));
+  app.use('/api/palitra', require('../modules/palitra'));
   app.use('/api/catalog', require('../modules/catalog'));
   app.use('/api/purchasing', require('../modules/purchasing'));
   app.use('/api/import', require('../modules/import'));

@@ -140,19 +140,8 @@ async function assertCustomer(client, req, customerId) {
 //  Ishlab chiqarishning `/suggest` idan alohida: u `production.view`
 //  so'raydi va savdo sahifasi ishlab chiqarish huquqiga tayanmasin.
 router.get('/suggest', need(...READ), wrap(async (_req, res) => {
-  const { rows } = await db.query(
-    `SELECT 'color' AS field, color AS value, COUNT(*) AS n
-       FROM production_units WHERE NULLIF(TRIM(color), '') IS NOT NULL
-      GROUP BY color
-     UNION ALL
-     SELECT 'fabric', fabric, COUNT(*)
-       FROM production_units WHERE NULLIF(TRIM(fabric), '') IS NOT NULL
-      GROUP BY fabric
-     ORDER BY n DESC, value`);
-  res.json({
-    colors:  rows.filter((r) => r.field === 'color').map((r) => r.value),
-    fabrics: rows.filter((r) => r.field === 'fabric').map((r) => r.value),
-  });
+  const { royxat } = require('./palitra');
+  res.json({ colors: await royxat(db, 'color'), fabrics: await royxat(db, 'fabric') });
 }));
 
 router.get('/products', need(...READ), wrap(async (req, res) => {
@@ -676,7 +665,8 @@ router.post('/orders', need(...WRITE), wrap(async (req, res) => {
 //  Katta-kichik harfga qaramaydi. Eski buyurtmada TURGAN qiymat
 //  tegilmasa tekshirilmaydi: o'sha rangdagi konver sotilib ketgan
 //  bo'lishi mumkin va qator o'z qiymatini yo'qotmasligi kerak.
-async function assertRang(client, orderId, items) {
+async function assertRang(client, orderId, items, req) {
+  const { tekshir } = require('./palitra');
   const eski = new Map((await client.query(
     `SELECT id, color, fabric FROM order_items WHERE order_id = $1`,
     [orderId])).rows.map((r) => [r.id, r]));
@@ -688,11 +678,9 @@ async function assertRang(client, orderId, items) {
       const was = it.id ? eski.get(Number(it.id)) : null;
       if (was && String(was[maydon] || '').trim().toLowerCase() === v.toLowerCase())
         continue;
-      const bor = (await client.query(
-        `SELECT 1 FROM production_units
-          WHERE LOWER(TRIM(${maydon})) = LOWER($1) LIMIT 1`, [v])).rowCount;
-      if (!bor) throw new Error(
-        `${nom} «${v}» ro'yxatda yo'q — boridan tanlang`);
+      //  Tekshiruv BITTA joyda (`palitra.tekshir`).
+      void nom;
+      await tekshir(client, req, maydon, v);
     }
   }
 }
@@ -722,7 +710,7 @@ async function floorMap(client, req, ids) {
 }
 
 async function saveItems(client, req, orderId, items) {
-  await assertRang(client, orderId, items);
+  await assertRang(client, orderId, items, req);
 
   const keep = items.map((i) => i.id).filter(Boolean);
   const busy = (await client.query(

@@ -2005,8 +2005,11 @@ function buyDraw() {
         </select></div>
       <div style="flex:1;min-width:90px">
         ${i ? '' : '<label>Rangi</label>'}
-        <input value="${esc(l.color || '')}" placeholder="ixtiyoriy"
-          oninput="buySet(${i},'color',this.value)"></div>
+        <select onchange="buySet(${i},'color',this.value)">
+          <option value="">— yo'q —</option>
+          ${(buyRef.colors || []).map((c) => `<option${
+            l.color === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+        </select></div>
       <div style="flex:1;min-width:80px">
         ${i ? '' : '<label>Soni</label>'}
         <input type="number" min="1" step="1" inputmode="numeric"
