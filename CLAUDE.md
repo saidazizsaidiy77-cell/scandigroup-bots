@@ -3256,15 +3256,13 @@ ostida reja, chiqdi va zavodda — faqat SON (summa tepadagi jamida) va **chiqsa
 chunki dona bilan komplekt qo'shilmaydi.
 
 **Reja** — joriy oyda BARCHA menejerlarga qo'yilgan DONA/SEGMENT
-rejalari yig'indisi; doirasi bor menejerda faqat o'ziniki. **Ikki
-xil reja sanalmaydi**: ishdan ketgan xodimniki va KPI si PUL
-TUSHUMIDAN bo'lgan xodimniki (`kpi_bonus_tushum`) — uning turkum
-rejasi butun bo'limniki va menejerlarnikining ustiga qo'shilib, jami
-rejani ikki barobar qilardi (zavod qarori, 2026-10). **Bu faqat
-DOLLAR rejasiga tegishli**: boshliqning DONA/KOMPLEKT rejasi SANALADI
-(zavod qarori, 2026-10) — uning o'z mijozlari bor va donasi
-menejerlarnikiga kirmaydi; sanalmasa panel stulda 900 o'rniga 750
-ko'rsatardi.
+rejalari yig'indisi; doirasi bor menejerda faqat o'ziniki. Ishdan
+ketgan xodimning rejasi sanalmaydi. **★ BOSHLIQNING REJASI HAM
+SANALADI — dona ham, dollar ham** (zavod qarori, 2026-11): savdo
+bo'lim boshlig'i (`kpi_bonus_tushum`) eksportni o'zi yuritadi va
+uning turkum rejasi menejerlarnikiga kirmaydi. Ilgari dollar rejasi
+tashlab yuborilardi va eksport rejasi jamidan tushib qolardi. Uning
+PUL TUSHUMI rejasi esa alohida kartochkada, jamiga qo'shilmaydi.
 **Chiqdi** — KPI fakti bilan bir xil qoida (`v_sales_kpi_fact`):
 chiqib ketgan KONVER, qabul qilingan qaytarish ayirilgan, dona faqat
 `kpi_dona` guruhda (matras emas). Menejerlar faktini qo'shib

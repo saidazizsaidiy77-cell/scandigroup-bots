@@ -2937,17 +2937,15 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
        reja AS (
          SELECT t.category AS c,
                 SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
-                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT'
-                                      AND NOT COALESCE(w.kpi_bonus_tushum, false)) AS s
+                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT')      AS s
            FROM sales_kpi_targets t
            --  Ishdan ketgan xodimning rejasi sanalmaydi: u bu oy
            --  hech narsa sotmaydi va jami rejani yolg'on oshirardi.
-           --  ★ KPI si PUL TUSHUMIDAN bo'lgan xodimning (kpi_bonus_tushum)
-           --  DOLLAR rejasi sanalmaydi — u butun bo'limniki va
-           --  menejerlarnikining ustiga qo'shilib, jamini ikki barobar
-           --  qilardi. DONA/KOMPLEKT rejasi esa SANALADI (zavod qarori,
-           --  2026-10): boshliqning o'z mijozlari bor va uning donasi
-           --  menejerlarnikiga kirmaydi.
+           --  ★ BOSHLIQNING REJASI HAM SANALADI — dona ham, dollar ham
+           --  (zavod qarori, 2026-10 va 2026-11). Uning o'z mijozlari bor
+           --  (eksport) va rejasi menejerlarnikiga kirmaydi; dollar rejasi
+           --  ilgari tashlab yuborilardi va eksport rejasi jamidan tushib
+           --  qolgan edi. PUL TUSHUMI rejasi esa alohida kartochkada.
            JOIN workers w ON w.id = t.worker_id AND w.active, oy
           WHERE t.mon = oy.m AND t.category IS NOT NULL
             AND ($2::int IS NULL OR t.worker_id = $2)
@@ -3085,6 +3083,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
     if (reja > 0) tushum = { reja, fakt: await zavodTushumi(mon),
                              kutilmoqda: await kutilganPuli(mon) };
   }
+
 
   res.json({
     dan: oraliq.dan, gacha: oraliq.gacha,
