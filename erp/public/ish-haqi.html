@@ -143,7 +143,8 @@ function render() {
         ${r.note ? `<div class="izoh">${esc(r.note)}</div>` : ''}</td>
       <td class="muted" style="font-size:13px">${esc([r.shop, r.dept].filter(Boolean).join(' · ')) || '—'}</td>
       <td class="num">${pul(r.open_uzs, r.open_usd, true)}</td>
-      <td class="num">${pul(r.acc_uzs, r.acc_usd)}</td>
+      <td class="num">${pul(r.acc_uzs, r.acc_usd)}${Number(r.piece_usd)
+        ? `<div class="muted" style="font-size:11px">shundan ishbay ${money(r.piece_usd)} $</div>` : ''}</td>
       <td class="num">${pul(r.paid_uzs, r.paid_usd)}</td>
       <td class="num"><b>${pul(r.close_uzs, r.close_usd, true)}</b></td>
     </tr>${open.has(r.id) ? `<tr><td colspan="6" style="background:var(--bg2,#f7f6f3)">${detail(r)}</td></tr>` : ''}`).join('')
@@ -188,7 +189,17 @@ function detail(r) {
         <td>${esc(p.item || '—')}</td><td class="muted">${esc(p.note || '')}</td>
         <td class="num">${money(p.amount)} ${p.currency === 'USD' ? '$' : "so'm"}</td></tr>`).join('')}</tbody></table>`
     : '<p class="muted" style="font-size:13px">Shu oyda kassadan to\'lov yozilmagan.</p>';
-  return tahrir + pays;
+  //  Ishbay — konver bo'limdan o'tganda o'zi yozilgan; qo'lda tahrirlanmaydi
+  //  (xato bo'lsa o'tkazish orqaga qaytariladi va u bilan birga o'chadi).
+  const ishbay = (d.piece || []).length ? `<div style="margin-bottom:10px">
+      <b style="font-size:13px">Ishbay — bo'limdan o'tgan konverlar</b>
+      <table style="font-size:13px"><thead><tr><th>Bo'lim</th><th>Mahsulot</th>
+        <th class="num">Dona</th><th class="num">Narx, $</th><th class="num">Summa, $</th></tr></thead>
+      <tbody>${d.piece.map(p => `<tr><td>${esc(p.section)}</td>
+        <td>${esc(p.product || '—')}<div class="muted" style="font-size:11px">${esc(p.konverlar || '')}</div></td>
+        <td class="num">${p.qty}</td><td class="num">${money(p.rate)}</td>
+        <td class="num">${money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : '';
+  return tahrir + ishbay + pays;
 }
 
 async function saqla(id) {

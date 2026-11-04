@@ -1011,3 +1011,53 @@ CREATE TABLE IF NOT EXISTS payroll_accruals (
   UNIQUE (worker_id, month, currency)
 );
 CREATE INDEX IF NOT EXISTS payroll_accruals_month_idx ON payroll_accruals (month);
+
+-- ═════════════════════════════════════════════════════ ISHBAY OYLIK
+--
+--  ★ BO'LIMDAN O'TGANDA HISOBLANADI (zavod qarori, 2026-11). Stul
+--  tsexida ish DONA bilan to'lanadi: Zborka karkas bir stul uchun
+--  3,8 $, Shkurka 2,2 $ … Narx BO'LIMDA (`sections.piece_rate`, $ bir
+--  donaga) — kodda emas (4-qoida): zavod narxni o'zgartirsa bitta
+--  katakcha tahrirlanadi, yangi bo'lim qo'shilsa unga narx yoziladi.
+--
+--  Hisob konver bo'limdan KETAYOTGANDA yoziladi: ish o'sha bo'limda
+--  bajarildi. Usta o'tkazishda o'sha bo'limning xodimlaridan BIRINI
+--  tanlaydi (`workers.section_id`) va pul unga yoziladi.
+--
+--  Har yozuv HARAKATGA bog'langan (`move_id`): oxirgi o'tkazish
+--  orqaga qaytarilsa (`production.undo`) ishbay yozuvi ham birga
+--  o'chadi — o'tmagan ishga pul qolmasin. Narx yozuv bilan QOTADI:
+--  ertaga narx o'zgarsa kechagi ish qayta hisoblanmaydi.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS piece_rate NUMERIC(10,2)
+  CHECK (piece_rate IS NULL OR piece_rate > 0);
+
+CREATE TABLE IF NOT EXISTS piece_work (
+  id          SERIAL PRIMARY KEY,
+  move_id     INT UNIQUE REFERENCES unit_moves(id) ON DELETE CASCADE,
+  conveyor_no TEXT NOT NULL,
+  product_id  INT REFERENCES products(id),
+  section_id  INT NOT NULL REFERENCES sections(id),
+  worker_id   INT NOT NULL REFERENCES workers(id),
+  qty         INT NOT NULL CHECK (qty > 0),
+  rate        NUMERIC(10,2) NOT NULL CHECK (rate > 0),
+  amount      NUMERIC(14,2) GENERATED ALWAYS AS (qty * rate) STORED,
+  work_date   DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_by  INT REFERENCES workers(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS piece_work_worker_idx ON piece_work (worker_id, work_date);
+CREATE INDEX IF NOT EXISTS piece_work_conv_idx   ON piece_work (conveyor_no, section_id);
+
+--  Zavod bergan narxlar — bir martalik: keyin saytdan yoki bazadan
+--  o'zgartirilgani keyingi deploy'da qaytarib qo'yilmasin.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'ishbay-stul') THEN
+    UPDATE sections s SET piece_rate = v.rate
+      FROM (VALUES ('STU-ZBOR', 3.80), ('STU-SHKUR', 2.20), ('STU-AST', 1.30),
+                   ('STU-ASTSH', 2.20), ('STU-LAK', 2.60), ('STU-QOPL', 4.00))
+           AS v(code, rate)
+     WHERE s.code = v.code;
+    INSERT INTO migration_flags (key) VALUES ('ishbay-stul');
+  END IF;
+END $$;
