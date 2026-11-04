@@ -887,6 +887,27 @@ test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
   const t = (await admin('GET', `/api/payroll/worker/${kim}?month=${oy}`)).body;
   assert.equal(t.piece.reduce((a, p) => a + Number(p.amount), 0), 38);
 
+  //  ★ TSEX BOSHLIG'I — FAQAT O'Z ODAMLARI (payroll.shop): stul ustasi
+  //  Zborka xodimini ko'radi, boshqa tsexning xodimini emas; yozolmaydi.
+  const stul = H.api(base, await H.sessionFor('Stul ustasi'));
+  const sp = await stul('GET', '/api/payroll?month=' + oy);
+  assert.equal(sp.status, 200, sp.text);
+  assert.ok(sp.body.rows.some((r) => r.id === kim), 'o\'z tsexining xodimi');
+  assert.equal(sp.body.can_edit, false);
+  const stulTsex = (await H.id(`SELECT shop_id FROM sections WHERE id = $1`, [ZBOR.id])).shop_id;
+  const begonaX = await H.id(
+    `INSERT INTO workers (name, section_id)
+     SELECT 'Ish haqi · begona', s.id FROM sections s WHERE s.shop_id <> $1
+      ORDER BY s.id LIMIT 1 RETURNING id`, [stulTsex]);
+  assert.ok(!sp.body.rows.some((r) => r.id === begonaX.id), 'begona tsex ko\'rinmaydi');
+  const sp2 = await stul('GET', '/api/payroll?month=' + oy);
+  assert.ok(!sp2.body.rows.some((r) => r.id === begonaX.id), 'begona tsex ko\'rinmaydi');
+  assert.equal((await stul('GET', `/api/payroll/worker/${begonaX.id}?month=${oy}`)).status, 403);
+  await H.id(`UPDATE workers SET active = false WHERE id = $1 RETURNING id`, [begonaX.id]);
+  assert.equal((await stul('GET', `/api/payroll/worker/${kim}?month=${oy}`)).status, 200);
+  assert.equal((await stul('PUT', '/api/payroll/accrual',
+    { worker_id: kim, month: oy, currency: 'USD', amount: 1 })).status, 403);
+
   //  Oxirgi o'tkazish orqaga qaytarilsa ishbay ham o'chadi
   const oxirgi = (await H.id(
     `SELECT id FROM production_units WHERE conveyor_no = $1 AND current_section_id = $2`,
