@@ -230,7 +230,9 @@ function varaq(v) {
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;
          gap:16px;align-items:flex-end;margin-bottom:14px">
       <div>
-        <h2 style="margin:0">${esc(v.worker_name)}</h2>
+        <h2 style="margin:0">${esc(v.worker_name)}${canPlan()
+          ? ` <button class="ic" title="Rejani tahrirlash" style="margin-left:6px"
+              onclick="planOch(${v.worker_id})">✎ Tahrirlash</button>` : ''}</h2>
         ${(v.ostida || []).length ? `<div class="muted"
           style="font-size:12px;margin-top:4px">Qo'l ostida:
           <b>${v.ostida.map(esc).join(', ')}</b> — varaqlari yuqoridagi
@@ -287,13 +289,14 @@ function ochYop(k) {
 //  ★ REJA BIR MARTA, BITTA SO'ROVDA saqlanadi: har turkum uchun summa
 //  va dona. Og'irlik yo'q (zavod qarori, 2026-10). Rejani faqat
 //  administrator qo'yadi (`sales.kpi`).
-function planOch() {
-  const wid = $('fWorker').value;
-  const eski = wid ? d.varaq.find((v) => String(v.worker_id) === String(wid)) : null;
-  const q = (code, cat) => {
-    const v = eski && eski.qator.find((x) => x.code === code);
-    return v ? ((v.ichi.find((c) => c.code === cat) || {}).reja || 0) : 0;
-  };
+//  ★ TAHRIRLASH — SHU OYNA (zavod qarori, 2026-11). Har varaqdagi
+//  «✎ Tahrirlash» o'sha xodimni ochadi; oynada xodim yoki oy
+//  almashsa MAVJUD reja serverdan qayta o'qiladi (`planYukla`). Ilgari
+//  kataklar faqat ochilishda, tepadagi tanlovdan to'lardi: boshqa
+//  xodim yoki oy tanlansa ular eski raqam bilan qolar va «Saqlash»
+//  o'sha xodimning rejasini jimgina almashtirib yuborardi.
+function planOch(widArg) {
+  const wid = widArg != null ? String(widArg) : $('fWorker').value;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
       <div class="modal" style="max-width:640px">
@@ -302,11 +305,11 @@ function planOch() {
           <button onclick="yop()">Yopish</button></div>
         <div class="fields" style="margin-bottom:16px">
           <div><label>Xodim</label>
-            <select id="pWorker" onchange="tushumKatak()">${d.xodimlar.map((w) =>
+            <select id="pWorker" onchange="planYukla()">${d.xodimlar.map((w) =>
               `<option value="${w.id}"${String(w.id) === String(wid)
                 ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>
           <div><label>Oy</label>
-            <input id="pMon" type="month" value="${d.yil}-${
+            <input id="pMon" type="month" onchange="planYukla()" value="${d.yil}-${
               String(d.oy).padStart(2, '0')}"></div>
         </div>
         <div id="pTushumWrap" style="margin-bottom:12px"></div>
@@ -316,10 +319,10 @@ function planOch() {
         <tbody>${d.categories.map((c) => `
           <tr><td>${esc(c.name)}</td>
             <td class="num"><input id="s_${c.code}" type="number" step="0.01" min="0"
-              value="${q('SEGMENT', c.code)}" oninput="planJami()"
+              value="0" oninput="planJami()"
               style="max-width:150px;text-align:right"></td>
             <td class="num"><input id="d_${c.code}" type="number" step="1" min="0"
-              value="${q('DONA', c.code)}" oninput="planJami()"
+              value="0" oninput="planJami()"
               style="max-width:110px;text-align:right"></td></tr>`).join('')}
           <tr style="font-weight:700"><td>Jami</td>
             <td class="num" id="sJami"></td><td class="num" id="dJami"></td></tr>
@@ -330,8 +333,30 @@ function planOch() {
           <button class="primary" onclick="planSaqla()">Saqlash</button>
           <button onclick="yop()">Bekor</button></div>
       </div></div>`;
+  planYukla();
+}
+
+//  Tanlangan xodim va oyning MAVJUD rejasi kataklarga tushadi. Reja
+//  yo'q bo'lsa — nol: o'sha oyga hali qo'yilmagan.
+async function planYukla() {
+  const wid = $('pWorker').value, mon = $('pMon').value;
+  let v = null;
+  try {
+    const r = await App.api('/api/sales/kpi?' + new URLSearchParams({ mon, worker_id: wid }));
+    v = (r.varaq || []).find((x) => String(x.worker_id) === String(wid)) || null;
+  } catch (e) { /* oyna ochilaveradi — nol bilan */ }
+  //  Javob kelguncha boshqa xodim tanlangan bo'lsa — eski javob yozilmaydi.
+  if (!$('pWorker') || $('pWorker').value !== wid || $('pMon').value !== mon) return;
+  const reja = (code, cat) => {
+    const q = v && v.qator.find((x) => x.code === code);
+    return q ? ((q.ichi.find((c) => c.code === cat) || {}).reja || 0) : 0;
+  };
+  for (const c of d.categories) {
+    $('s_' + c.code).value = reja('SEGMENT', c.code);
+    $('d_' + c.code).value = reja('DONA', c.code);
+  }
   planJami();
-  tushumKatak(eski && eski.tushum_qator ? eski.tushum_qator.reja : 0);
+  tushumKatak(v && v.tushum_qator ? v.tushum_qator.reja : 0);
 }
 
 //  Pul tushumi rejasi faqat «KPI bonusi tushgan puldan» belgisi bor
