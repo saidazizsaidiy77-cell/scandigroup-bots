@@ -3261,6 +3261,8 @@ ko'rsatmaydi, ULUSH esa ko'rsatadi. Foiz BITTA:
     Marja % = (savdo − tannarx) ÷ savdo × 100
 
 Yalpi foyda ostida turadi; bosilsa TURI bo'yicha marja ochiladi
+(yalpi foyda qatorining o'zi ham bosilsa turi bo'yicha ochiladi —
+turkum savdosi − turkum tannarxi)
 (mehmonxona · yotoqxona · stol · stul — har biri o'z savdosiga; savdo
 ham, tannarx ham `v_pl_month` da turkum bo'yicha keladi). Boshqa foiz
 qatori (tannarx %, harajat %, sof marja %) ataylab yo'q. «Jami» —

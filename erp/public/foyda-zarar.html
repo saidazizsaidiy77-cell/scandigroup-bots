@@ -162,6 +162,13 @@ function draw() {
   //  ★ BOSILSA TURI BO'YICHA: savdo va tannarx ikkalasi ham savdo
   //  turkumi bo'yicha keladi (`v_pl_month`), ya'ni turkumning marjasi
   //  o'sha turkumning o'z savdosiga.
+  //  Yalpi foyda ham TURI bo'yicha: turkum savdosi − o'sha turkum tannarxi.
+  const turYalpi = () => tur.map(t => {
+    const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
+    const by = {};
+    ms.forEach(m => by[m] = (t.by[m] || 0) - (tc[m] || 0));
+    return qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by);
+  }).join('');
   const turMarja = () => tur.map(t => {
     const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
     const by = {};
@@ -231,7 +238,10 @@ function draw() {
       ${ochiq.has('TANNARX') ? tan.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
               t.by)).join('') : ''}
-      ${qator('<b>Yalpi foyda</b>', yalpi)}
+      ${qator(`<span class="muted" style="margin-right:6px">${
+          ochiq.has('YALPI') ? '&minus;' : '+'}</span><b>Yalpi foyda</b>`,
+        yalpi, '', ` onclick="toggle('YALPI')" style="cursor:pointer"`)}
+      ${ochiq.has('YALPI') ? turYalpi() : ''}
       ${foiz(`<span class="muted" style="margin-right:6px">${
           ochiq.has('MARJA') ? '&minus;' : '+'}</span><b>Marja, %</b> — (savdo − tannarx) ÷ savdo`,
         yalpi, inc, ` onclick="toggle('MARJA')" style="cursor:pointer"`)}
@@ -295,6 +305,11 @@ function exportCsv() {
     (() => { const a = ms.reduce((s, m) => s + (by[m] || 0), 0), b = ms.reduce((s, m) => s + (inc[m] || 0), 0);
       return b ? (a / b * 100).toFixed(1) : ''; })()]);
   push('Yalpi foyda', yf);
+  Object.entries(t).forEach(([k, by]) => {
+    const c = tt[k] || {}, o = {};
+    ms.forEach(m => o[m] = (by[m] || 0) - (c[m] || 0));
+    push('  ' + k, o);
+  });
   pf('Marja, %', yf);
   Object.entries(t).forEach(([k, by]) => {
     const c = tt[k] || {};
