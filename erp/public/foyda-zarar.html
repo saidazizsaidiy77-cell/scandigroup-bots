@@ -111,7 +111,7 @@ function draw() {
   //  ★ MARJA = (savdo − tannarx) ÷ savdo (zavod qarori, 2026-11): savdo
   //  yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
   //  ko'rsatmaydi, ulush esa ko'rsatadi. Boshqa foiz chizilmaydi.
-  $('kPrIz').textContent = 'marja ' + (jami(inc)
+  $('kPrIz').textContent = 'yalpi marja ' + (jami(inc)
     ? ((jami(inc) - jami(cogs)) / jami(inc) * 100).toFixed(1).replace('.', ',') + '%' : '—');
 
   //  ★ SAVDO TURKUMLARGA BO'LINADI (zavod qarori, 2026-10):
@@ -146,24 +146,34 @@ function draw() {
   //  Foiz qatori — har oy o'z savdosiga, «Jami» esa yig'indilar nisbati
   //  (oylik foizlarning o'rtachasi EMAS: kichik oy katta oy bilan teng
   //  og'irlik olardi).
-  const fz = (x, y) => y ? (x / y * 100).toFixed(1).replace('.', ',') + '%' : '—';
+  const fz = (x, y) => y ? (x / y * 100).toFixed(1).replace('.', ',') + '%'
+                          : '<span class="muted">&mdash;</span>';
   //  `by` — marja (savdo − tannarx), `den` — o'sha savdo.
-  const foiz = (nom, by, den, bosh, cls) => {
+  //  Ko'rinishi `qator` bilan BIR XIL (zavod qarori, 2026-11): marja
+  //  savdo va tannarx bilan bir qatorda o'qiladi, mayda izoh emas.
+  const foiz = (nom, by, den, bosh) => {
     const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
     const ti = ms.reduce((a, m) => a + (den[m] || 0), 0);
-    const td = (x, y) => `<td class="num${cls ? '' : ' muted'}" style="font-size:12px${
-      y && x < 0 ? ';color:var(--bad)' : ''}">${fz(x, y)}</td>`;
-    return `<tr${bosh || ''}><td class="${cls || 'muted'}" style="font-size:12px;padding-left:22px">${nom}</td>
-      ${ms.map(m => td(by[m] || 0, den[m] || 0)).join('')}${td(t, ti)}</tr>`;
+    const td = (x, y, b) => `<td class="num">${b ? '<b>' : ''}${y && x < 0
+      ? `<span style="color:var(--bad)">${fz(x, y)}</span>` : fz(x, y)}${b ? '</b>' : ''}</td>`;
+    return `<tr${bosh || ''}><td>${nom}</td>
+      ${ms.map(m => td(by[m] || 0, den[m] || 0)).join('')}${td(t, ti, true)}</tr>`;
   };
   //  ★ BOSILSA TURI BO'YICHA: savdo va tannarx ikkalasi ham savdo
   //  turkumi bo'yicha keladi (`v_pl_month`), ya'ni turkumning marjasi
   //  o'sha turkumning o'z savdosiga.
+  //  Yalpi foyda ham TURI bo'yicha: turkum savdosi − o'sha turkum tannarxi.
+  const turYalpi = () => tur.map(t => {
+    const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
+    const by = {};
+    ms.forEach(m => by[m] = (t.by[m] || 0) - (tc[m] || 0));
+    return qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by);
+  }).join('');
   const turMarja = () => tur.map(t => {
     const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
     const by = {};
     ms.forEach(m => by[m] = (t.by[m] || 0) - (tc[m] || 0));
-    return foiz(`<span style="padding-left:22px">${esc(t.name)}</span>`, by, t.by);
+    return foiz(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by, t.by);
   }).join('');
 
   const qator = (nom, by, cls, bosh) => {
@@ -228,9 +238,13 @@ function draw() {
       ${ochiq.has('TANNARX') ? tan.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
               t.by)).join('') : ''}
-      ${qator('<b>Yalpi foyda</b>', yalpi)}
-      ${foiz(`<span style="margin-right:6px">${ochiq.has('MARJA') ? '&minus;' : '+'}</span>Marja, %`,
-        yalpi, inc, ` onclick="toggle('MARJA')" style="cursor:pointer"`, 'muted')}
+      ${qator(`<span class="muted" style="margin-right:6px">${
+          ochiq.has('YALPI') ? '&minus;' : '+'}</span><b>Yalpi foyda</b>`,
+        yalpi, '', ` onclick="toggle('YALPI')" style="cursor:pointer"`)}
+      ${ochiq.has('YALPI') ? turYalpi() : ''}
+      ${foiz(`<span class="muted" style="margin-right:6px">${
+          ochiq.has('MARJA') ? '&minus;' : '+'}</span><b>Yalpi marja, %</b> — (savdo − tannarx) ÷ savdo`,
+        yalpi, inc, ` onclick="toggle('MARJA')" style="cursor:pointer"`)}
       ${ochiq.has('MARJA') ? turMarja() : ''}
       ${qator('<b>Jami harajat</b>', exp)}
       ${guruh.map((g, i) => {
@@ -291,7 +305,12 @@ function exportCsv() {
     (() => { const a = ms.reduce((s, m) => s + (by[m] || 0), 0), b = ms.reduce((s, m) => s + (inc[m] || 0), 0);
       return b ? (a / b * 100).toFixed(1) : ''; })()]);
   push('Yalpi foyda', yf);
-  pf('Marja, %', yf);
+  Object.entries(t).forEach(([k, by]) => {
+    const c = tt[k] || {}, o = {};
+    ms.forEach(m => o[m] = (by[m] || 0) - (c[m] || 0));
+    push('  ' + k, o);
+  });
+  pf('Yalpi marja, %', yf);
   Object.entries(t).forEach(([k, by]) => {
     const c = tt[k] || {};
     const pc = (x, y) => y ? (x / y * 100).toFixed(1) : '';
