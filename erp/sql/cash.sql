@@ -638,6 +638,41 @@ SELECT w.id, w.name, w.phone,
  GROUP BY w.id, w.name, w.phone,
           w.opening_uzs, w.opening_usd, w.opening_rate, w.opening_on;
 
+--  ★ DIVIDENT — XARAJAT EMAS, FOYDANI TAQSIMLASH (zavod qarori,
+--  2026-11). U «Moliyaviy xarajatlar» ichida turardi va foyda-zararda
+--  harajat bo'lib ayirilardi: foyda kam ko'rinardi, holbuki divident
+--  foydaning O'ZIDAN beriladi. Endi u FOYDADAN KEYIN turadi:
+--
+--      savdo − harajat = foyda
+--      foyda − divident = qoldiq
+--
+--  Belgi MODDADA (4-qoida), boshlang'ichi bir martalik: saytdan
+--  qayta nomlangan modda keyingi deployda qaytarib belgilanmasin.
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS is_dividend BOOLEAN NOT NULL DEFAULT false;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'divident-foydadan') THEN
+    UPDATE expense_items SET is_dividend = true
+     WHERE group_code = 'MOLIYA' AND lower(name) = 'divident';
+    INSERT INTO migration_flags (key) VALUES ('divident-foydadan');
+  END IF;
+END $$;
+
+--  ★ TA'MINOTCHIGA TO'LOV FOYDA-ZARARDA EMAS (zavod qarori, 2026-11).
+--  Material foyda-zararga TANNARX bo'lib kiradi — chiqib ketgan
+--  mahsulotga sarflangani. To'lov esa qarzni yopish: u ham harajat
+--  bo'lib tursa bitta material ikki marta ayirilardi. To'lov pul
+--  oqimida va ta'minotchi qarzida qoladi. Belgi MODDADA, bir martalik.
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS in_pl BOOLEAN NOT NULL DEFAULT true;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'taminot-pl-dan') THEN
+    UPDATE expense_items SET in_pl = false
+     WHERE group_code = 'TAMIN' AND lower(name) = lower('Ta''minotchilarga to''lov');
+    INSERT INTO migration_flags (key) VALUES ('taminot-pl-dan');
+  END IF;
+END $$;
+
 -- ───────────────────────────────────── HARAJAT: FOYDA-ZARAR KESIMIDA
 --
 --  To'lov sanasi bo'yicha emas, HISOBOT OYI bo'yicha (`pl_month`):
@@ -647,7 +682,8 @@ CREATE VIEW v_expenses AS
 SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS group_sort,
        ei.id AS item_id, ei.name AS item_name,
        SUM(o.amount_usd)::numeric(16,2) AS amount_usd,
-       COUNT(*)::int AS ops
+       COUNT(*)::int AS ops,
+       ei.is_dividend, ei.in_pl
   FROM cash_ops o
   JOIN expense_items  ei ON ei.id = o.expense_item_id
   JOIN expense_groups eg ON eg.code = ei.group_code
@@ -656,79 +692,14 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
  --  moddaning O'ZI — «to_kind = expense» bo'lsa ta'minotchiga
  --  to'langan pul hisobotdan yo'qolib ketardi.
  WHERE o.status = 'ok' AND o.expense_item_id IS NOT NULL
- GROUP BY o.pl_month, eg.code, eg.name, eg.sort, ei.id, ei.name;
+ GROUP BY o.pl_month, eg.code, eg.name, eg.sort, ei.id, ei.name, ei.is_dividend, ei.in_pl;
 
 -- ════════════════════════════════════════════════ FOYDA-ZARAR (P&L)
 --
---  Oy bo'yicha: TUSHUM minus HARAJAT. Ikki manba bitta jadvalda —
---  sotuv konverlardan, harajat esa kassadan.
---
---  Tushum CHIQIB KETGAN mahsulotdan hisoblanadi (`ship_on`), buyurtma
---  yozilgan kundan emas: buyurtma hali pul emas, mahsulot mijozda
---  bo'lgandagina sotuv bo'ladi. Mijoz balansi ham shu qoida bilan
---  yuritiladi, ya'ni hisobot va qarzdorlik bir-biriga mos tushadi.
---
---  Harajat esa TO'LOV sanasi bo'yicha emas, HISOBOT OYI bo'yicha
---  (`pl_month`): sentabrda to'langan avgust ijarasi avgust foydasini
---  kamaytiradi.
---
---  Tannarx yo'q: xom ashyo hisobi hali yozilmagan. Shuning uchun bu
---  «yalpi foyda» emas — tushumdan zavodning pul harajatlari ayirilgani.
---  ★ TUSHUM TURKUM BO'YICHA BO'LINADI (zavod qarori, 2026-10).
---  Ilgari u BITTA «Sotuv» qatori edi va direktorning savoli javobsiz
---  qolardi: «mehmonxonadan qancha, stuldan qancha». Javob ma'lumotda
---  bor edi — har konver o'z guruhini biladi — lekin hisobot uni
---  yig'ib tashlardi.
---
---  Turkum GURUHDAN o'qiladi (`sales_category`), mahsulotdan emas:
---  penal va kamod bitta turkumda, lekin ikkita guruh va ikkita
---  marshrut (izoh: sql/catalog-groups.sql).
---
---  Qatorlar harajat bilan BIR XIL shaklda: guruh — «Mahsulot
---  sotuvi», modda esa turkumning nomi. Shu sababdan sahifa
---  o'zgarmaydi: u guruhni ochib, ichidagi moddalarni ko'rsatadi
---  va tushum endi o'zi to'rtga bo'linib chiqadi.
---
---  Turkumi YO'Q guruh «Turkumsiz» bo'lib turadi va yo'qolmaydi: yangi
---  guruh qo'shilib, katagi to'ldirilmagani ko'rinib tursin — aks
---  holda uning sotuvi hisobotdan jimgina tushib qolardi.
-DROP VIEW IF EXISTS v_pl_month CASCADE;
-CREATE VIEW v_pl_month AS
-SELECT date_trunc('month', x.on_date)::date AS pl_month,
-       'income'::text AS kind,
-       'SOTUV'::text  AS group_code,
-       'Mahsulot sotuvi'::text AS group_name,
-       0 AS group_sort,
-       NULL::int AS item_id,
-       COALESCE(sc.name, 'Turkumsiz')::text AS item_name,
-       SUM(x.amount)::numeric(16,2) AS amount_usd,
-       COUNT(*)::int AS ops,
-       --  Tartib ZAVODNIKI, alifbo emas: mehmonxona → yotoqxona →
-       --  stol → stul. Turkumsizi oxirida (99) — u javob emas,
-       --  to'ldirilmagan katakning belgisi.
-       COALESCE(sc.sort, 99)::int AS item_sort
-  FROM (
-    SELECT u.ship_on AS on_date, u.product_id, u.total_amount AS amount
-      FROM production_units u
-     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
-       AND u.total_amount IS NOT NULL
-    UNION ALL
-    --  ★ MIJOZDAN QAYTGANI — QAYTGAN OYNING savdosidan ayiriladi
-    --  (izoh: sql/warehouse.sql, «Mijozdan qaytarish»). Chiqim qatori
-    --  o'z oyida o'zgarmaydi: o'sha oyda mahsulot haqiqatan sotilgan.
-    SELECT r.ret_on, u.product_id, -(i.qty * COALESCE(i.price, 0))
-      FROM cust_return_items i
-      JOIN cust_returns r      ON r.id = i.return_id AND r.status = 'accepted'
-      JOIN production_units u  ON u.id = i.unit_id
-  ) x
-  JOIN products p            ON p.id = x.product_id
-  JOIN product_groups g      ON g.id = p.group_id
-  LEFT JOIN sales_categories sc ON sc.code = g.sales_category
- GROUP BY 1, COALESCE(sc.name, 'Turkumsiz'), COALESCE(sc.sort, 99)
-UNION ALL
-SELECT e.pl_month, 'expense', e.group_code, e.group_name, e.group_sort,
-       e.item_id, e.item_name, e.amount_usd, e.ops, 0
-  FROM v_expenses e;
+--  `v_pl_month` endi `sql/materials.sql` da (ENG OXIRIDA): unga
+--  TANNARX qo'shildi va u xom ashyo sarfini (`material_moves`,
+--  `v_material_flow`) o'qiydi — ular kassadan keyin yaratiladi.
+--  Bitta view, bitta fayl (2-qoida): bu yerda nusxasi YO'Q.
 
 -- ══════════════════════════════════════════════════════════ PUL OQIMI
 --

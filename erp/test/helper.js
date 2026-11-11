@@ -127,4 +127,22 @@ function api(base, token) {
 const id = async (sql, params) =>
   (await require('../db').db.query(sql, params)).rows[0];
 
-module.exports = { freshDatabase, startServer, sessionFor, api, id, testUrl };
+//  ★ FURNITURASIZ CHIQMAYDI (zavod qarori, 2026-11): sp, penal va kamodli
+//  buyurtmani chiqaradigan testlar furniturani shu yerdan yozadi — qoidaning
+//  o'zi `foyda-zarar: tannarx` testida tekshiriladi. To'g'ridan-to'g'ri
+//  harakat yoziladi (qoldiq tekshiruvi kerak emas).
+async function furnBer(orderId) {
+  const { db } = require('../db');
+  const { FURN_KERAK } = require('../modules/materials');
+  let m = (await db.query(
+    `SELECT id FROM materials WHERE name = 'Test furnitura'`)).rows[0];
+  if (!m) m = (await db.query(`INSERT INTO materials (name, uom, category)
+    VALUES ('Test furnitura', 'dona', 'FURN') RETURNING id`)).rows[0];
+  await db.query(
+    `INSERT INTO material_moves (material_id, qty, from_kind, to_kind, to_id, product_id)
+     SELECT $2, 1, 'opening', 'order', k.order_id, k.product_id
+       FROM (${FURN_KERAK}) k WHERE k.order_id = $1 AND NOT k.berildi`,
+    [orderId, m.id]);
+}
+
+module.exports = { freshDatabase, startServer, sessionFor, api, id, testUrl, furnBer };

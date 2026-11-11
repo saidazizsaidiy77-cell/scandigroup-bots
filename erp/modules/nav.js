@@ -325,6 +325,21 @@ const NAVBATLAR = [
   },
 ];
 
+//  FURNITURA YUK XATIGA — xom ashyo mudirining navbati: «Mijozga
+//  chiqarilsin» dagi buyurtma, mahsulotlaridan biriga furnitura hali
+//  yozilmagan. Shart `/api/materials/furn/orders` bilan AYNAN bir xil
+//  (`FURN_KERAK`) — ombor mudiri chiqara olmay turibdi.
+NAVBATLAR.push(async (req) => {
+  if (!bor(req, 'materials.manage')) return [];
+  const { FURN_KERAK } = require('./materials');
+  const n = await son(
+    `SELECT COUNT(DISTINCT k.order_id)::int AS n
+       FROM (${FURN_KERAK}) k JOIN orders o ON o.id = k.order_id
+      WHERE o.status = 'to_ship' AND NOT k.berildi`);
+  return [{ page: '/furnitura.html', mod: 'supply', n,
+            izoh: `${n} ta buyurtma furniturani kutmoqda` }];
+});
+
 //  So'rov ATAYLAB yengil: sahifa uni har daqiqada qayta o'qiydi
 //  (izoh: `public/app.js`, `navbatTick`). Nol bo'lgan navbat ham
 //  qaytadi — klient o'zi ajratadi va kelasi safar raqam paydo

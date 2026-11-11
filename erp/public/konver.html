@@ -179,7 +179,9 @@ async function sarf(d) {
     if (r.price == null) j.narxsiz = true; else j.sum += Number(r.qty) * Number(r.price);
     jam.set(r.material_id, j);
   }
-  const jami = [...jam.values()].reduce((s, j) => s + j.sum, 0);
+  const furn = SARF.furn || [];
+  const jami = [...jam.values()].reduce((s, j) => s + j.sum, 0)
+             + furn.reduce((s, f) => s + Number(f.summa || 0), 0);
   const sum = (r) => r.price == null ? '<span class="muted">—</span>'
                                      : n2(Number(r.qty) * Number(r.price));
   el.innerHTML = `
@@ -189,7 +191,7 @@ async function sarf(d) {
       ${SARF.rows.length ? `<button class="no-print" onclick="sarfChop()">Chop etish</button>` : ''}
     </div>
     <div id="sarfHead" class="print-only print-head"></div>
-    ${!SARF.rows.length
+    ${!SARF.rows.length && !furn.length
       ? `<p class="muted" style="font-size:13px">Bu konverga hali xom ashyo
            biriktirilmagan. Sarf tsex ekranidagi ▣ tugmasidan yoziladi.</p>`
       : `<div class="tbox"><table>
@@ -215,6 +217,10 @@ async function sarf(d) {
           <td class="num">${n3(j.qty)} <span class="muted">${esc(j.uom || '')}</span></td>
           ${narx ? `<td class="num">${n2(j.sum)}${j.narxsiz
             ? ' <span class="late" title="ba\'zi qatorda narx yo\'q">*</span>' : ''}</td>` : ''}</tr>`).join('')}
+        ${narx ? furn.map((f) => `<tr>
+          <td>Chiqishda berilgan furnitura <span class="muted">· ${esc(f.order_no)}</span></td>
+          <td class="num">${f.qty} <span class="muted">dona</span></td>
+          <td class="num">${n2(f.summa)}</td></tr>`).join('') : ''}
         ${narx ? `<tr><td><b>Jami</b></td><td></td><td class="num"><b>${n2(jami)}</b></td></tr>
           <tr><td colspan="3" class="muted" style="font-size:12px">Donaga: ${
             SARF.total ? n2(jami / SARF.total) : '—'} $ (${SARF.total} ${esc(SARF.uom)})

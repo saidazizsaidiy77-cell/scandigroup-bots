@@ -29,10 +29,10 @@
 <div class="grid g3" style="margin-top:16px">
   <div class="card"><h2>Savdo</h2><div class="kpi" id="kIn">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Chiqib ketgan mahsulot</p></div>
-  <div class="card"><h2>Harajat</h2><div class="kpi" id="kOut">—<small> $</small></div>
+  <div class="card"><h2>Tannarx + harajat</h2><div class="kpi" id="kOut">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Hisobot oyi bo'yicha</p></div>
   <div class="card"><h2>Foyda</h2><div class="kpi" id="kPr">—<small> $</small></div>
-    <p class="muted" style="margin-top:6px;font-size:12px">Savdo &minus; harajat</p></div>
+    <p class="muted" style="margin-top:6px;font-size:12px" id="kPrIz">Savdo &minus; tannarx &minus; harajat</p></div>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -101,9 +101,19 @@ function draw() {
   const inc = yig(r => r.kind === 'income');
   const exp = yig(r => r.kind === 'expense');
   const jami = (m) => Object.values(m).reduce((a, b) => a + b, 0);
+  //  ★ TANNARX (zavod qarori, 2026-11): chiqib ketgan mahsulotning
+  //  materiali, savdo bilan bir xil o'qda. «Harajat» kartochkasi ikkalasini
+  //  qo'shib turadi — foyda = savdo − (tannarx + harajat).
+  const cogs = yig(r => r.kind === 'cogs');
   $('kIn').innerHTML  = usd(jami(inc)) + '<small> $</small>';
-  $('kOut').innerHTML = usd(jami(exp)) + '<small> $</small>';
-  $('kPr').innerHTML  = usd(jami(inc) - jami(exp)) + '<small> $</small>';
+  $('kOut').innerHTML = usd(jami(exp) + jami(cogs)) + '<small> $</small>';
+  $('kPr').innerHTML  = usd(jami(inc) - jami(exp) - jami(cogs)) + '<small> $</small>';
+  //  ★ MARJA % DA (zavod qarori, 2026-11): savdo yaxshi oyda tannarx ham
+  //  katta bo'ladi — dollardagi raqam o'zgarishni ko'rsatmaydi, ulush esa
+  //  ko'rsatadi. Bo'luvchi har doim SAVDO.
+  const pr = (x) => jami(inc) ? (x / jami(inc) * 100).toFixed(1).replace('.', ',') + '%' : '—';
+  $('kPrIz').textContent = `yalpi marja ${pr(jami(inc) - jami(cogs))} · sof marja ${
+    pr(jami(inc) - jami(exp) - jami(cogs))}`;
 
   //  ★ SAVDO TURKUMLARGA BO'LINADI (zavod qarori, 2026-10):
   //  mehmonxona to'plami · yotoqxona to'plami · stol · stul.
@@ -134,6 +144,19 @@ function draw() {
     i.by[key(r)] = (i.by[key(r)] || 0) + Number(r.amount_usd);
   });
 
+  //  Foiz qatori — har oy o'z savdosiga, «Jami» esa yig'indilar nisbati
+  //  (oylik foizlarning o'rtachasi EMAS: kichik oy katta oy bilan teng
+  //  og'irlik olardi).
+  const fz = (x, y) => y ? (x / y * 100).toFixed(1).replace('.', ',') + '%' : '—';
+  const foiz = (nom, by) => {
+    const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
+    const ti = ms.reduce((a, m) => a + (inc[m] || 0), 0);
+    const td = (x, y) => `<td class="num muted" style="font-size:12px${
+      y && x < 0 ? ';color:var(--bad)' : ''}">${fz(x, y)}</td>`;
+    return `<tr><td class="muted" style="font-size:12px;padding-left:22px">${nom}</td>
+      ${ms.map(m => td(by[m] || 0, inc[m] || 0)).join('')}${td(t, ti)}</tr>`;
+  };
+
   const qator = (nom, by, cls, bosh) => {
     const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
     return `<tr class="${cls || ''}"${bosh || ''}>
@@ -142,8 +165,23 @@ function draw() {
       <td class="num"><b>${t < 0 ? `<span style="color:var(--bad)">${usd(t)}</span>` : usd(t)}</b></td></tr>`;
   };
 
+  //  Tannarx qatorlari — savdo TURKUMI bo'yicha (server tartibida):
+  //  furnitura alohida qator emas, mahsulotning o'z tannarxida.
+  const tan = [];
+  d.rows.filter(r => r.kind === 'cogs').forEach(r => {
+    let i = tan.find(x => x.name === r.item_name);
+    if (!i) tan.push(i = { name: r.item_name, by: {} });
+    i.by[key(r)] = (i.by[key(r)] || 0) + Number(r.amount_usd);
+  });
+  const yalpi = {};
+  ms.forEach(m => yalpi[m] = (inc[m] || 0) - (cogs[m] || 0));
   const foyda = {};
-  ms.forEach(m => foyda[m] = (inc[m] || 0) - (exp[m] || 0));
+  ms.forEach(m => foyda[m] = (yalpi[m] || 0) - (exp[m] || 0));
+  //  ★ DIVIDENT FOYDADAN KEYIN (zavod qarori, 2026-11): harajat emas,
+  //  foydani taqsimlash. Qolgani — «Qoldiq» (ta'sischi bitta, ya'ni taqsimlanmagan foyda degan qatlam yo'q).
+  const div = yig(r => r.kind === 'dividend');
+  const qoldi = {};
+  ms.forEach(m => qoldi[m] = (foyda[m] || 0) - (div[m] || 0));
 
   $('body').innerHTML = `<div style="overflow-x:auto"><table>
     <thead><tr><th>Ko'rsatkich</th>
@@ -175,7 +213,17 @@ function draw() {
             pastga surilardi. Endi jami qatorning O'ZIDA, tafsiloti esa
             uning ostida: savdo · harajat · foyda uchtasi ham bir xil
             o'qiladi. -->
+      ${qator(`<span class="muted" style="margin-right:6px">${
+          ochiq.has('TANNARX') ? '&minus;' : '+'}</span><b>Tannarx</b> — chiqqan mahsulotning materiali va furniturasi`,
+        cogs, '', ` onclick="toggle('TANNARX')" style="cursor:pointer"`)}
+      ${ochiq.has('TANNARX') ? tan.map(t =>
+        qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
+              t.by)).join('') : ''}
+      ${foiz('tannarx, savdodan %', cogs)}
+      ${qator('<b>Yalpi foyda</b>', yalpi)}
+      ${foiz('yalpi marja, %', yalpi)}
       ${qator('<b>Jami harajat</b>', exp)}
+      ${foiz('harajat, savdodan %', exp)}
       ${guruh.map((g, i) => {
         const by = {};
         g.items.forEach(it => ms.forEach(m => {
@@ -189,10 +237,16 @@ function draw() {
                     it.by)).join('') : '');
       }).join('')}
       ${qator('<b>FOYDA</b>', foyda)}
+      ${foiz('sof marja, %', foyda)}
+      ${qator('<span class="muted">− Divident</span>', div)}
+      ${qator('<b>Qoldiq</b>', qoldi)}
     </tbody></table></div>
     <p class="muted" style="font-size:12px;margin-top:12px">
-      Savdo chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
-      Tannarx hisobga olinmagan — xom ashyo hisobi hali yuritilmaydi.</p>`;
+      Savdo va tannarx chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
+      Tannarx — konverga yozilgan xom ashyo sarfi, yuk xatiga berilgan
+      furnitura va sotib olingan mahsulot narxi, mahsulotning turkumi
+      bo'yicha; ish haqi harajatda. Ta'minotchiga to'lov bu
+      yerda emas: material tannarx bo'lib kiradi.</p>`;
 }
 
 function toggle(code) {
@@ -216,6 +270,21 @@ function exportCsv() {
       (t[r.item_name][key(r)] || 0) + Number(r.amount_usd);
   });
   Object.entries(t).forEach(([k, by]) => push('  ' + k, by));
+  const cg = yig(r => r.kind === 'cogs');
+  push('Tannarx', cg);
+  const tt = {};
+  d.rows.filter(r => r.kind === 'cogs').forEach(r => {
+    (tt[r.item_name] = tt[r.item_name] || {})[key(r)] =
+      (tt[r.item_name][key(r)] || 0) + Number(r.amount_usd);
+  });
+  Object.entries(tt).forEach(([k, by]) => push('  ' + k, by));
+  const yf = {}; ms.forEach(m => yf[m] = (inc[m] || 0) - (cg[m] || 0));
+  const pf = (nom, by) => qat.push([nom, ...ms.map(m => inc[m] ? (by[m] / inc[m] * 100 || 0).toFixed(1) : ''),
+    (() => { const a = ms.reduce((s, m) => s + (by[m] || 0), 0), b = ms.reduce((s, m) => s + (inc[m] || 0), 0);
+      return b ? (a / b * 100).toFixed(1) : ''; })()]);
+  pf('Tannarx, % savdodan', cg);
+  push('Yalpi foyda', yf);
+  pf('Yalpi marja, %', yf);
   const g = {};
   d.rows.filter(r => r.kind === 'expense').forEach(r => {
     const k = r.group_name + ' · ' + r.item_name;
@@ -223,8 +292,14 @@ function exportCsv() {
   });
   Object.entries(g).forEach(([k, by]) => push(k, by));
   push('Jami harajat', exp);
-  const f = {}; ms.forEach(m => f[m] = (inc[m] || 0) - (exp[m] || 0));
+  pf('Harajat, % savdodan', exp);
+  const f = {}; ms.forEach(m => f[m] = (yf[m] || 0) - (exp[m] || 0));
   push('FOYDA', f);
+  pf('Sof marja, %', f);
+  const dv = yig(r => r.kind === 'dividend');
+  push('Divident', dv);
+  const q = {}; ms.forEach(m => q[m] = (f[m] || 0) - (dv[m] || 0));
+  push('Qoldiq', q);
   const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)
     .join(';')).join('\n');
   const a = document.createElement('a');

@@ -3190,6 +3190,87 @@ ikki marta kirim bo'lib ko'rinardi.
 Shuning uchun «foyda bor, pul yo'q» degan holat aynan shu ikki hisobotni
 yonma-yon qo'yganda ko'rinadi.
 
+**★ DIVIDENT — XARAJAT EMAS, FOYDANI TAQSIMLASH** (zavod qarori,
+2026-11; `expense_items.is_dividend`, `v_pl_month` dagi
+`kind = 'dividend'`). U «Moliyaviy xarajatlar» ichida turardi va
+foyda-zararda harajat bo'lib ayirilardi — foyda kam ko'rinardi,
+holbuki divident foydaning O'ZIDAN beriladi. Endi:
+
+    savdo − harajat = foyda
+    foyda − divident = qoldiq
+
+Oxirgi qator nomi **«Qoldiq»**, «taqsimlanmagan foyda» EMAS (zavod
+qarori, 2026-11): ta'sischi bitta va foyda ulushlarga bo'linmaydi —
+divident berilgandan keyin korxonada QOLGANI, xolos.
+
+Kassada yozilishi o'zgarmadi (o'sha modda, o'sha oyna); faqat
+hisobotdagi joyi boshqa. Harajatni o'qiydigan har joy
+`kind = 'expense'` ni so'raydi, `<> 'income'` ni EMAS — aks holda
+divident yana harajatga qo'shilib ketardi. Moliya panelida foyda
+divident AYIRILMAGAN holda, ostida «divident N» yozuvi. Belgi
+MODDADA, boshlang'ichi bir martalik (`migration_flags`:
+`divident-foydadan`).
+
+**★ TANNARX FOYDA-ZARARDA** (zavod qarori, 2026-11; `v_pl_month`
+dagi `kind = 'cogs'`, view endi `sql/materials.sql` da):
+
+    savdo − tannarx = yalpi foyda
+    yalpi foyda − harajat = foyda
+    foyda − divident = qoldiq
+
+Tannarx — CHIQIB KETGAN mahsulotniki, savdo bilan bir xil o'qda
+(`ship_on`), qaytgani qaytgan oyda ayiriladi. Tsexda va omborda
+turgan mahsulotning sarfi hali tannarx emas — u zaxira. Ichida:
+konverga yozilgan xom ashyo va FURNITURA sarfi (`material_moves`,
+`to_kind = 'unit'`; bir donasi tannarx hisobotidagi bilan AYNAN bir
+xil formula — raqamning hamma sarfi ÷ chiqqan dona), yuk xatiga
+yozilgan furnitura (`to_kind = 'order'`, buyurtma chiqqan oyda) va
+sotib olingan mahsulot (`buy_price`, matras). **Qator — SAVDO
+TURKUMI** (mehmonxona · yotoqxona · stol · stul), material turkumi
+emas (zavod qarori, 2026-11): savdo bilan yonma-yon o'qiladi va
+furnitura alohida qator bo'lmaydi — mahsulotning o'z tannarxiga
+qo'shiladi. **Ish haqi tannarxda EMAS** — u kassadagi oylik bo'lib
+harajatda qoladi, ikki marta sanalmaydi.
+
+**★ FURNITURA YUK XATIGA — XOM ASHYO MUDIRI YOZADI** (zavod qarori,
+2026-11; `/furnitura.html`, `/api/materials/furn/*`). Tsexda konverga
+qo'yilsa mahsulot sotilmaguncha furnitura pul bo'lib muzlardi. Mudir
+«Mijozga chiqarilsin» dagi buyurtmani ochadi va HAR MAHSULOTIGA
+(9083 penal, Milano sp) berilganini yozadi: `material_moves`,
+`to_kind = 'order'`, `product_id` — qatorga emas, mahsulotga
+(qatorlar «Qaytarib olish» dan keyin qayta yoziladi). Narx chiqish
+paytida qotadi (`chiqishNarxi`), qoldiq to'sig'i (`yetarlimi`) bu
+yerda ham. Chiqib ketganidan keyin bekor qilinmaydi.
+
+**FURNITURASIZ CHIQMAYDI**: belgisi bor guruhning (`needs_hardware` —
+sp, penal, kamod) har mahsulotiga furnitura yozilmaguncha `/ship`
+rad etadi va mahsulot nomini yozadi. Shart BITTA joyda (`FURN_KERAK`,
+`modules/materials.js`): ro'yxat, menyudagi navbat (xom ashyo mudiri,
+`materials.manage`) va `/ship` shundan o'qiydi.
+
+**Konver pasportida** (`/konver.html`, «Xom ashyo sarfi») chiqib
+ketgan donaga furnitura O'ZI qo'shiladi: shu buyurtmada shu
+mahsulotdan chiqqan donaga bo'linadi (`order_no` + `product_id`,
+`sotilgan-narx` bilan bir xil bog'lanish). Faqat narx huquqida.
+Tannarx hisoboti (`/tannarx.html`) hali faqat konver sarfini ko'radi.
+
+**★ MARJA FOIZDA** (zavod qarori, 2026-11; `/foyda-zarar.html`). Savdo
+yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
+ko'rsatmaydi, ULUSH esa ko'rsatadi. Har asosiy qator ostida mayda foiz
+qatori: tannarx %, yalpi marja %, harajat %, sof marja % — bo'luvchi
+har doim o'sha oyning SAVDOSI. «Jami» ustuni yig'indilar nisbati,
+oylik foizlarning o'rtachasi EMAS (kichik oy katta oy bilan teng og'irlik
+olardi). Foyda kartochkasi ostida ham ikkala marja; CSV da ham.
+Faqat hisobotda — moliya paneliga qo'shilmadi (zavod qarori).
+
+**★ TA'MINOTCHIGA TO'LOV FOYDA-ZARARDAN CHIQDI** (`expense_items.in_pl`,
+`migration_flags`: `taminot-pl-dan`). Material tannarx bo'lib keladi;
+to'lov ham harajat bo'lib tursa bitta material ikki marta ayirilardi.
+To'lov — qarzni yopish: pul oqimida, harajat ro'yxatida
+(`v_expenses`) va ta'minotchi qarzida qoladi. Natijasi: sarf
+yozilmagan oylarda foyda yuqori ko'rinadi — material konverga
+yozilmasa tannarxga tushmaydi.
+
 **★ MOLIYA PANELIDA TUSHUM USTUNI** (zavod qarori, 2026-10;
 `/moliya-panel.html`, «Oylik natija», `/api/cash/dashboard` dagi
 `oylar.pul`). Savdo bilan harajat yonida — kassaga MIJOZDAN kelgan pul,
@@ -3615,6 +3696,7 @@ Navbatlar (`erp/modules/nav.js`, `GET /api/navbat`):
 | `/omborlar.html` | vitrinadan qaytarish hujjati | T/M da `confirmed`, vitrinada `new` |
 | `/buyurtmalar.html` | bronning hammasi omborga kelgan, lekin yuborilmagan buyurtma | `sales.manage` |
 | `/kassalar.html` | topshirilgan, lekin qabul qilinmagan pul | `cash.manage` |
+| `/furnitura.html` | chiqarishga berilgan, furniturasi yozilmagan buyurtma | `materials.manage` |
 
 **★ NAVBAT — QILINADIGAN ISH, «YANGI YOZUV» EMAS.** Ro'yxatga raqam
 qo'yish oson, lekin har kuni turadigan raqamga ko'z o'rganib qoladi va

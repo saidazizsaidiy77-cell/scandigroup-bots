@@ -3242,6 +3242,19 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
                     + ` — ${x.qty - x.bron} ta`).join(', ')
         + '. Avval savdo qaytarib olib, konver biriktirsin');
 
+    //  ★ FURNITURASIZ CHIQMAYDI (zavod qarori, 2026-11). Belgisi bor
+    //  guruhning (sp, penal, kamod — `needs_hardware`) har mahsulotiga
+    //  xom ashyo mudiri furnitura yozgan bo'lishi shart: mebel mijozning
+    //  uyida yig'iladi va ruchkasiz ketgan yuk xatining tannarxi yolg'on
+    //  kam chiqardi. Shart BITTA joyda (`FURN_KERAK`, modules/materials.js).
+    const furnYoq = (await client.query(
+      `SELECT product, product_type FROM (${require('./materials').FURN_KERAK}) k
+        WHERE k.order_id = $1 AND NOT k.berildi ORDER BY product`, [o.id])).rows;
+    if (furnYoq.length)
+      throw new Error('Furnitura berilmagan: ' + furnYoq
+        .map((x) => `${x.product}${x.product_type ? ' · ' + x.product_type : ''}`)
+        .join(', ') + ". Xom ashyo mudiri «Furnitura yuk xatiga» sahifasidan yozadi");
+
     //  Faqat SHU buyurtmaga bron qilingan dona chiqadi. Konverning
     //  qolgan qismi boshqa mijozniki bo'lishi mumkin — u omborda qoladi,
     //  shuning uchun konver kerak bo'lsa bo'linadi.

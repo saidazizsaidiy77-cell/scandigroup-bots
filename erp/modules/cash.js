@@ -1094,11 +1094,17 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
                 AS pul,
               COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'income'), 0)::numeric
                 AS tushum,
-              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind <> 'income'), 0)::numeric
+              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'expense'), 0)::numeric
                 AS harajat,
               (COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'income'), 0)
-               - COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind <> 'income'), 0)
-              )::numeric AS foyda
+               - COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind IN ('expense', 'cogs')), 0)
+              )::numeric AS foyda,
+              --  Divident foydadan KEYIN (izoh: sql/cash.sql, is_dividend)
+              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'dividend'), 0)::numeric
+                AS divident,
+              --  Tannarx — chiqib ketgan mahsulotning materiali
+              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'cogs'), 0)::numeric
+                AS tannarx
          FROM oy LEFT JOIN v_pl_month p ON p.pl_month = oy.m
         GROUP BY oy.m ORDER BY oy.m`, [from, to]),
 
@@ -1109,7 +1115,7 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
       `SELECT COALESCE(group_name, 'Boshqa') AS name,
               SUM(amount_usd)::numeric AS amount
          FROM v_pl_month
-        WHERE pl_month BETWEEN $1::date AND $2::date AND kind <> 'income'
+        WHERE pl_month BETWEEN $1::date AND $2::date AND kind = 'expense'
         GROUP BY 1 HAVING SUM(amount_usd) <> 0
         ORDER BY amount DESC LIMIT 8`, [from, to]),
 

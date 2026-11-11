@@ -122,10 +122,10 @@ async function faktlar(yil) {
       `SELECT to_char(pl_month, 'YYYY-MM') AS mon,
               COALESCE(SUM(amount_usd) FILTER (WHERE kind = 'income'), 0)::numeric
                 AS tushum,
-              COALESCE(SUM(amount_usd) FILTER (WHERE kind <> 'income'), 0)::numeric
+              COALESCE(SUM(amount_usd) FILTER (WHERE kind = 'expense'), 0)::numeric
                 AS harajat,
               (COALESCE(SUM(amount_usd) FILTER (WHERE kind = 'income'), 0)
-               - COALESCE(SUM(amount_usd) FILTER (WHERE kind <> 'income'), 0)
+               - COALESCE(SUM(amount_usd) FILTER (WHERE kind IN ('expense', 'cogs')), 0)
               )::numeric AS foyda
          FROM v_pl_month
         WHERE pl_month BETWEEN $1::date AND $2::date

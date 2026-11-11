@@ -81,8 +81,8 @@ async function load() {
   if (!$('gacha').value) $('gacha').value = d.to;
 
   const jam = (k) => d.oylar.reduce((a, r) => a + (Number(r[k]) || 0), 0);
-  const tushum = jam('tushum'), harajat = jam('harajat');
-  const foyda = tushum - harajat;
+  const tushum = jam('tushum'), harajat = jam('harajat'), tannarx = jam('tannarx');
+  const foyda = tushum - tannarx - harajat;
   //  Kassa va bank — bugungi qoldiq; xodim qo'lidagi pul ham
   //  korxonaniki, shunchaki javonda emas (aylanma kapital bilan bir
   //  xil qoida).
@@ -96,13 +96,17 @@ async function load() {
     //  ikki ekranda ikki javob olardi.
     { name: 'Savdo', value: Panel.pul(tushum),
       hint: 'chiqib ketgan mahsulotdan' },
+    { name: 'Tannarx', value: Panel.pul(tannarx), hint: 'chiqqan mahsulotning materiali' },
     { name: 'Harajat', value: Panel.pul(harajat), hint: 'hisobot oyi bo\'yicha' },
     { name: 'Foyda', value: Panel.pul(foyda),
       tone: foyda < 0 ? 'bad' : foyda > 0 ? 'ok' : '',
       //  ★ TANNARX YO'Q — sahifa buni O'ZI aytadi, aks holda raqam
       //  boshqa narsa deb o'qilardi (foyda-zarar hisoboti bilan bir
       //  xil qoida).
-      hint: 'tannarxsiz — pul harajatlari ayirilgani' },
+      //  Divident foydadan KEYIN (zavod qarori, 2026-11): u harajat
+      //  emas, ya'ni foydani kamaytirmaydi — faqat yozib turiladi.
+      hint: 'savdo − tannarx − harajat'
+        + (jam('divident') ? ` · divident ${Panel.pul(jam('divident'))}` : '') },
   ]);
 
   Panel.kpi($('kpis2'), [
@@ -152,13 +156,14 @@ async function load() {
   const pul = jam('pul');
   $('jadval').innerHTML = `<table><thead><tr><th>Oy</th>
       <th class="num">Savdo</th><th class="num">Tushum</th>
-      <th class="num">Harajat</th>
+      <th class="num">Tannarx</th><th class="num">Harajat</th>
       <th class="num">Foyda</th></tr></thead><tbody>
     ${d.oylar.map((r) => {
       const f = Number(r.foyda) || 0;
       return `<tr><td>${esc(Panel.oyNom(r.mon))}</td>
         <td class="num">${Panel.son(r.tushum)}</td>
         <td class="num">${Panel.son(r.pul)}</td>
+        <td class="num">${Panel.son(r.tannarx)}</td>
         <td class="num">${Panel.son(r.harajat)}</td>
         <td class="num"${f < 0 ? ' style="color:var(--bad)"' : ''}>${
           Panel.son(f)}</td></tr>`;
@@ -166,6 +171,7 @@ async function load() {
     <tr><td><b>Jami</b></td>
       <td class="num"><b>${Panel.son(tushum)}</b></td>
       <td class="num"><b>${Panel.son(pul)}</b></td>
+      <td class="num"><b>${Panel.son(tannarx)}</b></td>
       <td class="num"><b>${Panel.son(harajat)}</b></td>
       <td class="num"><b${foyda < 0 ? ' style="color:var(--bad)"' : ''}>${
         Panel.son(foyda)}</b></td></tr>

@@ -605,6 +605,14 @@ const App = (() => {
       text: "Tsex so'raydi, ombor chiqaradi \u00b7 yonida harakat lentasi: qaysi material qayerga ketdi",
       perm: ['materials.view', 'materials.request', 'materials.manage'] },
 
+    //  ★ FURNITURA YUK XATIGA (zavod qarori, 2026-11): mudir chiqayotgan
+    //  buyurtmaning har mahsulotiga furnitura yozadi; yozilmaguncha
+    //  ombor mudiri chiqara olmaydi (izoh: modules/materials.js).
+    { href: '/furnitura.html', mod: 'supply', nav: 'Furnitura yuk xatiga',
+      title: 'Furnitura yuk xatiga', lead: 'Chiqayotgan buyurtmalar',
+      text: "Har mahsulotga ruchka, petlya va boshqasi · yozilmaguncha buyurtma chiqmaydi",
+      perm: ['materials.view', 'materials.manage'] },
+
     { href: '/materiallar.html?tab=zay', mod: 'supply', nav: 'Buyurtmalar',
       title: 'Xarid buyurtmalari', lead: 'Nima sotib olinadi',
       text: "Ombor yozadi, ta'minot bajaradi \u00b7 kimdan olinishi va qachon kelishi shu yerda",
