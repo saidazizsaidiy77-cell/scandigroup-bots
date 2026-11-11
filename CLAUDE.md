@@ -3256,12 +3256,16 @@ Tannarx hisoboti (`/tannarx.html`) hali faqat konver sarfini ko'radi.
 
 **★ MARJA FOIZDA** (zavod qarori, 2026-11; `/foyda-zarar.html`). Savdo
 yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
-ko'rsatmaydi, ULUSH esa ko'rsatadi. Har asosiy qator ostida mayda foiz
-qatori: tannarx %, yalpi marja %, harajat %, sof marja % — bo'luvchi
-har doim o'sha oyning SAVDOSI. «Jami» ustuni yig'indilar nisbati,
-oylik foizlarning o'rtachasi EMAS (kichik oy katta oy bilan teng og'irlik
-olardi). Foyda kartochkasi ostida ham ikkala marja; CSV da ham.
-Faqat hisobotda — moliya paneliga qo'shilmadi (zavod qarori).
+ko'rsatmaydi, ULUSH esa ko'rsatadi. Foiz BITTA:
+
+    Marja % = (savdo − tannarx) ÷ savdo × 100
+
+Yalpi foyda ostida turadi; bosilsa TURI bo'yicha marja ochiladi
+(mehmonxona · yotoqxona · stol · stul — har biri o'z savdosiga; savdo
+ham, tannarx ham `v_pl_month` da turkum bo'yicha keladi). Boshqa foiz
+qatori (tannarx %, harajat %, sof marja %) ataylab yo'q. «Jami» —
+yig'indilar nisbati, oylik foizlarning o'rtachasi EMAS. Foyda
+kartochkasi ostida ham, CSV da ham. Moliya paneliga qo'shilmadi.
 
 **★ TA'MINOTCHIGA TO'LOV FOYDA-ZARARDAN CHIQDI** (`expense_items.in_pl`,
 `migration_flags`: `taminot-pl-dan`). Material tannarx bo'lib keladi;
