@@ -4845,7 +4845,10 @@ test('xodimning qo\'lidagi pul sahifasida kassadan olingani KIRIM', async () => 
 test('harajat foyda-zarar va pul oqimi hisobotiga tushadi', async () => {
   const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
   const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
-  const modda = (await H.id(`SELECT id FROM expense_items ORDER BY id LIMIT 1`)).id;
+  //  Foyda-zararga tushadigan modda: ta'minotchiga to'lov va divident
+  //  u yerda harajat emas (izoh: sql/cash.sql, `in_pl`, `is_dividend`).
+  const modda = (await H.id(`SELECT id FROM expense_items
+    WHERE in_pl AND NOT is_dividend ORDER BY id LIMIT 1`)).id;
 
   const r = await kassir('POST', '/api/cash/ops', {
     from_kind: 'account', from_id: kassa, to_kind: 'expense',
@@ -4975,11 +4978,16 @@ test('ta\'minotchiga to\'lov moddasi bilan yoziladi', async () => {
     expense_item_id: modda.id, pl_month: '2026-09' });
   assert.equal(r.status, 200, r.text);
 
-  //  Foyda-zararda — o'z moddasida
+  //  ★ Foyda-zararda EMAS (zavod qarori, 2026-11): material tannarx
+  //  bo'lib kiradi, to'lov esa qarzni yopadi. Harajat ro'yxatida
+  //  (o'z moddasida) va pul oqimida qoladi.
   const pl = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
-  const h = pl.rows.find(x => x.kind === 'expense' && x.item_id === modda.id);
-  assert.ok(h, 'ta\'minotchiga to\'lov foyda-zararda');
-  assert.equal(Number(h.amount_usd), 300);
+  assert.ok(!pl.rows.some(x => x.item_id === modda.id),
+    'ta\'minotchiga to\'lov foyda-zararda emas');
+  const ex = (await kassir('GET', '/api/cash/expenses?from=2026-09-01&to=2026-09-01')).body;
+  const h = ex.rows.find(x => x.item_id === modda.id);
+  assert.ok(h, 'harajat ro\'yxatida o\'z moddasida');
+  assert.ok(Number(h.amount_usd) >= 300);
 
   //  Pul oqimida — ta'minotchi tomonida
   const fl = (await kassir('GET', '/api/cash/flow?from=2026-09&to=2026-09')).body;
@@ -5689,10 +5697,11 @@ test('podotchyot olgan xodim ta\'minotchiga to\'lay oladi', async () => {
   assert.equal(op.to_kind, 'supplier');
   assert.equal(op.to_id, tam);
 
-  //  Foyda-zararda o'z moddasida turadi
-  const pl = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
-  assert.ok(pl.rows.some((x) => x.kind === 'expense' && x.item_id === modda),
-    'xodim yozgan to\'lov foyda-zararda');
+  //  Harajat ro'yxatida o'z moddasida turadi (foyda-zararda emas —
+  //  material tannarx bo'lib kiradi)
+  const ex = (await kassir('GET', '/api/cash/expenses?from=2026-09-01&to=2026-09-01')).body;
+  assert.ok(ex.rows.some((x) => x.item_id === modda),
+    'xodim yozgan to\'lov harajat ro\'yxatida');
 });
 
 //  ★ TA'MINOTCHILAR FAYLDAN. Zavod ro'yxatni Excel'da yuritadi va
@@ -13637,6 +13646,53 @@ test('foyda-zarar: divident harajat emas, foydadan keyin ayiriladi', async () =>
   assert.equal(Number(oy.divident), 700);
   assert.ok(!d.harajat.some((r) => Number(r.amount) === 800),
     'harajat guruhiga divident qo\'shilmaydi');
+});
+
+/* ★ TANNARX FOYDA-ZARARDA (zavod qarori, 2026-11): chiqib ketgan
+ *  mahsulotning materiali `kind = 'cogs'`, savdo bilan bir xil oyda;
+ *  ta'minotchiga to'lov esa foyda-zarardan chiqadi (ikki marta emas). */
+test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', async () => {
+  const { db } = require('../db');
+  const admin = H.api(base, await H.sessionFor('Administrator'));
+  const kat = (await admin('GET', '/api/catalog')).body;
+  const penal = kat.products.find((p) => p.group_code === 'PENAL');
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Tannarx sinov mijozi', region: 'Toshkent' })).body;
+  const u = (await admin('POST', '/api/units/', { items: [
+    { product_id: penal.id, qty: 4, color: 'Oq', unit_price: 300,
+      is_opening: true, fg_on: '2032-03-01' }] })).body.created[0];
+  //  Konverga material: 4 dona uchun 80 $ furnitura (donasi 20 $)
+  const mat = (await db.query(`INSERT INTO materials (name, uom, category)
+    VALUES ('Tannarx sinov ruchka', 'dona', 'FURN') RETURNING id`)).rows[0].id;
+  await db.query(`INSERT INTO material_moves
+      (material_id, qty, from_kind, to_kind, to_id, ccy, price)
+    VALUES ($1, 8, 'opening', 'unit', $2, 'USD', 10)`, [mat, u.id]);
+
+  const z = (await admin('POST', '/api/sales/orders', {
+    customer_id: mij.id, ship_to: 'ZAVOD',
+    items: [{ product_id: penal.id, qty: 3, color: 'Oq', unit_price: 300 }] })).body;
+  const q = (await admin('GET', '/api/sales/orders/' + z.id)).body.items[0];
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
+    { item_id: q.id, unit_id: u.id, qty: 3 })).status, 200);
+  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  const sh = await admin('POST', `/api/sales/orders/${z.id}/ship`, { ship_on: '2032-04-10' });
+  assert.equal(sh.status, 200, sh.text);
+
+  const pl = (await admin('GET', '/api/cash/pl?from=2032-04&to=2032-04')).body;
+  const cogs = pl.rows.filter((r) => r.kind === 'cogs');
+  assert.equal(cogs.reduce((a, r) => a + Number(r.amount_usd), 0), 60,
+    '3 ta chiqdi × donasi 20 $');
+  assert.ok(cogs.some((r) => r.item_name === 'Furnitura'), 'material turkumi bo\'yicha');
+
+  const d = (await admin('GET', '/api/cash/dashboard?from=2032-04&to=2032-04')).body;
+  const oy = d.oylar.find((r) => r.mon === '2032-04');
+  assert.equal(Number(oy.tannarx), 60);
+  assert.equal(Number(oy.foyda), Number(oy.tushum) - 60 - Number(oy.harajat));
+
+  //  Ta'minotchiga to'lov foyda-zararga tushmaydi
+  const tm = (await H.id(`SELECT in_pl FROM expense_items
+    WHERE group_code = 'TAMIN' AND lower(name) = lower('Ta''minotchilarga to''lov')`));
+  assert.equal(tm.in_pl, false);
 });
 
 test('yakun', async () => {

@@ -1097,11 +1097,14 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
               COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'expense'), 0)::numeric
                 AS harajat,
               (COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'income'), 0)
-               - COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'expense'), 0)
+               - COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind IN ('expense', 'cogs')), 0)
               )::numeric AS foyda,
               --  Divident foydadan KEYIN (izoh: sql/cash.sql, is_dividend)
               COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'dividend'), 0)::numeric
-                AS divident
+                AS divident,
+              --  Tannarx — chiqib ketgan mahsulotning materiali
+              COALESCE(SUM(p.amount_usd) FILTER (WHERE p.kind = 'cogs'), 0)::numeric
+                AS tannarx
          FROM oy LEFT JOIN v_pl_month p ON p.pl_month = oy.m
         GROUP BY oy.m ORDER BY oy.m`, [from, to]),
 

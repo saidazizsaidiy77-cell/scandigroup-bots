@@ -1464,3 +1464,164 @@ BEGIN
     INSERT INTO migration_flags (key) VALUES ('qoplash-sp');
   END IF;
 END $$;
+
+-- ════════════════════════════════════════════════ FOYDA-ZARAR (P&L)
+--
+--  Oy bo'yicha: TUSHUM minus HARAJAT. Ikki manba bitta jadvalda —
+--  sotuv konverlardan, harajat esa kassadan.
+--
+--  Tushum CHIQIB KETGAN mahsulotdan hisoblanadi (`ship_on`), buyurtma
+--  yozilgan kundan emas: buyurtma hali pul emas, mahsulot mijozda
+--  bo'lgandagina sotuv bo'ladi. Mijoz balansi ham shu qoida bilan
+--  yuritiladi, ya'ni hisobot va qarzdorlik bir-biriga mos tushadi.
+--
+--  Harajat esa TO'LOV sanasi bo'yicha emas, HISOBOT OYI bo'yicha
+--  (`pl_month`): sentabrda to'langan avgust ijarasi avgust foydasini
+--  kamaytiradi.
+--
+--  Tannarx (`kind = 'cogs'`) — chiqib ketgan mahsulotning materiali,
+--  pastda: savdo − tannarx = yalpi foyda, undan harajat ayiriladi.
+--  ★ TUSHUM TURKUM BO'YICHA BO'LINADI (zavod qarori, 2026-10).
+--  Ilgari u BITTA «Sotuv» qatori edi va direktorning savoli javobsiz
+--  qolardi: «mehmonxonadan qancha, stuldan qancha». Javob ma'lumotda
+--  bor edi — har konver o'z guruhini biladi — lekin hisobot uni
+--  yig'ib tashlardi.
+--
+--  Turkum GURUHDAN o'qiladi (`sales_category`), mahsulotdan emas:
+--  penal va kamod bitta turkumda, lekin ikkita guruh va ikkita
+--  marshrut (izoh: sql/catalog-groups.sql).
+--
+--  Qatorlar harajat bilan BIR XIL shaklda: guruh — «Mahsulot
+--  sotuvi», modda esa turkumning nomi. Shu sababdan sahifa
+--  o'zgarmaydi: u guruhni ochib, ichidagi moddalarni ko'rsatadi
+--  va tushum endi o'zi to'rtga bo'linib chiqadi.
+--
+--  Turkumi YO'Q guruh «Turkumsiz» bo'lib turadi va yo'qolmaydi: yangi
+--  guruh qo'shilib, katagi to'ldirilmagani ko'rinib tursin — aks
+--  holda uning sotuvi hisobotdan jimgina tushib qolardi.
+DROP VIEW IF EXISTS v_pl_month CASCADE;
+CREATE VIEW v_pl_month AS
+SELECT date_trunc('month', x.on_date)::date AS pl_month,
+       'income'::text AS kind,
+       'SOTUV'::text  AS group_code,
+       'Mahsulot sotuvi'::text AS group_name,
+       0 AS group_sort,
+       NULL::int AS item_id,
+       COALESCE(sc.name, 'Turkumsiz')::text AS item_name,
+       SUM(x.amount)::numeric(16,2) AS amount_usd,
+       COUNT(*)::int AS ops,
+       --  Tartib ZAVODNIKI, alifbo emas: mehmonxona → yotoqxona →
+       --  stol → stul. Turkumsizi oxirida (99) — u javob emas,
+       --  to'ldirilmagan katakning belgisi.
+       COALESCE(sc.sort, 99)::int AS item_sort
+  FROM (
+    SELECT u.ship_on AS on_date, u.product_id, u.total_amount AS amount
+      FROM production_units u
+     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+       AND u.total_amount IS NOT NULL
+    UNION ALL
+    --  ★ MIJOZDAN QAYTGANI — QAYTGAN OYNING savdosidan ayiriladi
+    --  (izoh: sql/warehouse.sql, «Mijozdan qaytarish»). Chiqim qatori
+    --  o'z oyida o'zgarmaydi: o'sha oyda mahsulot haqiqatan sotilgan.
+    SELECT r.ret_on, u.product_id, -(i.qty * COALESCE(i.price, 0))
+      FROM cust_return_items i
+      JOIN cust_returns r      ON r.id = i.return_id AND r.status = 'accepted'
+      JOIN production_units u  ON u.id = i.unit_id
+  ) x
+  JOIN products p            ON p.id = x.product_id
+  JOIN product_groups g      ON g.id = p.group_id
+  LEFT JOIN sales_categories sc ON sc.code = g.sales_category
+ GROUP BY 1, COALESCE(sc.name, 'Turkumsiz'), COALESCE(sc.sort, 99)
+UNION ALL
+--  Divident `kind = 'dividend'`: harajatga QO'SHILMAYDI, foydadan
+--  keyin ayiriladi (izoh: yuqorida, `is_dividend`). Harajatni o'qiydigan
+--  har joy `kind = 'expense'` ni so'raydi, `<> 'income'` ni emas.
+--  Ta'minotchiga to'lov (`in_pl = false`) bu yerga TUSHMAYDI: material
+--  quyida TANNARX bo'lib keladi (izoh: sql/cash.sql, `in_pl`).
+SELECT e.pl_month, CASE WHEN e.is_dividend THEN 'dividend' ELSE 'expense' END,
+       e.group_code, e.group_name, e.group_sort,
+       e.item_id, e.item_name, e.amount_usd, e.ops, 0
+  FROM v_expenses e
+ WHERE e.in_pl
+UNION ALL
+--  ★ TANNARX — CHIQIB KETGAN MAHSULOTNING MATERIALI (zavod qarori,
+--  2026-11; `kind = 'cogs'`). Savdo bilan BIR XIL o'q: mahsulot chiqqan
+--  oyda (`ship_on`), qaytgani qaytgan oyda ayiriladi. Tsexda va omborda
+--  turgan mahsulotning sarfi hali tannarx EMAS — u zaxirada.
+--
+--  Konverning bir donasi — tannarx hisobotidagi bilan AYNAN bir xil
+--  formula (`modules/cost.js`): raqamning hamma sarfi ÷ raqamning
+--  chiqqan (bekor qilinmagan) donasi; narx — harakatda qotgani yoki
+--  manba omborning o'rtacha kirim narxi. Qator — material TURKUMI
+--  (LDSP, MDF, Furnitura…): «tannarxning qaysi qismi oshdi» degan
+--  savol shu yerda.
+--
+--  Sotib olingan mahsulot (matras) — `buy_price`: material sarfi yo'q.
+--  Yuk xatiga yozilgan furnitura (`to_kind = 'order'`) — buyurtma
+--  chiqqan oyda.
+SELECT t.pl_month, 'cogs', 'TANNARX', 'Tannarx', -1, NULL::int,
+       t.item_name, SUM(t.amount)::numeric(16,2), COUNT(*)::int, MIN(t.item_sort)
+  FROM (
+    WITH ortacha AS (
+      SELECT place_id, material_id,
+             SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
+             / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
+               AS price
+        FROM v_material_flow WHERE kind = 'warehouse'
+       GROUP BY place_id, material_id),
+    narxli AS (
+      SELECT mv.*, mv.qty * COALESCE(mv.price_usd, o.price) AS summa,
+             COALESCE(mc.name, 'Boshqa material') AS turkum,
+             COALESCE(mc.sort, 98) AS tsort
+        FROM material_moves mv
+        JOIN materials m ON m.id = mv.material_id
+        LEFT JOIN material_categories mc ON mc.code = m.category
+        LEFT JOIN ortacha o ON o.place_id = mv.from_id
+                           AND o.material_id = mv.material_id
+                           AND mv.from_kind = 'warehouse'
+       WHERE mv.status = 'ok' AND mv.to_kind IN ('unit', 'order')),
+    raqam AS (
+      SELECT u.conveyor_no, n.turkum, n.tsort, SUM(n.summa) AS summa
+        FROM narxli n JOIN production_units u ON u.id = n.to_id
+       WHERE n.to_kind = 'unit'
+       GROUP BY 1, 2, 3),
+    soni AS (
+      SELECT conveyor_no,
+             SUM(CASE WHEN status = 'shipped' THEN qty - COALESCE(returned_qty, 0)
+                      ELSE qty END) FILTER (WHERE status <> 'cancelled') AS soni
+        FROM production_units GROUP BY conveyor_no),
+    dona AS (
+      SELECT r.conveyor_no, r.turkum, r.tsort, r.summa / NULLIF(s.soni, 0) AS narx
+        FROM raqam r JOIN soni s USING (conveyor_no))
+    --  chiqqan konver
+    SELECT date_trunc('month', u.ship_on)::date AS pl_month, d.turkum AS item_name,
+           d.tsort AS item_sort, u.qty * d.narx AS amount
+      FROM production_units u JOIN dona d USING (conveyor_no)
+     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+    UNION ALL
+    --  mijozdan qaytgani — qaytgan oyda ayiriladi
+    SELECT date_trunc('month', r.ret_on)::date, d.turkum, d.tsort, -(i.qty * d.narx)
+      FROM cust_return_items i
+      JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
+      JOIN production_units u ON u.id = i.unit_id
+      JOIN dona d ON d.conveyor_no = u.conveyor_no
+    UNION ALL
+    --  sotib olingan mahsulot
+    SELECT date_trunc('month', u.ship_on)::date, 'Sotib olingan mahsulot', 99,
+           u.qty * u.buy_price
+      FROM production_units u
+     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL AND u.buy_price IS NOT NULL
+    UNION ALL
+    SELECT date_trunc('month', r.ret_on)::date, 'Sotib olingan mahsulot', 99,
+           -(i.qty * u.buy_price)
+      FROM cust_return_items i
+      JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
+      JOIN production_units u ON u.id = i.unit_id AND u.buy_price IS NOT NULL
+    UNION ALL
+    --  yuk xatiga yozilgan furnitura
+    SELECT date_trunc('month', o.shipped_on)::date, n.turkum, n.tsort, n.summa
+      FROM narxli n JOIN orders o ON o.id = n.to_id
+     WHERE n.to_kind = 'order' AND o.status = 'shipped' AND o.shipped_on IS NOT NULL
+  ) t
+ WHERE t.amount IS NOT NULL
+ GROUP BY t.pl_month, t.item_name;

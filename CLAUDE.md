@@ -3211,6 +3211,32 @@ divident AYIRILMAGAN holda, ostida «divident N» yozuvi. Belgi
 MODDADA, boshlang'ichi bir martalik (`migration_flags`:
 `divident-foydadan`).
 
+**★ TANNARX FOYDA-ZARARDA** (zavod qarori, 2026-11; `v_pl_month`
+dagi `kind = 'cogs'`, view endi `sql/materials.sql` da):
+
+    savdo − tannarx = yalpi foyda
+    yalpi foyda − harajat = foyda
+    foyda − divident = qoldiq
+
+Tannarx — CHIQIB KETGAN mahsulotniki, savdo bilan bir xil o'qda
+(`ship_on`), qaytgani qaytgan oyda ayiriladi. Tsexda va omborda
+turgan mahsulotning sarfi hali tannarx emas — u zaxira. Ichida:
+konverga yozilgan xom ashyo va FURNITURA sarfi (`material_moves`,
+`to_kind = 'unit'`; bir donasi tannarx hisobotidagi bilan AYNAN bir
+xil formula — raqamning hamma sarfi ÷ chiqqan dona), yuk xatiga
+yozilgan furnitura (`to_kind = 'order'`, buyurtma chiqqan oyda) va
+sotib olingan mahsulot (`buy_price`, matras). Qator — material
+TURKUMI (LDSP, MDF, Furnitura…). **Ish haqi tannarxda EMAS** — u
+kassadagi oylik bo'lib harajatda qoladi, ikki marta sanalmaydi.
+
+**★ TA'MINOTCHIGA TO'LOV FOYDA-ZARARDAN CHIQDI** (`expense_items.in_pl`,
+`migration_flags`: `taminot-pl-dan`). Material tannarx bo'lib keladi;
+to'lov ham harajat bo'lib tursa bitta material ikki marta ayirilardi.
+To'lov — qarzni yopish: pul oqimida, harajat ro'yxatida
+(`v_expenses`) va ta'minotchi qarzida qoladi. Natijasi: sarf
+yozilmagan oylarda foyda yuqori ko'rinadi — material konverga
+yozilmasa tannarxga tushmaydi.
+
 **★ MOLIYA PANELIDA TUSHUM USTUNI** (zavod qarori, 2026-10;
 `/moliya-panel.html`, «Oylik natija», `/api/cash/dashboard` dagi
 `oylar.pul`). Savdo bilan harajat yonida — kassaga MIJOZDAN kelgan pul,

@@ -125,7 +125,7 @@ async function faktlar(yil) {
               COALESCE(SUM(amount_usd) FILTER (WHERE kind = 'expense'), 0)::numeric
                 AS harajat,
               (COALESCE(SUM(amount_usd) FILTER (WHERE kind = 'income'), 0)
-               - COALESCE(SUM(amount_usd) FILTER (WHERE kind = 'expense'), 0)
+               - COALESCE(SUM(amount_usd) FILTER (WHERE kind IN ('expense', 'cogs')), 0)
               )::numeric AS foyda
          FROM v_pl_month
         WHERE pl_month BETWEEN $1::date AND $2::date
