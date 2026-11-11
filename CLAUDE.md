@@ -3258,7 +3258,7 @@ Tannarx hisoboti (`/tannarx.html`) hali faqat konver sarfini ko'radi.
 yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
 ko'rsatmaydi, ULUSH esa ko'rsatadi. Foiz BITTA:
 
-    Marja % = (savdo − tannarx) ÷ savdo × 100
+    Yalpi marja % = (savdo − tannarx) ÷ savdo × 100
 
 Yalpi foyda ostida turadi; bosilsa TURI bo'yicha marja ochiladi
 (yalpi foyda qatorining o'zi ham bosilsa turi bo'yicha ochiladi —

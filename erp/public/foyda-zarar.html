@@ -111,7 +111,7 @@ function draw() {
   //  ★ MARJA = (savdo − tannarx) ÷ savdo (zavod qarori, 2026-11): savdo
   //  yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
   //  ko'rsatmaydi, ulush esa ko'rsatadi. Boshqa foiz chizilmaydi.
-  $('kPrIz').textContent = 'marja ' + (jami(inc)
+  $('kPrIz').textContent = 'yalpi marja ' + (jami(inc)
     ? ((jami(inc) - jami(cogs)) / jami(inc) * 100).toFixed(1).replace('.', ',') + '%' : '—');
 
   //  ★ SAVDO TURKUMLARGA BO'LINADI (zavod qarori, 2026-10):
@@ -243,7 +243,7 @@ function draw() {
         yalpi, '', ` onclick="toggle('YALPI')" style="cursor:pointer"`)}
       ${ochiq.has('YALPI') ? turYalpi() : ''}
       ${foiz(`<span class="muted" style="margin-right:6px">${
-          ochiq.has('MARJA') ? '&minus;' : '+'}</span><b>Marja, %</b> — (savdo − tannarx) ÷ savdo`,
+          ochiq.has('MARJA') ? '&minus;' : '+'}</span><b>Yalpi marja, %</b> — (savdo − tannarx) ÷ savdo`,
         yalpi, inc, ` onclick="toggle('MARJA')" style="cursor:pointer"`)}
       ${ochiq.has('MARJA') ? turMarja() : ''}
       ${qator('<b>Jami harajat</b>', exp)}
@@ -310,7 +310,7 @@ function exportCsv() {
     ms.forEach(m => o[m] = (by[m] || 0) - (c[m] || 0));
     push('  ' + k, o);
   });
-  pf('Marja, %', yf);
+  pf('Yalpi marja, %', yf);
   Object.entries(t).forEach(([k, by]) => {
     const c = tt[k] || {};
     const pc = (x, y) => y ? (x / y * 100).toFixed(1) : '';
