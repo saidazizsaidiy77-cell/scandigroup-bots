@@ -145,7 +145,7 @@ function draw() {
   const foyda = {};
   ms.forEach(m => foyda[m] = (inc[m] || 0) - (exp[m] || 0));
   //  ★ DIVIDENT FOYDADAN KEYIN (zavod qarori, 2026-11): harajat emas,
-  //  foydani taqsimlash. Qolgani — taqsimlanmagan foyda.
+  //  foydani taqsimlash. Qolgani — «Qoldiq» (ta'sischi bitta, ya'ni taqsimlanmagan foyda degan qatlam yo'q).
   const div = yig(r => r.kind === 'dividend');
   const qoldi = {};
   ms.forEach(m => qoldi[m] = (foyda[m] || 0) - (div[m] || 0));
@@ -195,7 +195,7 @@ function draw() {
       }).join('')}
       ${qator('<b>FOYDA</b>', foyda)}
       ${qator('<span class="muted">− Divident</span>', div)}
-      ${qator('<b>Taqsimlanmagan foyda</b>', qoldi)}
+      ${qator('<b>Qoldiq</b>', qoldi)}
     </tbody></table></div>
     <p class="muted" style="font-size:12px;margin-top:12px">
       Savdo chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
@@ -235,7 +235,7 @@ function exportCsv() {
   const dv = yig(r => r.kind === 'dividend');
   push('Divident', dv);
   const q = {}; ms.forEach(m => q[m] = (f[m] || 0) - (dv[m] || 0));
-  push('Taqsimlanmagan foyda', q);
+  push('Qoldiq', q);
   const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)
     .join(';')).join('\n');
   const a = document.createElement('a');

@@ -3197,7 +3197,11 @@ foyda-zararda harajat bo'lib ayirilardi — foyda kam ko'rinardi,
 holbuki divident foydaning O'ZIDAN beriladi. Endi:
 
     savdo − harajat = foyda
-    foyda − divident = taqsimlanmagan foyda
+    foyda − divident = qoldiq
+
+Oxirgi qator nomi **«Qoldiq»**, «taqsimlanmagan foyda» EMAS (zavod
+qarori, 2026-11): ta'sischi bitta va foyda ulushlarga bo'linmaydi —
+divident berilgandan keyin korxonada QOLGANI, xolos.
 
 Kassada yozilishi o'zgarmadi (o'sha modda, o'sha oyna); faqat
 hisobotdagi joyi boshqa. Harajatni o'qiydigan har joy

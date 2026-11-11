@@ -644,7 +644,7 @@ SELECT w.id, w.name, w.phone,
 --  foydaning O'ZIDAN beriladi. Endi u FOYDADAN KEYIN turadi:
 --
 --      savdo − harajat = foyda
---      foyda − divident = taqsimlanmagan foyda
+--      foyda − divident = qoldiq
 --
 --  Belgi MODDADA (4-qoida), boshlang'ichi bir martalik: saytdan
 --  qayta nomlangan modda keyingi deployda qaytarib belgilanmasin.
