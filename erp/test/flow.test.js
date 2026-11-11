@@ -337,6 +337,7 @@ test('qisman qabulda ortiqcha bron bo\'lak bilan ketadi', async () => {
   await db.query(`INSERT INTO unit_reservations (unit_id, order_item_id, qty)
     VALUES ($1, $2, 10)`, [ok.body.done[0].unit_id, item.id]);
   await db.query(`UPDATE orders SET status = 'to_ship' WHERE id = $1`, [oi.id]);
+  await H.furnBer(oi.id);
   const sh = await admin('POST', `/api/sales/orders/${oi.id}/ship`, {});
   assert.equal(sh.status, 400, sh.text);
   assert.match(sh.body.error, /konverda 2 ta/);
@@ -3772,6 +3773,7 @@ test('yuk xatida ombor mudiri ko\'rsatiladi', async () => {
     { item_id: qator.id, unit_id: u.id, qty: 1 });
   await admin('POST', `/api/sales/orders/${z.id}/send`);
   const mudir = H.api(base, await H.sessionFor('Sinov ombor mudiri'));
+  await H.furnBer(z.id);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-06' })).status, 200);
 
@@ -3894,6 +3896,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal(javonda.warehouse_code, 'TM');
 
   // Hammasi kelmagunча chiqarib bo'lmaydi
+  await H.furnBer(z.id);
   const erta = await mudir('POST', `/api/sales/orders/${z.id}/ship`);
   assert.equal(erta.status, 400);
   assert.match(erta.body.error, /T\/M omborda yo'q/);
@@ -3920,6 +3923,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
                 unit_price: 250 }] })).status, 200);
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
 
+  await H.furnBer(z.id);
   const kam = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-04' });
   assert.equal(kam.status, 400, kam.text);
@@ -3955,6 +3959,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
 
   // Endi chiqadi. Mudir faqat chiqqan kunni qo'yadi — pul kirim
   // sanasi savdoniki va ombordan yozilmaydi.
+  await H.furnBer(z.id);
   const r = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-04', payment_on: '2026-10-20' });
   assert.equal(r.status, 200, r.text);
@@ -4007,6 +4012,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
 
   // Ro'yxatdan chiqdi, ikkinchi marta jo'natilmaydi
   assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);
+  await H.furnBer(z.id);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`)).status, 400);
 
   //  ★ CHIQMAGAN QATOR HUJJATDAN OLIB TASHLANADI, chiqqani esa YO'Q
@@ -4286,6 +4292,7 @@ test('mudir buyurtmani bugunga oladi va kun hisobi ro\'yxat bilan bir xil', asyn
 
   //  Chiqarib yuborilgach o'sha kunning «chiqdi» siga o'tadi — olingan
   //  soni esa o'zgarmaydi: kun shuncha reja bilan boshlangan.
+  await H.furnBer(z.id);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: bugun })).status, 200);
   const k2 = (await mudir('GET', '/api/sales/day')).body;
@@ -8578,6 +8585,7 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
     assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
       { item_id: q.id, unit_id: u.id, qty: 2 })).status, 200);
     assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+    await H.furnBer(z.id);
     const sh = await admin('POST', `/api/sales/orders/${z.id}/ship`,
       //  ★ BOSHQA HECH KIM TEGMAYDIGAN OY: kunlik reja testi BUGUNGI kun
       //  bilan chiqaradi va qotib qolgan joriy oy kalendar almashganda
@@ -10823,6 +10831,7 @@ test('konver raqami bo\'yicha qidiruv: bo\'laklari qayerdaligini aytadi', async 
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
     { item_id: qator.id, unit_id: omborda, qty: 4 })).status, 200);
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  await H.furnBer(z.id);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-04' })).status, 200);
 
@@ -10894,6 +10903,7 @@ test('chiqib ketgan buyurtmani faqat administrator tuzatadi', async () => {
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
     { item_id: q.id, unit_id: u.id, qty: 2 })).status, 200);
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  await H.furnBer(z.id);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-05' })).status, 200);
 
@@ -10983,6 +10993,7 @@ test('chiqib ketgan buyurtmada konver raqami ko\'rinadi', async () => {
   assert.equal(oldin[0].status, 'fg');
 
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  await H.furnBer(z.id);
   assert.equal((await mudir('POST', `/api/sales/orders/${z.id}/ship`,
     { ship_on: '2026-10-06' })).status, 200);
 
@@ -13675,19 +13686,44 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/assign`,
     { item_id: q.id, unit_id: u.id, qty: 3 })).status, 200);
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
+  //  ★ FURNITURASIZ CHIQMAYDI (penal — `needs_hardware`)
+  const yoq = await admin('POST', `/api/sales/orders/${z.id}/ship`, { ship_on: '2032-04-10' });
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /Furnitura berilmagan/);
+  const nav = async () => ((await admin('GET', '/api/navbat')).body.navbat
+    .find((x) => x.page === '/furnitura.html') || {}).n;
+  const ro = (await admin('GET', '/api/materials/furn/orders')).body.rows;
+  assert.ok(ro.some((o) => o.id === z.id), 'ro\'yxatda');
+  assert.equal(await nav(), ro.filter((o) => o.berildi < o.mahsulot).length,
+    'navbat ro\'yxat bilan bir xil');
+
+  //  Furnitura omborida 10 ta ruchka (donasi 2 $), 6 tasi yuk xatiga
+  const furnWh = await H.id(`SELECT id FROM warehouses WHERE code = 'FURN'`);
+  await db.query(`INSERT INTO material_moves
+      (material_id, qty, from_kind, to_kind, to_id, ccy, price)
+    VALUES ($1, 10, 'opening', 'warehouse', $2, 'USD', 2)`, [mat, furnWh.id]);
+  const f = await admin('POST', `/api/materials/furn/order/${z.id}`,
+    { product_id: penal.id, items: [{ material_id: mat, qty: 6 }] });
+  assert.equal(f.status, 200, f.text);
   const sh = await admin('POST', `/api/sales/orders/${z.id}/ship`, { ship_on: '2032-04-10' });
   assert.equal(sh.status, 200, sh.text);
 
   const pl = (await admin('GET', '/api/cash/pl?from=2032-04&to=2032-04')).body;
   const cogs = pl.rows.filter((r) => r.kind === 'cogs');
-  assert.equal(cogs.reduce((a, r) => a + Number(r.amount_usd), 0), 60,
-    '3 ta chiqdi × donasi 20 $');
-  assert.ok(cogs.some((r) => r.item_name === 'Furnitura'), 'material turkumi bo\'yicha');
+  assert.equal(cogs.reduce((a, r) => a + Number(r.amount_usd), 0), 72,
+    '3 ta chiqdi × donasi 20 $ + furnitura 6 × 2 $');
+  assert.ok(cogs.every((r) => r.item_name !== 'Furnitura'), 'furnitura alohida qator emas');
+  assert.ok(cogs.some((r) => r.item_name === 'Mehmonxona to\'plami'), 'savdo turkumi bo\'yicha');
+
+  //  Konver pasportida furnitura chiqqan donaga qo'shiladi
+  const ps = (await admin('GET', '/api/materials/conveyor?no=' + u.conveyor_no)).body;
+  assert.equal(ps.furn.length, 1);
+  assert.equal(Number(ps.furn[0].summa), 12);
 
   const d = (await admin('GET', '/api/cash/dashboard?from=2032-04&to=2032-04')).body;
   const oy = d.oylar.find((r) => r.mon === '2032-04');
-  assert.equal(Number(oy.tannarx), 60);
-  assert.equal(Number(oy.foyda), Number(oy.tushum) - 60 - Number(oy.harajat));
+  assert.equal(Number(oy.tannarx), 72);
+  assert.equal(Number(oy.foyda), Number(oy.tushum) - 72 - Number(oy.harajat));
 
   //  Ta'minotchiga to'lov foyda-zararga tushmaydi
   const tm = (await H.id(`SELECT in_pl FROM expense_items

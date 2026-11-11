@@ -1038,7 +1038,41 @@ router.get('/conveyor', need(...VIEW, 'production.view', 'production.entry'),
       WHERE mv.to_kind = 'unit' AND lower(u.conveyor_no) = lower($1)
       ORDER BY mv.moved_on, mv.id`, [no]);
   if (!narx) rows.forEach((r) => { delete r.price; });
-  res.json({ conveyor_no: no, narx, rows });
+  //  ★ CHIQQANDAN KEYIN FURNITURA O'ZI QO'SHILADI (zavod qarori,
+  //  2026-11). Furnitura yuk xatiga MAHSULOT bo'yicha yoziladi; konver
+  //  qaysi qatorniki ekani saqlanmagan, shuning uchun ulush shu
+  //  buyurtmada shu mahsulotdan chiqqan donaga bo'linadi (`order_no` +
+  //  `product_id` — `sotilgan-narx` bilan bir xil bog'lanish).
+  const furn = narx ? (await db.query(
+    `WITH ortacha AS (
+       SELECT place_id, material_id,
+              SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
+              / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
+                AS price
+         FROM v_material_flow WHERE kind = 'warehouse'
+        GROUP BY place_id, material_id),
+     f AS (
+       SELECT o.order_no, mv.product_id,
+              SUM(mv.qty * COALESCE(mv.price_usd, a.price)) AS summa
+         FROM material_moves mv
+         JOIN orders o ON o.id = mv.to_id AND o.status = 'shipped'
+         LEFT JOIN ortacha a ON a.place_id = mv.from_id
+                            AND a.material_id = mv.material_id
+        WHERE mv.to_kind = 'order' AND mv.status = 'ok'
+        GROUP BY 1, 2),
+     s AS (
+       SELECT order_no, product_id, SUM(qty) AS soni
+         FROM production_units
+        WHERE status = 'shipped' AND order_no IS NOT NULL
+        GROUP BY 1, 2)
+     SELECT u.order_no, SUM(u.qty)::int AS qty,
+            SUM(f.summa * u.qty / NULLIF(s.soni, 0))::NUMERIC(16,2) AS summa
+       FROM production_units u
+       JOIN f ON f.order_no = u.order_no AND f.product_id = u.product_id
+       JOIN s ON s.order_no = u.order_no AND s.product_id = u.product_id
+      WHERE lower(u.conveyor_no) = lower($1) AND u.status = 'shipped'
+      GROUP BY u.order_no ORDER BY u.order_no`, [no])).rows : [];
+  res.json({ conveyor_no: no, narx, rows, furn });
 }));
 
 //  Konverga nima biriktirilgani va qayerdan olinishi mumkinligi —
@@ -1347,6 +1381,153 @@ router.post('/moves/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
     await client.query('ROLLBACK');
     return res.status(e.status || 400).json({ error: e.message });
   } finally { client.release(); }
+}));
+
+// ═══════════════════════════════════════════ FURNITURA YUK XATIGA
+//
+//  ★ ZAVOD QARORI (2026-11; izoh: sql/materials.sql, `needs_hardware`).
+//  Furnitura tsexda konverga QO'YILMAYDI — mahsulot sotilmasa ruchkalar
+//  ham omborda muzlab yotardi. Xom ashyo mudiri chiqayotgan buyurtmani
+//  ko'radi va har MAHSULOTIGA kerakli furniturani yozadi; ombor qoldig'i
+//  shu paytda kamayadi, tannarx esa buyurtma chiqib ketgan oyda o'sha
+//  mahsulotning turkumiga tushadi.
+//
+//  Ro'yxat — «Mijozga chiqarilsin» (`to_ship`) buyurtmalar: savdo kunni
+//  kelishib bo'lgan, mudir yig'adi. Belgisi bor guruhning mahsuloti
+//  bo'lmasa buyurtma ro'yxatga tushmaydi.
+//
+//  Shart BITTA joyda (`FURN_KERAK`): ro'yxat, navbat va `/ship` dagi
+//  to'siq bir xil qatorlarni sanaydi.
+const FURN_KERAK = `
+  SELECT i.order_id, i.product_id, p.name AS product, g.name AS product_type,
+         SUM(i.qty)::int AS qty,
+         EXISTS (SELECT 1 FROM material_moves mv
+                  WHERE mv.to_kind = 'order' AND mv.to_id = i.order_id
+                    AND mv.product_id = i.product_id AND mv.status = 'ok') AS berildi
+    FROM order_items i
+    JOIN products p       ON p.id = i.product_id
+    JOIN product_groups g ON g.id = p.group_id AND g.needs_hardware
+   GROUP BY i.order_id, i.product_id, p.name, g.name`;
+
+async function furnOmbor(client, req, id) {
+  const r = (await client.query(
+    `SELECT w.id, w.name FROM warehouses w
+      WHERE w.kind = 'material' AND w.is_active AND w.shop_id IS NULL
+        AND ${id ? 'w.id = $2' : "w.code = 'FURN'"}
+        AND ($1::int[] IS NULL OR COALESCE(w.owner_shop_id, w.shop_id, 0) = ANY($1))`,
+    id ? [whDoira(req), id] : [whDoira(req)])).rows[0];
+  if (!r) { const e = new Error('Ombor topilmadi'); e.status = 400; throw e; }
+  return r;
+}
+
+router.get('/furn/orders', need(...VIEW), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `WITH k AS (${FURN_KERAK})
+     SELECT o.id, o.order_no, o.due_on, o.plan_on, c.name AS customer,
+            COUNT(*)::int AS mahsulot,
+            COUNT(*) FILTER (WHERE k.berildi)::int AS berildi,
+            json_agg(json_build_object('product', k.product,
+              'product_type', k.product_type, 'qty', k.qty,
+              'berildi', k.berildi) ORDER BY k.product) AS items
+       FROM orders o
+       JOIN k ON k.order_id = o.id
+       LEFT JOIN customers c ON c.id = o.customer_id
+      WHERE o.status = 'to_ship'
+      GROUP BY o.id, c.name
+      ORDER BY (COUNT(*) FILTER (WHERE NOT k.berildi) = 0), o.due_on NULLS LAST, o.id`);
+  res.json({ rows });
+}));
+
+router.get('/furn/order/:id', need(...VIEW), wrap(async (req, res) => {
+  const o = (await db.query(
+    `SELECT o.id, o.order_no, o.status, o.due_on, c.name AS customer
+       FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
+      WHERE o.id = $1`, [req.params.id])).rows[0];
+  if (!o) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+  const [items, moves] = await Promise.all([
+    db.query(`SELECT * FROM (${FURN_KERAK}) k WHERE k.order_id = $1
+               ORDER BY k.product`, [o.id]),
+    db.query(
+      `SELECT mv.id, mv.product_id, mv.qty, mv.moved_on, mv.status,
+              m.name AS material, m.code, m.uom, w.name AS warehouse,
+              wk.name AS worker
+         FROM material_moves mv
+         JOIN materials m ON m.id = mv.material_id
+         LEFT JOIN warehouses w ON w.id = mv.from_id AND mv.from_kind = 'warehouse'
+         LEFT JOIN workers wk   ON wk.id = mv.worker_id
+        WHERE mv.to_kind = 'order' AND mv.to_id = $1
+        ORDER BY mv.id`, [o.id]),
+  ]);
+  res.json({ order: o, items: items.rows, moves: moves.rows,
+             warehouse: await furnOmbor(db, req, null).catch(() => null) });
+}));
+
+router.post('/furn/order/:id', need(...MANAGE), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(
+      `SELECT id, order_no, status FROM orders WHERE id = $1 FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!o) throw new Error('Buyurtma topilmadi');
+    //  Chiqib ketgan buyurtmaga yozilmaydi: tannarx o'sha oyda yopilgan.
+    if (o.status !== 'to_ship')
+      throw new Error('Furnitura faqat «Mijozga chiqarilsin» dagi buyurtmaga yoziladi');
+    const k = (await client.query(
+      `SELECT * FROM (${FURN_KERAK}) k WHERE k.order_id = $1 AND k.product_id = $2`,
+      [o.id, req.body.product_id])).rows[0];
+    if (!k) throw new Error('Bu mahsulotga furnitura yozilmaydi');
+    const wh = await furnOmbor(client, req, Number(req.body.warehouse_id) || null);
+    let n = 0;
+    for (const it of items) {
+      const qty = Number(it.qty);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const m = (await client.query(
+        `SELECT id, name FROM materials WHERE id = $1 AND active`,
+        [it.material_id])).rows[0];
+      if (!m) throw new Error('Material topilmadi');
+      await yetarlimi(client, wh.id, m.id, qty, m.name);
+      //  Narx chiqish paytida QOTADI (izoh: `chiqishNarxi`): buyurtma
+      //  bir hafta kutsa ham tannarx o'sha kungi o'rtacha bilan.
+      const narx = await chiqishNarxi(client, wh.id, m.id);
+      await client.query(
+        `INSERT INTO material_moves (material_id, qty, from_kind, from_id,
+                                     to_kind, to_id, product_id, note, worker_id,
+                                     ccy, price)
+         VALUES ($1,$2,'warehouse',$3,'order',$4,$5,$6,$7,
+                 CASE WHEN $8::numeric IS NULL THEN NULL ELSE 'USD' END, $8)`,
+        [m.id, qty, wh.id, o.id, k.product_id, trim(it.note), req.user.id, narx]);
+      n++;
+    }
+    if (!n) throw new Error('Birorta ham qator kiritilmadi');
+    await audit(req, { module: 'materials', action: 'furnitura', entity: 'order',
+                       entity_id: o.id,
+                       payload: { product_id: k.product_id, warehouse_id: wh.id,
+                                  count: n } }, client);
+    await client.query('COMMIT');
+    res.json({ saved: n });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  Adashib yozilgani bekor qilinadi — faqat buyurtma hali chiqmagan
+//  bo'lsa: chiqib ketgan yuk xatining furniturasi mijozda.
+router.post('/furn/moves/:id/cancel', need(...MANAGE), wrap(async (req, res) => {
+  const mv = (await db.query(
+    `SELECT mv.id, o.status FROM material_moves mv
+       JOIN orders o ON o.id = mv.to_id
+      WHERE mv.id = $1 AND mv.to_kind = 'order' AND mv.status = 'ok'`,
+    [req.params.id])).rows[0];
+  if (!mv) return res.status(404).json({ error: 'Qator topilmadi' });
+  if (mv.status === 'shipped')
+    return res.status(400).json({ error: 'Buyurtma chiqib ketgan — furnitura mijozda' });
+  await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`, [mv.id]);
+  await audit(req, { module: 'materials', action: 'furnitura-cancel',
+                     entity: 'material_moves', entity_id: mv.id });
+  res.json({ ok: true });
 }));
 
 // ════════════════════════════════════════════════════ KIRIM HUJJATI
@@ -2708,4 +2889,5 @@ router.post('/supply-report', need('purchasing.view', 'purchasing.manage'),
 
 module.exports = router;
 module.exports.saldoXabari = saldoXabari;
+module.exports.FURN_KERAK = FURN_KERAK;
 module.exports.saldoYubor = saldoYubor;

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Furnitura yuk xatiga · ZELTA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Furnitura yuk xatiga</h1></div>
+  <div class="row"><span class="row" id="erpUser"></span></div>
+</div>
+
+<div class="card">
+  <p class="muted" style="margin:0;max-width:900px">«Mijozga chiqarilsin» dagi
+    buyurtmalar. Har mahsulotga (sp, penal, kamod) berilgan furniturani yozing —
+    yozilmaguncha ombor mudiri buyurtmani chiqara olmaydi. Summasi buyurtma chiqib
+    ketgan oyda o'sha mahsulotning tannarxiga qo'shiladi.</p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div id="body"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
+<div id="modal"></div>
+
+<script>
+//  FURNITURA YUK XATIGA (zavod qarori, 2026-11; `/api/materials/furn/*`).
+//  Ro'yxat ham, qaysi mahsulotga kerakligi ham SERVERDAN (`FURN_KERAK`):
+//  navbat va `/ship` dagi to'siq bilan bitta shart.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+  c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const n3 = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+const d8 = (v) => v ? String(v).slice(8, 10) + '.' + String(v).slice(5, 7) + '.' + String(v).slice(2, 4) : '';
+const yozadi = () => App.can('materials.manage', 'production.manage');
+
+async function load() {
+  let d;
+  try { d = await App.api('/api/materials/furn/orders'); }
+  catch (e) { $('body').innerHTML = `<p class="late">${esc(e.message)}</p>`; return; }
+  $('body').innerHTML = !d.rows.length
+    ? '<p class="muted">Furnitura kutayotgan buyurtma yo\'q.</p>'
+    : `<div class="tbox"><table><thead><tr><th>Zakaz</th><th>Mijoz</th>
+        <th>Chiqish</th><th>Mahsulotlar</th><th>Holat</th></tr></thead><tbody>
+      ${d.rows.map((o) => `<tr class="click" onclick="och(${o.id})">
+        <td><b>${esc(o.order_no)}</b></td>
+        <td>${esc(o.customer || '')}</td>
+        <td>${d8(o.due_on)}</td>
+        <td>${o.items.map((i) => `${i.berildi ? '✓' : '•'} ${esc(i.product)}
+          <span class="muted">· ${esc(i.product_type)} · ${i.qty}</span>`).join('<br>')}</td>
+        <td>${o.berildi === o.mahsulot ? '<span class="tag ok">yozilgan</span>'
+          : `<span class="tag warn">${o.mahsulot - o.berildi} ta mahsulot kutmoqda</span>`}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
+
+let O = null, stock = [], qator = {};
+async function och(id) {
+  O = await App.api('/api/materials/furn/order/' + id);
+  if (O.warehouse && !stock.length)
+    stock = (await App.api('/api/materials/stock?warehouse_id=' + O.warehouse.id)).rows;
+  qator = {};
+  chiz();
+}
+
+function chiz() {
+  const o = O.order;
+  $('modal').innerHTML = `<div class="overlay" onclick="if(event.target===this)yop()">
+    <div class="modal">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">${esc(o.order_no)} · ${esc(o.customer || '')}</h2>
+        <button onclick="yop()">✕</button></div>
+      <p class="muted" style="font-size:12.5px">Ombor: ${esc(O.warehouse?.name || '—')}</p>
+      ${O.items.map((it) => blok(it)).join('')}
+    </div></div>`;
+}
+
+function blok(it) {
+  const mv = O.moves.filter((m) => m.product_id === it.product_id);
+  const q = qator[it.product_id] || [];
+  return `<div class="card" style="margin-top:12px">
+    <h3 style="margin:0 0 8px;font-size:15px">${esc(it.product)}
+      <span class="muted">· ${esc(it.product_type)} · ${it.qty} ta</span>
+      ${it.berildi ? ' <span class="tag ok">yozilgan</span>' : ' <span class="tag warn">kutmoqda</span>'}</h3>
+    ${mv.length ? `<table><tbody>${mv.map((m) => `<tr${m.status !== 'ok'
+        ? ' style="opacity:.5;text-decoration:line-through"' : ''}>
+      <td>${esc(m.material)}${m.code ? ` <span class="muted">${esc(m.code)}</span>` : ''}</td>
+      <td class="num">${n3(m.qty)} <span class="muted">${esc(m.uom || '')}</span></td>
+      <td class="muted">${d8(m.moved_on)} · ${esc(m.worker || '')}</td>
+      <td>${m.status === 'ok' && yozadi() && O.order.status !== 'shipped'
+        ? `<button class="ic" title="Bekor qilish" onclick="bekor(${m.id})">×</button>` : ''}</td>
+    </tr>`).join('')}</tbody></table>` : ''}
+    ${yozadi() && O.order.status === 'to_ship' ? `
+      ${q.map((r, i) => `<div class="row" style="gap:8px;margin-top:6px">
+        <span style="flex:1">${esc(r.name)} <span class="muted">· omborda ${n3(r.bor)} ${esc(r.uom || '')}</span></span>
+        <input type="number" min="0" step="any" style="width:90px" value="${r.qty || ''}"
+          oninput="qator[${it.product_id}][${i}].qty=this.value">
+        <button class="ic" onclick="qator[${it.product_id}].splice(${i},1);chiz()">×</button></div>`).join('')}
+      <input placeholder="Furnitura qidirish — nomi yoki kodi" style="width:100%;margin-top:8px"
+        oninput="qidir(${it.product_id}, this.value)">
+      <div id="nat${it.product_id}"></div>
+      ${q.length ? `<button class="primary" style="margin-top:8px" id="sv${it.product_id}"
+        onclick="saqla(${it.product_id})">Saqlash</button>
+        <div id="sv${it.product_id}Msg"></div>` : ''}` : ''}
+  </div>`;
+}
+
+function qidir(pid, v) {
+  const s = v.trim().toLowerCase();
+  const el = $('nat' + pid);
+  if (!s) { el.innerHTML = ''; return; }
+  const top = stock.filter((r) => (r.material + ' ' + (r.code || '')).toLowerCase().includes(s))
+    .slice(0, 12);
+  el.innerHTML = top.length ? top.map((r) => `<div class="click" style="padding:6px 4px;cursor:pointer;
+      border-bottom:1px solid var(--line)" onclick="qosh(${pid}, ${r.material_id})">
+      ${esc(r.material)} <span class="muted">· ${n3(r.qty)} ${esc(r.uom || '')}</span></div>`).join('')
+    : '<p class="muted" style="font-size:12.5px">Omborda topilmadi</p>';
+}
+
+function qosh(pid, mid) {
+  const r = stock.find((x) => x.material_id === mid);
+  (qator[pid] = qator[pid] || []).push({ material_id: mid, name: r.material,
+    uom: r.uom, bor: r.qty, qty: '' });
+  chiz();
+}
+
+async function saqla(pid) {
+  const b = $('sv' + pid); b.disabled = true;
+  try {
+    await App.api('/api/materials/furn/order/' + O.order.id, { method: 'POST', body: {
+      product_id: pid, warehouse_id: O.warehouse?.id,
+      items: qator[pid].map((r) => ({ material_id: r.material_id, qty: Number(r.qty) })) } });
+    stock = [];
+    await och(O.order.id); load();
+  } catch (e) {
+    b.disabled = false;
+    $('sv' + pid + 'Msg').innerHTML = `<div class="tag bad" style="margin-top:8px;white-space:normal">${esc(e.message)}</div>`;
+  }
+}
+
+async function bekor(id) {
+  if (!confirm('Furnitura qatorini bekor qilasizmi? Qoldiqqa qaytadi.')) return;
+  try { await App.api('/api/materials/furn/moves/' + id + '/cancel', { method: 'POST' }); }
+  catch (e) { alert(e.message); return; }
+  stock = [];
+  await och(O.order.id); load();
+}
+
+function yop() { $('modal').innerHTML = ''; O = null; }
+
+App.start(load, 'materials.view', 'materials.manage');
+</script>
+</body>
+</html>

@@ -3225,9 +3225,34 @@ konverga yozilgan xom ashyo va FURNITURA sarfi (`material_moves`,
 `to_kind = 'unit'`; bir donasi tannarx hisobotidagi bilan AYNAN bir
 xil formula — raqamning hamma sarfi ÷ chiqqan dona), yuk xatiga
 yozilgan furnitura (`to_kind = 'order'`, buyurtma chiqqan oyda) va
-sotib olingan mahsulot (`buy_price`, matras). Qator — material
-TURKUMI (LDSP, MDF, Furnitura…). **Ish haqi tannarxda EMAS** — u
-kassadagi oylik bo'lib harajatda qoladi, ikki marta sanalmaydi.
+sotib olingan mahsulot (`buy_price`, matras). **Qator — SAVDO
+TURKUMI** (mehmonxona · yotoqxona · stol · stul), material turkumi
+emas (zavod qarori, 2026-11): savdo bilan yonma-yon o'qiladi va
+furnitura alohida qator bo'lmaydi — mahsulotning o'z tannarxiga
+qo'shiladi. **Ish haqi tannarxda EMAS** — u kassadagi oylik bo'lib
+harajatda qoladi, ikki marta sanalmaydi.
+
+**★ FURNITURA YUK XATIGA — XOM ASHYO MUDIRI YOZADI** (zavod qarori,
+2026-11; `/furnitura.html`, `/api/materials/furn/*`). Tsexda konverga
+qo'yilsa mahsulot sotilmaguncha furnitura pul bo'lib muzlardi. Mudir
+«Mijozga chiqarilsin» dagi buyurtmani ochadi va HAR MAHSULOTIGA
+(9083 penal, Milano sp) berilganini yozadi: `material_moves`,
+`to_kind = 'order'`, `product_id` — qatorga emas, mahsulotga
+(qatorlar «Qaytarib olish» dan keyin qayta yoziladi). Narx chiqish
+paytida qotadi (`chiqishNarxi`), qoldiq to'sig'i (`yetarlimi`) bu
+yerda ham. Chiqib ketganidan keyin bekor qilinmaydi.
+
+**FURNITURASIZ CHIQMAYDI**: belgisi bor guruhning (`needs_hardware` —
+sp, penal, kamod) har mahsulotiga furnitura yozilmaguncha `/ship`
+rad etadi va mahsulot nomini yozadi. Shart BITTA joyda (`FURN_KERAK`,
+`modules/materials.js`): ro'yxat, menyudagi navbat (xom ashyo mudiri,
+`materials.manage`) va `/ship` shundan o'qiydi.
+
+**Konver pasportida** (`/konver.html`, «Xom ashyo sarfi») chiqib
+ketgan donaga furnitura O'ZI qo'shiladi: shu buyurtmada shu
+mahsulotdan chiqqan donaga bo'linadi (`order_no` + `product_id`,
+`sotilgan-narx` bilan bir xil bog'lanish). Faqat narx huquqida.
+Tannarx hisoboti (`/tannarx.html`) hali faqat konver sarfini ko'radi.
 
 **★ MARJA FOIZDA** (zavod qarori, 2026-11; `/foyda-zarar.html`). Savdo
 yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
@@ -3671,6 +3696,7 @@ Navbatlar (`erp/modules/nav.js`, `GET /api/navbat`):
 | `/omborlar.html` | vitrinadan qaytarish hujjati | T/M da `confirmed`, vitrinada `new` |
 | `/buyurtmalar.html` | bronning hammasi omborga kelgan, lekin yuborilmagan buyurtma | `sales.manage` |
 | `/kassalar.html` | topshirilgan, lekin qabul qilinmagan pul | `cash.manage` |
+| `/furnitura.html` | chiqarishga berilgan, furniturasi yozilmagan buyurtma | `materials.manage` |
 
 **★ NAVBAT — QILINADIGAN ISH, «YANGI YOZUV» EMAS.** Ro'yxatga raqam
 qo'yish oson, lekin har kuni turadigan raqamga ko'z o'rganib qoladi va

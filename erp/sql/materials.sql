@@ -305,6 +305,18 @@ BEGIN
   END IF;
 END $$;
 
+--  ★ FURNITURA MAHSULOTGA YOZILADI (zavod qarori, 2026-11). Yuk xatida
+--  bir nechta mahsulot bo'ladi va mudir har biriga alohida yig'adi:
+--  9083 penalga ruchka va petlya, Milano sp ga boshqasi. Tannarx shu
+--  sababdan MAHSULOTNING turkumiga qo'shiladi va konver pasportida o'sha
+--  mahsulotning chiqqan donalariga bo'linadi. Qatorga (order_items.id)
+--  emas, MAHSULOTGA bog'lanadi: qatorlar «Qaytarib olish» dan keyin
+--  qayta yoziladi (`saveItems`), mahsulot esa o'zgarmaydi — chiqqan
+--  konver bilan bog'lanish ham shu (`order_no` + `product_id`).
+ALTER TABLE material_moves ADD COLUMN IF NOT EXISTS product_id INT REFERENCES products(id);
+CREATE INDEX IF NOT EXISTS material_moves_order_idx
+  ON material_moves (to_id, product_id) WHERE to_kind = 'order';
+
 -- ═══════════════════════════════════════════════════════ TALABNOMA
 --
 --  ★ ZAVOD QARORI (2026-09). Tsex boshlig'i xom ashyoni og'zaki
@@ -1552,15 +1564,19 @@ UNION ALL
 --  Konverning bir donasi — tannarx hisobotidagi bilan AYNAN bir xil
 --  formula (`modules/cost.js`): raqamning hamma sarfi ÷ raqamning
 --  chiqqan (bekor qilinmagan) donasi; narx — harakatda qotgani yoki
---  manba omborning o'rtacha kirim narxi. Qator — material TURKUMI
---  (LDSP, MDF, Furnitura…): «tannarxning qaysi qismi oshdi» degan
---  savol shu yerda.
+--  manba omborning o'rtacha kirim narxi.
+--
+--  ★ QATOR — SAVDO TURKUMI, material turkumi emas (zavod qarori,
+--  2026-11): savdo bilan yonma-yon o'qiladi va har turkumning marjasi
+--  ko'rinadi. Furnitura alohida qator EMAS — mahsulotning o'z
+--  tannarxiga qo'shiladi.
 --
 --  Sotib olingan mahsulot (matras) — `buy_price`: material sarfi yo'q.
 --  Yuk xatiga yozilgan furnitura (`to_kind = 'order'`) — buyurtma
---  chiqqan oyda.
+--  chiqqan oyda, o'sha MAHSULOTNING turkumiga (`product_id`).
 SELECT t.pl_month, 'cogs', 'TANNARX', 'Tannarx', -1, NULL::int,
-       t.item_name, SUM(t.amount)::numeric(16,2), COUNT(*)::int, MIN(t.item_sort)
+       COALESCE(sc.name, 'Turkumsiz')::text, SUM(t.amount)::numeric(16,2),
+       COUNT(*)::int, COALESCE(sc.sort, 99)::int
   FROM (
     WITH ortacha AS (
       SELECT place_id, material_id,
@@ -1570,58 +1586,55 @@ SELECT t.pl_month, 'cogs', 'TANNARX', 'Tannarx', -1, NULL::int,
         FROM v_material_flow WHERE kind = 'warehouse'
        GROUP BY place_id, material_id),
     narxli AS (
-      SELECT mv.*, mv.qty * COALESCE(mv.price_usd, o.price) AS summa,
-             COALESCE(mc.name, 'Boshqa material') AS turkum,
-             COALESCE(mc.sort, 98) AS tsort
+      SELECT mv.*, mv.qty * COALESCE(mv.price_usd, o.price) AS summa
         FROM material_moves mv
-        JOIN materials m ON m.id = mv.material_id
-        LEFT JOIN material_categories mc ON mc.code = m.category
         LEFT JOIN ortacha o ON o.place_id = mv.from_id
                            AND o.material_id = mv.material_id
                            AND mv.from_kind = 'warehouse'
        WHERE mv.status = 'ok' AND mv.to_kind IN ('unit', 'order')),
     raqam AS (
-      SELECT u.conveyor_no, n.turkum, n.tsort, SUM(n.summa) AS summa
+      SELECT u.conveyor_no, SUM(n.summa) AS summa
         FROM narxli n JOIN production_units u ON u.id = n.to_id
        WHERE n.to_kind = 'unit'
-       GROUP BY 1, 2, 3),
+       GROUP BY 1),
     soni AS (
       SELECT conveyor_no,
              SUM(CASE WHEN status = 'shipped' THEN qty - COALESCE(returned_qty, 0)
                       ELSE qty END) FILTER (WHERE status <> 'cancelled') AS soni
         FROM production_units GROUP BY conveyor_no),
     dona AS (
-      SELECT r.conveyor_no, r.turkum, r.tsort, r.summa / NULLIF(s.soni, 0) AS narx
+      SELECT r.conveyor_no, r.summa / NULLIF(s.soni, 0) AS narx
         FROM raqam r JOIN soni s USING (conveyor_no))
     --  chiqqan konver
-    SELECT date_trunc('month', u.ship_on)::date AS pl_month, d.turkum AS item_name,
-           d.tsort AS item_sort, u.qty * d.narx AS amount
+    SELECT date_trunc('month', u.ship_on)::date AS pl_month, u.product_id,
+           u.qty * d.narx AS amount
       FROM production_units u JOIN dona d USING (conveyor_no)
      WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
     UNION ALL
     --  mijozdan qaytgani — qaytgan oyda ayiriladi
-    SELECT date_trunc('month', r.ret_on)::date, d.turkum, d.tsort, -(i.qty * d.narx)
+    SELECT date_trunc('month', r.ret_on)::date, u.product_id, -(i.qty * d.narx)
       FROM cust_return_items i
       JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
       JOIN production_units u ON u.id = i.unit_id
       JOIN dona d ON d.conveyor_no = u.conveyor_no
     UNION ALL
     --  sotib olingan mahsulot
-    SELECT date_trunc('month', u.ship_on)::date, 'Sotib olingan mahsulot', 99,
-           u.qty * u.buy_price
+    SELECT date_trunc('month', u.ship_on)::date, u.product_id, u.qty * u.buy_price
       FROM production_units u
      WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL AND u.buy_price IS NOT NULL
     UNION ALL
-    SELECT date_trunc('month', r.ret_on)::date, 'Sotib olingan mahsulot', 99,
-           -(i.qty * u.buy_price)
+    SELECT date_trunc('month', r.ret_on)::date, u.product_id, -(i.qty * u.buy_price)
       FROM cust_return_items i
       JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
       JOIN production_units u ON u.id = i.unit_id AND u.buy_price IS NOT NULL
     UNION ALL
-    --  yuk xatiga yozilgan furnitura
-    SELECT date_trunc('month', o.shipped_on)::date, n.turkum, n.tsort, n.summa
+    --  yuk xatiga yozilgan furnitura — o'sha mahsulotning turkumiga
+    SELECT date_trunc('month', o.shipped_on)::date, n.product_id, n.summa
       FROM narxli n JOIN orders o ON o.id = n.to_id
      WHERE n.to_kind = 'order' AND o.status = 'shipped' AND o.shipped_on IS NOT NULL
   ) t
+  LEFT JOIN products p          ON p.id = t.product_id
+  LEFT JOIN product_groups g    ON g.id = p.group_id
+  LEFT JOIN sales_categories sc ON sc.code = g.sales_category
  WHERE t.amount IS NOT NULL
- GROUP BY t.pl_month, t.item_name;
+ GROUP BY t.pl_month, COALESCE(sc.name, 'Turkumsiz'), COALESCE(sc.sort, 99);

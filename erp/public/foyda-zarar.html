@@ -165,7 +165,8 @@ function draw() {
       <td class="num"><b>${t < 0 ? `<span style="color:var(--bad)">${usd(t)}</span>` : usd(t)}</b></td></tr>`;
   };
 
-  //  Tannarx qatorlari — material turkumi bo'yicha (server tartibida)
+  //  Tannarx qatorlari — savdo TURKUMI bo'yicha (server tartibida):
+  //  furnitura alohida qator emas, mahsulotning o'z tannarxida.
   const tan = [];
   d.rows.filter(r => r.kind === 'cogs').forEach(r => {
     let i = tan.find(x => x.name === r.item_name);
@@ -213,7 +214,7 @@ function draw() {
             uning ostida: savdo · harajat · foyda uchtasi ham bir xil
             o'qiladi. -->
       ${qator(`<span class="muted" style="margin-right:6px">${
-          ochiq.has('TANNARX') ? '&minus;' : '+'}</span><b>Tannarx</b> — chiqqan mahsulotning materiali`,
+          ochiq.has('TANNARX') ? '&minus;' : '+'}</span><b>Tannarx</b> — chiqqan mahsulotning materiali va furniturasi`,
         cogs, '', ` onclick="toggle('TANNARX')" style="cursor:pointer"`)}
       ${ochiq.has('TANNARX') ? tan.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
@@ -242,8 +243,9 @@ function draw() {
     </tbody></table></div>
     <p class="muted" style="font-size:12px;margin-top:12px">
       Savdo va tannarx chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
-      Tannarx — konverga yozilgan xom ashyo va furnitura sarfi hamda sotib
-      olingan mahsulot narxi; ish haqi harajatda. Ta'minotchiga to'lov bu
+      Tannarx — konverga yozilgan xom ashyo sarfi, yuk xatiga berilgan
+      furnitura va sotib olingan mahsulot narxi, mahsulotning turkumi
+      bo'yicha; ish haqi harajatda. Ta'minotchiga to'lov bu
       yerda emas: material tannarx bo'lib kiradi.</p>`;
 }
 
