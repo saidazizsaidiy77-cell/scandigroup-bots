@@ -3229,6 +3229,15 @@ sotib olingan mahsulot (`buy_price`, matras). Qator — material
 TURKUMI (LDSP, MDF, Furnitura…). **Ish haqi tannarxda EMAS** — u
 kassadagi oylik bo'lib harajatda qoladi, ikki marta sanalmaydi.
 
+**★ MARJA FOIZDA** (zavod qarori, 2026-11; `/foyda-zarar.html`). Savdo
+yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
+ko'rsatmaydi, ULUSH esa ko'rsatadi. Har asosiy qator ostida mayda foiz
+qatori: tannarx %, yalpi marja %, harajat %, sof marja % — bo'luvchi
+har doim o'sha oyning SAVDOSI. «Jami» ustuni yig'indilar nisbati,
+oylik foizlarning o'rtachasi EMAS (kichik oy katta oy bilan teng og'irlik
+olardi). Foyda kartochkasi ostida ham ikkala marja; CSV da ham.
+Faqat hisobotda — moliya paneliga qo'shilmadi (zavod qarori).
+
 **★ TA'MINOTCHIGA TO'LOV FOYDA-ZARARDAN CHIQDI** (`expense_items.in_pl`,
 `migration_flags`: `taminot-pl-dan`). Material tannarx bo'lib keladi;
 to'lov ham harajat bo'lib tursa bitta material ikki marta ayirilardi.
