@@ -146,15 +146,18 @@ function draw() {
   //  Foiz qatori — har oy o'z savdosiga, «Jami» esa yig'indilar nisbati
   //  (oylik foizlarning o'rtachasi EMAS: kichik oy katta oy bilan teng
   //  og'irlik olardi).
-  const fz = (x, y) => y ? (x / y * 100).toFixed(1).replace('.', ',') + '%' : '—';
+  const fz = (x, y) => y ? (x / y * 100).toFixed(1).replace('.', ',') + '%'
+                          : '<span class="muted">&mdash;</span>';
   //  `by` — marja (savdo − tannarx), `den` — o'sha savdo.
-  const foiz = (nom, by, den, bosh, cls) => {
+  //  Ko'rinishi `qator` bilan BIR XIL (zavod qarori, 2026-11): marja
+  //  savdo va tannarx bilan bir qatorda o'qiladi, mayda izoh emas.
+  const foiz = (nom, by, den, bosh) => {
     const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
     const ti = ms.reduce((a, m) => a + (den[m] || 0), 0);
-    const td = (x, y) => `<td class="num${cls ? '' : ' muted'}" style="font-size:12px${
-      y && x < 0 ? ';color:var(--bad)' : ''}">${fz(x, y)}</td>`;
-    return `<tr${bosh || ''}><td class="${cls || 'muted'}" style="font-size:12px;padding-left:22px">${nom}</td>
-      ${ms.map(m => td(by[m] || 0, den[m] || 0)).join('')}${td(t, ti)}</tr>`;
+    const td = (x, y, b) => `<td class="num">${b ? '<b>' : ''}${y && x < 0
+      ? `<span style="color:var(--bad)">${fz(x, y)}</span>` : fz(x, y)}${b ? '</b>' : ''}</td>`;
+    return `<tr${bosh || ''}><td>${nom}</td>
+      ${ms.map(m => td(by[m] || 0, den[m] || 0)).join('')}${td(t, ti, true)}</tr>`;
   };
   //  ★ BOSILSA TURI BO'YICHA: savdo va tannarx ikkalasi ham savdo
   //  turkumi bo'yicha keladi (`v_pl_month`), ya'ni turkumning marjasi
@@ -163,7 +166,7 @@ function draw() {
     const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
     const by = {};
     ms.forEach(m => by[m] = (t.by[m] || 0) - (tc[m] || 0));
-    return foiz(`<span style="padding-left:22px">${esc(t.name)}</span>`, by, t.by);
+    return foiz(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by, t.by);
   }).join('');
 
   const qator = (nom, by, cls, bosh) => {
@@ -229,8 +232,9 @@ function draw() {
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
               t.by)).join('') : ''}
       ${qator('<b>Yalpi foyda</b>', yalpi)}
-      ${foiz(`<span style="margin-right:6px">${ochiq.has('MARJA') ? '&minus;' : '+'}</span>Marja, %`,
-        yalpi, inc, ` onclick="toggle('MARJA')" style="cursor:pointer"`, 'muted')}
+      ${foiz(`<span class="muted" style="margin-right:6px">${
+          ochiq.has('MARJA') ? '&minus;' : '+'}</span><b>Marja, %</b> — (savdo − tannarx) ÷ savdo`,
+        yalpi, inc, ` onclick="toggle('MARJA')" style="cursor:pointer"`)}
       ${ochiq.has('MARJA') ? turMarja() : ''}
       ${qator('<b>Jami harajat</b>', exp)}
       ${guruh.map((g, i) => {
