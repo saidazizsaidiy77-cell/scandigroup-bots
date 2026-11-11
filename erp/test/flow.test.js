@@ -13603,6 +13603,42 @@ test('konver so\'rovi: bitta raqam — bir nechta rang', async () => {
   assert.ok(st2.every((r) => r.status === 'rejected'));
 });
 
+/* ★ DIVIDENT — XARAJAT EMAS, FOYDANI TAQSIMLASH (zavod qarori, 2026-11):
+ *  foyda-zararda harajatga qo'shilmaydi, foydadan keyin ayiriladi. */
+test('foyda-zarar: divident harajat emas, foydadan keyin ayiriladi', async () => {
+  const admin = H.api(base, await H.sessionFor('Administrator'));
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const div = (await H.id(`SELECT id, is_dividend FROM expense_items
+                            WHERE group_code = 'MOLIYA' AND lower(name) = 'divident'`));
+  assert.equal(div.is_dividend, true, 'divident moddasi belgilangan');
+  const soliq = (await H.id(`SELECT id FROM expense_items
+                              WHERE group_code = 'MOLIYA' AND lower(name) = 'soliqlar'`)).id;
+  const eski = (await admin('GET', '/api/admin/settings')).body.rows
+    .find((x) => x.kod === 'minus_cash').on;
+  await admin('PATCH', '/api/admin/settings/minus_cash', { on: false });
+  const yoz = (item, summa) => admin('POST', '/api/cash/ops', {
+    from_kind: 'account', from_id: kassa, to_kind: 'expense', to_id: item,
+    currency: 'USD', amount: summa, op_date: '2031-03-10', pl_month: '2031-03',
+    expense_item_id: item });
+  assert.equal((await yoz(div.id, 700)).status, 200);
+  assert.equal((await yoz(soliq, 100)).status, 200);
+  await admin('PATCH', '/api/admin/settings/minus_cash', { on: eski });
+
+  const pl = (await admin('GET', '/api/cash/pl?from=2031-03&to=2031-03')).body;
+  const sum = (k) => pl.rows.filter((r) => r.kind === k)
+    .reduce((a, r) => a + Number(r.amount_usd), 0);
+  assert.equal(sum('expense'), 100, 'harajatda faqat soliq');
+  assert.equal(sum('dividend'), 700, 'divident alohida qatorda');
+
+  const d = (await admin('GET', '/api/cash/dashboard?from=2031-03&to=2031-03')).body;
+  const oy = d.oylar.find((r) => r.mon === '2031-03');
+  assert.equal(Number(oy.harajat), 100);
+  assert.equal(Number(oy.foyda), -100, 'divident foydani kamaytirmaydi');
+  assert.equal(Number(oy.divident), 700);
+  assert.ok(!d.harajat.some((r) => Number(r.amount) === 800),
+    'harajat guruhiga divident qo\'shilmaydi');
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

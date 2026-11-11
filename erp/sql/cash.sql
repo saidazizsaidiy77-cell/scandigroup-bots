@@ -638,6 +638,26 @@ SELECT w.id, w.name, w.phone,
  GROUP BY w.id, w.name, w.phone,
           w.opening_uzs, w.opening_usd, w.opening_rate, w.opening_on;
 
+--  ★ DIVIDENT — XARAJAT EMAS, FOYDANI TAQSIMLASH (zavod qarori,
+--  2026-11). U «Moliyaviy xarajatlar» ichida turardi va foyda-zararda
+--  harajat bo'lib ayirilardi: foyda kam ko'rinardi, holbuki divident
+--  foydaning O'ZIDAN beriladi. Endi u FOYDADAN KEYIN turadi:
+--
+--      savdo − harajat = foyda
+--      foyda − divident = taqsimlanmagan foyda
+--
+--  Belgi MODDADA (4-qoida), boshlang'ichi bir martalik: saytdan
+--  qayta nomlangan modda keyingi deployda qaytarib belgilanmasin.
+ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS is_dividend BOOLEAN NOT NULL DEFAULT false;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'divident-foydadan') THEN
+    UPDATE expense_items SET is_dividend = true
+     WHERE group_code = 'MOLIYA' AND lower(name) = 'divident';
+    INSERT INTO migration_flags (key) VALUES ('divident-foydadan');
+  END IF;
+END $$;
+
 -- ───────────────────────────────────── HARAJAT: FOYDA-ZARAR KESIMIDA
 --
 --  To'lov sanasi bo'yicha emas, HISOBOT OYI bo'yicha (`pl_month`):
@@ -647,7 +667,8 @@ CREATE VIEW v_expenses AS
 SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS group_sort,
        ei.id AS item_id, ei.name AS item_name,
        SUM(o.amount_usd)::numeric(16,2) AS amount_usd,
-       COUNT(*)::int AS ops
+       COUNT(*)::int AS ops,
+       ei.is_dividend
   FROM cash_ops o
   JOIN expense_items  ei ON ei.id = o.expense_item_id
   JOIN expense_groups eg ON eg.code = ei.group_code
@@ -656,7 +677,7 @@ SELECT o.pl_month, eg.code AS group_code, eg.name AS group_name, eg.sort AS grou
  --  moddaning O'ZI — «to_kind = expense» bo'lsa ta'minotchiga
  --  to'langan pul hisobotdan yo'qolib ketardi.
  WHERE o.status = 'ok' AND o.expense_item_id IS NOT NULL
- GROUP BY o.pl_month, eg.code, eg.name, eg.sort, ei.id, ei.name;
+ GROUP BY o.pl_month, eg.code, eg.name, eg.sort, ei.id, ei.name, ei.is_dividend;
 
 -- ════════════════════════════════════════════════ FOYDA-ZARAR (P&L)
 --
@@ -726,7 +747,11 @@ SELECT date_trunc('month', x.on_date)::date AS pl_month,
   LEFT JOIN sales_categories sc ON sc.code = g.sales_category
  GROUP BY 1, COALESCE(sc.name, 'Turkumsiz'), COALESCE(sc.sort, 99)
 UNION ALL
-SELECT e.pl_month, 'expense', e.group_code, e.group_name, e.group_sort,
+--  Divident `kind = 'dividend'`: harajatga QO'SHILMAYDI, foydadan
+--  keyin ayiriladi (izoh: yuqorida, `is_dividend`). Harajatni o'qiydigan
+--  har joy `kind = 'expense'` ni so'raydi, `<> 'income'` ni emas.
+SELECT e.pl_month, CASE WHEN e.is_dividend THEN 'dividend' ELSE 'expense' END,
+       e.group_code, e.group_name, e.group_sort,
        e.item_id, e.item_name, e.amount_usd, e.ops, 0
   FROM v_expenses e;
 

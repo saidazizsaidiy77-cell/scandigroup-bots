@@ -102,7 +102,10 @@ async function load() {
       //  ★ TANNARX YO'Q — sahifa buni O'ZI aytadi, aks holda raqam
       //  boshqa narsa deb o'qilardi (foyda-zarar hisoboti bilan bir
       //  xil qoida).
-      hint: 'tannarxsiz — pul harajatlari ayirilgani' },
+      //  Divident foydadan KEYIN (zavod qarori, 2026-11): u harajat
+      //  emas, ya'ni foydani kamaytirmaydi — faqat yozib turiladi.
+      hint: 'tannarxsiz — pul harajatlari ayirilgani'
+        + (jam('divident') ? ` · divident ${Panel.pul(jam('divident'))}` : '') },
   ]);
 
   Panel.kpi($('kpis2'), [

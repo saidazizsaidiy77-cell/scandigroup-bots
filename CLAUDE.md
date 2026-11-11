@@ -3190,6 +3190,23 @@ ikki marta kirim bo'lib ko'rinardi.
 Shuning uchun «foyda bor, pul yo'q» degan holat aynan shu ikki hisobotni
 yonma-yon qo'yganda ko'rinadi.
 
+**★ DIVIDENT — XARAJAT EMAS, FOYDANI TAQSIMLASH** (zavod qarori,
+2026-11; `expense_items.is_dividend`, `v_pl_month` dagi
+`kind = 'dividend'`). U «Moliyaviy xarajatlar» ichida turardi va
+foyda-zararda harajat bo'lib ayirilardi — foyda kam ko'rinardi,
+holbuki divident foydaning O'ZIDAN beriladi. Endi:
+
+    savdo − harajat = foyda
+    foyda − divident = taqsimlanmagan foyda
+
+Kassada yozilishi o'zgarmadi (o'sha modda, o'sha oyna); faqat
+hisobotdagi joyi boshqa. Harajatni o'qiydigan har joy
+`kind = 'expense'` ni so'raydi, `<> 'income'` ni EMAS — aks holda
+divident yana harajatga qo'shilib ketardi. Moliya panelida foyda
+divident AYIRILMAGAN holda, ostida «divident N» yozuvi. Belgi
+MODDADA, boshlang'ichi bir martalik (`migration_flags`:
+`divident-foydadan`).
+
 **★ MOLIYA PANELIDA TUSHUM USTUNI** (zavod qarori, 2026-10;
 `/moliya-panel.html`, «Oylik natija», `/api/cash/dashboard` dagi
 `oylar.pul`). Savdo bilan harajat yonida — kassaga MIJOZDAN kelgan pul,
