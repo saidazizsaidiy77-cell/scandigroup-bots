@@ -337,6 +337,10 @@ async function boot(){
     $('fCheg').checked = true;
   drawChips();
   await load();
+  //  `?id=` — buyurtma to'g'ridan-to'g'ri ochiladi (savdo panelidagi
+  //  «Zavodda» ro'yxati va konver pasportidagi zakaz havolasi).
+  const oid = Number(new URLSearchParams(location.search).get('id'));
+  if (oid) openOrder(oid);
 }
 
 //  ★ TAB YONIDA JAMI SUMMA (zavod qarori, 2026-09). Qatorda summa

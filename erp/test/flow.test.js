@@ -9841,6 +9841,15 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
   assert.equal(otgan.joriy, false);
   assert.ok(otgan.turkum.every((r) => Number(r.zavodda_qty) === 0
     && Number(r.chiqdi_amount) === 0), 'o\'tgan oyda zavodda va chiqdi yo\'q');
+  //  ★ «ZAVODDA» RO'YXATI — kartochka raqami bilan bir xil shart: dona
+  //  yig'indisi (kpi_dona) zavodda_qty ga teng, o'tgan oyda bo'sh.
+  for (const r of sdNow.turkum) {
+    const yig = (r.zavodda_list || []).filter((x) => x.dona)
+      .reduce((a, x) => a + Number(x.qty), 0);
+    assert.equal(yig, Number(r.zavodda_qty), `${r.code}: ro'yxat = kartochka`);
+  }
+  assert.ok(sdNow.turkum.some((r) => r.zavodda_list.length), 'ro\'yxat bo\'sh emas');
+  assert.ok(otgan.turkum.every((r) => !r.zavodda_list.length));
 
   //  ★ TURKUM ICHIDA MAHSULOTLAR: yig'indi turkum kartochkasiga teng
   //  (summa hammasi, dona — faqat kpi_dona guruhlarda), NOL mahsulot

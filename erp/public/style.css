@@ -648,5 +648,12 @@ input.auto{color:var(--accent-ink)}
 .kqator{display:flex;justify-content:space-between;gap:8px;font-size:13px;
         padding:3px 0;font-variant-numeric:tabular-nums}
 .kqator span:first-child{color:var(--muted)}
+/* «Zavodda» bosilsa buyurtmalar ro'yxati (panel.js, zavoddaRo) */
+.kzav summary{cursor:pointer;list-style:none}
+.kzav summary::-webkit-details-marker{display:none}
+.kzro{max-height:260px;overflow:auto;margin:4px 0 6px;font-size:12.5px;
+  border-top:1px dashed var(--line,#e4e2dc)}
+.kzro>div{padding:6px 0;border-bottom:1px dashed var(--line,#e4e2dc)}
+.kzro a{color:inherit}
 .kjami{display:flex;flex-wrap:wrap;gap:6px 28px;align-items:baseline;margin:4px 0 14px}
 .kjami b{font-size:20px;font-variant-numeric:tabular-nums}

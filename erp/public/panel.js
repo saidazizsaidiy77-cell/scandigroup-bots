@@ -288,6 +288,26 @@ const Panel = (() => {
       <span><span class="muted">Bajarildi</span> <b>${jf == null ? '—' : jf + '%'}</b></span>
       ${zavod ? `<span><span class="muted">Chiqsa</span> <b>${jfz == null ? '—' : jfz + '%'}</b></span>` : ''}
     </div>${bar(jCh, jZa, jRe)}`;
+  //  ★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR (zavod qarori, 2026-11;
+  //  `zavodda_list`). <details>: holat sahifada saqlanmaydi, ochiq
+  //  qolgani qayta chizilganda yopiladi. Zakaz bosilsa buyurtma ochiladi.
+  const HOL = { draft: 'Boshlanmagan', waiting: 'Ishlab chiqarilmoqda',
+                reserved: 'Tayyor', to_ship: 'Mijozga chiqarilsin' };
+  const d8 = (v) => v ? String(v).slice(8, 10) + '.' + String(v).slice(5, 7) : '';
+  const zavoddaRo = (r, za, u) => {
+    const ro = r.zavodda_list || [];
+    if (!ro.length)
+      return `<div class="kqator"><span>Zavodda</span><span><b>${son(za)}</b> ${u}</span></div>`;
+    return `<details class="kzav"><summary class="kqator"><span>Zavodda ▾</span>
+        <span><b>${son(za)}</b> ${u}</span></summary>
+      <div class="kzro">${ro.map((x) => `<div>
+        <a href="/buyurtmalar.html?id=${x.id}" target="_blank"><b>${esc(x.order_no)}</b></a>
+        <span class="muted">· ${esc(x.customer || '')}</span>
+        <div>${esc(x.product)} <span class="muted">· ${esc(x.product_type)}</span>
+          · <b>${son(x.qty)}</b>${x.dona ? '' : ' <span class="muted">(dona sanalmaydi)</span>'}</div>
+        <div class="muted">${esc(HOL[x.holat] || x.holat)}${x.due_on ? ' · chiqish ' + d8(x.due_on) : ''}</div>
+      </div>`).join('')}</div></details>`;
+  };
   const kartlar = tk.map((r) => {
     const ch = Number(r.chiqdi_qty) || 0, za = Number(r.zavodda_qty) || 0;
     const re = Number(r.reja_qty) || 0, u = esc(r.uom || 'dona');
@@ -299,7 +319,7 @@ const Panel = (() => {
       ${bar(ch, za, re)}
       <div class="kqator"><span>Reja</span><span>${re ? `<b>${son(re)}</b> ${u}` : '—'}</span></div>
       <div class="kqator"><span>Chiqdi</span><span><b>${son(ch)}</b> ${u}</span></div>
-      ${zavod ? `<div class="kqator"><span>Zavodda</span><span><b>${son(za)}</b> ${u}</span></div>` : ''}
+      ${zavod ? zavoddaRo(r, za, u) : ''}
       ${zavod ? `<div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>` : ''}
     </div>`;
   }).join('') + tushumKart(tushum)
