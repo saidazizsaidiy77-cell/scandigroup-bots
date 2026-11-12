@@ -311,14 +311,19 @@ const Panel = (() => {
   const kartlar = tk.map((r) => {
     const ch = Number(r.chiqdi_qty) || 0, za = Number(r.zavodda_qty) || 0;
     const re = Number(r.reja_qty) || 0, u = esc(r.uom || 'dona');
+    //  ★ DOLLAR HAM (zavod qarori, 2026-11): turkum rejasi SEGMENT bilan
+    //  ham qo'yiladi va «shu turda qancha pul rejasi» degan savolga javob
+    //  faqat menejer varaqlarida bo'lingan holda turardi.
+    const reS = Number(r.reja_amount) || 0, chS = Number(r.chiqdi_amount) || 0;
     const f = foiz(ch, re), fz = foiz(ch + za, re);
     return `<div class="kcard">
       <div class="knom">${esc(r.name)}</div>
       <div class="kfoiz">${f == null ? '<small>reja qo\'yilmagan</small>'
         : f + '% <small>bajarildi</small>'}</div>
       ${bar(ch, za, re)}
-      <div class="kqator"><span>Reja</span><span>${re ? `<b>${son(re)}</b> ${u}` : '—'}</span></div>
-      <div class="kqator"><span>Chiqdi</span><span><b>${son(ch)}</b> ${u}</span></div>
+      <div class="kqator"><span>Reja</span><span>${re ? `<b>${son(re)}</b> ${u}` : '—'}${
+        reS ? ` · <b>${esc(pul(reS, true))}</b>` : ''}</span></div>
+      <div class="kqator"><span>Chiqdi</span><span><b>${son(ch)}</b> ${u} · <b>${esc(pul(chS, true))}</b></span></div>
       ${zavod ? zavoddaRo(r, za, u) : ''}
       ${zavod ? `<div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>` : ''}
     </div>`;

@@ -3372,7 +3372,8 @@ Kesim — TURKUM (mehmonxona · yotoqxona · stol · stul), guruh emas:
 KPI rejasi turkumga qo'yiladi va penal bilan kamod BITTA reja. Har
 turkum — kartochka: katta raqam **bajarildi %** (chiqdi ÷ reja),
 chiziqda to'q qismi chiqdi, chiziqli qismi zavodda, qora belgi reja;
-ostida reja, chiqdi va zavodda — faqat SON (summa tepadagi jamida) va **chiqsa %**
+ostida reja va chiqdi — SON va DOLLAR (zavod qarori, 2026-11: turkumning dollar rejasi
+faqat menejer varaqlarida bo'lingan turardi), zavodda — faqat SON, va **chiqsa %**
 ((chiqdi + zavodda) ÷ reja). Tepada JAMI — dollarda (SEGMENT rejasi),
 chunki dona bilan komplekt qo'shilmaydi.
 
