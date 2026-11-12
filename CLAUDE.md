@@ -3392,6 +3392,14 @@ uchun konverning o'zidan, bir marta. **Zavodda** — «Zavodda turibdi»
 kartochkasi bilan bir xil shart; buyurtmadagi SUMMA ekranda yo'q,
 faqat jami «chiqsa %» ga kiradi. Oraliq filtriga bog'liq emas.
 
+**★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR** (zavod qarori, 2026-11;
+`turkumKpi` dagi `zavodda_list`, `Panel.kpiTurkum`). Kartochkadagi
+raqam bosilsa ostida buyurtmalar ochiladi: zakaz (bosilsa
+`/buyurtmalar.html?id=` buyurtmani ochadi), mijoz, mahsulot · turi ·
+soni, holat va chiqish sanasi. Shart `zav` bilan AYNAN bir xil va
+test dona yig'indisini (`kpi_dona`) kartochka raqamiga solishtiradi;
+matras ro'yxatda turadi, lekin «dona sanalmaydi» deb yoziladi.
+
 **★ PUL TUSHUMI — BESHINCHI KARTOCHKA** (zavod qarori, 2026-10;
 `/api/sales/dashboard` dagi `tushum`). «KPI bonusi tushgan puldan»
 belgili xodimning rejasi kassaga KELGAN pulga qo'yiladi va turkum

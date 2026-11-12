@@ -2771,6 +2771,24 @@ function turkumKpi(mon, chans, own) {
             AND ($1::text[] IS NULL OR o.channel = ANY($1))
             AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
           GROUP BY 1),
+       --  ★ «ZAVODDA» NING O'ZI — QAYSI BUYURTMALAR (zavod qarori,
+       --  2026-11). Shart zav bilan AYNAN bir xil, faqat buyurtma va
+       --  mahsulot bo'yicha: kartochkadagi raqam bosilsa shu ro'yxat
+       --  ochiladi va dona yig'indisi o'sha raqamga teng.
+       zr AS (
+         SELECT g.sales_category AS c, o.id, o.order_no, o.customer_name,
+                o.due_on, ${HOLAT} AS holat,
+                p.name AS product, g.name AS product_type, g.kpi_dona,
+                SUM(i.qty)::int AS qty
+           FROM v_sales_orders o
+           JOIN order_items i    ON i.order_id = o.id
+           JOIN products p       ON p.id = i.product_id
+           JOIN product_groups g ON g.id = p.group_id, oy
+          WHERE o.status NOT IN ('shipped', 'cancelled')
+            AND oy.m = date_trunc('month', CURRENT_DATE)::date
+            AND ($1::text[] IS NULL OR o.channel = ANY($1))
+            AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
+          GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9),
        reja AS (
          SELECT t.category AS c,
                 SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
@@ -2795,7 +2813,13 @@ function turkumKpi(mon, chans, own) {
               COALESCE((SELECT q FROM zav WHERE c = sc.code), 0)::int           AS zavodda_qty,
               COALESCE((SELECT s FROM zav WHERE c = sc.code), 0)::numeric       AS zavodda_amount,
               (SELECT q FROM reja WHERE c = sc.code)::numeric                   AS reja_qty,
-              (SELECT s FROM reja WHERE c = sc.code)::numeric                   AS reja_amount
+              (SELECT s FROM reja WHERE c = sc.code)::numeric                   AS reja_amount,
+              COALESCE((SELECT json_agg(json_build_object(
+                  'id', id, 'order_no', order_no, 'customer', customer_name,
+                  'due_on', due_on, 'holat', holat, 'product', product,
+                  'product_type', product_type, 'qty', qty, 'dona', kpi_dona)
+                  ORDER BY due_on NULLS LAST, order_no, product)
+                FROM zr WHERE c = sc.code), '[]'::json)                         AS zavodda_list
          FROM sales_categories sc
         WHERE sc.active
         ORDER BY sc.sort, sc.name`, [chans, own, mon]);
