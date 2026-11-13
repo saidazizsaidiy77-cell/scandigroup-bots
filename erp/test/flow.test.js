@@ -9056,6 +9056,25 @@ test('savdo KPI: prognoz = fakt + jarayondagi buyurtmalar', async () => {
   assert.equal(v.taxminiy.summa, 1200);
   assert.equal(v.taxminiy.foiz, 60, '1200 / 2000');
 
+  //  ★ BOSHQA SAVDO PROGNOZI — butun zavodning jarayoni minus o'ziniki.
+  await admin('POST', '/api/sales/kpi', { mon: OY, worker_id: mgr, items: [
+    { indicator: 'SEGMENT', category: 'STUL', plan: 2000 },
+    { indicator: 'DONA', category: 'STUL', plan: 20 },
+    { indicator: 'YORDAM', category: 'STUL', plan: 100000 }] });
+  v = await ol();
+  const zj = Number((await H.id(
+    `SELECT COALESCE(SUM(oi.qty * COALESCE(oi.unit_price, 0)), 0) AS s
+       FROM orders o JOIN order_items oi ON oi.order_id = o.id
+       JOIN products p ON p.id = oi.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE o.status IN ('new', 'reserved', 'to_ship')
+        AND g.sales_category = 'STUL'`)).s);
+  const yt = v.qator.find((y) => y.code === 'YORDAM').ichi
+    .find((c) => c.code === 'STUL');
+  assert.equal(Math.round(yt.jarayonda * 100), Math.round((zj - 800) * 100));
+  assert.equal(Math.round(yt.prognoz * 100), Math.round((yt.fakt + yt.jarayonda) * 100));
+  assert.equal(Math.round(v.yordam.prognoz * 100), Math.round(yt.prognoz * 100));
+
   //  ★ PUL TUSHUMI: pul kirim sanasi shu oyda, BUGUN yoki keyin.
   await admin('PATCH', '/api/admin/workers/' + mgr, { kpi_bonus_tushum: true });
   const oldin = (await ol()).tushum_qator.jarayonda;

@@ -3617,6 +3617,11 @@ bo'lagi).
 Shkala BAZADA, baza bo'yicha (`savdo` / `tushum`); eski
 `sales_kpi_bands` o'qilmaydi.
 
+**Boshqa savdoning oy oxiriga taxminiysi** ham o'zinikidek: fakt +
+jarayondagi buyurtmalar, jarayoni esa fakt bilan AYNAN bir xil ayirma —
+turkumda butun zavodning yozilgan, hali chiqmagan buyurtmalari minus
+o'zinikilar (`zavodJarayon`, faqat joriy oyda).
+
 Reja oynasida **reja qo'yilgan turkumlar tepada**, qolgani bitta
 «+ boshqa turkumlar» qatoriga yig'iladi (`pSaralash`): korpus
 menejeriga stol-stul qatori ortiqcha. Hech qaysisida reja yo'q bo'lsa
