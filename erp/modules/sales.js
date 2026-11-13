@@ -4204,6 +4204,18 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
         AND ($2::int[] IS NULL OR k.worker_id = ANY($2))
       GROUP BY 1, 2`, [kim, doira])).rows;
 
+  //  Butun zavodning jarayondagi buyurtmalari, turkum bo'yicha — «boshqa
+  //  savdo» prognozi uchun (o'z jarayoni bilan bir xil holatlar).
+  const zavodJarayon = !joriy ? [] : (await db.query(
+    `SELECT g.sales_category AS category,
+            SUM(oi.qty * COALESCE(oi.unit_price, 0)) AS summa
+       FROM orders o
+       JOIN order_items oi        ON oi.order_id = o.id
+       JOIN products p            ON p.id = oi.product_id
+       LEFT JOIN product_groups g ON g.id = p.group_id
+      WHERE o.status IN ('new', 'reserved', 'to_ship')
+      GROUP BY 1`)).rows;
+
   //  ★ PUL TUSHUMI PROGNOZI — PUL KIRIM SANASIDAN (`orders.payment_on`).
   //  Menejer mijoz bilan kelishgan kun shu oyga tushgan buyurtmalar —
   //  butun zavodniki, chunki belgili xodimning fakti ham butun
@@ -4235,12 +4247,18 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       fakt: son(zavodTurkum[c.code]) - ozSeg(c.code) }))];
 
     const jr = jarayon.filter((x) => x.worker_id === wid);
-    const jar = (code, cat) => jr
+    const ozJar = (code, cat) => jr
       .filter((x) => cat === undefined || x.category === cat)
       .reduce((a, x) => a + son(code === 'DONA' ? x.dona : x.summa), 0);
+    //  ★ «BOSHQA SAVDO» NING JARAYONI (zavod qarori, 2026-11): fakt bilan
+    //  AYNAN bir xil ayirma — turkumda butun zavodning jarayondagi
+    //  buyurtmalari minus o'zinikilar.
+    const jar = (code, cat) => code !== 'YORDAM' ? ozJar(code, cat)
+      : zavodJarayon.filter((x) => cat === undefined || x.category === cat)
+          .reduce((a, x) => a + son(x.summa), 0) - ozJar('SEGMENT', cat);
 
     const qator = ind.rows.map((i) => {
-      const bor = i.code === 'SEGMENT' || i.code === 'DONA';
+      const bor = i.code === 'SEGMENT' || i.code === 'DONA' || i.code === 'YORDAM';
       const otaReja = pl.find((p) => p.indicator === i.code && !p.category);
       //  ★ OTA QATOR YIG'INDI: fakt turkumlardan qo'shiladi, reja esa
       //  turkumlardan yig'iladi (eski oylarda ota qatorda turgan bo'lsa
@@ -4341,7 +4359,9 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     const yFakt = yRejali.reduce((a, c) => a + c.fakt, 0);
     const yFoiz = yReja > 0 ? yFakt / yReja * 100 : 0;
     const yStavka = yReja > 0 ? bonusStavka(shkala('savdo'), yFoiz) : 0;
+    const yProg = yRejali.reduce((a, c) => a + c.prognoz, 0);
     const yordam = yReja > 0 ? { reja: yReja, fakt: yFakt, foiz: yFoiz,
+      prognoz: yProg, taxminiy_foiz: yProg / yReja * 100,
       stavka: yStavka, bonus: yFakt * yStavka / 100 } : null;
     //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
     //  Boshliqning raqami qo'l ostidagilarning yig'indisidan chiqadi
