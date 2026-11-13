@@ -9748,12 +9748,14 @@ test('ishlab chiqarish paneli: T/M ga topshirilgani — qoldiq va matrassiz', as
   assert.ok(Array.isArray(d.topshirildi));
   const jami = d.topshirildi.reduce((a, r) => a + r.qty, 0);
   const q = (await tdb.query(
-    `SELECT COALESCE(SUM(u.qty) FILTER (WHERE NOT u.is_opening
+    `SELECT COALESCE(SUM(u.qty) FILTER (WHERE NOT (u.is_opening AND u.fg_by IS NULL
+                                  AND u.fg_on <= u.created_at::date)
                   AND p.route_template_id IS NOT NULL
                   AND COALESCE(u.note, '') NOT LIKE 'Mijozdan qaytdi%'
                   AND NOT EXISTS (SELECT 1 FROM cust_return_items ri
                                    WHERE ri.new_unit_id = u.id)), 0)::int AS toza,
-            COALESCE(SUM(u.qty) FILTER (WHERE u.is_opening
+            COALESCE(SUM(u.qty) FILTER (WHERE (u.is_opening AND u.fg_by IS NULL
+                                  AND u.fg_on <= u.created_at::date)
                   OR p.route_template_id IS NULL), 0)::int AS chetda
        FROM production_units u JOIN products p ON p.id = u.product_id
       WHERE u.fg_on BETWEEN $1::date AND $2::date AND u.status <> 'cancelled'`,

@@ -4335,7 +4335,8 @@ router.get('/dashboard', need('production.reports', 'production.manage'),
     //  javob bermaydi: unga vitrinadan va mijozdan qaytgani,
     //  boshlang'ich qoldiq va matras ham tushadi. Bu yerda FAQAT
     //  tsexdan kelgani: marshruti bor mahsulot (matras emas),
-    //  boshlang'ich qoldiq emas, mijozdan qaytgan bo'lak emas
+    //  omborga to'g'ridan-to'g'ri kiritilgan boshlang'ich qoldiq
+    //  emas (tsexdan kelgani sanaladi), mijozdan qaytgan bo'lak emas
     //  (bo'lingani ham — `clonePart` izohni ko'chiradi). Vitrinadan
     //  qaytish `warehouse_moves` da, `fg_on` ga tegmaydi.
     //  Kun — `fg_on`, mudir QABUL qilgan kun.
@@ -4347,7 +4348,14 @@ router.get('/dashboard', need('production.reports', 'production.manage'),
          JOIN products p       ON p.id = u.product_id
          JOIN product_groups g ON g.id = p.group_id
         WHERE u.fg_on BETWEEN $1::date AND $2::date
-          AND u.status <> 'cancelled' AND NOT u.is_opening
+          AND u.status <> 'cancelled'
+          --  Boshlang'ich qoldiq faqat OMBORGA TO'G'RIDAN-TO'G'RI
+          --  kiritilgani chiqariladi: uni hech kim qabul qilmagan
+          --  (fg_by bo'sh) va kuni kiritilgan kundan keyin emas.
+          --  Tsexda yarim yo'lda kiritilib, keyin mudir qabul qilgani
+          --  esa HAQIQIY ishlab chiqarish — u sanaladi.
+          AND NOT (u.is_opening AND u.fg_by IS NULL
+                   AND u.fg_on <= u.created_at::date)
           AND p.route_template_id IS NOT NULL
           AND COALESCE(u.note, '') NOT LIKE 'Mijozdan qaytdi%'
           AND NOT EXISTS (SELECT 1 FROM cust_return_items ri
