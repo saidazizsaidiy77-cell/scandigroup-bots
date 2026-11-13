@@ -3617,6 +3617,11 @@ bo'lagi).
 Shkala BAZADA, baza bo'yicha (`savdo` / `tushum`); eski
 `sales_kpi_bands` o'qilmaydi.
 
+Reja oynasida **reja qo'yilgan turkumlar tepada**, qolgani bitta
+«+ boshqa turkumlar» qatoriga yig'iladi (`pSaralash`): korpus
+menejeriga stol-stul qatori ortiqcha. Hech qaysisida reja yo'q bo'lsa
+hammasi ochiq — qaysi turkum unikiligini oyna bilmaydi.
+
 **★ REJANI TAHRIRLASH — HAR VARAQDA «✎ Tahrirlash»** (zavod qarori,
 2026-11; `planYukla`, `public/savdo-kpi.html`). Oyna o'sha xodimning
 mavjud rejasi bilan ochiladi va oynada xodim yoki oy almashsa reja
