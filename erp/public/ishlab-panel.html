@@ -56,6 +56,16 @@
     bilan turadi.</p>
 </div>
 
+<div class="card" style="margin-top:16px">
+  <h2>T/M omborga topshirildi — turi bo'yicha</h2>
+  <div id="topshirildi"></div>
+  <p class="muted" style="font-size:12px;margin-top:10px">
+    Faqat <b>tsexdan kelgani</b>, mudir qabul qilgan kun bo'yicha:
+    vitrinadan va mijozdan qaytgani, boshlang'ich qoldiq va matras
+    kirmaydi — ombordagi «Kirdi» dan farqi shu. Stul <b>dona</b>,
+    qolgani <b>komplekt</b>; qavsda — konverlar soni.</p>
+</div>
+
 <div class="grid g2" style="margin-top:16px">
   <div class="card"><h2>Tsexlar bo'yicha</h2><div id="tsexlar"></div></div>
   <div class="card"><h2>Ko'p chiqarilgan mahsulot</h2><div id="mahsulot"></div></div>
@@ -132,6 +142,40 @@ async function load() {
     fmt: (v) => Panel.son(v), birlik: 'uom' });
   Panel.rank($('bolimlar'), { rows: d.bolimlar, key: 'qty',
     fmt: (v) => Panel.son(v) + ' dona' });
+  topshirildiChiz(d);
+}
+
+//  Qator — TUR, ustun — OY. Oylar oraliqdan chiqadi, ma'lumotdan
+//  emas: hech narsa topshirilmagan oy ham bo'sh ustun bo'lib tursin.
+function topshirildiChiz(d) {
+  const oylar = [];
+  for (let x = new Date(String(d.dan).slice(0, 7) + '-01T00:00:00');
+       x <= new Date(String(d.gacha).slice(0, 10) + 'T00:00:00');
+       x = new Date(x.getFullYear(), x.getMonth() + 1, 1))
+    oylar.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`);
+  const turlar = new Map();
+  for (const r of d.topshirildi || []) {
+    const k = r.product_type + '|' + r.uom;
+    if (!turlar.has(k)) turlar.set(k, { tur: r.product_type, uom: r.uom, m: {} });
+    turlar.get(k).m[r.mon] = r;
+  }
+  if (!turlar.size) {
+    $('topshirildi').innerHTML = '<p class="muted">Oraliqda T/M omborga hech narsa topshirilmagan.</p>';
+    return;
+  }
+  const kat = (r) => r && r.qty
+    ? `${Panel.son(r.qty)} <span class="muted" style="font-size:11px">(${r.konver})</span>` : '<span class="muted">—</span>';
+  const qatorlar = [...turlar.values()].map((t) => {
+    const jq = Object.values(t.m).reduce((a, r) => a + r.qty, 0);
+    const jk = Object.values(t.m).reduce((a, r) => a + r.konver, 0);
+    return `<tr><td>${esc(t.tur)} <span class="muted" style="font-size:11px">${esc(t.uom)}</span></td>`
+      + oylar.map((m) => `<td class="num">${kat(t.m[m])}</td>`).join('')
+      + `<td class="num"><b>${kat({ qty: jq, konver: jk })}</b></td></tr>`;
+  }).join('');
+  $('topshirildi').innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Turi</th>${oylar.map((m) => `<th class="num">${m}</th>`).join('')}
+      <th class="num">Jami</th></tr></thead>
+    <tbody>${qatorlar}</tbody></table></div>`;
 }
 
 App.start(() => tezQoy('12'), 'production.reports', 'production.manage');

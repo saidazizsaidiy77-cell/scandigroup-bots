@@ -4255,7 +4255,7 @@ router.get('/dashboard', need('production.reports', 'production.manage'),
     [sana(req.query.from), to]);
   const P = [oraliq.dan, oraliq.gacha];
 
-  const [oylar, tsexlar, mahsulot, wip, bolimlar, kech] = await Promise.all([
+  const [oylar, tsexlar, mahsulot, wip, bolimlar, kech, topshirildi] = await Promise.all([
     //  Oylar bo'yicha — O'LCHOV BIRLIGI ajratilmaydi: trend SHAKLNI
     //  ko'rsatadi, aniq raqam esa pastdagi kesimlarda turadi. Dona
     //  bilan komplektni qo'shish bu yerda ham noto'g'ri bo'lardi,
@@ -4328,12 +4328,39 @@ router.get('/dashboard', need('production.reports', 'production.manage'),
       `SELECT COUNT(*)::int AS konver, COALESCE(SUM(qty), 0)::int AS qty
          FROM v_unit_register
         WHERE status = 'production' AND fg_late`),
+
+    //  ★ T/M OMBORGA TOPSHIRILDI — TURI BO'YICHA, OYMA-OY (zavod
+    //  qarori, 2026-11). «Oktabrda nechta penal, kamod, stol, stul,
+    //  sp ishlab chiqardik» degan savolga ombordagi «Kirdi» toza
+    //  javob bermaydi: unga vitrinadan va mijozdan qaytgani,
+    //  boshlang'ich qoldiq va matras ham tushadi. Bu yerda FAQAT
+    //  tsexdan kelgani: marshruti bor mahsulot (matras emas),
+    //  boshlang'ich qoldiq emas, mijozdan qaytgan bo'lak emas
+    //  (bo'lingani ham — `clonePart` izohni ko'chiradi). Vitrinadan
+    //  qaytish `warehouse_moves` da, `fg_on` ga tegmaydi.
+    //  Kun — `fg_on`, mudir QABUL qilgan kun.
+    db.query(
+      `SELECT to_char(date_trunc('month', u.fg_on), 'YYYY-MM') AS mon,
+              g.name AS product_type, COALESCE(g.uom, 'dona') AS uom,
+              SUM(u.qty)::int AS qty, COUNT(DISTINCT u.conveyor_no)::int AS konver
+         FROM production_units u
+         JOIN products p       ON p.id = u.product_id
+         JOIN product_groups g ON g.id = p.group_id
+        WHERE u.fg_on BETWEEN $1::date AND $2::date
+          AND u.status <> 'cancelled' AND NOT u.is_opening
+          AND p.route_template_id IS NOT NULL
+          AND COALESCE(u.note, '') NOT LIKE 'Mijozdan qaytdi%'
+          AND NOT EXISTS (SELECT 1 FROM cust_return_items ri
+                           WHERE ri.new_unit_id = u.id)
+        GROUP BY 1, g.name, g.uom
+        ORDER BY g.name, 1`, P),
   ]);
 
   res.json({
     dan: oraliq.dan, gacha: oraliq.gacha,
     oylar: oylar.rows, tsexlar: tsexlar.rows, mahsulot: mahsulot.rows,
     wip: wip.rows[0], bolimlar: bolimlar.rows, kech: kech.rows[0],
+    topshirildi: topshirildi.rows,
   });
 }));
 
