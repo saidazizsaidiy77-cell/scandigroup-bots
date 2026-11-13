@@ -382,7 +382,7 @@ function planOch(widArg) {
           <th class="num" style="width:130px">Dona</th>
           <th class="num" style="width:160px" title="Showroom, SMM, eksport">Boshqa savdo, $</th></tr></thead>
         <tbody>${d.categories.map((c) => `
-          <tr><td>${esc(c.name)}</td>
+          <tr id="pr_${c.code}"><td>${esc(c.name)}</td>
             <td class="num"><input id="s_${c.code}" type="number" step="0.01" min="0"
               value="0" oninput="planJami()"
               style="max-width:150px;text-align:right"></td>
@@ -392,6 +392,8 @@ function planOch(widArg) {
             <td class="num"><input id="y_${c.code}" type="number" step="0.01" min="0"
               value="0" oninput="planJami()"
               style="max-width:140px;text-align:right"></td></tr>`).join('')}
+          <tr id="pBoshqa" style="display:none"><td colspan="4">
+            <button class="lnk" onclick="pBoshqaOch()" id="pBoshqaBtn"></button></td></tr>
           <tr style="font-weight:700"><td>Jami</td>
             <td class="num" id="sJami"></td><td class="num" id="dJami"></td>
             <td class="num" id="yJami"></td></tr>
@@ -431,6 +433,27 @@ async function planYukla() {
   }
   planJami();
   tushumKatak(v && v.tushum_qator ? v.tushum_qator.reja : 0);
+  pSaralash();
+}
+
+//  ★ XODIMNING O'Z TURKUMLARI TEPADA, QOLGANI YOPIQ (zavod qarori,
+//  2026-11). Korpus menejeriga stol-stul qatorlari ortiqcha va bo'sh
+//  turgani «nega bular bo'sh» degan savol berardi. Reja qo'yilgan
+//  turkum ko'rinadi, qolgani bitta qatorga yig'iladi va bosilsa
+//  ochiladi. Hech qaysisida reja yo'q (yangi xodim, yangi oy) —
+//  hammasi ochiq: qaysi turkum unikiligini oyna bilmaydi.
+function pSaralash() {
+  const bor = (c) => ['s_', 'd_', 'y_'].some((p) => Number($(p + c.code).value) > 0);
+  const yopiq = d.categories.filter((c) => !bor(c));
+  const yashir = yopiq.length < d.categories.length && yopiq.length > 0;
+  for (const c of d.categories)
+    $('pr_' + c.code).style.display = yashir && !bor(c) ? 'none' : '';
+  $('pBoshqa').style.display = yashir ? '' : 'none';
+  $('pBoshqaBtn').textContent = `+ boshqa turkumlar (${yopiq.map((c) => c.name).join(', ')})`;
+}
+function pBoshqaOch() {
+  for (const c of d.categories) $('pr_' + c.code).style.display = '';
+  $('pBoshqa').style.display = 'none';
 }
 
 //  Pul tushumi rejasi faqat «KPI bonusi tushgan puldan» belgisi bor
