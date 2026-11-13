@@ -646,7 +646,9 @@ chiqardik» — ombordagi «Kirdi» bunga toza javob bermaydi: unga
 vitrinadan va mijozdan qaytgani, boshlang'ich qoldiq va matras ham
 tushadi. Jadval: qator — TUR (o'lchov birligi bilan), ustun — OY,
 qavsda konverlar soni. Faqat tsexdan kelgani: `fg_on` (mudir qabul
-qilgan kun), marshruti bor, `NOT is_opening`, mijozdan qaytgan bo'lak
+qilgan kun), marshruti bor, OMBORGA to'g'ridan-to'g'ri kiritilgan
+boshlang'ich qoldiq emas (`is_opening`, `fg_by` bo'sh, `fg_on <=
+created_at`; tsexda kiritilib keyin qabul qilingani SANALADI), mijozdan qaytgan bo'lak
 emas (`cust_return_items.new_unit_id` yoki izoh — `clonePart` uni
 ko'chiradi). Test mustaqil SQL bilan solishtiradi.
 
