@@ -8672,7 +8672,7 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   const ind = (await db.query(
     `SELECT code FROM sales_kpi_indicators WHERE active ORDER BY code`)).rows
     .map((r) => r.code);
-  assert.deepEqual(ind, ['DONA', 'SEGMENT']);
+  assert.deepEqual(ind, ['DONA', 'SEGMENT', 'YORDAM']);
 
   // ── REJA ────────────────────────────────────────────────────────
   const qoy = (items, kim = admin) => kim('POST', '/api/sales/kpi',
@@ -8739,12 +8739,12 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
 
   //  ★ UMUMIY — JAMI SUMMA bo'yicha: 223 770 / 415 000.
   assert.equal(Math.round(v.umumiy * 100) / 100, 53.92, 'UMUMIY KPI');
-  assert.equal(Number(v.bonus_stavka), 0.75, '53,92% → 0,75%');
+  assert.equal(Number(v.bonus_stavka), 0.25, '53,92% → savdodan 0,25%');
   //  ★ BONUS BAZASI XODIMDA: standarti SAVDO (chiqib ketgan mahsulot),
   //  belgilangan xodimga TUSHGAN PUL.
   assert.equal(v.bonus_baza, 'savdo');
-  assert.equal(Math.round(v.bonus * 100) / 100,
-    Math.round(223770 * 0.0075 * 100) / 100);
+  assert.ok(Math.abs(v.bonus - 223770 * 0.0025) < 0.001);
+  assert.equal(v.yordam, null, 'ikkinchi reja qo\'yilmagan');
   assert.equal(v.tushum, 221031);
   assert.equal((await admin('PATCH', '/api/admin/workers/' + mgr,
     { kpi_bonus_tushum: true })).status, 200);
@@ -8773,13 +8773,61 @@ test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   assert.equal((await qoy(items)).status, 200);
   assert.equal((await ol()).tushum_qator, null);
 
-  //  Shkala BAZADA: bosqich qo'shish kodga tegmaydi (4-qoida).
+  //  Shkala BAZADA, ikkita: savdodan va tushumdan (4-qoida).
   const kpi = (await admin('GET', `/api/sales/kpi?mon=${OY}`)).body;
-  const band = (p) => kpi.bands.filter((b) => Number(p) >= Number(b.from_pct))
+  const band = (baza, p) => kpi.bands.filter((b) => b.baza === baza
+      && Number(p) >= Number(b.from_pct))
     .reduce((a, b) => Number(b.rate_pct), 0);
-  assert.equal(band(49.99), 0, '50% dan past — faqat fiksa');
-  assert.equal(band(50), 0.75);
-  assert.equal(band(80), 1);
+  assert.equal(band('savdo', 49.99), 0, '50% dan past — faqat fiksa');
+  assert.equal(band('savdo', 50), 0.25);
+  assert.equal(band('savdo', 74.99), 0.25);
+  assert.equal(band('savdo', 75), 0.375);
+  assert.equal(band('savdo', 100), 0.5);
+  assert.equal(band('tushum', 49.99), 0);
+  assert.equal(band('tushum', 50), 0.4);
+  assert.equal(band('tushum', 75), 0.6);
+  assert.equal(band('tushum', 120), 0.8);
+
+  //  ── ★ IKKINCHI REJA — BOSHQA SAVDO (zavod qarori, 2026-11) ─────────
+  //  Fakt: turkumda butun zavod savdosi minus o'ziniki. Menejeri yo'q
+  //  mijozga (showroom) 30 000 lik STOL chiqadi.
+  const shw = (await admin('POST', '/api/units/customers',
+    { name: 'KPI showroom mijozi', region: 'Toshkent' })).body;
+  const stolG = grp.find((x) => x.cat === 'STOL');
+  await db.query(
+    `INSERT INTO production_units (conveyor_no, product_id, qty, status,
+                                   ship_on, unit_price, customer_id)
+     VALUES ('KPI-SHW', $1, 3, 'shipped', $2::date, 10000, $3)`,
+    [stolG.pid, M1, shw.id]);
+  const zavStol = Number((await H.id(
+    `SELECT COALESCE(SUM(u.total_amount), 0) AS s FROM production_units u
+       JOIN products p ON p.id = u.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE u.status = 'shipped' AND g.sales_category = 'STOL'
+        AND date_trunc('month', u.ship_on) = $1::date`, [M1])).s);
+  const panReja = async () => Number((await admin('GET',
+    `/api/sales/kpi/umumiy?mon=${OY}`)).body.turkum
+    .find((t) => t.code === 'STOL').reja_amount);
+  const pan0 = await panReja();
+  assert.equal((await qoy([...items,
+    { indicator: 'YORDAM', category: 'STOL', plan: 40000 }])).status, 200);
+  const vy = await ol();
+  const yFakt = zavStol - 28775;
+  assert.ok(yFakt >= 30000);
+  assert.equal(Math.round(tk(vy, 'YORDAM', 'STOL').fakt * 100), Math.round(yFakt * 100));
+  assert.equal(vy.yordam.reja, 40000);
+  assert.equal(Math.round(vy.yordam.fakt * 100), Math.round(yFakt * 100));
+  const yStavka = yFakt / 40000 >= 1 ? 0.5 : yFakt / 40000 >= 0.75 ? 0.375
+    : yFakt / 40000 >= 0.5 ? 0.25 : 0;
+  assert.equal(vy.yordam.stavka, yStavka, 'alohida baholanadi');
+  //  Asosiy reja o'zgarmaydi; bonus ikkalasining yig'indisi.
+  assert.equal(Math.round(vy.umumiy * 100) / 100, 53.92);
+  assert.ok(Math.abs(vy.bonus - (223770 * 0.0025 + yFakt * yStavka / 100)) < 0.001);
+  //  Panel rejasi ikkinchi rejani qo'shmaydi — u turkum rejasining bo'lagi.
+  assert.equal(await panReja(), pan0, 'YORDAM panel rejasiga qo\'shilmaydi');
+  await db.query(`UPDATE production_units SET status = 'cancelled'
+                   WHERE conveyor_no = 'KPI-SHW'`);
+  assert.equal((await qoy(items)).status, 200);
 
   //  ── MIJOZDAN QAYTGANI AYIRILADI, qaytgan oyda ─────────────────────
   //  2 ta stul qaytdi (qabul qilingan). Yozilgan, lekin qabul
