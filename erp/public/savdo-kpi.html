@@ -99,11 +99,11 @@ const son = (v, unit) => unit === '$' ? n2(v) : n0(v);
 //  solishtirgandagi holat — ya'ni «orqadamanmi» degan savolning
 //  javobi aynan u. Oy tugaganda ikkalasi tenglashadi.
 //
-//  Chegaralar bonus shkalasiniki: 80% dan yuqorisi — to'liq stavka,
-//  50% dan pasti — bonussiz (`sales_kpi_bands`).
+//  Chegaralar bonus shkalasiniki (`sales_kpi_scale`, zavod qarori
+//  2026-11): 100% dan — to'liq stavka, 50% dan pasti — bonussiz.
 const bajCls = (v) => {
   const p = Number(v || 0) * 100;
-  return p >= 80 ? 'ok' : p >= 50 ? 'warn' : 'bad';
+  return p >= 100 ? 'ok' : p >= 50 ? 'warn' : 'bad';
 };
 
 const OYLAR = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul',
@@ -187,6 +187,7 @@ const ind = (v, code) => v.qator.find((q) => q.code === code)
 
 function varaq(v) {
   const st = v.bonus_stavka;
+  const Y = v.yordam;
   const S = ind(v, 'SEGMENT'), D = ind(v, 'DONA');
   const ich = (q, code) => q.ichi.find((c) => c.code === code)
     || { reja: 0, fakt: 0, bajarilish: 0, plan_bugun: 0, indeks: 0, prognoz: 0 };
@@ -253,8 +254,27 @@ function varaq(v) {
         v.tushum_qator, n2, false) : ''}
       ${korin.map((c) => juft(esc(c.name), c, false)).join('')}
       ${tsizS}${tsizD}
-      ${korin.length ? juft('Jami', null, true) : ''}</tbody>
+      ${korin.length ? juft('Jami', null, true) : ''}
+      ${yQatorlar()}</tbody>
     </table></div>`;
+  //  ★ BOSHQA SAVDO QATORLARI — faqat rejasi bor turkum: fakt shu
+  //  turkumda butun zavodning savdosi minus o'ziniki.
+  const yQatorlar = () => {
+    if (!Y) return '';
+    const YQ = ind(v, 'YORDAM');
+    const r = YQ.ichi.filter((c) => c.reja > 0);
+    const nom = (c) => (d.categories.find((x) => x.code === c.code) || c).name;
+    return `<tr><td colspan="7" style="padding-top:14px"><b>Boshqa savdo</b>
+        <span class="muted" style="font-size:11px">· showroom, SMM, eksport — turkumda
+        butun zavod savdosi minus o'ziniki</span></td></tr>`
+      + r.map((c) => qator(esc(nom(c)), c, n2, false)).join('')
+      + (r.length > 1 ? qator('Jami', { reja: Y.reja, fakt: Y.fakt,
+          bajarilish: Y.reja ? Y.fakt / Y.reja : 0,
+          plan_bugun: r.reduce((a, c) => a + c.plan_bugun, 0),
+          indeks: r.reduce((a, c) => a + c.plan_bugun, 0)
+            ? Y.fakt / r.reduce((a, c) => a + c.plan_bugun, 0) : 0,
+          prognoz: Y.fakt }, n2, true) : '');
+  };
   //  Turkumi yo'q savdo — faqat reja umuman yo'q bo'lganda: rejasi bor
   //  varaqda u KPI ga tegishli emas.
   const tsiz = (q, f) => !rejali.length && q.turkumsiz ? `<tr class="muted">
@@ -297,14 +317,24 @@ function varaq(v) {
             ? n2(DJ.bajarilish * 100) + '%' : '—'}</div>
           <div class="muted" style="font-size:11px">${n0(DJ.fakt)} / ${n0(DJ.reja)} dona</div>
         </div>
+        ${Y ? `<!--  ★ IKKINCHI REJA — BOSHQA SAVDO (zavod qarori, 2026-11):
+              alohida foiz, alohida bonus. -->
         <div>
-          <div class="muted" style="font-size:12px">BONUS (${n2(st)}%)</div>
+          <div class="muted" style="font-size:12px">BOSHQA SAVDO KPI</div>
+          <div style="font-size:28px;font-weight:700">${n2(Y.foiz)}%</div>
+          <div class="muted" style="font-size:11px">${n2(Y.fakt)} / ${n2(Y.reja)} $
+            · showroom, SMM, eksport</div>
+        </div>` : ''}
+        <div>
+          <div class="muted" style="font-size:12px">BONUS${Y ? '' : ` (${n2(st)}%)`}</div>
           <div style="font-size:28px;font-weight:700">${n2(v.bonus)} $</div>
-          <!--  Bonus BAZASI — tushgan pul, reja emas: KPI eshikni
-                ochadi, pul esa hajmini beradi (zavod qarori). -->
+          <!--  Bonus BAZASI — tushgan pul yoki savdo, reja emas: KPI
+                eshikni ochadi, pul esa hajmini beradi (zavod qarori). -->
           <div class="muted" style="font-size:11px">${v.bonus_baza === 'tushum'
-            ? `tushgan pul ${n2(v.tushum)} $ dan`
-            : `savdo ${n2(v.savdo)} $ dan`}</div>
+            ? `tushgan pul ${n2(v.tushum)} $ × ${n2(st)}%`
+            : `o'z savdosi ${n2(v.savdo)} $ × ${n2(st)}%`}${Y
+            ? ` = ${n2(v.bonus_asosiy)} $<br>boshqa savdo ${n2(Y.fakt)} $ × ${
+              n2(Y.stavka)}% = ${n2(Y.bonus)} $` : ''}</div>
         </div>
       </div>
     </div>
@@ -333,7 +363,7 @@ function planOch(widArg) {
   const wid = widArg != null ? String(widArg) : $('fWorker').value;
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)yop()">
-      <div class="modal" style="max-width:640px">
+      <div class="modal" style="max-width:800px">
         <div class="row" style="justify-content:space-between;margin-bottom:14px">
           <h1 style="margin:0">KPI rejasi</h1>
           <button onclick="yop()">Yopish</button></div>
@@ -349,7 +379,8 @@ function planOch(widArg) {
         <div id="pTushumWrap" style="margin-bottom:12px"></div>
         <table><thead><tr><th>Turkum</th>
           <th class="num" style="width:170px">Summa, $</th>
-          <th class="num" style="width:130px">Dona</th></tr></thead>
+          <th class="num" style="width:130px">Dona</th>
+          <th class="num" style="width:160px" title="Showroom, SMM, eksport">Boshqa savdo, $</th></tr></thead>
         <tbody>${d.categories.map((c) => `
           <tr><td>${esc(c.name)}</td>
             <td class="num"><input id="s_${c.code}" type="number" step="0.01" min="0"
@@ -357,12 +388,20 @@ function planOch(widArg) {
               style="max-width:150px;text-align:right"></td>
             <td class="num"><input id="d_${c.code}" type="number" step="1" min="0"
               value="0" oninput="planJami()"
-              style="max-width:110px;text-align:right"></td></tr>`).join('')}
+              style="max-width:110px;text-align:right"></td>
+            <td class="num"><input id="y_${c.code}" type="number" step="0.01" min="0"
+              value="0" oninput="planJami()"
+              style="max-width:140px;text-align:right"></td></tr>`).join('')}
           <tr style="font-weight:700"><td>Jami</td>
-            <td class="num" id="sJami"></td><td class="num" id="dJami"></td></tr>
+            <td class="num" id="sJami"></td><td class="num" id="dJami"></td>
+            <td class="num" id="yJami"></td></tr>
         </tbody></table>
         <p class="muted" style="margin:14px 0 0;font-size:12px">Umumiy KPI
-          jami summa bo'yicha hisoblanadi. Bo'sh qoldirilgan turkum — reja yo'q.</p>
+          jami summa bo'yicha hisoblanadi. Bo'sh qoldirilgan turkum — reja yo'q.
+          <b>Boshqa savdo</b> — ikkinchi reja: turkumning umumiy rejasidan
+          xodimnikidan qolgani (showroom, SMM, eksport). Fakti — shu turkumda
+          butun zavod savdosi minus xodimning o'zi; alohida baholanadi va
+          bonusi qo'shiladi.</p>
         <div class="row" style="gap:10px;margin-top:16px">
           <button class="primary" onclick="planSaqla()">Saqlash</button>
           <button onclick="yop()">Bekor</button></div>
@@ -388,6 +427,7 @@ async function planYukla() {
   for (const c of d.categories) {
     $('s_' + c.code).value = reja('SEGMENT', c.code);
     $('d_' + c.code).value = reja('DONA', c.code);
+    $('y_' + c.code).value = reja('YORDAM', c.code);
   }
   planJami();
   tushumKatak(v && v.tushum_qator ? v.tushum_qator.reja : 0);
@@ -413,6 +453,7 @@ function planJami() {
     a + (Number(($(p + c.code) || {}).value) || 0), 0);
   $('sJami').textContent = n2(yig('s_'));
   $('dJami').textContent = n0(yig('d_'));
+  $('yJami').textContent = n2(yig('y_'));
 }
 
 async function planSaqla() {
@@ -428,6 +469,8 @@ async function planSaqla() {
       plan: Number($('s_' + c.code).value) || 0 });
     items.push({ indicator: 'DONA', category: c.code,
       plan: Number($('d_' + c.code).value) || 0 });
+    items.push({ indicator: 'YORDAM', category: c.code,
+      plan: Number($('y_' + c.code).value) || 0 });
   }
   try {
     await App.api('/api/sales/kpi', { method: 'POST',

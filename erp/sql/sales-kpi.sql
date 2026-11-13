@@ -134,6 +134,45 @@ INSERT INTO sales_kpi_bands (from_pct, rate_pct) VALUES
   (80, 1)
 ON CONFLICT (from_pct) DO NOTHING;
 
+--  ★ IKKI SHKALA — SAVDODAN VA TUSHUMDAN (zavod qarori, 2026-11).
+--  Bitta shkala ikki xil bazaga to'g'ri kelmaydi: pul tushumidan
+--  bonus oladigan xodimning stavkasi savdodan oladigan menejernikidan
+--  boshqa. Shuning uchun shkala BAZA bo'yicha (`baza`):
+--
+--    bajarilish      savdodan    tushumdan
+--    < 50%           0           0
+--    50 – 74,99%     0,25%       0,4%
+--    75 – 99,99%     0,375%      0,6%
+--    100% va ortiq   0,5%        0,8%
+--
+--  Eski `sales_kpi_bands` (bitta shkala) o'qilmaydi, lekin
+--  o'chirilmaydi: jadval tarixda turadi. Raqamlar BAZADA, kodda emas
+--  (4-qoida) — `ON CONFLICT DO NOTHING`, ya'ni saytdan (bazadan)
+--  o'zgartirilgan stavka keyingi deploy'da qaytmaydi.
+CREATE TABLE IF NOT EXISTS sales_kpi_scale (
+  baza     TEXT NOT NULL CHECK (baza IN ('savdo', 'tushum')),
+  from_pct NUMERIC(6,2) NOT NULL CHECK (from_pct >= 0),
+  rate_pct NUMERIC(6,4) NOT NULL CHECK (rate_pct >= 0),
+  PRIMARY KEY (baza, from_pct)
+);
+
+INSERT INTO sales_kpi_scale (baza, from_pct, rate_pct) VALUES
+  ('savdo',  0,   0), ('savdo',  50, 0.25), ('savdo',  75, 0.375), ('savdo',  100, 0.5),
+  ('tushum', 0,   0), ('tushum', 50, 0.4),  ('tushum', 75, 0.6),   ('tushum', 100, 0.8)
+ON CONFLICT (baza, from_pct) DO NOTHING;
+
+--  ★ IKKINCHI REJA — «BOSHQA SAVDO» (`YORDAM`, zavod qarori 2026-11).
+--  Turkum menejeri (korpus — Bahrom, stol-stul — Aziz) o'z mijozlaridan
+--  tashqari showroom, SMM va eksport savdosiga ham yordam beradi:
+--  turkumning umumiy rejasi ikkiga bo'linadi — o'ziniki va QOLGANI.
+--  Fakt — o'sha turkumda BUTUN zavodning savdosi minus o'zining
+--  savdosi (`modules/sales.js`, `GET /kpi`), ya'ni ikkala reja bitta
+--  savdoni ikki marta sanamaydi. Har reja ALOHIDA baholanadi va bonus
+--  ikkalasidan qo'shiladi.
+INSERT INTO sales_kpi_indicators (code, name, unit, by_category, default_weight, sort, active)
+VALUES ('YORDAM', 'Boshqa savdo (showroom, SMM, eksport), $', 'usd', true, 0, 6, true)
+ON CONFLICT (code) DO NOTHING;
+
 -- ───────────────────────────────────────────────────────── FAKT
 --
 --  ★ UCHALA RAQAM HAM MIJOZNING MENEJERIGA yoziladi

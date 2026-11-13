@@ -4101,7 +4101,10 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     db.query(`SELECT * FROM sales_kpi_indicators WHERE active ORDER BY sort, code`),
     db.query(`SELECT code, name FROM sales_categories WHERE active
                ORDER BY sort, name`),
-    db.query(`SELECT from_pct, rate_pct FROM sales_kpi_bands ORDER BY from_pct`),
+    //  ★ IKKI SHKALA (zavod qarori, 2026-11; `sql/sales-kpi.sql`):
+    //  savdodan va tushumdan — stavkalari boshqa.
+    db.query(`SELECT baza, from_pct, rate_pct FROM sales_kpi_scale
+               ORDER BY baza, from_pct`),
     db.query(
       `SELECT t.*, w.name AS worker_name
          FROM sales_kpi_targets t JOIN workers w ON w.id = t.worker_id
@@ -4132,6 +4135,34 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   //  qilingani va qabul qilinmagani — `pending` — sanalmaydi; TUSHUM
   //  shoxi bilan bir xil shart, `sql/sales-kpi.sql`).
   const zavodTushum = await zavodTushumi(K.mon);
+
+  //  ★ «BOSHQA SAVDO» FAKTI UCHUN — BUTUN ZAVODNING TURKUM SAVDOSI
+  //  (zavod qarori, 2026-11). Shart `v_sales_kpi_fact` dagi SEGMENT
+  //  shoxi bilan AYNAN bir xil (chiqib ketgan konver, qabul qilingan
+  //  qaytarish ayirilgan), faqat mijozning menejeri so'ralmaydi:
+  //  menejeri yo'q mijoz (showroom, SMM) ham, eksport ham shu yerda.
+  //  Xodimning «boshqa savdosi» = bu − o'z SEGMENT fakti.
+  const zavodTurkum = Object.fromEntries((await db.query(
+    `SELECT category, SUM(s)::numeric AS s FROM (
+       SELECT g.sales_category AS category, SUM(u.total_amount) AS s
+         FROM production_units u
+         JOIN products p       ON p.id = u.product_id
+         JOIN product_groups g ON g.id = p.group_id
+        WHERE u.status = 'shipped' AND u.total_amount IS NOT NULL
+          AND date_trunc('month', u.ship_on)::date = $1::date
+        GROUP BY 1
+       UNION ALL
+       SELECT g.sales_category, -SUM(i.qty * COALESCE(i.price, 0))
+         FROM cust_returns r
+         JOIN cust_return_items i ON i.return_id = r.id
+         JOIN production_units u  ON u.id = i.unit_id
+         JOIN products p          ON p.id = u.product_id
+         JOIN product_groups g    ON g.id = p.group_id
+        WHERE r.status = 'accepted'
+          AND date_trunc('month', r.ret_on)::date = $1::date
+        GROUP BY 1) t
+      WHERE category IS NOT NULL
+      GROUP BY 1`, [K.mon])).rows.map((r) => [r.category, Number(r.s)]));
 
   const nisbat = K.jami_kun ? K.otgan_kun / K.jami_kun : 0;
   const son = (v) => Number(v || 0);
@@ -4195,7 +4226,13 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
 
   const varaq = kimlar.map((wid) => {
     const pl = plans.rows.filter((p) => p.worker_id === wid);
-    const fk = facts.rows.filter((f) => f.worker_id === wid);
+    const oz = facts.rows.filter((f) => f.worker_id === wid);
+    //  «Boshqa savdo» fakti: turkumda butun zavod − o'ziniki.
+    const ozSeg = (c) => oz.filter((f) => f.indicator === 'SEGMENT' && f.category === c)
+      .reduce((a, f) => a + son(f.fakt), 0);
+    const fk = [...oz, ...cat.rows.map((c) => ({
+      indicator: 'YORDAM', category: c.code,
+      fakt: son(zavodTurkum[c.code]) - ozSeg(c.code) }))];
 
     const jr = jarayon.filter((x) => x.worker_id === wid);
     const jar = (code, cat) => jr
@@ -4291,7 +4328,21 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
     const taxSumma = tushumAsosiy ? tushumQator.prognoz
       : rejali.reduce((a, c) => a + c.prognoz, 0);
     const taxReja = tushumAsosiy ? tReja : rejaJami;
-    const stavka = bonusStavka(bands.rows, foiz);
+    //  ★ IKKI REJA — IKKI ALOHIDA HISOB (zavod qarori, 2026-11).
+    //  Birinchisi o'z savdosi (yoki belgili xodimda pul tushumi),
+    //  ikkinchisi «boshqa savdo» (`YORDAM`): har biri o'z foizi bilan
+    //  shkaladan o'tadi va o'z faktidan bonus beradi. Ikkinchi reja
+    //  qo'yilmagan xodimda u nol — hech narsa o'zgarmaydi.
+    const shkala = (b) => bands.rows.filter((r) => r.baza === b);
+    const stavka = bonusStavka(shkala(tushumdan ? 'tushum' : 'savdo'), foiz);
+    const Y = qator.find((q) => q.code === 'YORDAM') || { ichi: [] };
+    const yRejali = Y.ichi.filter((c) => c.reja > 0);
+    const yReja = yRejali.reduce((a, c) => a + c.reja, 0);
+    const yFakt = yRejali.reduce((a, c) => a + c.fakt, 0);
+    const yFoiz = yReja > 0 ? yFakt / yReja * 100 : 0;
+    const yStavka = yReja > 0 ? bonusStavka(shkala('savdo'), yFoiz) : 0;
+    const yordam = yReja > 0 ? { reja: yReja, fakt: yFakt, foiz: yFoiz,
+      stavka: yStavka, bonus: yFakt * yStavka / 100 } : null;
     //  ★ QO'L OSTIDAGILAR EKRANDA YOZILADI (zavod qarori, 2026-10).
     //  Boshliqning raqami qo'l ostidagilarning yig'indisidan chiqadi
     //  (izoh: `sql/sales-kpi.sql`) va buni ekran aytmasa, u o'z
@@ -4309,7 +4360,10 @@ router.get('/kpi', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
       taxminiy: { summa: taxSumma, foiz: taxReja > 0 ? taxSumma / taxReja * 100 : 0 },
       umumiy_baza: tushumAsosiy ? 'tushum' : 'savdo',
       bonus_baza: tushumdan ? 'tushum' : 'savdo',
-      bonus_stavka: stavka, bonus: baza * stavka / 100,
+      bonus_stavka: stavka,
+      bonus_asosiy: baza * stavka / 100,
+      yordam,
+      bonus: baza * stavka / 100 + (yordam ? yordam.bonus : 0),
     };
   }).sort((a, b) => b.umumiy - a.umumiy);
 

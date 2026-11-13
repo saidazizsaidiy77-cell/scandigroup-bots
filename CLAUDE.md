@@ -3597,6 +3597,26 @@ ikki odamni bir-biriga ham (`modules/admin.js`).
 **Reja qo'yish huquqi `sales.kpi`** — FAQAT administrator (yuqorida).
 Tugma huquqi yo'q odamda umuman chizilmaydi, tekshiruv esa serverda.
 
+**★ IKKI REJA VA IKKI SHKALA** (zavod qarori, 2026-11;
+`sales_kpi_scale`, `YORDAM`, `sql/sales-kpi.sql`). Turkum menejeri
+(korpus, stol-stul) o'z mijozlaridan tashqari showroom, SMM va eksport
+savdosiga ham yordam beradi, shuning uchun turkumning umumiy rejasi
+ikkiga bo'linadi: **o'ziniki** (`SEGMENT`) va **boshqa savdo**
+(`YORDAM`, reja oynasidagi uchinchi ustun). Boshqa savdo fakti — shu
+turkumda BUTUN zavod savdosi minus o'ziniki (qaytarish ayirilgan), ya'ni
+bitta savdo ikki rejada sanalmaydi. Ikki reja ALOHIDA baholanadi va
+bonus qo'shiladi; panel rejasiga `YORDAM` kirmaydi (u turkum rejasining
+bo'lagi).
+
+    bajarilish      savdodan    tushumdan
+    < 50%           0           0
+    50 – 74,99%     0,25%       0,4%
+    75 – 99,99%     0,375%      0,6%
+    100% va ortiq   0,5%        0,8%
+
+Shkala BAZADA, baza bo'yicha (`savdo` / `tushum`); eski
+`sales_kpi_bands` o'qilmaydi.
+
 **★ REJANI TAHRIRLASH — HAR VARAQDA «✎ Tahrirlash»** (zavod qarori,
 2026-11; `planYukla`, `public/savdo-kpi.html`). Oyna o'sha xodimning
 mavjud rejasi bilan ochiladi va oynada xodim yoki oy almashsa reja
