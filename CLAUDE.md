@@ -639,6 +639,17 @@ bilan cheklanadi** va qolgani bosilganda ochiladi: telefonda o'nta
 mahsulot qatori butun ekranni egallab, ish — bo'limlar ro'yxati —
 pastga tushib ketardi.
 
+**★ T/M OMBORGA TOPSHIRILDI — TURI BO'YICHA** (zavod qarori,
+2026-11; `/api/units/dashboard` dagi `topshirildi`, Ishlab chiqarish
+paneli). «Oktabrda nechta penal, kamod, stol, stul, sp ishlab
+chiqardik» — ombordagi «Kirdi» bunga toza javob bermaydi: unga
+vitrinadan va mijozdan qaytgani, boshlang'ich qoldiq va matras ham
+tushadi. Jadval: qator — TUR (o'lchov birligi bilan), ustun — OY,
+qavsda konverlar soni. Faqat tsexdan kelgani: `fg_on` (mudir qabul
+qilgan kun), marshruti bor, `NOT is_opening`, mijozdan qaytgan bo'lak
+emas (`cust_return_items.new_unit_id` yoki izoh — `clonePart` uni
+ko'chiradi). Test mustaqil SQL bilan solishtiradi.
+
 **Tsex boshlig'i konverni kim kutayotganini ko'radi** — bo'limlar
 ekranining O'ZIDA, alohida oyna emas. Konver yonida ikkita raqam turadi:
 soni (jismonan nechta) va ostida «N buyurtmada». Qator bosilsa ostida

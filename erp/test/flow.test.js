@@ -9736,6 +9736,35 @@ test('ishlab chiqarish paneli: chiqarilgan tsexdan chiqqanda sanaladi', async ()
     'bo\'limlar navbati to\'ladi');
 });
 
+//  ★ T/M OMBORGA TOPSHIRILDI — FAQAT TSEXDAN KELGANI (zavod qarori,
+//  2026-11). Ombordagi «Kirdi» ga boshlang'ich qoldiq, matras va
+//  mijozdan qaytgani ham tushadi; bu hisobotga — yo'q. Test
+//  raqamni bazadagi konverlardan mustaqil hisoblanganiga solishtiradi.
+test('ishlab chiqarish paneli: T/M ga topshirilgani — qoldiq va matrassiz', async () => {
+  const { db: tdb } = require('../db');
+  const dan = kun(-400), gacha = kun(1);
+  const d = (await admin('GET',
+    `/api/units/dashboard?from=${dan}&to=${gacha}`)).body;
+  assert.ok(Array.isArray(d.topshirildi));
+  const jami = d.topshirildi.reduce((a, r) => a + r.qty, 0);
+  const q = (await tdb.query(
+    `SELECT COALESCE(SUM(u.qty) FILTER (WHERE NOT u.is_opening
+                  AND p.route_template_id IS NOT NULL
+                  AND COALESCE(u.note, '') NOT LIKE 'Mijozdan qaytdi%'
+                  AND NOT EXISTS (SELECT 1 FROM cust_return_items ri
+                                   WHERE ri.new_unit_id = u.id)), 0)::int AS toza,
+            COALESCE(SUM(u.qty) FILTER (WHERE u.is_opening
+                  OR p.route_template_id IS NULL), 0)::int AS chetda
+       FROM production_units u JOIN products p ON p.id = u.product_id
+      WHERE u.fg_on BETWEEN $1::date AND $2::date AND u.status <> 'cancelled'`,
+    [dan, gacha])).rows[0];
+  assert.equal(jami, q.toza, 'faqat tsexdan kelgani');
+  //  Testda boshlang'ich qoldiq ham, matras ham omborga kiritiladi —
+  //  ular sanalsa raqam shu farqqa oshardi.
+  assert.ok(q.chetda > 0, 'testda qoldiq yoki matras bor');
+  for (const r of d.topshirildi) assert.ok(r.konver > 0 && r.uom, r.product_type);
+});
+
 //  ★ KPI: OYLIK REJA VA FAKT. Panel «qancha qildik» degan savolga
 //  javob beradi, lekin 76 ming dollar ko'pmi yoki ozmi — buni faqat
 //  REJA bilan solishtirganda bilinadi.
