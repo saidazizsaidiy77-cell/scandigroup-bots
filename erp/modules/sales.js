@@ -2726,8 +2726,18 @@ async function kutilganPuli(mon) {
 //  oyni so'raydi (zavod qarori, 2026-11) — ikki nusxa yozilsa bir kun
 //  bir-biridan ajralib ketardi. «Zavodda» faqat joriy oyda: u bugungi
 //  holat va o'tgan oyning savoli emas.
-function turkumKpi(mon, chans, own) {
-  return db.query(
+//
+//  ★ MENEJER O'Z TURKUMINI BUTUNLIGICHA KO'RADI (zavod qarori, 2026-11;
+//  `kimga`, faqat KPI sahifasida). Turkum menejerining rejasi ikki
+//  bo'lak — o'ziniki (SEGMENT) va boshqa savdo (YORDAM: showroom, SMM,
+//  eksport) — ya'ni u turkumning BUTUN savdosiga javob beradi. Shuning
+//  uchun unga faqat rejasi bor turkumlar chiziladi (stol-stul
+//  menejeriga penal kerak emas), reja — ikkala bo'lak yig'indisi,
+//  chiqdi va «zavodda» esa butun zavodniki: bosilsa shu turkumdagi
+//  HAMMA buyurtma ochiladi. Rejasi umuman yo'q bo'lsa hamma turkum.
+async function turkumKpi(mon, chans, own, kimga) {
+  if (kimga) { chans = null; own = null; }
+  const r = await db.query(
       `WITH oy AS (SELECT COALESCE($3::date, date_trunc('month', CURRENT_DATE)::date) AS m),
        chiq AS (
          SELECT g.sales_category AS c,
@@ -2792,7 +2802,8 @@ function turkumKpi(mon, chans, own) {
        reja AS (
          SELECT t.category AS c,
                 SUM(t.plan) FILTER (WHERE t.indicator = 'DONA')    AS q,
-                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT')      AS s
+                SUM(t.plan) FILTER (WHERE t.indicator = 'SEGMENT'
+                                     OR ($4::int IS NOT NULL AND t.indicator = 'YORDAM')) AS s
            FROM sales_kpi_targets t
            --  Ishdan ketgan xodimning rejasi sanalmaydi: u bu oy
            --  hech narsa sotmaydi va jami rejani yolg'on oshirardi.
@@ -2804,6 +2815,7 @@ function turkumKpi(mon, chans, own) {
            JOIN workers w ON w.id = t.worker_id AND w.active, oy
           WHERE t.mon = oy.m AND t.category IS NOT NULL
             AND ($2::int IS NULL OR t.worker_id = $2)
+            AND ($4::int IS NULL OR t.worker_id = $4)
           GROUP BY 1)
        SELECT sc.code, sc.name,
               (SELECT MIN(g.uom) FROM product_groups g
@@ -2822,7 +2834,12 @@ function turkumKpi(mon, chans, own) {
                 FROM zr WHERE c = sc.code), '[]'::json)                         AS zavodda_list
          FROM sales_categories sc
         WHERE sc.active
-        ORDER BY sc.sort, sc.name`, [chans, own, mon]);
+        ORDER BY sc.sort, sc.name`, [chans, own, mon, kimga || null]);
+  if (kimga) {
+    const bor = r.rows.filter((x) => x.reja_amount != null || x.reja_qty != null);
+    if (bor.length) r.rows = bor;
+  }
+  return r;
 }
 
 //  Pul tushumi kartochkasi (izoh: /dashboard). Reja — o'sha oyda belgili
@@ -4074,7 +4091,7 @@ router.get('/kpi/umumiy', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const joriy = (await db.query(
     `SELECT $1::date = date_trunc('month', CURRENT_DATE)::date AS j`, [K.mon])).rows[0].j;
   res.json({ mon: K.mon, joriy,
-             turkum: (await turkumKpi(K.mon, channelsOf(req), own)).rows,
+             turkum: (await turkumKpi(K.mon, channelsOf(req), own, own)).rows,
              tushum: own ? null : await tushumKpi(K.mon) });
 }));
 
