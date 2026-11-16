@@ -4088,10 +4088,15 @@ const kpiYozadi = (req) => req.user.permissions.includes('sales.kpi');
 router.get('/kpi/umumiy', need(...READ, 'sales.kpi'), wrap(async (req, res) => {
   const K = KPI_OY(req.query.mon);
   const own = ownOf(req);
+  //  ★ TURKUM REJADAN, BELGIDAN EMAS (zavod qarori, 2026-11): menejerga
+  //  «Faqat o'zinikini» belgisi bo'lmasa ham faqat REJASI BOR turkumlari
+  //  chiziladi. Rahbariyat (reja qo'yadigan / hisobot ko'radigan) butun
+  //  zavodni ko'radi.
+  const kimga = kpiHammasi(req) ? null : req.user.id;
   const joriy = (await db.query(
     `SELECT $1::date = date_trunc('month', CURRENT_DATE)::date AS j`, [K.mon])).rows[0].j;
   res.json({ mon: K.mon, joriy,
-             turkum: (await turkumKpi(K.mon, channelsOf(req), own, own)).rows,
+             turkum: (await turkumKpi(K.mon, channelsOf(req), own, kimga)).rows,
              tushum: own ? null : await tushumKpi(K.mon) });
 }));
 

@@ -3644,6 +3644,11 @@ chiqdi va «zavodda» esa shu turkumda BUTUN zavodniki — bosilsa
 showroom, SMM va eksport buyurtmalari ham ochiladi. Rejasi umuman
 yo'q bo'lsa hamma turkum. Savdo paneli o'zgarmadi.
 
+**★ QISQARISH REJADAN, BELGIDAN EMAS** (zavod qarori, 2026-11): «Faqat
+o'zinikini» belgisi bo'lmagan menejerda ham turkumlar REJASIDAN
+qisqaradi (`kimga` — o'zi). Rahbariyat (`kpiHammasi`) butun zavodni
+ko'radi.
+
 Reja oynasida **reja qo'yilgan turkumlar tepada**, qolgani bitta
 «+ boshqa turkumlar» qatoriga yig'iladi (`pSaralash`): korpus
 menejeriga stol-stul qatori ortiqcha. Hech qaysisida reja yo'q bo'lsa

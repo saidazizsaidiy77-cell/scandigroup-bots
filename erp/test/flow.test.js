@@ -8678,6 +8678,15 @@ test('savdo KPI: menejerga o\'z turkumlari, zavodda — butun zavod', async () =
   assert.equal(stol.zavodda_qty, hamma.zavodda_qty, 'zavodda — butun zavod');
   assert.equal(stol.zavodda_list.length, hamma.zavodda_list.length);
   assert.equal(Number(stol.chiqdi_amount), Number(hamma.chiqdi_amount));
+
+  //  ★ BELGISIZ HAM (zavod qarori, 2026-11): «Faqat o'zinikini» olib
+  //  tashlansa ham turkumlar REJADAN qisqaradi.
+  await db.query(`UPDATE worker_roles SET scope_own = false
+                   WHERE worker_id = $1 AND role_code = 'sotuvchi'`, [wid]);
+  const men2 = H.api(base, await H.sessionFor(nom));
+  const u2 = (await men2('GET', '/api/sales/kpi/umumiy?mon=' + oy)).body;
+  assert.deepEqual(u2.turkum.map((t) => t.code).sort(), ['STOL', 'STUL'], 'belgisiz ham');
+  assert.equal(u2.turkum.find((t) => t.code === 'STOL').zavodda_qty, hamma.zavodda_qty);
   await db.query(`DELETE FROM sales_kpi_targets WHERE worker_id = $1`, [wid]);
 });
 
