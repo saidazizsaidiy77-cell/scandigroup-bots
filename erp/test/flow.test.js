@@ -8650,6 +8650,37 @@ test('savdo turkumi: foyda-zararda tushum turkumlarga bo\'linadi', async () => {
     .find((g) => g.code === 'KAMOD').sales_category, 'MEHMON', 'tegilmaydi');
 });
 
+//  ★ MENEJER O'Z TURKUMINI BUTUNLIGICHA KO'RADI (zavod qarori, 2026-11).
+//  KPI sahifasida doirasi bor menejerga faqat rejasi bor turkumlar,
+//  reja — o'ziniki + boshqa savdo, «zavodda» esa butun zavodniki.
+test('savdo KPI: menejerga o\'z turkumlari, zavodda — butun zavod', async () => {
+  const { db } = require('../db');
+  const nom = 'KPI turkum menejeri';
+  await db.query(`INSERT INTO workers (name) VALUES ($1) ON CONFLICT DO NOTHING`, [nom]);
+  await db.query(
+    `INSERT INTO worker_roles (worker_id, role_code, scope_own)
+     SELECT id, 'sotuvchi', true FROM workers WHERE name = $1
+     ON CONFLICT (worker_id, role_code) DO UPDATE SET scope_own = true`, [nom]);
+  const wid = (await H.id(`SELECT id FROM workers WHERE name = $1`, [nom])).id;
+  const oy = new Date().toISOString().slice(0, 7);
+  assert.equal((await admin('POST', '/api/sales/kpi', { mon: oy, worker_id: wid, items: [
+    { indicator: 'SEGMENT', category: 'STOL', plan: 1000 },
+    { indicator: 'YORDAM',  category: 'STOL', plan: 500 },
+    { indicator: 'SEGMENT', category: 'STUL', plan: 2000 },
+  ] })).status, 200);
+  const men = H.api(base, await H.sessionFor(nom));
+  const u = (await men('GET', '/api/sales/kpi/umumiy?mon=' + oy)).body;
+  assert.deepEqual(u.turkum.map((t) => t.code).sort(), ['STOL', 'STUL']);
+  const stol = u.turkum.find((t) => t.code === 'STOL');
+  assert.equal(Number(stol.reja_amount), 1500, 'o\'ziniki + boshqa savdo');
+  const hamma = (await admin('GET', '/api/sales/kpi/umumiy?mon=' + oy)).body.turkum
+    .find((t) => t.code === 'STOL');
+  assert.equal(stol.zavodda_qty, hamma.zavodda_qty, 'zavodda — butun zavod');
+  assert.equal(stol.zavodda_list.length, hamma.zavodda_list.length);
+  assert.equal(Number(stol.chiqdi_amount), Number(hamma.chiqdi_amount));
+  await db.query(`DELETE FROM sales_kpi_targets WHERE worker_id = $1`, [wid]);
+});
+
 test('savdo KPI: turkum bo\'yicha summa va dona, og\'irliksiz', async () => {
   //  ★ ZAVOD QARORI (2026-10): reja har TURKUM uchun ikki raqam —
   //  summa va dona. Og'irlik yo'q, Tushum va AKB ko'rsatkich emas.

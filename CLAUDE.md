@@ -3635,6 +3635,15 @@ jarayondagi buyurtmalar, jarayoni esa fakt bilan AYNAN bir xil ayirma —
 turkumda butun zavodning yozilgan, hali chiqmagan buyurtmalari minus
 o'zinikilar (`zavodJarayon`, faqat joriy oyda).
 
+**★ MENEJER O'Z TURKUMINI BUTUNLIGICHA KO'RADI** (zavod qarori,
+2026-11; `turkumKpi` dagi `kimga`, faqat `/kpi/umumiy`). KPI
+sahifasidagi turkum kartochkalarida doirasi bor menejerga faqat
+REJASI BOR turkumlar chiziladi (stol-stul menejeriga penal yo'q),
+reja — SEGMENT + YORDAM (u turkumning butun savdosiga javob beradi),
+chiqdi va «zavodda» esa shu turkumda BUTUN zavodniki — bosilsa
+showroom, SMM va eksport buyurtmalari ham ochiladi. Rejasi umuman
+yo'q bo'lsa hamma turkum. Savdo paneli o'zgarmadi.
+
 Reja oynasida **reja qo'yilgan turkumlar tepada**, qolgani bitta
 «+ boshqa turkumlar» qatoriga yig'iladi (`pSaralash`): korpus
 menejeriga stol-stul qatori ortiqcha. Hech qaysisida reja yo'q bo'lsa
