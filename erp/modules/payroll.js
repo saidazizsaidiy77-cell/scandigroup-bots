@@ -83,8 +83,9 @@ router.get('/', need(...KO), wrap(async (req, res) => {
     )
     SELECT w.id, w.name, w.position, w.staff_group, w.active,
            COALESCE(sc.name, w.dept) AS dept, sh.name AS shop,
-           COALESCE(s.open_uzs, 0)::numeric(18,2) AS open_uzs,
-           COALESCE(s.open_usd, 0)::numeric(18,2) AS open_usd,
+           (COALESCE(s.open_uzs, 0) + w.pay_open_uzs)::numeric(18,2) AS open_uzs,
+           (COALESCE(s.open_usd, 0) + w.pay_open_usd)::numeric(18,2) AS open_usd,
+           w.pay_open_uzs, w.pay_open_usd, w.pay_open_on::text AS pay_open_on, w.pay_open_note,
            COALESCE(s.acc_uzs, 0)::numeric(18,2)  AS acc_uzs,
            COALESCE(s.acc_usd, 0)::numeric(18,2)  AS acc_usd,
            COALESCE(s.paid_uzs, 0)::numeric(18,2) AS paid_uzs,
@@ -101,7 +102,8 @@ router.get('/', need(...KO), wrap(async (req, res) => {
       LEFT JOIN shops    sh ON sh.id = w.shop_id
      --  Ishdan ketgan xodim ham turadi, agar hisobi yopilmagan bo'lsa:
      --  unga qarzimiz qolgan va u jimgina ro'yxatdan tushib ketmasin.
-     WHERE (w.active OR s.worker_id IS NOT NULL)
+     WHERE (w.active OR s.worker_id IS NOT NULL
+            OR w.pay_open_uzs <> 0 OR w.pay_open_usd <> 0)
        AND ($2::int[] IS NULL OR COALESCE(w.shop_id, sc.shop_id) = ANY($2))
      ORDER BY sh.name NULLS LAST, w.name`, [m, sh]);
   for (const r of rows) {
@@ -205,5 +207,126 @@ router.post('/copy', need(YOZ), wrap(async (req, res) => {
     payload: { qator: r.rowCount } });
   res.json({ ok: true, count: r.rowCount });
 }));
+
+//  ★ BOSHLANG'ICH QOLDIQ (izoh: sql/cash.sql). ISHORALI: musbat —
+//  berilmagan oylik (korxona qarzdor), manfiy — xodimga berilgan qarz.
+//  Bo'sh — «yo'q» (nol), «tegma» emas.
+const sonmi = (v) => (v === '' || v == null ? 0 : Number(v));
+async function boshlangich(c, req, wid, b) {
+  const uzs = sonmi(b.uzs), usd = sonmi(b.usd);
+  if (!Number.isFinite(uzs) || !Number.isFinite(usd))
+    throw Object.assign(new Error('Summa noto\'g\'ri'), { status: 400 });
+  const eski = (await c.query(`SELECT pay_open_uzs, pay_open_usd, pay_open_on
+      FROM workers WHERE id = $1`, [wid])).rows[0];
+  if (!eski) throw Object.assign(new Error('Xodim topilmadi'), { status: 400 });
+  const on = b.on ? String(b.on).slice(0, 10) : null;
+  if (on && !/^\d{4}-\d{2}-\d{2}$/.test(on))
+    throw Object.assign(new Error('Sana noto\'g\'ri'), { status: 400 });
+  await c.query(`UPDATE workers SET pay_open_uzs = $2, pay_open_usd = $3,
+      pay_open_on = $4, pay_open_note = $5 WHERE id = $1`,
+    [wid, uzs, usd, on, b.note ? String(b.note).trim() || null : null]);
+  await audit(req, { module: 'payroll', action: 'opening', entity: 'worker', entity_id: wid,
+    payload: { edi: eski, boldi: { uzs, usd, on } } }, c);
+}
+
+router.put('/opening', need(YOZ), wrap(async (req, res) => {
+  const b = req.body || {};
+  await boshlangich(db, req, Number(b.worker_id) || 0, b);
+  res.json({ ok: true });
+}));
+
+//  ★ FAYLDAN (zavod qarori, 2026-11): oltmish odamni qo'lda terish
+//  yarim kunlik ish. Ustunlar: F.I.SH · «Berilmagan so'm» ·
+//  «Berilmagan $» · «Qarz so'm» · «Qarz $» · «Sana». Har valyutada
+//  qoldiq = berilmagan − qarz. Ikkala katagi bo'sh valyutaga TEGILMAYDI.
+//  Avval TEKSHIRIB ko'rsatiladi (`?save=1` siz), xato qator bo'lsa hech
+//  narsa saqlanmaydi — boshqa importlar bilan bir xil yo'l.
+const OFIELDS = {
+  name:     ['fish', 'fio', 'ism', 'ismi', 'xodim', 'hodim', 'nomi', 'фио', 'сотрудник'],
+  unp_uzs:  ['berilmagan', 'berilmagansom', 'berilmaganoylik', 'berilmaganoyliksom',
+             'korxonaqarzi', 'korxonaqarzisom', 'haqdor', 'haqdorsom'],
+  unp_usd:  ['berilmagandollar', 'berilmaganusd', 'berilmaganoylikdollar',
+             'berilmaganoylikusd', 'korxonaqarzidollar', 'haqdordollar', 'haqdorusd'],
+  debt_uzs: ['qarz', 'qarzsom', 'qarzi', 'qarzisom', 'xodimqarzi', 'xodimqarzisom',
+             'qarzdor', 'qarzdorsom', 'avans', 'avanssom'],
+  debt_usd: ['qarzdollar', 'qarzusd', 'qarzidollar', 'qarziusd', 'xodimqarzidollar',
+             'qarzdordollar', 'qarzdorusd', 'avansdollar', 'avansusd'],
+  on:       ['sana', 'qarzsanasi', 'дата'],
+};
+router.post('/opening/import', need(YOZ),
+  express.raw({ type: '*/*', limit: '10mb' }),
+  wrap(async (req, res) => {
+    const { readSheet } = require('../xlsx');
+    const H = require('./import').helpers;
+    const buf = req.body;
+    if (!buf || !buf.length) throw Object.assign(new Error('Fayl bo\'sh'), { status: 400 });
+    let table;
+    try { table = H.isXlsx(buf) ? readSheet(buf) : H.parseCsv(buf.toString('utf8')); }
+    catch (e) { throw Object.assign(new Error('Faylni o\'qib bo\'lmadi: ' + e.message), { status: 400 }); }
+    const hi = table.findIndex((r) => r.some((c) => String(c).trim()));
+    if (hi < 0) throw Object.assign(new Error('Fayl bo\'sh'), { status: 400 });
+    const map = {};
+    table[hi].forEach((h, i) => {
+      const n = H.norm(String(h ?? '').replace(/\$/g, 'dollar'));
+      const f = Object.keys(OFIELDS).find((k) => OFIELDS[k].includes(n));
+      if (f && map[f] == null) map[f] = i;
+    });
+    if (map.name == null)
+      throw Object.assign(new Error('Xodim ismi ustuni topilmadi («F.I.SH»). Topilgan: ' +
+        table[hi].filter(Boolean).join(', ')), { status: 400 });
+    if (!['unp_uzs', 'unp_usd', 'debt_uzs', 'debt_usd'].some((k) => map[k] != null))
+      throw Object.assign(new Error('Summa ustuni topilmadi: «Berilmagan so\'m», ' +
+        '«Berilmagan $», «Qarz so\'m» yoki «Qarz $»'), { status: 400 });
+    const ws = (await db.query(`SELECT id, name, pay_open_uzs, pay_open_usd FROM workers`)).rows;
+    const byName = new Map(ws.map((w) => [H.norm(w.name), w]));
+    const rows = [], seen = new Set();
+    for (let i = hi + 1; i < table.length; i++) {
+      const cells = table[i];
+      if (!cells.some((c) => String(c).trim())) continue;
+      const at = (f) => (map[f] == null ? '' : String(cells[map[f]] ?? '').trim());
+      const errors = [];
+      const name = at('name');
+      const w = byName.get(H.norm(name));
+      if (!name) errors.push('Ism bo\'sh');
+      else if (!w) errors.push(`Xodim topilmadi: «${name}» — avval Xodimlar sahifasida kiriting`);
+      else if (seen.has(w.id)) errors.push(`Faylda takrorlangan: «${name}»`);
+      else seen.add(w.id);
+      const it = { name, worker_id: w && w.id };
+      for (const cur of ['uzs', 'usd']) {
+        const a = at('unp_' + cur), d = at('debt_' + cur);
+        if (!a && !d) continue;
+        const na = a ? H.toNum(a) : 0, nd = d ? H.toNum(d) : 0;
+        if (na === undefined || nd === undefined) errors.push(`Summa tushunarsiz: «${a || d}»`);
+        else it[cur] = Math.round((Math.abs(na) - Math.abs(nd)) * 100) / 100;
+      }
+      const sana = at('on');
+      if (sana) {
+        const dt = H.toDate(sana);
+        if (dt === undefined) errors.push(`Sana tushunarsiz: «${sana}»`); else it.on = dt;
+      }
+      rows.push({ line: i + 1, it, errors });
+    }
+    if (!rows.length) throw Object.assign(new Error('Faylda qator yo\'q'), { status: 400 });
+    const bad = rows.filter((r) => r.errors.length);
+    if (req.query.save !== '1')
+      return res.json({ preview: true, total: rows.length, bad: bad.length, rows: rows.slice(0, 200) });
+    if (bad.length)
+      throw Object.assign(new Error(`${bad.length} ta qatorda xato bor — saqlanmadi`), { status: 400 });
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN');
+      for (const r of rows) {
+        const w = ws.find((x) => x.id === r.it.worker_id);
+        const cur = (await c.query(`SELECT pay_open_on::text AS on, pay_open_note
+            FROM workers WHERE id = $1`, [w.id])).rows[0];
+        await boshlangich(c, req, w.id, {
+          uzs: r.it.uzs ?? w.pay_open_uzs, usd: r.it.usd ?? w.pay_open_usd,
+          on: r.it.on || cur.on,
+          note: cur.pay_open_note });
+      }
+      await c.query('COMMIT');
+      res.json({ saved: rows.length });
+    } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+  }));
 
 module.exports = router;

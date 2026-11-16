@@ -1283,3 +1283,4 @@ router.post('/workers', need('admin.users'),
   }));
 
 module.exports = router;
+router.helpers = { parseCsv, isXlsx, norm, toDate, toNum };
