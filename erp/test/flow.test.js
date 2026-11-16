@@ -5989,6 +5989,47 @@ test('tsex boshlig\'i faqat O\'Z tsexining oyligini yozadi', async () => {
 //  o'ntasi kiradi — qolgani PIN'siz shtatda turadi va ularning oyligi
 //  ishbay hisobdan chiqadi. Fayl shuning uchun PIN'ni ham, rolni ham
 //  o'qimaydi: PIN yozilgan Excel pochtada va stol ustida qolardi.
+//  ★ ISH HAQI BOSHLANG'ICH QOLDIG'I (zavod qarori, 2026-11): musbat —
+//  berilmagan oylik, minus — xodimga berilgan qarz; «Oy boshiga» ichida.
+test('ish haqi: boshlang\'ich qoldiq — qo\'lda va fayldan', async () => {
+  const { db } = require('../db');
+  for (const n of ['Sinov Oylik Qarzi', 'Sinov Oylik Avans'])
+    await db.query(`INSERT INTO workers (name) SELECT $1::text
+      WHERE NOT EXISTS (SELECT 1 FROM workers WHERE name = $1::text)`, [n]);
+  const a = (await H.id(`SELECT id FROM workers WHERE name = 'Sinov Oylik Qarzi'`)).id;
+  const b = (await H.id(`SELECT id FROM workers WHERE name = 'Sinov Oylik Avans'`)).id;
+  const oy = new Date().toISOString().slice(0, 7);
+  const qator = async (id) => (await admin('GET', '/api/payroll?month=' + oy)).body
+    .rows.find((r) => r.id === id);
+  const b0 = await qator(a);
+
+  assert.equal((await admin('PUT', '/api/payroll/opening',
+    { worker_id: a, uzs: '1500000', usd: '', on: '2026-09-30' })).status, 200);
+  const b1 = await qator(a);
+  assert.equal(Number(b1.open_uzs) - Number(b0.open_uzs), 1500000, 'oy boshiga qo\'shildi');
+  assert.equal(Number(b1.close_uzs) - Number(b0.close_uzs), 1500000);
+  assert.equal(Number(b1.acc_uzs), Number(b0.acc_uzs), 'hisoblandiga tushmaydi');
+
+  const fayl = ["F.I.SH;Berilmagan so'm;Qarz $;Sana",
+                "Sinov Oylik Avans;;200;01.10.2026",
+                "Bunday Odam Yoq;100;;"];
+  const pre = await (await post('/api/payroll/opening/import', fayl)).json();
+  assert.equal(pre.bad, 1, 'topilmagan xodim — xato');
+  const fayl2 = fayl.slice(0, 2);
+  const ok = await (await post('/api/payroll/opening/import?save=1', fayl2)).json();
+  assert.equal(ok.saved, 1);
+  const r = await qator(b);
+  assert.equal(Number(r.pay_open_usd), -200, 'qarz — minus');
+  assert.equal(r.pay_open_on, '2026-10-01');
+
+  //  Ikkinchi yuklash bo'sh valyutaga tegmaydi.
+  await (await post('/api/payroll/opening/import?save=1',
+    ["F.I.SH;Berilmagan so'm", "Sinov Oylik Avans;300"])).json();
+  const r2 = await qator(b);
+  assert.equal(Number(r2.pay_open_usd), -200);
+  assert.equal(Number(r2.pay_open_uzs), 300);
+});
+
 test('xodimlarni fayldan yuklash: bo\'lim tsex ichida izlanadi', async () => {
   const fayl = [
     "T/R;F.I.SH;Guruh;Tsex;Bo'lim;Lavozim",
@@ -8678,6 +8719,15 @@ test('savdo KPI: menejerga o\'z turkumlari, zavodda — butun zavod', async () =
   assert.equal(stol.zavodda_qty, hamma.zavodda_qty, 'zavodda — butun zavod');
   assert.equal(stol.zavodda_list.length, hamma.zavodda_list.length);
   assert.equal(Number(stol.chiqdi_amount), Number(hamma.chiqdi_amount));
+
+  //  ★ BELGISIZ HAM (zavod qarori, 2026-11): «Faqat o'zinikini» olib
+  //  tashlansa ham turkumlar REJADAN qisqaradi.
+  await db.query(`UPDATE worker_roles SET scope_own = false
+                   WHERE worker_id = $1 AND role_code = 'sotuvchi'`, [wid]);
+  const men2 = H.api(base, await H.sessionFor(nom));
+  const u2 = (await men2('GET', '/api/sales/kpi/umumiy?mon=' + oy)).body;
+  assert.deepEqual(u2.turkum.map((t) => t.code).sort(), ['STOL', 'STUL'], 'belgisiz ham');
+  assert.equal(u2.turkum.find((t) => t.code === 'STOL').zavodda_qty, hamma.zavodda_qty);
   await db.query(`DELETE FROM sales_kpi_targets WHERE worker_id = $1`, [wid]);
 });
 

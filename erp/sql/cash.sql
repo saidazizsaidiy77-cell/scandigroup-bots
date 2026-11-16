@@ -983,6 +983,19 @@ CREATE TABLE IF NOT EXISTS payroll_accruals (
 );
 CREATE INDEX IF NOT EXISTS payroll_accruals_month_idx ON payroll_accruals (month);
 
+--  ★ ISH HAQI BOSHLANG'ICH QOLDIG'I (zavod qarori, 2026-11). Tizimdan
+--  oldin ikki xil hisob qolgan: BERILMAGAN oylik (korxona xodimga
+--  qarzdor) va xodimga BERILGAN qarz (xodim korxonaga qarzdor).
+--  Ikkalasi bitta ISHORALI maydonda — ish haqi «oxiriga» si bilan bir
+--  xil tomon: musbat — korxona qarzdor, manfiy — xodim qarzdor.
+--  Kassadagi `opening_*` (qo'ldagi pul) BOSHQA narsa: u kassaning puli.
+--  Hisobotda «Oy boshiga» ning ICHIDA turadi, sanasidan qat'i nazar
+--  (qarzdorlikdagi `kind = 'opening'` bilan bir xil qoida).
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS pay_open_uzs  NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS pay_open_usd  NUMERIC(16,2) NOT NULL DEFAULT 0;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS pay_open_on   DATE;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS pay_open_note TEXT;
+
 -- ═════════════════════════════════════════════════════ ISHBAY OYLIK
 --
 --  ★ BO'LIMDAN O'TGANDA HISOBLANADI (zavod qarori, 2026-11). Stul

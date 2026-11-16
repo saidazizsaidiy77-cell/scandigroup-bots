@@ -3134,6 +3134,20 @@ Ishdan ketgan xodim hisobi yopilmaguncha ro'yxatda turadi.
 Huquqi: ko'rish `payroll.view` (direktor `%.view` bilan oladi),
 yozish `payroll.manage` (buxgalter, administrator).
 
+**★ BOSHLANG'ICH QOLDIQ — BERILMAGAN OYLIK VA BERILGAN QARZ** (zavod
+qarori, 2026-11; `workers.pay_open_*`, `PUT /api/payroll/opening`,
+`POST /api/payroll/opening/import`). Tizimdan oldin ikki xil hisob
+qolgan va ikkalasi BITTA ishorali maydonda, «oxiriga» bilan bir xil
+tomon: musbat — korxona xodimga qarzdor (berilmagan oylik), manfiy —
+xodim korxonaga qarzdor (berilgan qarz). So'm va dollar alohida.
+«Oy boshiga» ning ICHIDA, sanasidan qat'i nazar (qarzdorlikdagi
+`kind = 'opening'` bilan bir xil qoida); hisoblandiga tushmaydi.
+Kassadagi `workers.opening_*` (qo'ldagi pul) BOSHQA narsa. Qator
+ochilganda yoziladi, yozayotganda tomoni ostida chiqadi; fayldan:
+F.I.SH · Berilmagan so'm · Berilmagan $ · Qarz so'm · Qarz $ · Sana —
+qoldiq = berilmagan − qarz, bo'sh valyutaga tegilmaydi, topilmagan
+xodim xato. Huquqi `payroll.manage`, audit `opening`.
+
 **★ TSEX BOSHLIG'I O'Z ODAMLARINI KO'RADI** (`payroll.shop`, zavod
 qarori 2026-11). `tsex_usta` da «Ish haqi» sahifasi ochiq, lekin FAQAT
 o'z tsexining xodimlari — ROLNING tsexi (`scope_shop_main`), **qo'shimcha
@@ -3643,6 +3657,11 @@ reja — SEGMENT + YORDAM (u turkumning butun savdosiga javob beradi),
 chiqdi va «zavodda» esa shu turkumda BUTUN zavodniki — bosilsa
 showroom, SMM va eksport buyurtmalari ham ochiladi. Rejasi umuman
 yo'q bo'lsa hamma turkum. Savdo paneli o'zgarmadi.
+
+**★ QISQARISH REJADAN, BELGIDAN EMAS** (zavod qarori, 2026-11): «Faqat
+o'zinikini» belgisi bo'lmagan menejerda ham turkumlar REJASIDAN
+qisqaradi (`kimga` — o'zi). Rahbariyat (`kpiHammasi`) butun zavodni
+ko'radi.
 
 Reja oynasida **reja qo'yilgan turkumlar tepada**, qolgani bitta
 «+ boshqa turkumlar» qatoriga yig'iladi (`pSaralash`): korpus
