@@ -282,18 +282,15 @@ async function staffPaid() {
   try { d = await App.api(`/api/cash/staff-paid?worker_id=${wid}&month=${mon}`); }
   catch (e) { if (my === paidReq) el.innerHTML = ''; return; }
   if (my !== paidReq) return;
-  const oy = OYLAR[Number(mon.slice(5, 7)) - 1] || mon;
-  const pul = (o) => [o.USD ? `${usd(o.USD)} $` : '', o.UZS ? `${usd(o.UZS)} so'm` : '']
-    .filter(Boolean).join(' + ') || '0';
-  const qol = { USD: d.accrued.USD - d.paid.USD, UZS: d.accrued.UZS - d.paid.UZS };
-  const bor = d.accrued.USD || d.accrued.UZS;
-  const d8 = (v) => { const x = String(v).slice(0, 10); return `${x.slice(8, 10)}.${x.slice(5, 7)}`; };
-  el.innerHTML = `<b>${esc(oy)} uchun berilgan: ${pul(d.paid)}</b>`
-    + (bor ? ` \u00b7 hisoblangan ${pul(d.accrued)} \u00b7 qoldi <b class="${
-        qol.USD < 0 || qol.UZS < 0 ? 'late' : ''}">${pul(qol)}</b>` : '')
-    + (d.ops.length ? `<div style="margin-top:4px">${d.ops.map(o => `${d8(o.op_date)} ${
-        esc(o.item || '')} \u2014 ${usd(o.amount)} ${o.currency === 'USD' ? '$' : "so'm"}`)
-        .join(' \u00b7 ')}</div>` : '');
+  //  ★ FAQAT UMUMIY HISOB (zavod qarori, 2026-11): kassada boshqa
+  //  ma'lumot kerak emas. Xodim qarzdor — qizil, korxona qarzdor — qora.
+  //  Raqam ish haqi sahifasidagi «oxiriga» bilan bir xil.
+  const b = d.balance || { USD: 0, UZS: 0 };
+  const qism = ['USD', 'UZS'].filter(c => b[c]).map(c => {
+    const s = `${usd(Math.abs(b[c]))} ${c === 'USD' ? '$' : "so'm"}`;
+    return b[c] > 0 ? `korxona qarzdor ${s}` : `<span class="late">xodim qarzdor ${s}</span>`;
+  });
+  el.innerHTML = `<b>${qism.join(' \u00b7 ') || 'hisob yopiq'}</b>`;
 }
 
 //  Topilganlar SHU YERDA, ro'yxat bo'lib turadi — bosib ochiladigan

@@ -3205,6 +3205,16 @@ kuni) va test ikkalasini solishtiradi. Doira: kassa va ish haqi
 huquqi bor odam — hamma xodim, tsex boshlig'i — faqat o'z tsexi
 (403); ekranda huquq yetmasa yozuv jim turadi.
 
+**★ BIRINCHI QATOR — UMUMIY HISOB** (zavod qarori, 2026-11;
+`/staff-paid` dagi `balance`). Kassirning asosiy savoli shu oy emas,
+butun hisob: «xodim korxonaga 3 000 $ qarzdor» yoki «korxona qarzdor».
+Raqam ish haqi sahifasidagi «oxiriga» bilan AYNAN bir xil
+(boshlang'ich qoldiq + tanlangan oygacha hisoblangan − to'langan),
+test ikkalasini solishtiradi. Xodim qarzdor bo'lsa qizil, korxona
+qarzdor bo'lsa qora. **Ekranda FAQAT shu** (zavod qarori): oy bo'yicha
+berilgan va hujjatlar ro'yxati kassada kerak emas — ular ish haqi
+sahifasida; server ularni baribir qaytaradi.
+
 **★ TA'MINOTCHIGA PUL BERAYOTGANDA QARZI KO'RINADI** (zavod qarori,
 2026-10; `/api/cash/refs` dagi `suppliers.balance`). Buyurtmada
 mijozning balansi chiqqani bilan bir xil sabab: «unga qancha

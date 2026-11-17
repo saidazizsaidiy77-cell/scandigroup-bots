@@ -466,7 +466,7 @@ router.get('/staff-paid', need(...ANY), wrap(async (req, res) => {
         WHERE w.id = $1 AND COALESCE(w.shop_id, sc.shop_id) = ANY($2)`, [wid, sh])).rowCount;
     if (!ok) return res.status(403).json({ error: 'Bu xodim sizning tsexingizda emas' });
   }
-  const [paid, acc] = await Promise.all([
+  const [paid, acc, bal] = await Promise.all([
     db.query(`SELECT o.id, o.doc_no, o.op_date, o.currency, o.amount, i.name AS item
                 FROM cash_ops o
                 LEFT JOIN expense_items i ON i.id = o.expense_item_id
@@ -480,6 +480,25 @@ router.get('/staff-paid', need(...ANY), wrap(async (req, res) => {
                 SELECT 'USD', amount FROM piece_work
                  WHERE worker_id = $1 AND date_trunc('month', work_date)::date = $2) x
                GROUP BY currency`, [wid, m]),
+    //  ★ UMUMIY HISOB — ish haqi sahifasidagi «oxiriga» bilan AYNAN bir
+    //  xil: boshlang'ich qoldiq + shu oygacha hisoblangan (ishbay bilan)
+    //  − shu oygacha to'langan. Musbat — korxona xodimga qarzdor,
+    //  manfiy — xodim korxonaga qarzdor.
+    db.query(`SELECT currency, SUM(amount)::numeric(18,2) AS amount FROM (
+                SELECT 'UZS' AS currency, pay_open_uzs AS amount FROM workers WHERE id = $1
+                UNION ALL
+                SELECT 'USD', pay_open_usd FROM workers WHERE id = $1
+                UNION ALL
+                SELECT currency, amount FROM payroll_accruals
+                 WHERE worker_id = $1 AND month <= $2
+                UNION ALL
+                SELECT 'USD', amount FROM piece_work
+                 WHERE worker_id = $1 AND date_trunc('month', work_date)::date <= $2
+                UNION ALL
+                SELECT currency, -amount FROM cash_ops
+                 WHERE status = 'ok' AND staff_id = $1
+                   AND COALESCE(pl_month, date_trunc('month', op_date)::date) <= $2) x
+               GROUP BY currency`, [wid, m]),
   ]);
   const jam = (rows) => {
     const o = { UZS: 0, USD: 0 };
@@ -487,7 +506,7 @@ router.get('/staff-paid', need(...ANY), wrap(async (req, res) => {
     return o;
   };
   res.json({ month: m.slice(0, 7), paid: jam(paid.rows), accrued: jam(acc.rows),
-             ops: paid.rows });
+             balance: jam(bal.rows), ops: paid.rows });
 }));
 
 router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => {
