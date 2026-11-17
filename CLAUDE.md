@@ -4459,6 +4459,13 @@ harakatning sof yig'indisi, shuning uchun aylanma endi oraliqdan
 oldingisini ham o'qiydi (`<= to` gacha) va kirdi/chiqdi `FILTER`
 bilan oraliqqa qisiladi.
 
+**★ JAMI QIDIRUVGA HAM ERGASHADI** (zavod qarori, 2026-11). JAMI
+qatori va kartochkalardagi kirdi, chiqdi va oraliq oxiri (`byUom`,
+`/api/warehouse/fg/summary`) faqat tur filtrini olardi: «sultan» deb
+izlanganda jadvalda Sultan turar, JAMI esa butun stulni qo'shardi.
+Shart `AYL` dagi bilan AYNAN bir xil; test yig'indini RO'YXATNING
+o'zidan qo'shilganiga solishtiradi.
+
 **Shart `HAVING` da**: oraliqdan oldin kelib, o'sha oraliqdan oldin
 chiqib ketgan mahsulot uchala raqam ham nol bo'lib qatorda turardi va
 ro'yxatni butun tarix bilan to'ldirardi.

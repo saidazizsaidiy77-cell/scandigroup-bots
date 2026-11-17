@@ -644,6 +644,17 @@ test('ombor mudiri: omborlar ro\'yxati va jamlanma qoldiq', async () => {
   assert.equal(kelRow.qty, 1);
   assert.equal(kelRow.kirdi, 0, 'o\'sha oraliqda harakat yo\'q');
   assert.equal(kel.body.total.kirdi, 0);
+
+  //  ★ JAMI QIDIRUVGA ERGASHADI (zavod qarori, 2026-11): «Venge» deb
+  //  izlanganda kirdi, chiqdi va oraliq oxiri RO'YXATNING o'zidan
+  //  qo'shilganiga teng — butun omborniki emas.
+  const sb = (await mudir('GET', '/api/warehouse/fg/summary?q=Venge&from=2000-01-01')).body;
+  const qosh = (k) => sb.rows.reduce((a, r) => a + Number(r[k]), 0);
+  assert.equal(sb.total.kirdi, qosh('kirdi'), 'kirdi qidiruv bo\'yicha');
+  assert.equal(sb.total.chiqdi, qosh('chiqdi'), 'chiqdi qidiruv bo\'yicha');
+  assert.equal(sb.total.oxir, qosh('oxir'), 'oxiriga qidiruv bo\'yicha');
+  const hamma = (await mudir('GET', '/api/warehouse/fg/summary?from=2000-01-01')).body;
+  assert.ok(hamma.total.kirdi > sb.total.kirdi, 'qidiruvsiz ko\'proq');
 });
 
 const post = (path, csv) => fetch(base + path, {
