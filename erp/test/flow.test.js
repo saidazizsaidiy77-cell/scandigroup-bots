@@ -5915,6 +5915,9 @@ test('oylik moddasi o\'z tsexi bilan keladi', async () => {
   const itr = refs.items.find((x) => x.name === 'Oylik muhandis-texnik xodimlar');
   assert.equal(itr.staff_group, 'ITR');
   assert.equal(itr.shop_id, null, 'texnolog butun ishlab chiqarishga xizmat qiladi');
+  const mkt = refs.items.find((x) => x.name === 'Oylik marketing');
+  assert.equal(mkt.staff_group, 'Marketing');
+  assert.equal(mkt.needs_worker, true, 'marketing oyligi ham xodim so\'raydi');
 
   //  Modda kutayotgan guruh Xodimlar sahifasidagi ro'yxatda TURADI,
   //  hali hech kimda bo'lmasa ham: aks holda qo'lda terilib, «ITR» va
@@ -5924,6 +5927,7 @@ test('oylik moddasi o\'z tsexi bilan keladi', async () => {
     'GET', '/api/admin/roles')).body;
   assert.ok(meta.staff_groups.includes('ITR'),
     'yangi moddaning guruhi ro\'yxatda turadi');
+  assert.ok(meta.staff_groups.includes('Marketing'), 'marketing guruhi ham');
 
   //  ★ BUTUN GURUH XODIM SO'RAYDI — yangi qo'shilgani ham. Ilgari bu
   //  `migration_flags` bilan bir marta qo'yilardi va bayroqdan KEYIN
