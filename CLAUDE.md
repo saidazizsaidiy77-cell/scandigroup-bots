@@ -3188,6 +3188,17 @@ Ish haqi sahifasida ishbay «Hisoblandi, $» ga O'ZI qo'shiladi (ish
 bajarilgan kunning oyi), qator ostida «shundan ishbay», ochilganda
 bo'lim va mahsulot bo'yicha jadval.
 
+**★ XODIMGA PUL BERAYOTGANDA SHU OY UCHUN OLGANI KO'RINADI** (zavod
+qarori, 2026-11; `GET /api/cash/staff-paid`, chiqim oynasidagi «Kimga —
+xodim» ostida). Kassir Bahromga noyabr avansini berayotib u shu oy
+uchun allaqachon nima olganini ko'radi: «Noyabr uchun berilgan 50 $ ·
+hisoblangan 500 $ · qoldi 450 $» va to'lov hujjatlari. Oy —
+formadagi foyda-zarar oyi. Shart ish haqi sahifasidagi «to'landi»
+bilan AYNAN bir xil (`staff_id`, `ok`, `pl_month`, bo'lmasa to'lov
+kuni) va test ikkalasini solishtiradi. Doira: kassa va ish haqi
+huquqi bor odam — hamma xodim, tsex boshlig'i — faqat o'z tsexi
+(403); ekranda huquq yetmasa yozuv jim turadi.
+
 **★ TA'MINOTCHIGA PUL BERAYOTGANDA QARZI KO'RINADI** (zavod qarori,
 2026-10; `/api/cash/refs` dagi `suppliers.balance`). Buyurtmada
 mijozning balansi chiqqani bilan bir xil sabab: «unga qancha
