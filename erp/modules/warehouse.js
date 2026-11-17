@@ -554,6 +554,15 @@ router.get('/fg/summary', need(...READ), wrap(async (req, res) => {
              FROM v_fg_moves m2
             WHERE m2.uom = u.uom AND m2.warehouse_id = $4
               AND ($2::date IS NULL OR m2.on_date <= $2)
+              --  ★ QIDIRUV HAM (zavod qarori, 2026-11): ilgari faqat tur
+              --  filtri bor edi va «sultan» deb izlanganda jadvalda
+              --  Sultan turar, JAMI esa butun stulni qo'shardi. Shart
+              --  AYL dagi bilan AYNAN bir xil.
+              AND ($3::text IS NULL OR m2.product ILIKE '%' || $3 || '%'
+                   OR m2.product_type ILIKE '%' || $3 || '%'
+                   OR m2.color ILIKE '%' || $3 || '%'
+                   OR m2.fabric ILIKE '%' || $3 || '%'
+                   OR m2.conveyor_no ILIKE '%' || $3 || '%')
               AND ($5::text IS NULL
                    OR m2.product_type = ANY(string_to_array($5, ',')))) m ON true
         WHERE q.qty <> 0 OR m.kirdi <> 0 OR m.chiqdi <> 0 OR m.bosh <> 0
