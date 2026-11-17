@@ -288,9 +288,20 @@ async function staffPaid() {
   const qol = { USD: d.accrued.USD - d.paid.USD, UZS: d.accrued.UZS - d.paid.UZS };
   const bor = d.accrued.USD || d.accrued.UZS;
   const d8 = (v) => { const x = String(v).slice(0, 10); return `${x.slice(8, 10)}.${x.slice(5, 7)}`; };
-  el.innerHTML = `<b>${esc(oy)} uchun berilgan: ${pul(d.paid)}</b>`
+  //  ★ UMUMIY HISOB BIRINCHI (zavod qarori, 2026-11): kassirning
+  //  savoli «unga hozir qancha berishimiz kerak yoki u bizga qancha
+  //  qarzdor». Raqam ish haqi sahifasidagi «oxiriga» bilan bir xil.
+  const tomon = (v, cur) => {
+    const s = `${usd(Math.abs(v))} ${cur === 'USD' ? '$' : "so'm"}`;
+    return v > 0 ? `korxona qarzdor ${s}` : `<span class="late">xodim qarzdor ${s}</span>`;
+  };
+  const b = d.balance || { USD: 0, UZS: 0 };
+  const hisob = ['USD', 'UZS'].filter(c => b[c]).map(c => tomon(b[c], c)).join(' \u00b7 ')
+    || "hisob yopiq";
+  el.innerHTML = `<b>Umumiy hisob (${esc(oy)} oxiriga): ${hisob}</b>`
+    + `<div style="margin-top:4px">${esc(oy)} uchun berilgan: ${pul(d.paid)}`
     + (bor ? ` \u00b7 hisoblangan ${pul(d.accrued)} \u00b7 qoldi <b class="${
-        qol.USD < 0 || qol.UZS < 0 ? 'late' : ''}">${pul(qol)}</b>` : '')
+        qol.USD < 0 || qol.UZS < 0 ? 'late' : ''}">${pul(qol)}</b>` : '') + '</div>'
     + (d.ops.length ? `<div style="margin-top:4px">${d.ops.map(o => `${d8(o.op_date)} ${
         esc(o.item || '')} \u2014 ${usd(o.amount)} ${o.currency === 'USD' ? '$' : "so'm"}`)
         .join(' \u00b7 ')}</div>` : '');

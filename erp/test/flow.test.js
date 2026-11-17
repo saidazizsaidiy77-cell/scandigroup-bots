@@ -5867,6 +5867,8 @@ test('oylik: kimga berilgani so\'raladi va qo\'lidagi pulga qo\'shilmaydi', asyn
   const ph = (await admin('GET', '/api/payroll?month=2026-09')).body.rows
     .find((r) => r.id === xodim);
   assert.equal(Number(ph.paid_usd), sp.paid.USD, 'ish haqi sahifasi bilan bir xil');
+  assert.equal(sp.balance.USD, Number(ph.close_usd), 'umumiy hisob = ish haqi «oxiriga»');
+  assert.equal(sp.balance.UZS, Number(ph.close_uzs));
   const okt = (await kassir('GET', `/api/cash/staff-paid?worker_id=${xodim}&month=2026-10`)).body;
   assert.equal(okt.paid.USD, 0, 'boshqa oyga tushmaydi');
   assert.equal((await kassir('GET', '/api/cash/staff-paid?worker_id=x&month=2026-09')).status, 400);
