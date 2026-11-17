@@ -2795,6 +2795,12 @@ qo'yish yo'l emas edi: texnologning oyligi korpus tsexining
 summasiga qo'shilib ketardi va «texnologlarga qancha ketdi» degan
 savol foyda-zarardan yo'qolardi.
 
+**★ MARKETING BO'LIMI — HAM GURUH BO'YICHA** (zavod qarori, 2026-11;
+«Oylik marketing», `staff_group = 'Marketing'`, `migration_flags`:
+`oylik-doira-marketing`). Marketing xodimlari olinmoqda va oyligi «Oylik
+AUP» ga qo'shilib, foyda-zarardan yo'qolardi. Xodim kartochkasida
+Guruh — `Marketing`, Bo'lim nomi — «Marketing bo'limi»; tsex bo'sh.
+
 **Guruh ro'yxati IKKI manbadan** (`GET /api/admin/roles` dagi
 `staff_groups`): shtatda ishlatilgani VA oylik moddasi kutayotgani
 (`expense_items.staff_group`). Yangi modda qo'shilganda uning guruhi

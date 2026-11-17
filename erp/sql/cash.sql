@@ -159,6 +159,9 @@ INSERT INTO expense_items (group_code, name, sort) VALUES
   ('MAOSH', 'Oylik stul', 50),
   ('MAOSH', 'Oylik savdo', 60),
   ('MAOSH', 'Oylik ombor', 65),
+  --  Marketing bo'limi (zavod qarori, 2026-11): tsexi yo'q, oyligi
+  --  foyda-zararda alohida ko'rinsin — guruh bo'yicha bog'lanadi.
+  ('MAOSH', 'Oylik marketing', 67),
   ('MAOSH', 'Xodimlarga sarmoya', 70),
   ('MAOSH', 'Tibbiy yordam', 80),
   ('XOJALIK', 'Oziq-ovqat', 10),
@@ -401,6 +404,17 @@ BEGIN
      WHERE ei.group_code = 'MAOSH' AND lower(ei.name) = lower(v.modda);
 
     INSERT INTO migration_flags (key) VALUES ('oylik-doira-2');
+  END IF;
+END $$;
+
+--  Oylik marketing — o'z bayrog'i bilan (oldingilar allaqachon o'tgan).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'oylik-doira-marketing') THEN
+    UPDATE expense_items
+       SET staff_group = 'Marketing'
+     WHERE group_code = 'MAOSH' AND lower(name) = 'oylik marketing';
+    INSERT INTO migration_flags (key) VALUES ('oylik-doira-marketing');
   END IF;
 END $$;
 
