@@ -5855,6 +5855,22 @@ test('oylik: kimga berilgani so\'raladi va qo\'lidagi pulga qo\'shilmaydi', asyn
   assert.equal(op.staff_id, xodim);
   assert.equal(op.staff_name, 'Sinov Oylik Oluvchi');
 
+  //  ★ SHU OY UCHUN QANCHA BERILGAN (zavod qarori, 2026-11): kassir
+  //  avans berayotib xodim o'sha oy uchun nima olganini ko'radi.
+  //  Ish haqi sahifasidagi «to'landi» bilan bir xil shart.
+  await admin('PUT', '/api/payroll/accrual',
+    { worker_id: xodim, month: '2026-09', currency: 'USD', amount: 1000 });
+  const sp = (await kassir('GET', `/api/cash/staff-paid?worker_id=${xodim}&month=2026-09`)).body;
+  assert.equal(sp.paid.USD, 300, 'sentabr uchun berilgani');
+  assert.equal(sp.accrued.USD, 1000, 'hisoblangani');
+  assert.equal(sp.ops.length, 1);
+  const ph = (await admin('GET', '/api/payroll?month=2026-09')).body.rows
+    .find((r) => r.id === xodim);
+  assert.equal(Number(ph.paid_usd), sp.paid.USD, 'ish haqi sahifasi bilan bir xil');
+  const okt = (await kassir('GET', `/api/cash/staff-paid?worker_id=${xodim}&month=2026-10`)).body;
+  assert.equal(okt.paid.USD, 0, 'boshqa oyga tushmaydi');
+  assert.equal((await kassir('GET', '/api/cash/staff-paid?worker_id=x&month=2026-09')).status, 400);
+
   //  Foyda-zararda o'z moddasida turadi
   const pl = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
   assert.ok(pl.rows.some((x) => x.item_id === modda.id),

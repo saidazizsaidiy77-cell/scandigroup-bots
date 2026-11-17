@@ -253,6 +253,7 @@ function staffFilter() {
         : `<button type="button" class="lnk" onclick="staffAllToggle()">faqat ${
              esc(cheklov.scope_name || '')}</button>`}` : '');
   calc();
+  staffPaid();
 }
 
 function staffPick(id) {
@@ -261,6 +262,38 @@ function staffPick(id) {
   $('fStaff').value = String(id);
   $('fStaffQ').value = w.name;
   staffFilter();
+}
+
+//  ★ SHU OY UCHUN QANCHA BERILGAN (zavod qarori, 2026-11). Kassir
+//  avans berayotib xodim shu oy uchun nima olganini ko'radi: «Noyabr
+//  uchun berilgan 50 $ · hisoblangan 500 $ · qoldi 450 $». Oy —
+//  formadagi foyda-zarar oyi, raqam serverdan (`/staff-paid`, ish haqi
+//  sahifasidagi «to'landi» bilan bitta shart). Huquq yetmasa jim
+//  turadi: bu yordamchi yozuv, to'siq emas.
+let paidReq = 0;
+async function staffPaid() {
+  const el = $('fStaffPaid');
+  if (!el) return;
+  const wid = Number($('fStaff') && $('fStaff').value) || 0;
+  const mon = $('fMonth') ? $('fMonth').value : '';
+  if (!wid || !mon || ($('fStaffBox') && $('fStaffBox').hidden)) { el.innerHTML = ''; return; }
+  const my = ++paidReq;
+  let d;
+  try { d = await App.api(`/api/cash/staff-paid?worker_id=${wid}&month=${mon}`); }
+  catch (e) { if (my === paidReq) el.innerHTML = ''; return; }
+  if (my !== paidReq) return;
+  const oy = OYLAR[Number(mon.slice(5, 7)) - 1] || mon;
+  const pul = (o) => [o.USD ? `${usd(o.USD)} $` : '', o.UZS ? `${usd(o.UZS)} so'm` : '']
+    .filter(Boolean).join(' + ') || '0';
+  const qol = { USD: d.accrued.USD - d.paid.USD, UZS: d.accrued.UZS - d.paid.UZS };
+  const bor = d.accrued.USD || d.accrued.UZS;
+  const d8 = (v) => { const x = String(v).slice(0, 10); return `${x.slice(8, 10)}.${x.slice(5, 7)}`; };
+  el.innerHTML = `<b>${esc(oy)} uchun berilgan: ${pul(d.paid)}</b>`
+    + (bor ? ` \u00b7 hisoblangan ${pul(d.accrued)} \u00b7 qoldi <b class="${
+        qol.USD < 0 || qol.UZS < 0 ? 'late' : ''}">${pul(qol)}</b>` : '')
+    + (d.ops.length ? `<div style="margin-top:4px">${d.ops.map(o => `${d8(o.op_date)} ${
+        esc(o.item || '')} \u2014 ${usd(o.amount)} ${o.currency === 'USD' ? '$' : "so'm"}`)
+        .join(' \u00b7 ')}</div>` : '');
 }
 
 //  Topilganlar SHU YERDA, ro'yxat bo'lib turadi — bosib ochiladigan
@@ -469,7 +502,8 @@ function openForm(kind) {
                    oninput="staffFilter()" style="margin-bottom:8px">
             <input type="hidden" id="fStaff">
             <div id="fStaffList" class="pick"></div>
-            <div class="hint" id="fStaffHint"></div></div>` : ''}
+            <div class="hint" id="fStaffHint"></div>
+            <div class="hint" id="fStaffPaid"></div></div>` : ''}
 
           <div><label>Summa</label>
             <input id="fAmt" type="number" min="0" step="0.01" inputmode="decimal"
@@ -513,7 +547,7 @@ function openForm(kind) {
           <!--  ★ QAYSI OYNING FOYDA-ZARARIGA: to'lov bugun ketadi,
                 harajat esa boshqa oyniki bo'lishi mumkin. -->
           <div id="fMonthBox" hidden><label>Foyda-zarar oyi</label>
-            <select id="fMonth">${oyOptions(bugun.slice(0, 7))}</select>
+            <select id="fMonth" onchange="staffPaid()">${oyOptions(bugun.slice(0, 7))}</select>
             <div class="hint">qaysi oy hisobotiga tushsin</div></div>
 
           <div class="wide"><label>Izoh</label>

@@ -441,6 +441,55 @@ async function assertSide(client, kind, id, req) {
   }
 }
 
+//  ★ XODIMGA SHU OY UCHUN QANCHA BERILGAN (zavod qarori, 2026-11).
+//  Kassir Bahromga noyabr avansini berayotib, u shu oy uchun allaqachon
+//  nima olganini ko'rishi kerak: aks holda ikki kassir bir odamga
+//  ikki marta avans berib yuborardi. Shart ish haqi sahifasidagi
+//  «to'landi» bilan AYNAN bir xil (`staff_id`, `ok`, foyda-zarar oyi,
+//  bo'lmasa to'lov kuni) — ikki joyda ikki xil raqam chiqmasin.
+//  Hisoblangani ham (`payroll_accruals` + ishbay) yoziladi: «qoldi»
+//  degan savolning javobi shu.
+//
+//  Doira: kassir, buxgalter va ish haqi huquqi bor odam — hamma
+//  xodimni; qolgan (`cash.entry`, tsex boshlig'i) — faqat o'z
+//  tsexining xodimini (ish haqi sahifasidagi `payroll.shop` bilan bir
+//  xil chegara). Server CHEGARA, ekran emas.
+router.get('/staff-paid', need(...ANY), wrap(async (req, res) => {
+  const wid = Number(req.query.worker_id) || 0;
+  const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.query.month || ''))
+    ? req.query.month + '-01' : null;
+  if (!wid || !m) return res.status(400).json({ error: 'Xodim va oy kerak' });
+  if (!can(req, 'cash.manage', 'cash.view', 'payroll.view', 'payroll.manage')) {
+    const sh = req.user.scope_shop_main || [];
+    const ok = sh.length && (await db.query(
+      `SELECT 1 FROM workers w LEFT JOIN sections sc ON sc.id = w.section_id
+        WHERE w.id = $1 AND COALESCE(w.shop_id, sc.shop_id) = ANY($2)`, [wid, sh])).rowCount;
+    if (!ok) return res.status(403).json({ error: 'Bu xodim sizning tsexingizda emas' });
+  }
+  const [paid, acc] = await Promise.all([
+    db.query(`SELECT o.id, o.doc_no, o.op_date, o.currency, o.amount, i.name AS item
+                FROM cash_ops o
+                LEFT JOIN expense_items i ON i.id = o.expense_item_id
+               WHERE o.status = 'ok' AND o.staff_id = $1
+                 AND COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) = $2
+               ORDER BY o.op_date, o.id`, [wid, m]),
+    db.query(`SELECT currency, SUM(amount)::numeric(18,2) AS amount FROM (
+                SELECT currency, amount FROM payroll_accruals
+                 WHERE worker_id = $1 AND month = $2
+                UNION ALL
+                SELECT 'USD', amount FROM piece_work
+                 WHERE worker_id = $1 AND date_trunc('month', work_date)::date = $2) x
+               GROUP BY currency`, [wid, m]),
+  ]);
+  const jam = (rows) => {
+    const o = { UZS: 0, USD: 0 };
+    for (const r of rows) o[r.currency] = Math.round((o[r.currency] + Number(r.amount)) * 100) / 100;
+    return o;
+  };
+  res.json({ month: m.slice(0, 7), paid: jam(paid.rows), accrued: jam(acc.rows),
+             ops: paid.rows });
+}));
+
 router.post('/ops', need('cash.entry', 'cash.manage'), wrap(async (req, res) => {
   const b = req.body || {};
   const boss = isBoss(req);
