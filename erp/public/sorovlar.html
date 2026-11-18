@@ -65,11 +65,19 @@
           marshrutdan o'zi chiqadi (izoh: sql/register.sql). -->
     <div id="planBox" hidden><label id="planLbl">Keyingi tsexga topshirish</label>
       <input id="fPlan" type="date"></div>
+    <!--  ★ MAXSUS BUYURTMA (zavod qarori, 2026-11) — faqat shu guruhda:
+          mijoz bilan kelishilgan TOPSHIRISH kuni va KIMGA (mijoz yoki
+          showroom). Tsexdan tsexga o'tish sanasi so'ralmaydi. -->
+    <div class="mx" hidden><label>Topshirish sanasi
+        <span class="muted" style="text-transform:none;letter-spacing:0">— mijoz bilan kelishilgan</span></label>
+      <input id="fFinish" type="date"></div>
+    <div class="mx" hidden><label>Kimga</label>
+      <select id="fKimga"></select></div>
     <!--  Rang va mato — RO'YXATDAN, qo'lda yozilmaydi. Bitta «Venge» va
           bitta «venge» ombor qoldig'ini ikkiga bo'lib yuborardi va savdo
           ro'yxatida bir xil rang ikki marta turardi. Yangi rang zavodning
           qarori: u jurnal orqali kiritiladi. -->
-    <div><label>Rangi <span class="muted" id="colorReq"
+    <div id="colorBox"><label>Rangi <span class="muted" id="colorReq"
         style="text-transform:none;letter-spacing:0">— majburiy</span></label>
       <select id="fColor" onchange="maydonlar()"></select></div>
     <div id="fabricBox"><label>Matosi <span class="muted" id="fabricReq"
@@ -84,12 +92,12 @@
       <div id="rangQator"></div>
       <button type="button" onclick="rangQosh()" style="margin-top:6px">+ Boshqa rang</button>
       <span class="hint" id="rangJami" style="margin-left:8px"></span></div>
-    <div class="wide"><label>Izoh</label>
+    <div class="wide"><label id="noteLbl">Izoh</label>
       <input id="fNote" placeholder="ixtiyoriy"></div>
     <!--  Zahira — buyurtmasiz, oldindan ishlanadigan mahsulot. Kutish
           bo'limida buyurtma kutadi va unga muddat bashorat qilinmaydi;
           rangi ham keyin, mijoz aytganda tanlanadi. -->
-    <div class="wide"><label class="row" style="gap:10px;align-items:center;
+    <div class="wide" id="stockBox"><label class="row" style="gap:10px;align-items:center;
       text-transform:none;font-size:14px;cursor:pointer">
       <input type="checkbox" id="fStock" style="width:auto" onchange="maydonlar()">
       <span>Zahira uchun — buyurtmasiz, oldindan ishlanadi</span></label>
@@ -129,6 +137,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
 const d8 = (v) => !v ? '' : String(v).slice(0, 10).split('-').reverse().join('.');
 
 let ref = null, mahsulotlar = [], planKerak = false, ranglar = [], matolar = [];
+let mijozlar = null;
 let data = { rows: [], can_approve: false };
 
 const STATUS = { pending:['warn','kutmoqda'], approved:['ok','tasdiqlandi'],
@@ -193,6 +202,22 @@ const tanlangan = () => mahsulotlar.find(
 //  ishlatilmaydi va katak ham chizilmaydi.
 function maydonlar() {
   const p = tanlangan();
+  //  ★ MAXSUS BUYURTMA: bitta konver — butun buyurtma, tarkibi izohda.
+  //  Rang, zahira va tsexdan tsexga sana so'ralmaydi; topshirish kuni
+  //  va kimga so'raladi. Penal, kamod, stol, stulga tegmaydi.
+  const mx = !!p?.is_custom;
+  document.querySelectorAll('.mx').forEach((el) => { el.hidden = !mx; });
+  $('colorBox').hidden = mx; $('stockBox').hidden = mx;
+  $('noteLbl').textContent = mx ? 'Tarkibi — majburiy' : 'Izoh';
+  $('fNote').placeholder = mx ? 'nima ishlanadi: ofis mebeli, oshxona, horeca…' : 'ixtiyoriy';
+  if (mx) {
+    $('fStock').checked = false; $('fColor').value = ''; $('fFabric').value = '';
+    $('rangQator').innerHTML = ''; $('rangBox').hidden = true;
+    $('fabricBox').hidden = true; $('planBox').hidden = true;
+    $('etaLine').textContent = '';
+    kimgaYukla();
+    return;
+  }
   const zahira = $('fStock').checked;
   const matoli = !!p?.needs_fabric;
   //  Majburiylik SAVDO so'raydigan guruhda (stol, stul): rangni
@@ -219,6 +244,18 @@ function maydonlar() {
   $('stockHint').textContent = !p?.sales_can_request ? ''
     : zahira ? 'Rang va mato so\'ralmaydi — mijoz aytganda bo\'yaladi'
              : 'Rangi hali bilinmasa shu katakchani belgilang';
+}
+
+//  Mijozlar ro'yxati faqat maxsus buyurtma tanlanganda olinadi.
+async function kimgaYukla() {
+  if (mijozlar) return;
+  mijozlar = [];
+  try { mijozlar = (await App.api('/api/units/customers')).customers || []; } catch {}
+  $('fKimga').innerHTML = '<option value="">— tanlang —</option>'
+    + '<option value="showroom">Showroom (zavod)</option>'
+    + '<optgroup label="Mijoz">'
+    + mijozlar.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+    + '</optgroup>';
 }
 
 async function taklif(majburan) {
@@ -314,7 +351,9 @@ function draw() {
       <td><b>${esc(r.conveyor_no || '—')}</b>${r.order_no
         ? `<div class="muted" style="font-size:12px">${esc(r.order_no)}${
             r.customer_name ? ' · ' + esc(r.customer_name) : ''}</div>` : ''}${
-        r.is_stock ? '<div><span class="tag">zahira</span></div>' : ''}</td>
+        r.is_stock ? '<div><span class="tag">zahira</span></div>' : ''}${
+        r.showroom ? '<div><span class="tag">showroom</span></div>'
+          : r.req_customer ? `<div class="muted" style="font-size:12px">${esc(r.req_customer)}</div>` : ''}</td>
       <!--  ★ SO'ROVCHINING IZOHI KO'RINADI (zavod qarori, 2026-10).
             Izoh BAZAGA yozilardi-yu, hech qayerda chizilmasdi: xodim
             «mato mijozникиdan», «shoshilinch», «eski chizmadan» deb
@@ -396,6 +435,15 @@ async function send() {
     started_on: $('fStart').value || null,
     note:       $('fNote').value.trim() || null,
   };
+  if (tanlangan()?.is_custom) {
+    const k = $('fKimga').value;
+    it.finish_on = $('fFinish').value || null;
+    it.showroom = k === 'showroom';
+    it.customer_id = k && k !== 'showroom' ? Number(k) : null;
+    if (!it.finish_on) return alert('Topshirish sanasi kiritilmagan');
+    if (!k) return alert('Kimga: mijozni yoki showroomni tanlang');
+    if (!it.note) return alert('Tarkibini yozing — nima ishlanadi');
+  }
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
   const ex = it.is_stock ? [] : rangQatorlari();
@@ -413,7 +461,7 @@ async function send() {
     if (yoq.length) return alert(
       yoq.join(' va ') + ' tanlanmagan — bilinmasa «zahira» deb belgilang');
   }
-  if (planKerak && !it.next_on) {
+  if (planKerak && !it.next_on && !tanlangan()?.is_custom) {
     $('fPlan').focus();
     return alert($('planLbl').textContent + ' sanasi kiritilmagan');
   }
@@ -426,6 +474,7 @@ async function send() {
     $('fNo').value = ''; $('fQty').value = 1;
     $('fColor').value = ''; $('fFabric').value = '';
     $('fNote').value = ''; $('fStock').checked = false; $('fPlan').value = '';
+    $('fFinish').value = ''; $('fKimga').value = '';
     $('rangQator').innerHTML = '';
     maydonlar();
     //  Keyingi raqam darrov taklif qilinadi: qator ketma-ket
@@ -463,7 +512,9 @@ function tahrir(id) {
           <div><label>Rangi</label><select id="eColor">${opt(ranglar, r.color)}</select></div>
           ${p?.needs_fabric || r.fabric
             ? `<div><label>Matosi</label><select id="eFabric">${opt(matolar, r.fabric)}</select></div>` : ''}
-          ${!r.auto || r.next_on ? `<div><label>Keyingi tsexga topshirish${
+          ${r.is_custom ? `<div><label>Topshirish sanasi</label>
+            <input id="eFinish" type="date" value="${esc(String(r.finish_on || '').slice(0, 10))}"></div>` : ''}
+          ${!r.is_custom && (!r.auto || r.next_on) ? `<div><label>Keyingi tsexga topshirish${
             r.auto ? '' : ' <span class="muted" style="text-transform:none">— majburiy</span>'}</label>
             <input id="eNext" type="date" value="${esc(String(r.next_on || '').slice(0, 10))}"></div>` : ''}
           <div class="wide"><label>Izoh</label>
@@ -492,6 +543,7 @@ async function eSaqla(id) {
   };
   if ($('eFabric')) body.fabric = $('eFabric').value || null;
   if ($('eNext'))   body.next_on = $('eNext').value || null;
+  if ($('eFinish')) body.finish_on = $('eFinish').value || null;
   if (body.qty <= 0) return alert('Soni kiritilmagan');
   try {
     await App.api(`/api/units/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) });

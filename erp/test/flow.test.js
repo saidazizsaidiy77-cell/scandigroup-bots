@@ -3164,7 +3164,7 @@ test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
        FROM product_groups g LEFT JOIN route_templates rt ON rt.id = g.route_template_id
       WHERE g.code = 'MAXSUS'`)).rows;
   assert.deepEqual(g.map((x) => [x.code, x.no_prefix, x.uom, x.sales_category, x.route]),
-    [['MAXSUS', 'Z', 'dona', 'MAXSUS', 'L1-FULL']]);
+    [['MAXSUS', 'Z', 'komplekt', 'MAXSUS', 'L1-FULL']]);
   assert.equal(g[0].sales_can_request, true, 'savdo so\'raydi');
 
   //  Konver raqami guruhning harfidan.
@@ -3209,6 +3209,39 @@ test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
   assert.equal(tf.ish[0].oy, '2031-03');
   //  Sinov operatsiyasi boshqa testlarning kassa va P&L hisobiga tushmasin.
   await db.query(`DELETE FROM cash_ops WHERE doc_no = 'P31-9001'`);
+  //  ★ MAXSUS BUYURTMA SO'ROVI: topshirish kuni, kimga va tarkibi.
+  //  Raqam zakazning 757 dan emas, o'z hisobidan (Z26-0001…).
+  const sotuv = await xodim('Sinov maxsus sotuvchi', 'sotuvchi');
+  const mxPid = (await H.id(`SELECT id FROM products WHERE sku = 'MAXSUS'`)).id;
+  const mij = (await admin('POST', '/api/units/customers',
+    { name: 'Maxsus sinov mijozi', region: 'Toshkent' })).body;
+  const asos = { product_id: mxPid, qty: 1, started_on: '2026-11-20' };
+  const yoq = await sotuv('POST', '/api/units/requests', { ...asos, customer_id: mij.id,
+    note: 'Ofis: 4 stol' });
+  assert.equal(yoq.status, 400, 'topshirish sanasisiz bo\'lmaydi');
+  assert.match(yoq.body.error, /Topshirish sanasi/);
+  assert.equal((await sotuv('POST', '/api/units/requests',
+    { ...asos, finish_on: '2026-12-10', note: 'Ofis' })).status, 400, 'kimgasiz bo\'lmaydi');
+  assert.equal((await sotuv('POST', '/api/units/requests',
+    { ...asos, finish_on: '2026-12-10', customer_id: mij.id })).status, 400, 'tarkibsiz bo\'lmaydi');
+  const ok = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-10',
+    customer_id: mij.id, note: 'Ofis: 4 stol, 2 shkaf · oshxona' });
+  assert.equal(ok.status, 200, ok.text);
+  const rq = (await admin('GET', '/api/units/requests?status=pending')).body.rows
+    .find((r) => r.id === ok.body.created[0]);
+  assert.ok(Number(rq.conveyor_no.slice(-4)) < 757, rq.conveyor_no);
+  assert.equal(String(rq.fg_on).slice(0, 10), '2026-12-10', 'T/M ga — kelishilgan kun');
+  assert.equal(rq.req_customer, 'Maxsus sinov mijozi');
+  const ap = await admin('POST', `/api/units/requests/${rq.id}/approve`);
+  assert.equal(ap.status, 200, ap.text);
+  const u = (await db.query(
+    `SELECT fg_planned_on::text AS f, customer_id, showroom FROM production_units
+      WHERE conveyor_no = $1`, [rq.conveyor_no])).rows[0];
+  assert.deepEqual([u.f, u.customer_id, u.showroom], ['2026-12-10', mij.id, false]);
+  //  Showroom uchun ham — mijozsiz.
+  const sh = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-15',
+    showroom: true, note: 'Showroom: oshxona' });
+  assert.equal(sh.status, 200, sh.text);
 });
 
 test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {

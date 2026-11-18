@@ -739,6 +739,36 @@ BEGIN
   END IF;
 END $$;
 
+--  ★ MAXSUS BUYURTMANING O'Z QOIDALARI (zavod qarori, 2026-11) — FAQAT
+--  shu guruhda (`is_custom`), penal, kamod, stol va stulga tegmaydi:
+--
+--    · bitta konver — BUTUN buyurtma: ofis, horeca, oshxona mebeli
+--      bitta raqam ostida, tarkibi IZOHDA (har biriga alohida konver
+--      ochilmaydi) — shuning uchun KOMPLEKT;
+--    · sana ikkita: BOSHLANISH va mijoz bilan kelishilgan TOPSHIRISH
+--      kuni (`unit_requests.finish_on` → `fg_planned_on`); tsexdan
+--      tsexga o'tish sanasi so'ralmaydi;
+--    · KIMGA: mijoz yoki showroom (`customer_id`, `showroom`).
+ALTER TABLE product_groups ADD COLUMN IF NOT EXISTS is_custom BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE unit_requests  ADD COLUMN IF NOT EXISTS finish_on   DATE;
+ALTER TABLE unit_requests  ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id);
+ALTER TABLE unit_requests  ADD COLUMN IF NOT EXISTS showroom    BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS showroom  BOOLEAN NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'maxsus-qoidalar') THEN
+    UPDATE product_groups SET is_custom = true, uom = 'komplekt' WHERE code = 'MAXSUS';
+    INSERT INTO migration_flags (key) VALUES ('maxsus-qoidalar');
+  END IF;
+END $$;
+
+--  Umumiy mahsulot: tarkib izohda, katalogda har buyurtmaga nom ochilmaydi.
+INSERT INTO products (sku, name, group_id, route_template_id)
+SELECT 'MAXSUS', 'Maxsus buyurtma', g.id, g.route_template_id
+  FROM product_groups g WHERE g.code = 'MAXSUS'
+ON CONFLICT (sku) DO NOTHING;
+
 -- ───────────────────────────────────────── TAYYOR MAHSULOT KIRIMI ───────────
 --
 --  ★ MOL HUJJAT BILAN KIRADI — xom ashyodagi bilan AYNAN bir xil
