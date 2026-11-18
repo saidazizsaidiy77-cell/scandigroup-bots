@@ -54,7 +54,9 @@ router.get('/ref', need('production.view', 'production.entry'), wrap(async (_req
                        --  qisqartiradi va majburiy katakni belgilaydi —
                        --  chegara baribir SERVERDA: requestOne.
                        COALESCE(g.sales_can_request, false) AS sales_can_request,
-                       COALESCE(g.needs_fabric, false)      AS needs_fabric
+                       COALESCE(g.needs_fabric, false)      AS needs_fabric,
+                       --  Maxsus buyurtma: sana, kimga va tarkib so'raladi.
+                       COALESCE(g.is_custom, false)         AS is_custom
                   FROM products p JOIN product_groups g ON g.id = p.group_id
                   LEFT JOIN (SELECT pr.product_id, COUNT(*) AS steps,
                                     (array_agg(sc.shop_id ORDER BY pr.step_no))[1] AS shop_id

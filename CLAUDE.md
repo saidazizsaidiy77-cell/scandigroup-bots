@@ -599,13 +599,29 @@ MIJOZ yoki SHOWROOM buyurtmasi bilan. Mavjud tsexlarda, penal · kamod
 ekranda konver va zakaz bir xil ko'rinadi. Kerak bo'lsa
 `product_groups.no_prefix` da bitta katak almashtiriladi (4-qoida).
 
-Savdo turkumi — **«Maxsus buyurtma»**, DONA bilan. Savdo so'rov yozadi
-(`sales_can_request`): narx buyurtma olinganda qatorda qo'yiladi va
-konver o'sha qatorga o'zi biriktiriladi. Showroom uchun — odatdagi
-so'rov, keyin T/M dan omborlar aro hujjat bilan. Bir martalik qismi
-`migration_flags`: `maxsus-buyurtma`; harf va turkum doimiy qoida
-(faqat bo'sh katak). Eshik va mebel modellari katalogda shu guruhga
-qo'shiladi.
+Savdo turkumi — **«Maxsus buyurtma»**, KOMPLEKT bilan. Savdo so'rov
+yozadi (`sales_can_request`): narx buyurtma olinganda qatorda qo'yiladi
+va konver o'sha qatorga o'zi biriktiriladi. Bir martalik qismi
+`migration_flags`: `maxsus-buyurtma`, `maxsus-qoidalar`; harf va
+turkum doimiy qoida (faqat bo'sh katak).
+
+**★ BITTA KONVER — BUTUN BUYURTMA** (zavod qarori, 2026-11;
+`product_groups.is_custom`, `maxsusTekshir`, `modules/units.js`). Bitta
+maxsus buyurtmada ofis, horeca va oshxona mebeli birga bo'ladi va har
+biriga konver ochish kerak emas: umumiy mahsulot **«Maxsus buyurtma»**
+(`sku = 'MAXSUS'`), tarkibi IZOHDA (majburiy). Faqat shu guruhda
+(penal, kamod, stol, stulga tegmaydi):
+
+    sana     BOSHLANISH + mijoz bilan kelishilgan TOPSHIRISH kuni
+             (`unit_requests.finish_on` → `fg_planned_on`, reja —
+             formuladan ustun); tsexdan tsexga sana so'ralmaydi
+    kimga    MIJOZ yoki SHOWROOM (`customer_id`, `showroom`) — konverga
+             ko'chadi; zahira yo'q
+    rang     so'ralmaydi
+
+Buyurtmadan so'ralganda mijoz va sana BUYURTMANING o'zidan (`due_on`).
+**Raqam o'z hisobidan** (`Z26-0001`): `doc_no_start` dagi `Z26-` qatori
+(757) zakazniki va konverga tegmaydi (`nextConveyorNo`).
 
 **Javobgar tsex** (`product_groups.owner_shop_id`) — bo'lim konver
 QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini: begona

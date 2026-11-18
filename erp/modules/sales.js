@@ -1504,6 +1504,7 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
       `SELECT i.*, p.name AS product, g.name AS product_type,
               COALESCE(g.sales_can_request, false) AS mumkin,
               COALESCE(g.needs_fabric, false)      AS matoli,
+              COALESCE(g.is_custom, false)         AS maxsus,
               i.qty - COALESCE((SELECT SUM(r.qty) FROM unit_reservations r
                                  WHERE r.order_item_id = i.id), 0) AS qoldi
          FROM order_items i
@@ -1532,7 +1533,8 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     //  YO'Q: konver aynan shu mijoz uchun so'ralmoqda. Shuning uchun
     //  javob qaysi katakni to'ldirish kerakligini aytadi.
     const bosh = (v) => !String(v ?? '').trim();
-    const yoq = [bosh(it.color) && 'rangi',
+    //  Maxsus buyurtmada rang so'ralmaydi — tarkibi izohda.
+    const yoq = it.maxsus ? [] : [bosh(it.color) && 'rangi',
                  it.matoli && bosh(it.fabric) && 'matosi'].filter(Boolean);
     if (yoq.length) throw new Error(
       `Buyurtma qatorining ${yoq.join(' va ')} tanlanmagan `
@@ -1556,6 +1558,8 @@ router.post('/orders/:id/request-unit', need(...WRITE), wrap(async (req, res) =>
     const q = await requestOne(client, req, {
       product_id: it.product_id, qty, color: it.color, fabric: it.fabric,
       started_on: today(),
+      //  Maxsus buyurtmada topshirish kuni — buyurtmaning chiqish sanasi.
+      finish_on: o.due_on ? String(o.due_on).slice(0, 10) : null,
     }, null, it.id);
 
     await notify.queue({
