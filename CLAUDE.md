@@ -3680,10 +3680,17 @@ o'zinikilar (`zavodJarayon`, faqat joriy oyda).
 2026-11; `turkumKpi` dagi `kimga`, faqat `/kpi/umumiy`). KPI
 sahifasidagi turkum kartochkalarida doirasi bor menejerga faqat
 REJASI BOR turkumlar chiziladi (stol-stul menejeriga penal yo'q),
-reja — SEGMENT + YORDAM (u turkumning butun savdosiga javob beradi),
+reja — butun zavodning shu turkumdagi rejasi (pastda),
 chiqdi va «zavodda» esa shu turkumda BUTUN zavodniki — bosilsa
 showroom, SMM va eksport buyurtmalari ham ochiladi. Rejasi umuman
 yo'q bo'lsa hamma turkum. Savdo paneli o'zgarmadi.
+
+**★ RAQAMLAR RAHBARIYATNIKIDEK** (zavod qarori, 2026-11). Menejer
+kartochkasida reja ham BUTUN zavodning shu turkumdagi rejasi (SEGMENT
+yig'indisi), ya'ni administrator ko'rgan kartochka bilan AYNAN bir xil
+— farqi faqat qaysi turkumlar chizilgani (o'z rejasi bor, `meniki`).
+**Pul tushumi kartochkasi menejerga chizilmaydi** — u rahbariyatniki.
+Test reja raqamini admin javobiga solishtiradi.
 
 **★ QISQARISH REJADAN, BELGIDAN EMAS** (zavod qarori, 2026-11): «Faqat
 o'zinikini» belgisi bo'lmagan menejerda ham turkumlar REJASIDAN
