@@ -587,24 +587,25 @@ Shuning uchun belgi BO'LIMda ham bor (STU-LAK) va o'qilishi bitta
 joyda: `COALESCE(bo'limniki, tsexniki)`. Zahira ham shu bo'limda
 kutadi (`is_hold`).
 
-**★ ESHIK VA INDIVIDUAL BUYURTMA** (zavod qarori, 2026-11;
-`sql/warehouse.sql`, guruhlar `ESHIK` va `INDIV`). Ikkalasi ham MAVJUD
-tsexlarda, penal · kamod · sp tartibida yuradi (`L1-FULL`) — alohida
-tsex ochilmadi. Raqami guruhda:
+**★ MAXSUS BUYURTMA** (zavod qarori, 2026-11; `sql/warehouse.sql`,
+guruh `MAXSUS`). Eshik ham, individual mebel ham BITTA yo'nalish va
+bitta guruh: zavod ularni T/M omborga zahiraga YASAMAYDI — faqat
+MIJOZ yoki SHOWROOM buyurtmasi bilan. Mavjud tsexlarda, penal · kamod
+· sp tartibida yuradi (`L1-FULL`), alohida tsex ochilmadi. Raqami:
 
-    D26-0001   eshik («E» o'rniga — zavod tanlovi)
-    Z26-0001   individual buyurtma
+    Z26-0001   maxsus buyurtma (eshik, individual mebel…)
 
 ⚠️ `Z` zakaz raqami bilan bir xil harf (`Z26-0758`) — zavod qarori;
 ekranda konver va zakaz bir xil ko'rinadi. Kerak bo'lsa
 `product_groups.no_prefix` da bitta katak almashtiriladi (4-qoida).
 
-Savdo turkumi ham alohida: **Eshik** va **Individual buyurtma**. Eshik
-DONA, individual KOMPLEKT; individualni savdo so'raydi
-(`sales_can_request`) — narx buyurtma olinganda qatorda qo'yiladi va
-konver o'sha qatorga o'zi biriktiriladi. Bir martalik qismi
-`migration_flags`: `eshik-individual`; harf va turkum doimiy qoida
-(faqat bo'sh katak). Mahsulotlar katalogdan qo'shiladi.
+Savdo turkumi — **«Maxsus buyurtma»**, DONA bilan. Savdo so'rov yozadi
+(`sales_can_request`): narx buyurtma olinganda qatorda qo'yiladi va
+konver o'sha qatorga o'zi biriktiriladi. Showroom uchun — odatdagi
+so'rov, keyin T/M dan omborlar aro hujjat bilan. Bir martalik qismi
+`migration_flags`: `maxsus-buyurtma`; harf va turkum doimiy qoida
+(faqat bo'sh katak). Eshik va mebel modellari katalogda shu guruhga
+qo'shiladi.
 
 **Javobgar tsex** (`product_groups.owner_shop_id`) — bo'lim konver
 QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini: begona

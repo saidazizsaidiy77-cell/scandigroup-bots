@@ -3154,22 +3154,21 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
   assert.equal(Number(tf.rows[0].prev_qty), 1.5, 'oldingisida donaga 1,5 list');
 });
 
-test('eshik va individual: guruh, harf, turkum; tannarxda ish haqi', async () => {
+test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
   const { db } = require('../db');
-  //  ★ IKKI YANGI YO'NALISH (zavod qarori, 2026-11): mavjud tsexda,
-  //  penal tartibida; raqam D (eshik) va Z (individual) bilan.
+  //  ★ MAXSUS BUYURTMA (zavod qarori, 2026-11): eshik ham, individual
+  //  mebel ham bitta guruh, mavjud tsexda, penal tartibida, raqami Z.
   const g = (await db.query(
     `SELECT g.code, g.no_prefix, g.uom, g.sales_category, g.sales_can_request,
             rt.code AS route
        FROM product_groups g LEFT JOIN route_templates rt ON rt.id = g.route_template_id
-      WHERE g.code IN ('ESHIK', 'INDIV') ORDER BY g.code`)).rows;
+      WHERE g.code = 'MAXSUS'`)).rows;
   assert.deepEqual(g.map((x) => [x.code, x.no_prefix, x.uom, x.sales_category, x.route]),
-    [['ESHIK', 'D', 'dona', 'ESHIK', 'L1-FULL'],
-     ['INDIV', 'Z', 'komplekt', 'INDIV', 'L1-FULL']]);
-  assert.equal(g[1].sales_can_request, true, 'individualni savdo so\'raydi');
+    [['MAXSUS', 'Z', 'dona', 'MAXSUS', 'L1-FULL']]);
+  assert.equal(g[0].sales_can_request, true, 'savdo so\'raydi');
 
   //  Konver raqami guruhning harfidan.
-  const grp = (await H.id(`SELECT id FROM product_groups WHERE code = 'ESHIK'`)).id;
+  const grp = (await H.id(`SELECT id FROM product_groups WHERE code = 'MAXSUS'`)).id;
   const pid = (await db.query(
     `INSERT INTO products (sku, name, group_id, route_template_id)
      VALUES ('ESH-SINOV', 'Sinov eshik', $1,
@@ -3179,7 +3178,7 @@ test('eshik va individual: guruh, harf, turkum; tannarxda ish haqi', async () =>
     { product_id: pid, qty: 2, section_id: ARRA }] })).body.created[0];
   const e2 = (await admin('POST', '/api/units/', { items: [
     { product_id: pid, qty: 4, section_id: ARRA }] })).body.created[0];
-  assert.match(e1.conveyor_no, /^D\d{2}-\d{4}$/, e1.conveyor_no);
+  assert.match(e1.conveyor_no, /^Z\d{2}-\d{4}$/, e1.conveyor_no);
 
   //  ★ ISH HAQI — tsex oyligi o'sha oyda tsexdan CHIQQAN konverlarga
   //  bo'linadi. Sarf yo'q — ulush donadan: 300 $ → 2 ta 100, 4 ta 200.
