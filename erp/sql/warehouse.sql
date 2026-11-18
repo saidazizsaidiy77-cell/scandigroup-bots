@@ -695,6 +695,55 @@ SELECT 'MATRAS', 'Matras', g.id, NULL
   FROM product_groups g WHERE g.code = 'MATRAS'
 ON CONFLICT (sku) DO NOTHING;
 
+-- ═══════════════════════════════════════ ESHIK VA INDIVIDUAL BUYURTMA
+--
+--  ★ IKKI YANGI YO'NALISH (zavod qarori, 2026-11). Alohida tsex
+--  OCHILMAYDI: ikkalasi ham MAVJUD tsexlarda, penal · kamod · sp
+--  tartibida yuradi (`L1-FULL`). Guruh bo'lib turishining sababi
+--  matras bilan bir xil — raqamning harfi, o'lchov birligi va savdo
+--  turkumi GURUHDA yoziladi:
+--
+--      D26-0001   eshik (zavod «E» o'rniga «D» ni tanladi)
+--      Z26-0001   individual buyurtma
+--
+--  Harf faqat BO'SH katakka yoziladi: saytdan o'zgartirilgani keyingi
+--  deploy'da qaytarib qo'yilmaydi (matras bilan bir xil qoida).
+INSERT INTO sales_categories (code, name, sort) VALUES
+  ('ESHIK',  'Eshik',               5),
+  ('INDIV',  'Individual buyurtma', 6)
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO product_groups (code, name, line_id, is_set, sort, route_template_id)
+SELECT v.code, v.name, (SELECT id FROM lines WHERE code = 'L1'), false, v.sort,
+       (SELECT id FROM route_templates WHERE code = 'L1-FULL')
+  FROM (VALUES ('ESHIK', 'Eshik', 7), ('INDIV', 'Individual', 8)) AS v(code, name, sort)
+ WHERE EXISTS (SELECT 1 FROM lines WHERE code = 'L1')
+ON CONFLICT (code) DO NOTHING;
+
+UPDATE product_groups SET no_prefix = 'D' WHERE code = 'ESHIK' AND no_prefix IS NULL;
+UPDATE product_groups SET no_prefix = 'Z' WHERE code = 'INDIV' AND no_prefix IS NULL;
+UPDATE product_groups SET no_width = 4 WHERE code IN ('ESHIK', 'INDIV') AND no_width IS NULL;
+
+--  Turkum — DOIMIY qoida (`WHERE sales_category IS NULL`), matrasdagi
+--  bilan bir xil sabab: toza bazada ham bo'sh qolmasin.
+UPDATE product_groups SET sales_category = 'ESHIK'
+ WHERE code = 'ESHIK' AND sales_category IS NULL;
+UPDATE product_groups SET sales_category = 'INDIV'
+ WHERE code = 'INDIV' AND sales_category IS NULL;
+
+--  Bir martalik (`migration_flags`): eshik DONA, individual KOMPLEKT;
+--  individualni SAVDO so'raydi — u buyurtmasiz ochilmaydi va har
+--  konver bitta mijozniki (stol va stul bilan bir xil yo'l).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'eshik-individual') THEN
+    UPDATE product_groups SET uom = 'dona'     WHERE code = 'ESHIK';
+    UPDATE product_groups SET uom = 'komplekt' WHERE code = 'INDIV';
+    UPDATE product_groups SET sales_can_request = true WHERE code = 'INDIV';
+    INSERT INTO migration_flags (key) VALUES ('eshik-individual');
+  END IF;
+END $$;
+
 -- ───────────────────────────────────────── TAYYOR MAHSULOT KIRIMI ───────────
 --
 --  ★ MOL HUJJAT BILAN KIRADI — xom ashyodagi bilan AYNAN bir xil

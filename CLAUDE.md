@@ -587,6 +587,25 @@ Shuning uchun belgi BO'LIMda ham bor (STU-LAK) va o'qilishi bitta
 joyda: `COALESCE(bo'limniki, tsexniki)`. Zahira ham shu bo'limda
 kutadi (`is_hold`).
 
+**★ ESHIK VA INDIVIDUAL BUYURTMA** (zavod qarori, 2026-11;
+`sql/warehouse.sql`, guruhlar `ESHIK` va `INDIV`). Ikkalasi ham MAVJUD
+tsexlarda, penal · kamod · sp tartibida yuradi (`L1-FULL`) — alohida
+tsex ochilmadi. Raqami guruhda:
+
+    D26-0001   eshik («E» o'rniga — zavod tanlovi)
+    Z26-0001   individual buyurtma
+
+⚠️ `Z` zakaz raqami bilan bir xil harf (`Z26-0758`) — zavod qarori;
+ekranda konver va zakaz bir xil ko'rinadi. Kerak bo'lsa
+`product_groups.no_prefix` da bitta katak almashtiriladi (4-qoida).
+
+Savdo turkumi ham alohida: **Eshik** va **Individual buyurtma**. Eshik
+DONA, individual KOMPLEKT; individualni savdo so'raydi
+(`sales_can_request`) — narx buyurtma olinganda qatorda qo'yiladi va
+konver o'sha qatorga o'zi biriktiriladi. Bir martalik qismi
+`migration_flags`: `eshik-individual`; harf va turkum doimiy qoida
+(faqat bo'sh katak). Mahsulotlar katalogdan qo'shiladi.
+
 **Javobgar tsex** (`product_groups.owner_shop_id`) — bo'lim konver
 QAYERDA ekanini aytadi, javobgar tsex esa KIM boshqarayotganini: begona
 tsexning bo'limida turgan konver o'z boshlig'ining ekranida ustun bo'lib
@@ -5882,7 +5901,7 @@ qolganlarning ustiga tushadi.
 haqi va kassadagi harajatdan O'QIYDI. Uch bosqich:
 
     1  material       YOZILDI — sarf × manba omborning o'rtacha narxi
-    2  ish haqi       ishbay yozilguncha tsex oyligi taqsimlanadi
+    2  ish haqi       YOZILDI — tsex oyligi taqsimlanadi (pastda)
     3  kommunal       «oyni yopish»: shu oyda omborga kirgan konverlarga,
                       TANNARXIGA proporsional (zavod qarori), raqam qotadi
 
@@ -5895,6 +5914,20 @@ berardi), o'zi esa qizil «sarf yozilmagan» bo'lib turadi. Qator
 bosilsa material bo'yicha, BIR DONAGA, oldingisi bilan yonma-yon —
 «nega oshdi» degan savolning javobi. Boshlang'ich qoldiq (`is_opening`)
 va marshrutsiz mahsulot (matras) ro'yxatga tushmaydi.
+
+**★ ISH HAQI — TSEX OYLIGI KONVERGA TAQSIMLANADI** (zavod qarori,
+2026-11; `cost.js` dagi `taqsim`). Ishbay yo'q: tsexning oy oyligi —
+kassadagi `MAOSH` moddasi, tsexi bor (`expense_items.shop_id`: «Oylik
+korpus», «Oylik lak»…), foyda-zarar oyi bo'yicha — o'sha oyda TSEXDAN
+CHIQQAN konverlarga bo'linadi. «Chiqdi» — tsex ekranidagi «oy
+boshidan beri» bilan bir xil: boshqa tsexga o'tdi (`unit_moves`) yoki
+T/M omborga topshirildi (`fg_on`). Ulush — chiqqan dona × donaning
+material tannarxi; o'sha oyda hech kimda sarf bo'lmasa — dona. Konver
+uch tsexdan o'tsa uchalasining oyligidan oladi. Hisobotda «Ish haqi,
+$» va **«Tannarx donaga»** (xom ashyo + ish haqi); ochilgan qatorda
+qaysi tsex, qaysi oy. Konver chiqmagan oydagi oylik hech kimga
+tushmaydi. Foyda-zararda oylik HARAJATda qoladi (ikki marta sanalmaydi
+— bu tannarx hisoboti, P&L emas).
 
 **Mahsulot turi filtri** (penal, stul…) va qidiruv KLIENTDA: ro'yxatda
 LIMIT yo'q, ya'ni hammasi sahifada turadi. Turlar yuklangan qatorlardan
