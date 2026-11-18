@@ -47,6 +47,8 @@ tr.k-det>td{background:var(--surface-2)}
     <p class="muted" style="margin-top:6px;font-size:12px" id="kNi"></p></div>
   <div class="card"><h2>Xom ashyo</h2><div class="kpi" id="kS">—<small> $</small></div>
     <p class="muted" style="margin-top:6px;font-size:12px">Konverlarga sarflangan</p></div>
+  <div class="card"><h2>Ish haqi</h2><div class="kpi" id="kI">—<small> $</small></div>
+    <p class="muted" style="margin-top:6px;font-size:12px">Tsex oyligidan taqsimlangan</p></div>
   <div class="card"><h2>Sarf yozilmagan</h2><div class="kpi" id="kY">—</div>
     <p class="muted" style="margin-top:6px;font-size:12px">Material biriktirilmagan konver</p></div>
 </div>
@@ -54,8 +56,10 @@ tr.k-det>td{background:var(--surface-2)}
 <div class="card" style="margin-top:16px">
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
   <p class="muted" style="font-size:12px;margin-top:10px">
-    Hozircha faqat <b>xom ashyo</b>: ish haqi va kommunal keyingi bosqichda
-    qo'shiladi. Bir donaga = konverning jami materiali ÷ chiqqan dona
+    Tannarx = <b>xom ashyo + ish haqi</b>; kommunal keyingi bosqichda.
+    Ish haqi — tsexning oy oyligi (kassadagi «Oylik …» moddasi, foyda-zarar
+    oyi) o'sha oyda tsexdan chiqqan konverlarga material tannarxiga
+    proporsional bo'linadi. Bir donaga = konverning jami materiali ÷ chiqqan dona
     (brak ham kiradi). Narx — material olingan omborning o'rtacha kirim
     narxi. «Oldingi» — shu mahsulotning sarfi bor oldingi konveri.
     <span class="no-print">Qator bosilsa material bo'yicha farq chiqadi.</span></p>
@@ -131,11 +135,13 @@ function chiz() {
   $('kN').textContent = v.length;
   $('kNi').textContent = `${v.filter((r) => r.yolda).length} tasi hali ishlab chiqarishda`;
   $('kS').innerHTML = `${usd(v.reduce((s, r) => s + Number(r.summa || 0), 0))}<small> $</small>`;
+  $('kI').innerHTML = `${usd(v.reduce((s, r) => s + Number(r.ish_haqi || 0), 0))}<small> $</small>`;
   $('kY').innerHTML = sarfsiz ? `<span class="late">${sarfsiz}</span>` : '0';
   if (!v.length) { $('body').innerHTML = `<p class="muted">Bu oraliqda omborga kirgan konver yo'q.</p>`; return; }
   $('body').innerHTML = `<div class="tbox"><table>
     <thead><tr><th>Kirgan</th><th>Konver</th><th>Mahsulot</th><th class="num">Soni</th>
-      <th class="num">Xom ashyo, $</th><th class="num">Bir donaga, $</th>
+      <th class="num">Xom ashyo, $</th><th class="num">Xom ashyo donaga, $</th>
+      <th class="num">Ish haqi, $</th><th class="num">Tannarx donaga, $</th>
       <th>Oldingi</th><th class="num">Oldingisi donaga, $</th><th>Farq</th></tr></thead>
     <tbody>${v.map((r) => `
       <tr class="k-row" onclick="och('${esc(r.conveyor_no)}')">
@@ -146,11 +152,13 @@ function chiz() {
         <td class="num">${r.soni} <span class="muted">${esc(r.uom || '')}</span></td>
         <td class="num">${r.summa == null ? '<span class="late">sarf yozilmagan</span>' : usd(r.summa)}${
           r.narxsiz ? ` <span class="late" title="${r.narxsiz} ta qatorda narx yo'q">*</span>` : ''}</td>
-        <td class="num"><b>${r.dona == null ? '—' : usd(r.dona)}</b></td>
+        <td class="num">${r.dona == null ? '—' : usd(r.dona)}</td>
+        <td class="num">${r.ish_haqi == null ? '<span class="muted">—</span>' : usd(r.ish_haqi)}</td>
+        <td class="num"><b>${r.jami_dona == null || Number(r.jami_dona) === 0 ? '—' : usd(r.jami_dona)}</b></td>
         <td>${r.prev_no ? esc(r.prev_no) : '<span class="muted">birinchi</span>'}</td>
         <td class="num">${r.prev_dona == null ? '—' : usd(r.prev_dona)}</td>
         <td>${farq(r)}</td></tr>
-      ${ochiq === r.conveyor_no ? `<tr class="k-det"><td colspan="9">${detal()}</td></tr>` : ''}`).join('')}
+      ${ochiq === r.conveyor_no ? `<tr class="k-det"><td colspan="11">${detal()}</td></tr>` : ''}`).join('')}
     </tbody></table></div>`;
 }
 
@@ -167,9 +175,11 @@ async function och(no) {
 function detal() {
   if (!det) return '<span class="muted">Yuklanmoqda…</span>';
   if (det.error) return esc(det.error);
-  if (!det.rows.length) return '<span class="muted">Material biriktirilmagan.</span>';
+  const ish = (det.ish || []).length ? `<p style="margin:0 0 8px"><b>Ish haqi:</b> ${
+    det.ish.map((x) => `${esc(x.shop)} · ${esc(x.oy)} — ${usd(x.summa)} $`).join(' \u00b7 ')}</p>` : '';
+  if (!det.rows.length) return ish + '<span class="muted">Material biriktirilmagan.</span>';
   const p = det.prev_no;
-  return `<table style="background:transparent">
+  return ish + `<table style="background:transparent">
     <thead><tr><th>Material</th><th class="num">Donaga soni</th><th class="num">Donaga, $</th>
       ${p ? `<th class="num">${esc(p)}: soni</th><th class="num">${esc(p)}: $</th><th>Farq</th>` : ''}</tr></thead>
     <tbody>${det.rows.map((m) => {
@@ -192,7 +202,7 @@ function chop() {
   const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
   const q = $('fQ').value.trim(), tur = $('fTur').value;
   $('printHead').innerHTML = `
-    <h1>Tannarx (xom ashyo) · konver bo'yicha</h1>
+    <h1>Tannarx (xom ashyo + ish haqi) · konver bo'yicha</h1>
     <div class="meta">Omborga kirgan: ${d8($('fFrom').value) || 'boshidan'} — ${
       d8($('fTo').value) || 'bugungacha'}${tur ? ` \u00b7 turi: ${esc(tur)}` : ''}${q ? ` · qidiruv: ${esc(q)}` : ''}${
       $('fYol').checked ? ' · ishlab chiqarishdagilar bilan' : ''}</div>
@@ -203,9 +213,9 @@ function chop() {
 
 function exportCsv() {
   const qat = [['Kirgan', 'Konver', 'Mahsulot', 'Turi', 'Soni', 'Xom ashyo $',
-                'Bir donaga $', 'Oldingi konver', 'Oldingisi donaga $', 'Farq $']];
+                'Xom ashyo donaga $', 'Ish haqi $', 'Tannarx donaga $', 'Oldingi konver', 'Oldingisi donaga $', 'Farq $']];
   for (const r of korinadi()) qat.push([d8(r.kirgan), r.conveyor_no, r.product,
-    r.product_type || '', r.soni, r.summa ?? '', r.dona ?? '', r.prev_no || '',
+    r.product_type || '', r.soni, r.summa ?? '', r.dona ?? '', r.ish_haqi ?? '', r.jami_dona ?? '', r.prev_no || '',
     r.prev_dona ?? '', r.dona != null && r.prev_dona != null
       ? (Number(r.dona) - Number(r.prev_dona)).toFixed(2) : '']);
   const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)

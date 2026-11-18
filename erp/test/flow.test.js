@@ -3154,6 +3154,63 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
   assert.equal(Number(tf.rows[0].prev_qty), 1.5, 'oldingisida donaga 1,5 list');
 });
 
+test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
+  const { db } = require('../db');
+  //  ★ MAXSUS BUYURTMA (zavod qarori, 2026-11): eshik ham, individual
+  //  mebel ham bitta guruh, mavjud tsexda, penal tartibida, raqami Z.
+  const g = (await db.query(
+    `SELECT g.code, g.no_prefix, g.uom, g.sales_category, g.sales_can_request,
+            rt.code AS route
+       FROM product_groups g LEFT JOIN route_templates rt ON rt.id = g.route_template_id
+      WHERE g.code = 'MAXSUS'`)).rows;
+  assert.deepEqual(g.map((x) => [x.code, x.no_prefix, x.uom, x.sales_category, x.route]),
+    [['MAXSUS', 'Z', 'dona', 'MAXSUS', 'L1-FULL']]);
+  assert.equal(g[0].sales_can_request, true, 'savdo so\'raydi');
+
+  //  Konver raqami guruhning harfidan.
+  const grp = (await H.id(`SELECT id FROM product_groups WHERE code = 'MAXSUS'`)).id;
+  const pid = (await db.query(
+    `INSERT INTO products (sku, name, group_id, route_template_id)
+     VALUES ('ESH-SINOV', 'Sinov eshik', $1,
+             (SELECT id FROM route_templates WHERE code = 'L1-FULL'))
+     RETURNING id`, [grp])).rows[0].id;
+  const e1 = (await admin('POST', '/api/units/', { items: [
+    { product_id: pid, qty: 2, section_id: ARRA }] })).body.created[0];
+  const e2 = (await admin('POST', '/api/units/', { items: [
+    { product_id: pid, qty: 4, section_id: ARRA }] })).body.created[0];
+  assert.match(e1.conveyor_no, /^Z\d{2}-\d{4}$/, e1.conveyor_no);
+
+  //  ★ ISH HAQI — tsex oyligi o'sha oyda tsexdan CHIQQAN konverlarga
+  //  bo'linadi. Sarf yo'q — ulush donadan: 300 $ → 2 ta 100, 4 ta 200.
+  const kor = (await H.id(`SELECT id FROM sections WHERE code = 'KOR-SHKUR'`)).id;
+  const boy = (await H.id(`SELECT id FROM sections WHERE code = 'BOY-AST1'`)).id;
+  for (const [u, q] of [[e1, 2], [e2, 4]]) {
+    await db.query(
+      `INSERT INTO unit_moves (unit_id, section_id, from_section_id, qty, moved_on)
+       VALUES ($1, $2, $3, $4, '2031-03-10')`, [u.id, boy, kor, q]);
+  }
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const modda = (await H.id(
+    `SELECT id FROM expense_items WHERE lower(name) = 'oylik korpus'`)).id;
+  await db.query(
+    `INSERT INTO cash_ops (doc_no, op_date, from_kind, from_id, to_kind, to_id,
+                           currency, amount, status, pl_month, expense_item_id)
+     VALUES ('P31-9001', '2031-04-05', 'account', $1, 'expense', $2,
+             'USD', 300, 'ok', '2031-03-01', $2)`, [kassa, modda]);
+
+  const tn = (await admin('GET', '/api/cost?yolda=1')).body.rows;
+  const t1 = tn.find((r) => r.conveyor_no === e1.conveyor_no);
+  const t2 = tn.find((r) => r.conveyor_no === e2.conveyor_no);
+  assert.equal(Number(t1.ish_haqi), 100);
+  assert.equal(Number(t2.ish_haqi), 200);
+  assert.equal(Number(t2.jami_dona), 50, 'materialsiz: 200 $ ÷ 4');
+  const tf = (await admin('GET', '/api/cost/' + encodeURIComponent(e1.conveyor_no))).body;
+  assert.equal(tf.ish.length, 1);
+  assert.equal(tf.ish[0].oy, '2031-03');
+  //  Sinov operatsiyasi boshqa testlarning kassa va P&L hisobiga tushmasin.
+  await db.query(`DELETE FROM cash_ops WHERE doc_no = 'P31-9001'`);
+});
+
 test('xom ashyo: spravochnik, tsex omborlari va fayldan yuklash', async () => {
   //  ★ HAR RANG ALOHIDA MATERIAL (zavod qarori): «LDSP 16mm oq» va
   //  «LDSP 16mm venge» — ikkita qator, har birining o'z qoldig'i.
