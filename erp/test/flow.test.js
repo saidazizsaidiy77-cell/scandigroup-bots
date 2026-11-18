@@ -8746,9 +8746,11 @@ test('savdo KPI: menejerga o\'z turkumlari, zavodda — butun zavod', async () =
   const u = (await men('GET', '/api/sales/kpi/umumiy?mon=' + oy)).body;
   assert.deepEqual(u.turkum.map((t) => t.code).sort(), ['STOL', 'STUL']);
   const stol = u.turkum.find((t) => t.code === 'STOL');
-  assert.equal(Number(stol.reja_amount), 1500, 'o\'ziniki + boshqa savdo');
   const hamma = (await admin('GET', '/api/sales/kpi/umumiy?mon=' + oy)).body.turkum
     .find((t) => t.code === 'STOL');
+  assert.equal(Number(stol.reja_amount), Number(hamma.reja_amount),
+    'reja — rahbariyatnikidek, butun zavod');
+  assert.equal(u.tushum, null, 'pul tushumi menejerga chizilmaydi');
   assert.equal(stol.zavodda_qty, hamma.zavodda_qty, 'zavodda — butun zavod');
   assert.equal(stol.zavodda_list.length, hamma.zavodda_list.length);
   assert.equal(Number(stol.chiqdi_amount), Number(hamma.chiqdi_amount));
