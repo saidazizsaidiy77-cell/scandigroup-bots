@@ -41,6 +41,7 @@ const TURLAR = [
 
   { kod: 'cash_pending',   bolim: 'Kassa', nom: 'Pul topshirildi — qabul qilinmagan' },
   { kod: 'digest',         bolim: 'Rahbariyat', nom: 'Kunlik xulosa (har kuni)' },
+  { kod: 'ai_daily',       bolim: 'Rahbariyat', nom: 'Tahlilchi AI — ertalabki tahlil' },
 
   { kod: 'task_assigned',  bolim: 'Vazifalar', nom: 'Sizga vazifa berildi' },
   { kod: 'task_comment',   bolim: 'Vazifalar', nom: 'Vazifaga izoh / bajarildi' },

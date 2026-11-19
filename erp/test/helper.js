@@ -83,6 +83,7 @@ async function startServer() {
   app.use('/api/payroll', require('../modules/payroll'));
   // Tizim tekshiruvi: hujjat, qoldiq va qarz bir xil raqamni aytadimi.
   app.use('/api/integrity', require('../modules/integrity'));
+  app.use('/api/ai', require('../modules/tahlilchi').router);
   app.use('/api/kpi', require('../modules/kpi'));
 
   const server = await new Promise((resolve) => {

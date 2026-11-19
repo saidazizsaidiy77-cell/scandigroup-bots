@@ -4095,6 +4095,37 @@ summasi, ostida mijoz va zakaz raqami.
 
 ---
 
+## Tahlilchi AI — Telegram'da savol-javob va ertalabki tahlil
+
+**★ RAQAM EMAS, TAHLIL** (zavod qarori, 2026-11; `modules/tahlilchi.js`,
+`sql/ai.sql`). Botga savol yoziladi («bu oy stul rejasi qanday?», «kimga
+qo'ng'iroq qilish kerak?», «S26-474 qayerda?») va Claude (`claude-opus-5-5`,
+`AI_MODEL` bilan almashadi) ERP hisobotlarini O'QIB, rejaga va o'tgan
+davrga solishtirib, xavf va 1–3 tavsiya bilan javob beradi. 08:10 da
+(`AI_AT`) «Kunlik xulosa» belgisi bor xodimga ertalabki tahlil ketadi
+(`ai_daily` turi — xodim o'chira oladi).
+
+**★ HUQUQ IKKINCHI MARTA YOZILMADI.** Agent bazaga kirmaydi: har savol
+uchun SO'RAGAN xodimning sessiyasi ochiladi (`surface = 'bot'`) va
+saytning O'Z API si ichki HTTP bilan o'qiladi — `ownOf`, `scopeOf`,
+`channelsOf` va huquqlar aynan saytdagidek. Menejer botdan ham faqat o'z
+mijozini ko'radi; 403 kelsa agent «sizga ochiq emas» deydi (test buni
+tekshiradi). Ro'yxat BITTA joyda (`ENDPOINTLAR`) va unda faqat GET —
+agent hech narsani o'zgartira olmaydi.
+
+**Kimga ochiq — XODIMDA** (`workers.ai_access`, Xodimlar sahifasida
+«Tahlilchi AI», standarti `false` — 4-qoida): har javob pul turadi. Har
+savol `ai_log` ga yoziladi: kim, nima, qaysi hisobotlar, tokenlar —
+«qancha ketyapti» degan savolga javob.
+
+**Yoqish**: `ANTHROPIC_API_KEY` (Railway sozlamasi) va `ERP_TG_TOKEN`;
+ikkalasi bo'lmasa JIM turadi. Bot xabarni `getUpdates` bilan oladi —
+botga webhook qo'yilgan bo'lsa 409 va jurnalda bitta qator. Sayt yo'li ham
+bor: `POST /api/ai/savol`. Suhbat xotirasi 30 daqiqa yoki 8 savol,
+`/yangi` — boshidan.
+
+---
+
 ## Xodimlar — shtat va kirish
 
 **★ TEST HISOBLARI FAQAT BO'SH BAZADA** (zavod qarori, 2026-09;

@@ -226,4 +226,5 @@ router.post('/logout', wrap(async (req, res) => {
 //  ketsa bitta ekranda boshqa menejerning mijozi ko'rinib qolardi.
 const ownOf = (req) => (req.user?.scope_own ? req.user.id : null);
 
-module.exports = { router, authenticate, need, loadWorker, verifyTelegram, ownOf };
+module.exports = { router, authenticate, need, loadWorker, verifyTelegram, ownOf,
+                   createSession };
