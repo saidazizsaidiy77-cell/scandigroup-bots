@@ -618,6 +618,10 @@ biriga konver ochish kerak emas: umumiy mahsulot **«Maxsus buyurtma»**
     kimga    MIJOZ yoki SHOWROOM (`customer_id`, `showroom`) — konverga
              ko'chadi; zahira yo'q
     rang     so'ralmaydi
+    turi     NIMA ishlab chiqariladi — Eshik · Horeca · Oshxona · Ofis
+             mebeli, bir nechtasi birga, MAJBURIY (`custom_kinds`,
+             ro'yxat bazada; `unit_requests`/`production_units
+             .custom_kinds`). Tafsilot izohda, ixtiyoriy
 
 Buyurtmadan so'ralganda mijoz va sana BUYURTMANING o'zidan (`due_on`).
 **Raqam o'z hisobidan** (`Z26-0001`): `doc_no_start` dagi `Z26-` qatori
@@ -3189,6 +3193,15 @@ ochilganda yoziladi, yozayotganda tomoni ostida chiqadi; fayldan:
 F.I.SH · Berilmagan so'm · Berilmagan $ · Qarz so'm · Qarz $ · Sana —
 qoldiq = berilmagan − qarz, bo'sh valyutaga tegilmaydi, topilmagan
 xodim xato. Huquqi `payroll.manage`, audit `opening`.
+
+**★ SANADAN SANAGACHA** (zavod qarori, 2026-11; `oraliq`,
+`modules/payroll.js`; filtr ikki sana). To'liq oy tanlansa
+(1-kundan oxirgi kungacha) — eskicha OY rejimi: to'landi foyda-zarar
+oyi bo'yicha, hisoblash shu yerda yoziladi. Boshqa har qanday oraliq —
+KUNLIK: to'landi kassadan berilgan KUN (`op_date`), ishbay ish kuni,
+hisoblangan oylik o'z oyining 1-kuni bo'yicha; boshiga + hisoblandi −
+to'landi = oxiriga saqlanadi. Kunlik rejimda hisoblash faqat
+ko'rsatiladi (u OYGA yoziladi). `?month=` eskicha ishlaydi.
 
 **★ TSEX BOSHLIG'I O'Z ODAMLARINI KO'RADI** (`payroll.shop`, zavod
 qarori 2026-11). `tsex_usta` da «Ish haqi» sahifasi ochiq, lekin FAQAT

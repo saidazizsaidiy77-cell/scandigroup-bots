@@ -3222,25 +3222,32 @@ test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
   assert.match(yoq.body.error, /Topshirish sanasi/);
   assert.equal((await sotuv('POST', '/api/units/requests',
     { ...asos, finish_on: '2026-12-10', note: 'Ofis' })).status, 400, 'kimgasiz bo\'lmaydi');
-  assert.equal((await sotuv('POST', '/api/units/requests',
-    { ...asos, finish_on: '2026-12-10', customer_id: mij.id })).status, 400, 'tarkibsiz bo\'lmaydi');
+  //  ★ NIMA ISHLAB CHIQARILADI — ro'yxatdan, majburiy.
+  const yoqTur = await sotuv('POST', '/api/units/requests',
+    { ...asos, finish_on: '2026-12-10', customer_id: mij.id });
+  assert.equal(yoqTur.status, 400, 'tursiz bo\'lmaydi');
+  assert.match(yoqTur.body.error, /Nima ishlab chiqariladi/);
+  assert.equal((await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-10',
+    customer_id: mij.id, custom_kinds: ['MEBEL-YOQ'] })).status, 400, 'ro\'yxatda yo\'q tur');
   const ok = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-10',
-    customer_id: mij.id, note: 'Ofis: 4 stol, 2 shkaf · oshxona' });
+    customer_id: mij.id, custom_kinds: ['OFIS', 'OSHXONA'] });
   assert.equal(ok.status, 200, ok.text);
   const rq = (await admin('GET', '/api/units/requests?status=pending')).body.rows
     .find((r) => r.id === ok.body.created[0]);
   assert.ok(Number(rq.conveyor_no.slice(-4)) < 757, rq.conveyor_no);
   assert.equal(String(rq.fg_on).slice(0, 10), '2026-12-10', 'T/M ga — kelishilgan kun');
   assert.equal(rq.req_customer, 'Maxsus sinov mijozi');
+  assert.equal(rq.kinds, 'Oshxona mebeli, Ofis mebeli');
   const ap = await admin('POST', `/api/units/requests/${rq.id}/approve`);
   assert.equal(ap.status, 200, ap.text);
   const u = (await db.query(
-    `SELECT fg_planned_on::text AS f, customer_id, showroom FROM production_units
+    `SELECT fg_planned_on::text AS f, customer_id, showroom, custom_kinds FROM production_units
       WHERE conveyor_no = $1`, [rq.conveyor_no])).rows[0];
-  assert.deepEqual([u.f, u.customer_id, u.showroom], ['2026-12-10', mij.id, false]);
+  assert.deepEqual([u.f, u.customer_id, u.showroom, u.custom_kinds],
+    ['2026-12-10', mij.id, false, ['OSHXONA', 'OFIS']]);
   //  Showroom uchun ham — mijozsiz.
   const sh = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-15',
-    showroom: true, note: 'Showroom: oshxona' });
+    showroom: true, custom_kinds: ['ESHIK'] });
   assert.equal(sh.status, 200, sh.text);
 });
 
@@ -13496,6 +13503,24 @@ test('ish haqi: hisoblandi kassadan to\'langani bilan oyma-oy', async () => {
   assert.equal(Number(okt.open_uzs), 2000000);
   assert.equal(Number(okt.acc_uzs), 3000000);
   assert.equal(Number(okt.close_uzs), 5000000);
+
+  //  ★ SANADAN SANAGACHA (zavod qarori, 2026-11). To'liq oy — oy rejimi
+  //  (to'landi foyda-zarar oyi bo'yicha); boshqa oraliq — kunlik:
+  //  to'landi kassadan berilgan KUN bo'yicha, hisoblangan oy 1-kunida.
+  const qq = async (f, t) => (await admin('GET', `/api/payroll?from=${f}&to=${t}`)).body;
+  const toliq = await qq('2026-09-01', '2026-09-30');
+  assert.equal(toliq.month, '2026-09');
+  assert.equal(Number(toliq.rows.find(x => x.id === w).paid_uzs), 1000000);
+  const k1 = await qq('2026-10-01', '2026-10-05');
+  assert.equal(k1.month, null);
+  const r1 = k1.rows.find(x => x.id === w);
+  assert.deepEqual([r1.open_uzs, r1.acc_uzs, r1.paid_uzs, r1.close_uzs].map(Number),
+    [3000000, 3000000, 1000000, 5000000], 'to\'lov 3-oktabr kuni');
+  const r2 = (await qq('2026-10-04', '2026-10-31')).rows.find(x => x.id === w);
+  assert.deepEqual([r2.open_uzs, r2.acc_uzs, r2.paid_uzs, r2.close_uzs].map(Number),
+    [5000000, 0, 0, 5000000]);
+  const d1 = (await admin('GET', `/api/payroll/worker/${w}?from=2026-10-01&to=2026-10-05`)).body;
+  assert.deepEqual(d1.payments.map(p => p.doc_no), ['P26-9701']);
 
   //  Bo'sh — «yo'q»: qatori o'chadi
   assert.equal((await admin('PUT', '/api/payroll/accrual',
