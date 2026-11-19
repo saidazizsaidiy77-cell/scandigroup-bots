@@ -211,6 +211,9 @@ function maydonlar() {
   const mx = !!p?.is_custom;
   document.querySelectorAll('.mx').forEach((el) => { el.hidden = !mx; });
   $('colorBox').hidden = mx; $('stockBox').hidden = mx;
+  //  Konver bitta — summa umumiy, soni turlarda.
+  $('fQty').parentElement.hidden = mx;
+  if (mx) $('fQty').value = 1;
   $('noteLbl').textContent = mx ? 'Tafsilot' : 'Izoh';
   $('fNote').placeholder = mx ? 'o\'lcham, model, soni — ixtiyoriy' : 'ixtiyoriy';
   if (mx) {
@@ -251,14 +254,23 @@ function maydonlar() {
 
 //  Maxsus buyurtma turlari — ro'yxatdan, bir nechtasi birga.
 let turRoyxat = [];
-function turlarHtml(list, tanlangan, cls) {
+//  Har tur yonida SONI: belgilansa katak ochiladi (zavod qarori, 2026-11).
+function turlarHtml(list, tanlangan, cls, sonlar = []) {
   turRoyxat = list;
-  return list.map((k) => `<label class="row" style="gap:6px;align-items:center;margin:0;
+  return list.map((k) => {
+    const i = tanlangan.indexOf(k.code), on = i >= 0;
+    return `<label class="row" style="gap:6px;align-items:center;margin:0;
     text-transform:none;font-size:14px;cursor:pointer"><input type="checkbox" class="${cls}"
-    value="${esc(k.code)}" style="width:auto"${tanlangan.includes(k.code) ? ' checked' : ''}>
-    ${esc(k.name)}</label>`).join('');
+    value="${esc(k.code)}" style="width:auto"${on ? ' checked' : ''}
+    onchange="this.parentElement.querySelector('input[type=number]').hidden=!this.checked">
+    ${esc(k.name)}<input type="number" min="1" step="1" inputmode="numeric" placeholder="soni"
+    class="${cls}-n" style="width:80px"${on ? '' : ' hidden'}
+    value="${on && sonlar?.[i] != null ? sonlar[i] : ''}"></label>`;
+  }).join('');
 }
-const turlarOl = (cls) => [...document.querySelectorAll('.' + cls + ':checked')].map((x) => x.value);
+const turlarOl = (cls) => [...document.querySelectorAll('.' + cls + ':checked')]
+  .map((x) => ({ code: x.value,
+                 qty: Number(x.parentElement.querySelector('input[type=number]').value) || null }));
 
 //  Mijozlar ro'yxati faqat maxsus buyurtma tanlanganda olinadi.
 async function kimgaYukla() {
@@ -313,7 +325,10 @@ async function load() {
     const doira = App.me()?.scope_shop_ids || [];
     mahsulotlar = (doira.length
       ? ref.products.filter((p) => doira.includes(p.shop_id))
-      : ref.products).filter(yozaOladi);
+      : ref.products).filter(yozaOladi)
+      //  ★ Maxsus buyurtma guruhida faqat umumiy «Maxsus buyurtma»:
+      //  eshik, horeca va boshqalar mahsulot emas — turi pastda tanlanadi.
+      .filter((p) => !p.is_custom || p.sku === 'MAXSUS');
     $('fProduct').innerHTML = '<option value="">— tanlang —</option>'
       + mahsulotlar.map((p) => `<option value="${p.id}">${
           esc(p.name)}${p.size_label ? ' · ' + esc(p.size_label) : ''} · ${
@@ -459,8 +474,10 @@ async function send() {
     it.customer_id = k && k !== 'showroom' ? Number(k) : null;
     if (!it.finish_on) return alert('Topshirish sanasi kiritilmagan');
     if (!k) return alert('Kimga: mijozni yoki showroomni tanlang');
-    it.custom_kinds = turlarOl('fk');
-    if (!it.custom_kinds.length) return alert('Nima ishlab chiqarilishini tanlang');
+    it.custom_items = turlarOl('fk');
+    if (!it.custom_items.length) return alert('Nima ishlab chiqarilishini tanlang');
+    if (it.custom_items.some((x) => !x.qty)) return alert('Har turning sonini kiriting');
+    it.qty = 1;
   }
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
@@ -539,7 +556,7 @@ async function tahrir(id) {
           ${r.is_custom ? `<div><label>Topshirish sanasi</label>
             <input id="eFinish" type="date" value="${esc(String(r.finish_on || '').slice(0, 10))}"></div>
             <div class="wide"><label>Nima ishlab chiqariladi</label>
-            <div class="row" style="gap:14px;flex-wrap:wrap">${turlarHtml(turRoyxat, r.custom_kinds || [], 'ek')}</div></div>` : ''}
+            <div class="row" style="gap:14px;flex-wrap:wrap">${turlarHtml(turRoyxat, r.custom_kinds || [], 'ek', r.custom_qty || [])}</div></div>` : ''}
           ${!r.is_custom && (!r.auto || r.next_on) ? `<div><label>Keyingi tsexga topshirish${
             r.auto ? '' : ' <span class="muted" style="text-transform:none">— majburiy</span>'}</label>
             <input id="eNext" type="date" value="${esc(String(r.next_on || '').slice(0, 10))}"></div>` : ''}
@@ -570,7 +587,7 @@ async function eSaqla(id) {
   if ($('eFabric')) body.fabric = $('eFabric').value || null;
   if ($('eNext'))   body.next_on = $('eNext').value || null;
   if ($('eFinish')) { body.finish_on = $('eFinish').value || null;
-                     body.custom_kinds = turlarOl('ek'); }
+                     body.custom_items = turlarOl('ek'); }
   if (body.qty <= 0) return alert('Soni kiritilmagan');
   try {
     await App.api(`/api/units/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) });

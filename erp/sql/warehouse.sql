@@ -781,6 +781,10 @@ INSERT INTO custom_kinds (code, name, sort) VALUES
 ON CONFLICT (code) DO NOTHING;
 ALTER TABLE unit_requests    ADD COLUMN IF NOT EXISTS custom_kinds TEXT[];
 ALTER TABLE production_units ADD COLUMN IF NOT EXISTS custom_kinds TEXT[];
+--  Har turning SONI (zavod qarori, 2026-11): custom_kinds bilan bir
+--  tartibda. Konverning o'zi bitta (summa umumiy), tarkibi shu yerda.
+ALTER TABLE unit_requests    ADD COLUMN IF NOT EXISTS custom_qty INT[];
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS custom_qty INT[];
 
 --  Umumiy mahsulot: tarkib izohda, katalogda har buyurtmaga nom ochilmaydi.
 INSERT INTO products (sku, name, group_id, route_template_id)
