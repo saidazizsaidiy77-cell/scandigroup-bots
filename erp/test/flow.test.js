@@ -3229,25 +3229,42 @@ test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
   assert.match(yoqTur.body.error, /Nima ishlab chiqariladi/);
   assert.equal((await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-10',
     customer_id: mij.id, custom_kinds: ['MEBEL-YOQ'] })).status, 400, 'ro\'yxatda yo\'q tur');
+  //  ★ Har turning SONI majburiy; konver bitta; mahsulot faqat MAXSUS.
+  const turSonsiz = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-10',
+    customer_id: mij.id, custom_kinds: ['OFIS'] });
+  assert.equal(turSonsiz.status, 400);
+  assert.match(turSonsiz.body.error, /sonini/);
+  const ikki = await sotuv('POST', '/api/units/requests', { ...asos, qty: 2, finish_on: '2026-12-10',
+    customer_id: mij.id, custom_items: [{ code: 'OFIS', qty: 2 }] });
+  assert.equal(ikki.status, 400);
+  assert.match(ikki.body.error, /bitta konver/);
+  const eshikPid = (await H.id(`INSERT INTO products (sku, name, group_id, route_template_id)
+    SELECT 'MX-ESHIK-SINOV', 'Eshik', g.id, g.route_template_id FROM product_groups g
+     WHERE g.code = 'MAXSUS' RETURNING id`)).id;
+  const begona = await sotuv('POST', '/api/units/requests', { ...asos, product_id: eshikPid,
+    finish_on: '2026-12-10', customer_id: mij.id, custom_items: [{ code: 'ESHIK', qty: 1 }] });
+  assert.equal(begona.status, 400);
+  assert.match(begona.body.error, /Maxsus buyurtma» mahsuloti/);
+  await db.query(`DELETE FROM products WHERE id = $1`, [eshikPid]);
   const ok = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-10',
-    customer_id: mij.id, custom_kinds: ['OFIS', 'OSHXONA'] });
+    customer_id: mij.id, custom_items: [{ code: 'OFIS', qty: 2 }, { code: 'OSHXONA', qty: 3 }] });
   assert.equal(ok.status, 200, ok.text);
   const rq = (await admin('GET', '/api/units/requests?status=pending')).body.rows
     .find((r) => r.id === ok.body.created[0]);
   assert.ok(Number(rq.conveyor_no.slice(-4)) < 757, rq.conveyor_no);
   assert.equal(String(rq.fg_on).slice(0, 10), '2026-12-10', 'T/M ga — kelishilgan kun');
   assert.equal(rq.req_customer, 'Maxsus sinov mijozi');
-  assert.equal(rq.kinds, 'Oshxona mebeli, Ofis mebeli');
+  assert.equal(rq.kinds, 'Oshxona mebeli — 3 ta, Ofis mebeli — 2 ta');
   const ap = await admin('POST', `/api/units/requests/${rq.id}/approve`);
   assert.equal(ap.status, 200, ap.text);
   const u = (await db.query(
-    `SELECT fg_planned_on::text AS f, customer_id, showroom, custom_kinds FROM production_units
-      WHERE conveyor_no = $1`, [rq.conveyor_no])).rows[0];
-  assert.deepEqual([u.f, u.customer_id, u.showroom, u.custom_kinds],
-    ['2026-12-10', mij.id, false, ['OSHXONA', 'OFIS']]);
+    `SELECT fg_planned_on::text AS f, customer_id, showroom, custom_kinds, custom_qty
+       FROM production_units WHERE conveyor_no = $1`, [rq.conveyor_no])).rows[0];
+  assert.deepEqual([u.f, u.customer_id, u.showroom, u.custom_kinds, u.custom_qty],
+    ['2026-12-10', mij.id, false, ['OSHXONA', 'OFIS'], [3, 2]]);
   //  Showroom uchun ham — mijozsiz.
   const sh = await sotuv('POST', '/api/units/requests', { ...asos, finish_on: '2026-12-15',
-    showroom: true, custom_kinds: ['ESHIK'] });
+    showroom: true, custom_items: [{ code: 'ESHIK', qty: 4 }] });
   assert.equal(sh.status, 200, sh.text);
 });
 

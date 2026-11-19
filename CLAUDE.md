@@ -623,6 +623,14 @@ biriga konver ochish kerak emas: umumiy mahsulot **«Maxsus buyurtma»**
              ro'yxat bazada; `unit_requests`/`production_units
              .custom_kinds`). Tafsilot izohda, ixtiyoriy
 
+**★ HAR TURNING SONI, KONVER BITTA** (zavod qarori, 2026-11;
+`custom_qty`, `custom_items` [{code, qty}]). Tur yonida soni yoziladi
+(«Eshik — 5 ta, Ofis mebeli — 2 ta»), konverning o'zi esa BITTA — summa
+umumiy, buyurtma qatorida qo'yiladi. Mahsulot ro'yxatida guruhdan faqat
+«Maxsus buyurtma» turadi: saytdan ochilgan «Eshik», «HORECA mebellari»
+kabi nomlar ko'rinmaydi va server ham yangi so'rovda rad etadi
+(`maxsusTekshir`, `yangi`). Eski so'rov tahrirda tegilmaydi.
+
 Buyurtmadan so'ralganda mijoz va sana BUYURTMANING o'zidan (`due_on`).
 **Raqam o'z hisobidan** (`Z26-0001`): `doc_no_start` dagi `Z26-` qatori
 (757) zakazniki va konverga tegmaydi (`nextConveyorNo`).
