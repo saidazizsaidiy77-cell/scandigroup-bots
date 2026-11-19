@@ -489,7 +489,8 @@ async function send() {
   //  Serverdagi qoidaning O'ZI (`requestOne`), shu yerda esa uning
   //  ko'rinishi: xodim saqlashni bosgandan keyin emas, oldin bilsin.
   const p = tanlangan();
-  if (p?.sales_can_request && !it.is_stock) {
+  //  Maxsus buyurtmada rang so'ralmaydi — serverdagi qoida bilan bir xil.
+  if (p?.sales_can_request && !p?.is_custom && !it.is_stock) {
     const yoq = [(it.lines || [it]).some((l) => !l.color) && 'rang',
                  p.needs_fabric && (it.lines || [it]).some((l) => !l.fabric) && 'mato']
       .filter(Boolean);
