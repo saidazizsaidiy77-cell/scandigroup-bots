@@ -42,6 +42,7 @@ const FILES = [
   //  Vazifalar doskasi: faqat `workers` ga tayanadi, eng oxirida turishi
   //  shart emas, lekin yangi modul oldingilarni qimirlatmasin.
   'tasks.sql',                 // vazifalar: mavzu, izoh, ijrochi, muddat
+  'ai.sql',                    // tahlilchi AI: kimga ochiq va savollar jurnali
 ];
 
 // server.js ham shu funksiyani chaqiradi (ERP_AUTO_MIGRATE=1 bo'lsa),

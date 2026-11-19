@@ -14092,6 +14092,79 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   assert.equal(tm.in_pl, false);
 });
 
+//  ★ TAHLILCHI AI (izoh: modules/tahlilchi.js). Haqiqiy Claude API
+//  chaqirilmaydi: soxta server birinchi javobda vositani chaqiradi,
+//  ikkinchisida vosita natijasini matnga qaytaradi — ya'ni ma'lumot
+//  SO'RAGAN XODIMNING huquqi bilan o'qilgani tekshiriladi.
+test('tahlilchi AI: huquq, vosita va jurnal', async () => {
+  const http = require('http');
+  const { db } = require('../db');
+  const sorovlar = [];
+  let endpoint = 'kpi_umumiy';
+  const soxta = http.createServer((req, res) => {
+    let b = '';
+    req.on('data', (c) => { b += c; });
+    req.on('end', () => {
+      const j = JSON.parse(b);
+      sorovlar.push(j);
+      const oxirgi = j.messages[j.messages.length - 1];
+      const natija = Array.isArray(oxirgi.content)
+        && oxirgi.content.find((c) => c.type === 'tool_result');
+      const content = natija
+        ? [{ type: 'text', text: 'NATIJA: ' + JSON.stringify(natija.content).slice(0, 300) }]
+        : [{ type: 'tool_use', id: 'tu_' + sorovlar.length, name: 'erp_oqish',
+             input: { endpoint, params: { mon: '2026-11' } } }];
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ id: 'msg_' + sorovlar.length, type: 'message',
+        role: 'assistant', model: j.model, content,
+        stop_reason: natija ? 'end_turn' : 'tool_use', stop_sequence: null,
+        usage: { input_tokens: 100, output_tokens: 20 } }));
+    });
+  });
+  await new Promise((r) => soxta.listen(0, r));
+  const eskiKey = process.env.ANTHROPIC_API_KEY, eskiUrl = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_API_KEY = 'test-kalit';
+  process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${soxta.address().port}`;
+  try {
+    //  Belgisiz — yopiq (standarti false, 4-qoida)
+    const yopiq = await admin('POST', '/api/ai/savol', { savol: 'Reja qanday?' });
+    assert.equal(yopiq.status, 403);
+    const adminId = (await H.id(`SELECT id FROM workers WHERE name = 'Administrator'`)).id;
+    assert.equal((await admin('PATCH', `/api/admin/workers/${adminId}`,
+      { ai_access: true })).status, 200);
+    const w = (await admin('GET', '/api/admin/workers')).body;
+    assert.equal((w.workers || w).find((x) => x.id === adminId).ai_access, true);
+
+    const r = await admin('POST', '/api/ai/savol', { savol: 'Bu oy reja qanday?' });
+    assert.equal(r.status, 200, r.text);
+    assert.match(r.body.javob, /^NATIJA: /);
+    assert.deepEqual(r.body.tools, ['kpi_umumiy']);
+    assert.equal(sorovlar[0].model, 'claude-opus-5-5');
+    assert.equal(sorovlar[0].tools[0].name, 'erp_oqish');
+    assert.match(sorovlar[0].messages[0].content, /Administrator/);
+    const log = (await db.query(
+      `SELECT kind, tools, input_tokens FROM ai_log WHERE worker_id = $1
+        ORDER BY id DESC LIMIT 1`, [adminId])).rows[0];
+    assert.deepEqual([log.kind, log.tools, log.input_tokens], ['chat', ['kpi_umumiy'], 200]);
+
+    //  ★ HUQUQ SO'RAGAN XODIMNIKI: sotuvchida kassa huquqi yo'q —
+    //  foyda-zarar unga ochilmaydi va agent buni aylanib o'tolmaydi.
+    const sot = (await H.id(`SELECT id FROM workers WHERE name = 'Sinov sotuvchi'`)).id;
+    await db.query(`UPDATE workers SET ai_access = true WHERE id = $1`, [sot]);
+    endpoint = 'foyda_zarar';
+    const s = await sotuvchi('POST', '/api/ai/savol', { savol: 'Foyda qancha?' });
+    assert.equal(s.status, 200, s.text);
+    assert.match(s.body.javob, /Huquq yo'q/);
+    await db.query(`UPDATE workers SET ai_access = false WHERE id IN ($1, $2)`, [sot, adminId]);
+  } finally {
+    soxta.close();
+    if (eskiKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = eskiKey;
+    if (eskiUrl === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = eskiUrl;
+  }
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();

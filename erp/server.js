@@ -88,6 +88,8 @@ app.use('/api/tasks', require('./modules/tasks'));
 app.use('/api/payroll', require('./modules/payroll'));
 // Tizim tekshiruvi: hujjat, qoldiq va qarz bir xil raqamni aytadimi.
 app.use('/api/integrity', require('./modules/integrity'));
+//  Tahlilchi AI (izoh: modules/tahlilchi.js) — faqat o'qiydi.
+app.use('/api/ai', require('./modules/tahlilchi').router);
 
 // Modul ro'yxati bu yerda EMAS, `public/app.js` dagi MODULES da. Sabab:
 // menyu sahifa ochilishi bilan chiziladi, ya'ni nom klientda baribir kerak.
@@ -354,6 +356,12 @@ const KUNLIK = [
   //  degan savolga kun bo'yi vaqt qoladi.
   { nom: 'vazifa', env: 'TASK_AT', vaqt: '09:00',
     ish: () => require('./modules/tasks').tasksYubor() },
+
+  //  ★ TAHLILCHI AI (izoh: modules/tahlilchi.js) — raqamlar 08:00 da
+  //  keladi, tahlil esa ulardan KEYIN: «Kunlik xulosa» belgisi bor va
+  //  tahlilchi ochiq xodimga, uning O'Z huquqi bilan.
+  { nom: 'tahlil', env: 'AI_AT', vaqt: '08:10',
+    ish: () => require('./modules/tahlilchi').kunlikYubor() },
 ];
 
 function kunlikJadval() {
@@ -403,7 +411,12 @@ const PORT = process.env.PORT || 3000;
       process.exit(1);
     }
   }
-  app.listen(PORT, () => console.log(`ZELTA ERP → http://localhost:${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`ZELTA ERP → http://localhost:${PORT}`);
+    //  Tahlilchi sayt API sini O'Z serveri orqali o'qiydi (izoh:
+    //  modules/tahlilchi.js) — shuning uchun manzil listen dan keyin.
+    require('./modules/tahlilchi').boshla(`http://127.0.0.1:${PORT}`);
+  });
   zaxiraJadvali();
   xabarJadvali();
   kunlikJadval();
