@@ -763,6 +763,25 @@ BEGIN
   END IF;
 END $$;
 
+--  ★ NIMA ISHLAB CHIQARILADI (zavod qarori, 2026-11): eshik, horeca,
+--  oshxona, ofis mebeli — RO'YXATDAN, bir nechtasi birga. Mahsulot
+--  bitta («Maxsus buyurtma»), tur esa so'rovda belgilanadi. Ro'yxat
+--  BAZADA: yangi tur bitta qator.
+CREATE TABLE IF NOT EXISTS custom_kinds (
+  code   TEXT PRIMARY KEY,
+  name   TEXT NOT NULL,
+  sort   INT  NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO custom_kinds (code, name, sort) VALUES
+  ('ESHIK',   'Eshik',          1),
+  ('HORECA',  'Horeca mebeli',  2),
+  ('OSHXONA', 'Oshxona mebeli', 3),
+  ('OFIS',    'Ofis mebeli',    4)
+ON CONFLICT (code) DO NOTHING;
+ALTER TABLE unit_requests    ADD COLUMN IF NOT EXISTS custom_kinds TEXT[];
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS custom_kinds TEXT[];
+
 --  Umumiy mahsulot: tarkib izohda, katalogda har buyurtmaga nom ochilmaydi.
 INSERT INTO products (sku, name, group_id, route_template_id)
 SELECT 'MAXSUS', 'Maxsus buyurtma', g.id, g.route_template_id

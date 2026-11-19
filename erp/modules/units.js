@@ -1182,6 +1182,8 @@ router.get('/requests/next-no', need(...REQUEST), wrap(async (req, res) => {
     [shopId, boshlanish, pid])).rows[0];
 
   res.json({
+    custom_kinds: (await db.query(
+      `SELECT code, name FROM custom_kinds WHERE active ORDER BY sort`)).rows,
     conveyor_no: await nextConveyorNo(db, letter, width),
     next_shop:   keyingi?.name || 'T/M ombor',
     plan_required: !tsex?.auto,
@@ -1226,6 +1228,9 @@ router.get('/requests', need(...REQUEST), wrap(async (req, res) => {
             COALESCE(rq.finish_on, z.fg_on, ish_kuni(q.started_on, q.steps)) AS fg_on,
             rq.finish_on, rq.customer_id AS req_customer_id, rq.showroom,
             rc.name AS req_customer, COALESCE(g.is_custom, false) AS is_custom,
+            rq.custom_kinds,
+            (SELECT string_agg(k.name, ', ' ORDER BY k.sort) FROM custom_kinds k
+              WHERE k.code = ANY(rq.custom_kinds)) AS kinds,
             --  ★ QAYSI BUYURTMA UCHUN. Savdo yozgan so'rovda mijoz
             --  allaqachon kutib turadi va tasdiqlovchining birinchi
             --  savoli shu bo'ladi: «bu kimga?» Ilgari javob faqat
@@ -1386,16 +1391,29 @@ async function sorovTekshir(client, req, it, shopId, yozish = true) {
 
 //  ★ MAXSUS BUYURTMANING UCH SAVOLI — bitta joyda: yozishda ham,
 //  tahrirda ham. Boshqa guruhga hech narsa qaytarmaydi.
+//  Faqat ro'yxatdagi (faol) tur qabul qilinadi — qo'lda yozilgani emas.
+async function turlar(client, v) {
+  const arr = (Array.isArray(v) ? v : []).map((x) => String(x || '').trim()).filter(Boolean);
+  if (!arr.length) return [];
+  const { rows } = await client.query(
+    `SELECT code FROM custom_kinds WHERE active AND code = ANY($1) ORDER BY sort`, [arr]);
+  if (rows.length !== new Set(arr).size) throw new Error('Noma\'lum mahsulot turi');
+  return rows.map((r) => r.code);
+}
+
 async function maxsusTekshir(client, it, orderItemId = null) {
   const g = (await client.query(
     `SELECT COALESCE(g.is_custom, false) AS maxsus
        FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE p.id = $1`, [it.product_id])).rows[0];
-  const bosh = { finish_on: null, customer_id: null, showroom: false };
+  const bosh = { finish_on: null, customer_id: null, showroom: false, kinds: null };
   if (!g?.maxsus) return bosh;
   const sana = /^\d{4}-\d{2}-\d{2}/.test(String(it.finish_on || ''))
     ? String(it.finish_on).slice(0, 10) : null;
-  if (orderItemId) return { ...bosh, finish_on: sana };
+  if (orderItemId) {
+    const k = await turlar(client, it.custom_kinds);
+    return { ...bosh, finish_on: sana, kinds: k.length ? k : null };
+  }
   if (!sana) throw new Error('Topshirish sanasi kiritilmagan — mijoz bilan kelishilgan kun');
   if (it.started_on && sana < String(it.started_on).slice(0, 10))
     throw new Error('Topshirish sanasi boshlanishdan oldin');
@@ -1404,9 +1422,10 @@ async function maxsusTekshir(client, it, orderItemId = null) {
   if (!showroom && !cid) throw new Error('Kimga: mijozni yoki showroomni tanlang');
   if (cid && !(await client.query(`SELECT 1 FROM customers WHERE id = $1`, [cid])).rowCount)
     throw new Error('Mijoz topilmadi');
-  if (!trim(it.note))
-    throw new Error('Tarkibini izohga yozing — nima ishlanadi (ofis, oshxona, horeca…)');
-  return { finish_on: sana, customer_id: showroom ? null : cid, showroom };
+  const kinds = await turlar(client, it.custom_kinds);
+  if (!kinds.length)
+    throw new Error('Nima ishlab chiqariladi — eshik, horeca, oshxona yoki ofis mebelini tanlang');
+  return { finish_on: sana, customer_id: showroom ? null : cid, showroom, kinds };
 }
 
 //  ★ SO'ROV YOZILADIGAN YAGONA JOY.
@@ -1519,12 +1538,12 @@ async function requestOne(client, req, it, scope = null, orderItemId = null) {
       `INSERT INTO unit_requests
          (product_id, qty, color, fabric, started_on, section_id, note,
           shop_id, created_by, conveyor_no, is_stock, next_on, order_item_id,
-          finish_on, customer_id, showroom)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+          finish_on, customer_id, showroom, custom_kinds)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
       [it.product_id, Number(l.qty), trim(l.color), trim(l.fabric),
        it.started_on || null, it.section_id || null, it.note || null,
        shopId, req.user.id, no, it.is_stock === true, due,
-       orderItemId, mx.finish_on, mx.customer_id, mx.showroom])).rows[0].id);
+       orderItemId, mx.finish_on, mx.customer_id, mx.showroom, mx.kinds])).rows[0].id);
   //  Izoh xabarga ham chiqadi: tasdiqlovchi telefonda o'qiydi va
   //  sahifani ochmasdan qaror qiladi (izoh: pastda, `notify.queue`).
   return { id: ids[0], ids, no, qty,
@@ -1634,13 +1653,15 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
 
       //  ★ MAXSUS BUYURTMA: kelishilgan kun T/M omborga topshirish
       //  rejasiga, mijoz konverga, showroom belgisi ham.
-      if (q.finish_on || q.customer_id || q.showroom) {
+      if (q.finish_on || q.customer_id || q.showroom || q.custom_kinds) {
         await client.query(
           `UPDATE production_units
               SET fg_planned_on = COALESCE($2::date, fg_planned_on),
                   customer_id   = COALESCE($3, customer_id),
-                  showroom      = $4
-            WHERE id = $1`, [u.id, q.finish_on, q.customer_id, q.showroom === true]);
+                  showroom      = $4,
+                  custom_kinds  = COALESCE($5, custom_kinds)
+            WHERE id = $1`, [u.id, q.finish_on, q.customer_id, q.showroom === true,
+                             q.custom_kinds]);
       }
 
       //  Kiritayotganda qo'yilgan «keyingi tsexga topshirish» sanasi
@@ -1802,6 +1823,7 @@ router.patch('/requests/:id', need(...REQUEST), wrap(async (req, res) => {
       finish_on:  has('finish_on') ? (b.finish_on || null) : ymd(q.finish_on),
       customer_id: has('customer_id') ? b.customer_id : q.customer_id,
       showroom:   has('showroom') ? b.showroom === true : q.showroom,
+      custom_kinds: has('custom_kinds') ? b.custom_kinds : q.custom_kinds,
     };
     if (it.qty <= 0) throw new Error('Soni kiritilmagan');
     if (it.is_stock) { it.color = null; it.fabric = null; }
@@ -1822,10 +1844,10 @@ router.patch('/requests/:id', need(...REQUEST), wrap(async (req, res) => {
       `UPDATE unit_requests
           SET qty = $2, color = $3, fabric = $4, started_on = $5,
               next_on = $6, note = $7, is_stock = $8,
-              finish_on = $9, customer_id = $10, showroom = $11
+              finish_on = $9, customer_id = $10, showroom = $11, custom_kinds = $12
         WHERE id = $1`,
       [id, it.qty, trim(it.color), trim(it.fabric), it.started_on, due,
-       it.note, it.is_stock, mx.finish_on, mx.customer_id, mx.showroom]);
+       it.note, it.is_stock, mx.finish_on, mx.customer_id, mx.showroom, mx.kinds]);
     const edi = { qty: Number(q.qty), color: q.color, fabric: q.fabric,
                   started_on: ymd(q.started_on), next_on: ymd(q.next_on),
                   note: q.note, is_stock: q.is_stock };

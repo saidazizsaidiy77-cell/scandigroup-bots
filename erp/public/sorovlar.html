@@ -73,6 +73,9 @@
       <input id="fFinish" type="date"></div>
     <div class="mx" hidden><label>Kimga</label>
       <select id="fKimga"></select></div>
+    <div class="mx wide" hidden><label>Nima ishlab chiqariladi
+        <span class="muted" style="text-transform:none;letter-spacing:0">— bir nechtasi ham</span></label>
+      <div id="fKinds" class="row" style="gap:14px;flex-wrap:wrap"></div></div>
     <!--  Rang va mato — RO'YXATDAN, qo'lda yozilmaydi. Bitta «Venge» va
           bitta «venge» ombor qoldig'ini ikkiga bo'lib yuborardi va savdo
           ro'yxatida bir xil rang ikki marta turardi. Yangi rang zavodning
@@ -208,8 +211,8 @@ function maydonlar() {
   const mx = !!p?.is_custom;
   document.querySelectorAll('.mx').forEach((el) => { el.hidden = !mx; });
   $('colorBox').hidden = mx; $('stockBox').hidden = mx;
-  $('noteLbl').textContent = mx ? 'Tarkibi — majburiy' : 'Izoh';
-  $('fNote').placeholder = mx ? 'nima ishlanadi: ofis mebeli, oshxona, horeca…' : 'ixtiyoriy';
+  $('noteLbl').textContent = mx ? 'Tafsilot' : 'Izoh';
+  $('fNote').placeholder = mx ? 'o\'lcham, model, soni — ixtiyoriy' : 'ixtiyoriy';
   if (mx) {
     $('fStock').checked = false; $('fColor').value = ''; $('fFabric').value = '';
     $('rangQator').innerHTML = ''; $('rangBox').hidden = true;
@@ -246,6 +249,17 @@ function maydonlar() {
              : 'Rangi hali bilinmasa shu katakchani belgilang';
 }
 
+//  Maxsus buyurtma turlari — ro'yxatdan, bir nechtasi birga.
+let turRoyxat = [];
+function turlarHtml(list, tanlangan, cls) {
+  turRoyxat = list;
+  return list.map((k) => `<label class="row" style="gap:6px;align-items:center;margin:0;
+    text-transform:none;font-size:14px;cursor:pointer"><input type="checkbox" class="${cls}"
+    value="${esc(k.code)}" style="width:auto"${tanlangan.includes(k.code) ? ' checked' : ''}>
+    ${esc(k.name)}</label>`).join('');
+}
+const turlarOl = (cls) => [...document.querySelectorAll('.' + cls + ':checked')].map((x) => x.value);
+
 //  Mijozlar ro'yxati faqat maxsus buyurtma tanlanganda olinadi.
 async function kimgaYukla() {
   if (mijozlar) return;
@@ -271,6 +285,8 @@ async function taklif(majburan) {
     //  Katak keyingi tsexning NOMI bilan yoziladi: «keyingi tsex» degan
     //  umumiy so'z o'rniga «Lak tsexiga topshirish» deb tursin.
     planKerak = !!r.plan_required;
+    if (r.custom_kinds && !$('fKinds').children.length)
+      $('fKinds').innerHTML = turlarHtml(r.custom_kinds, [], 'fk');
     $('planBox').hidden = !planKerak;
     $('planLbl').textContent = `${r.next_shop}ga topshirish`;
   } catch { /* taklif bermadi — xodim o'zi yozadi */ }
@@ -365,6 +381,7 @@ function draw() {
             adashmasin. -->
       <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
         <div class="muted" style="font-size:12px">${esc(r.product_type)}</div>
+        ${r.kinds ? `<div style="font-size:13px"><b>${esc(r.kinds)}</b></div>` : ''}
         ${r.note ? `<div class="tag" style="font-size:12px;white-space:normal;
           margin-top:4px">${esc(r.note)}</div>` : ''}${
         [r.item_note, r.order_note].filter(Boolean).length
@@ -442,7 +459,8 @@ async function send() {
     it.customer_id = k && k !== 'showroom' ? Number(k) : null;
     if (!it.finish_on) return alert('Topshirish sanasi kiritilmagan');
     if (!k) return alert('Kimga: mijozni yoki showroomni tanlang');
-    if (!it.note) return alert('Tarkibini yozing — nima ishlanadi');
+    it.custom_kinds = turlarOl('fk');
+    if (!it.custom_kinds.length) return alert('Nima ishlab chiqarilishini tanlang');
   }
   if (!it.product_id)  return alert('Mahsulot tanlanmagan');
   if (it.qty <= 0)     return alert('Soni kiritilmagan');
@@ -475,6 +493,7 @@ async function send() {
     $('fColor').value = ''; $('fFabric').value = '';
     $('fNote').value = ''; $('fStock').checked = false; $('fPlan').value = '';
     $('fFinish').value = ''; $('fKimga').value = '';
+    document.querySelectorAll('.fk').forEach((x) => { x.checked = false; });
     $('rangQator').innerHTML = '';
     maydonlar();
     //  Keyingi raqam darrov taklif qilinadi: qator ketma-ket
@@ -489,9 +508,14 @@ async function send() {
 //  o'zgarmaydi — konver raqamining harfi undan chiqqan; boshqa
 //  mahsulot kerak bo'lsa so'rov rad etiladi. Qoida serverda
 //  (`sorovTekshir`) — yozishdagi bilan bitta.
-function tahrir(id) {
+async function tahrir(id) {
   const r = data.rows.find((x) => x.id === id);
   if (!r) return;
+  //  Maxsus buyurtma turlari ro'yxati hali olinmagan bo'lsa — serverdan.
+  if (r.is_custom && !turRoyxat.length) {
+    try { turRoyxat = (await App.api('/api/units/requests/next-no?product_id='
+      + r.product_id)).custom_kinds || []; } catch { /* bo'sh qoladi */ }
+  }
   const opt = (v, cur) => '<option value="">\u2014 yo\'q \u2014</option>'
     + [...new Set([...(cur ? [cur] : []), ...v])].map((c) =>
       `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
@@ -513,7 +537,9 @@ function tahrir(id) {
           ${p?.needs_fabric || r.fabric
             ? `<div><label>Matosi</label><select id="eFabric">${opt(matolar, r.fabric)}</select></div>` : ''}
           ${r.is_custom ? `<div><label>Topshirish sanasi</label>
-            <input id="eFinish" type="date" value="${esc(String(r.finish_on || '').slice(0, 10))}"></div>` : ''}
+            <input id="eFinish" type="date" value="${esc(String(r.finish_on || '').slice(0, 10))}"></div>
+            <div class="wide"><label>Nima ishlab chiqariladi</label>
+            <div class="row" style="gap:14px;flex-wrap:wrap">${turlarHtml(turRoyxat, r.custom_kinds || [], 'ek')}</div></div>` : ''}
           ${!r.is_custom && (!r.auto || r.next_on) ? `<div><label>Keyingi tsexga topshirish${
             r.auto ? '' : ' <span class="muted" style="text-transform:none">— majburiy</span>'}</label>
             <input id="eNext" type="date" value="${esc(String(r.next_on || '').slice(0, 10))}"></div>` : ''}
@@ -543,7 +569,8 @@ async function eSaqla(id) {
   };
   if ($('eFabric')) body.fabric = $('eFabric').value || null;
   if ($('eNext'))   body.next_on = $('eNext').value || null;
-  if ($('eFinish')) body.finish_on = $('eFinish').value || null;
+  if ($('eFinish')) { body.finish_on = $('eFinish').value || null;
+                     body.custom_kinds = turlarOl('ek'); }
   if (body.qty <= 0) return alert('Soni kiritilmagan');
   try {
     await App.api(`/api/units/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) });

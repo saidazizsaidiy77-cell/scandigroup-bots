@@ -29,9 +29,10 @@
       bo'yicha) — bu yerda yozilmaydi (izoh: modules/payroll.js). -->
 <div class="card">
   <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-    <button onclick="surish(-1)">◀</button>
-    <div><label>Oy</label><input id="fMonth" type="month" onchange="load()"></div>
-    <button onclick="surish(1)">▶</button>
+    <button onclick="surish(-1)" title="Oldingi oy">◀</button>
+    <div><label>Sanadan</label><input id="fFrom" type="date" onchange="load()"></div>
+    <div><label>Sanagacha</label><input id="fTo" type="date" onchange="load()"></div>
+    <button onclick="surish(1)" title="Keyingi oy">▶</button>
     <div style="flex:1;min-width:180px"><label>Qidiruv</label>
       <input id="fQ" placeholder="ism, lavozim, bo'lim yoki tsex" oninput="render()"></div>
     <label class="row" style="gap:6px;align-items:center;margin:0">
@@ -47,13 +48,13 @@
 <div class="card" id="impCard" hidden style="margin-top:16px"></div>
 
 <div class="grid g3" style="margin-top:16px">
-  <div class="card"><h2>Oy boshiga qarzimiz</h2><div class="kpi" id="kOpen">—</div>
+  <div class="card"><h2 id="hOpen">Oy boshiga qarzimiz</h2><div class="kpi" id="kOpen">—</div>
     <p class="muted" style="margin-top:6px;font-size:12px" id="kOpenB"></p></div>
   <div class="card"><h2>Hisoblandi</h2><div class="kpi" id="kAcc">—</div>
     <p class="muted" style="margin-top:6px;font-size:12px" id="kAccB"></p></div>
   <div class="card"><h2>To'landi</h2><div class="kpi" id="kPaid">—</div>
     <p class="muted" style="margin-top:6px;font-size:12px" id="kPaidB"></p></div>
-  <div class="card"><h2>Oy oxiriga qarzimiz</h2><div class="kpi" id="kClo">—</div>
+  <div class="card"><h2 id="hClo">Oy oxiriga qarzimiz</h2><div class="kpi" id="kClo">—</div>
     <p class="muted" style="margin-top:6px;font-size:12px" id="kCloB"></p></div>
 </div>
 
@@ -107,21 +108,36 @@ const d8 = v => !v ? '—' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2
 let data = { rows: [], total: {} };
 const open = new Map();
 
+//  ★ SANADAN SANAGACHA (zavod qarori, 2026-11). To'liq oy tanlansa
+//  (1-kundan oxirgi kungacha) — oy rejimi: hisoblangan oylik shu yerda
+//  yoziladi. Boshqa oraliq — kunlik: to'landi kassadan berilgan KUN
+//  bo'yicha, faqat o'qish (hisoblash oyga yoziladi).
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function oyQoy(y, m) {
+  $('fFrom').value = ymd(new Date(y, m, 1));
+  $('fTo').value = ymd(new Date(y, m + 1, 0));
+}
 function surish(n) {
-  const [y, m] = ($('fMonth').value || data.month).split('-').map(Number);
-  const d = new Date(y, m - 1 + n, 1);
-  $('fMonth').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const s = $('fFrom').value || ymd(new Date());
+  oyQoy(+s.slice(0, 4), +s.slice(5, 7) - 1 + n);
   load();
 }
+const oraliqMatn = () => data.month ? data.month
+  : `${d8(data.from)} — ${d8(data.to)}`;
+const sorov = () => data.month ? `month=${data.month}`
+  : `from=${data.from}&to=${data.to}`;
 
 async function load() {
-  const p = new URLSearchParams();
-  if ($('fMonth').value) p.set('month', $('fMonth').value);
+  if (!$('fFrom').value || !$('fTo').value) { const t = new Date(); oyQoy(t.getFullYear(), t.getMonth()); }
+  if ($('fFrom').value > $('fTo').value) return alert('«Sanadan» «Sanagacha» dan keyin');
+  const p = new URLSearchParams({ from: $('fFrom').value, to: $('fTo').value });
   open.clear();
   data = await App.api('/api/payroll?' + p);
-  $('fMonth').value = data.month;
-  $('copyBtn').hidden = !data.can_edit;
+  //  Hisoblashni yozish va ko'chirish — faqat bitta to'liq oyda.
+  $('copyBtn').hidden = !data.can_edit || !data.month;
   $('impBtn').hidden = !data.can_edit;
+  $('hOpen').textContent = data.month ? 'Oy boshiga qarzimiz' : 'Davr boshiga qarzimiz';
+  $('hClo').textContent = data.month ? 'Oy oxiriga qarzimiz' : 'Davr oxiriga qarzimiz';
   render();
 }
 
@@ -169,7 +185,7 @@ async function toggle(id) {
   if (open.has(id)) { open.delete(id); return render(); }
   open.set(id, null);
   render();
-  open.set(id, await App.api(`/api/payroll/worker/${id}?month=${data.month}`));
+  open.set(id, await App.api(`/api/payroll/worker/${id}?${sorov()}`));
   render();
 }
 
@@ -179,7 +195,13 @@ function detail(r) {
   if (!d) return '<span class="muted">Yuklanmoqda…</span>';
   const acc = c => (d.accruals.find(a => a.currency === c) || {}).amount || '';
   const note = (d.accruals[0] || {}).note || '';
-  const tahrir = data.can_edit ? `
+  //  Kunlik oraliqda hisoblash yozilmaydi (u OYGA yoziladi) —
+  //  oraliqqa tushgan oylarning hisoblangani faqat ko'rsatiladi.
+  const hisob = !data.month ? (d.accruals.length ? `<p style="font-size:13px;margin:0 0 10px">
+      <b>Hisoblandi:</b> ${d.accruals.map(a => `${esc(String(a.month || '').slice(0, 7))} — ${money(a.amount)} ${
+        a.currency === 'USD' ? '$' : "so'm"}`).join(' · ')}
+      <span class="muted">(hisoblash uchun bitta to'liq oyni tanlang)</span></p>` : '') : '';
+  const tahrir = data.can_edit ? (data.month ? `
     <div class="row" style="flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">
       <div><label>Hisoblandi, so'm</label>
         <input id="aU${r.id}" type="number" min="0" step="0.01" value="${acc('UZS')}" style="width:150px"></div>
@@ -188,7 +210,7 @@ function detail(r) {
       <div style="flex:1;min-width:160px"><label>Izoh</label>
         <input id="aN${r.id}" value="${esc(note)}" placeholder="masalan: 26 kun, ishbay"></div>
       <button class="primary" onclick="saqla(${r.id})">Saqlash</button>
-    </div>
+    </div>` : hisob) + `
     <div class="row" style="flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px;
          padding-top:10px;border-top:1px dashed var(--line,#ddd)">
       <div><label>Boshlang'ich qoldiq, so'm</label>
@@ -202,7 +224,7 @@ function detail(r) {
         <input id="oN${r.id}" value="${esc(r.pay_open_note || '')}" placeholder="masalan: avgust oyligi, qarz"></div>
       <button onclick="boshSaqla(${r.id})">Saqlash</button>
       <div class="muted" style="font-size:12px;width:100%" id="oT${r.id}">${tomonMatn(r.pay_open_uzs, r.pay_open_usd)}</div>
-    </div>` : '';
+    </div>` : hisob;
   const pays = d.payments.length ? `<table style="font-size:13px">
       <thead><tr><th>Sana</th><th>Hujjat</th><th>Modda</th><th>Izoh</th><th class="num">Summa</th></tr></thead>
       <tbody>${d.payments.map(p => `<tr>
@@ -210,7 +232,7 @@ function detail(r) {
         <td>${esc(p.doc_no || '#' + p.id)}</td>
         <td>${esc(p.item || '—')}</td><td class="muted">${esc(p.note || '')}</td>
         <td class="num">${money(p.amount)} ${p.currency === 'USD' ? '$' : "so'm"}</td></tr>`).join('')}</tbody></table>`
-    : '<p class="muted" style="font-size:13px">Shu oyda kassadan to\'lov yozilmagan.</p>';
+    : `<p class="muted" style="font-size:13px">${data.month ? 'Shu oyda' : 'Shu davrda'} kassadan to'lov yozilmagan.</p>`;
   //  Ishbay — konver bo'limdan o'tganda o'zi yozilgan; qo'lda tahrirlanmaydi
   //  (xato bo'lsa o'tkazish orqaga qaytariladi va u bilan birga o'chadi).
   const ishbay = (d.piece || []).length ? `<div style="margin-bottom:10px">
@@ -232,7 +254,7 @@ async function saqla(id) {
         worker_id: id, month: data.month, currency: cur, amount: $(el + id).value, note }) });
     const keep = [...open.keys()];
     await load();
-    for (const k of keep) open.set(k, await App.api(`/api/payroll/worker/${k}?month=${data.month}`));
+    for (const k of keep) open.set(k, await App.api(`/api/payroll/worker/${k}?${sorov()}`));
     render();
   } catch (e) { alert(e.message); }
 }
@@ -259,7 +281,7 @@ async function boshSaqla(id) {
       on: $('oS' + id).value || null, note: $('oN' + id).value }) });
     const keep = [...open.keys()];
     await load();
-    for (const k of keep) open.set(k, await App.api(`/api/payroll/worker/${k}?month=${data.month}`));
+    for (const k of keep) open.set(k, await App.api(`/api/payroll/worker/${k}?${sorov()}`));
     render();
   } catch (e) { alert(e.message); }
 }
@@ -315,7 +337,7 @@ function printPage() {
   const now = new Date();
   const ikki = n => String(n).padStart(2, '0');
   const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
-  $('printHead').innerHTML = `<h1>Ish haqi · ${esc(data.month)}</h1>
+  $('printHead').innerHTML = `<h1>Ish haqi · ${esc(oraliqMatn())}</h1>
     <div class="meta">${korinadi().length} ta xodim · chop etildi ${ikki(now.getDate())}.${
       ikki(now.getMonth() + 1)}.${now.getFullYear()} ${ikki(now.getHours())}:${ikki(now.getMinutes())}${xodim}</div>`;
   window.print();
@@ -330,7 +352,7 @@ function exportCsv() {
     .map(v => `"${String(v).replace(/"/g, '""')}"`));
   const csv = '﻿' + [head.map(h => `"${h}"`), ...rows].map(r => r.join(';')).join('\r\n') + '\r\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = Object.assign(document.createElement('a'), { href: url, download: `ish-haqi-${data.month}.csv` });
+  const a = Object.assign(document.createElement('a'), { href: url, download: `ish-haqi-${data.month || (data.from + '_' + data.to)}.csv` });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

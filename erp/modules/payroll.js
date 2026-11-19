@@ -39,47 +39,59 @@ const oy = (v) => {
   const m = String(v || '').slice(0, 7);
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m + '-01' : null;
 };
+//  ★ SANADAN SANAGACHA (zavod qarori, 2026-11). Bitta to'liq oy
+//  tanlansa (1-kundan oxirgi kungacha) — eskicha OY rejimi: to'landi
+//  foyda-zarar oyi bo'yicha. Boshqa har qanday oraliq — KUNLIK rejim:
+//  to'landi KASSADAN berilgan KUN bo'yicha (`op_date`), ishbay ish
+//  bajarilgan kun bo'yicha, hisoblangan oylik esa o'z oyining 1-kuniga
+//  yoziladi. Qoidasi bitta: boshiga + hisoblandi − to'landi = oxiriga.
+const sana = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
+function oraliq(q) {
+  const d1 = sana(q.from), d2 = sana(q.to);
+  if (d1 && d2 && d1 <= d2) {
+    const oyBosh = d1.slice(0, 8) + '01';
+    const oxir = new Date(Date.UTC(+d1.slice(0, 4), +d1.slice(5, 7), 0))
+      .toISOString().slice(0, 10);
+    if (d1 === oyBosh && d2 === oxir) return { lo: d1, hi: d1, kunlik: false, month: d1 };
+    return { lo: d1, hi: d2, kunlik: true, month: null };
+  }
+  const m = oy(q.month) || bugungiOy();
+  return { lo: m, hi: m, kunlik: false, month: m };
+}
 const bugungiOy = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
-//  To'langan pulning OYI: foyda-zarar oyi, u bo'lmasa to'lov kuni.
-//  Oylikda `pl_month` majburiy (harajat), ta'minotchiga to'lovda esa
-//  `staff_id` umuman bo'lmaydi.
-//  ★ ISHBAY — HISOBLANGANGA O'ZI QO'SHILADI (izoh: sql/cash.sql).
-//  Dollarda, ish bajarilgan kunning oyi bo'yicha. Buxgalter uni qo'lda
-//  terib o'tirmaydi: konver bo'limdan o'tgan zahoti shu yerda.
-const ISHBAY = `
-  SELECT worker_id, 'USD'::text AS currency, amount,
-         date_trunc('month', work_date)::date AS month
-    FROM piece_work`;
-
-const TOLOV = `
-  SELECT o.staff_id AS worker_id, o.currency, o.amount,
-         COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) AS month
-    FROM cash_ops o
-   WHERE o.status = 'ok' AND o.staff_id IS NOT NULL`;
-
+//  To'langan pulning OYI: foyda-zarar oyi, u bo'lmasa to'lov kuni
+//  (oy rejimi). ★ ISHBAY hisoblanganga O'ZI qo'shiladi (izoh:
+//  sql/cash.sql), dollarda, ish bajarilgan kun bo'yicha.
 router.get('/', need(...KO), wrap(async (req, res) => {
-  const m = oy(req.query.month) || bugungiOy();
+  const or = oraliq(req.query);
   const sh = tsexlar(req);
+  //  `month` ustuni — yozuvning SANASI: oy rejimida oyning 1-kuni,
+  //  kunlik rejimda ishbay va to'lovning o'z kuni ($3).
   const { rows } = await db.query(`
     WITH h AS (
       SELECT worker_id, currency, amount, month, 1 AS ishora FROM payroll_accruals
       UNION ALL
-      SELECT worker_id, currency, amount, month, 1 FROM (${ISHBAY}) i
+      SELECT worker_id, 'USD', amount,
+             CASE WHEN $3 THEN work_date ELSE date_trunc('month', work_date)::date END, 1
+        FROM piece_work
       UNION ALL
-      SELECT worker_id, currency, amount, month, -1 FROM (${TOLOV}) t
+      SELECT o.staff_id, o.currency, o.amount,
+             CASE WHEN $3 THEN o.op_date
+                  ELSE COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) END, -1
+        FROM cash_ops o WHERE o.status = 'ok' AND o.staff_id IS NOT NULL
     ), s AS (
       SELECT worker_id,
         SUM(amount * ishora) FILTER (WHERE month < $1 AND currency = 'UZS') AS open_uzs,
         SUM(amount * ishora) FILTER (WHERE month < $1 AND currency = 'USD') AS open_usd,
-        SUM(amount) FILTER (WHERE month = $1 AND ishora = 1 AND currency = 'UZS') AS acc_uzs,
-        SUM(amount) FILTER (WHERE month = $1 AND ishora = 1 AND currency = 'USD') AS acc_usd,
-        SUM(amount) FILTER (WHERE month = $1 AND ishora = -1 AND currency = 'UZS') AS paid_uzs,
-        SUM(amount) FILTER (WHERE month = $1 AND ishora = -1 AND currency = 'USD') AS paid_usd
-        FROM h WHERE month <= $1 GROUP BY worker_id
+        SUM(amount) FILTER (WHERE month >= $1 AND ishora = 1 AND currency = 'UZS') AS acc_uzs,
+        SUM(amount) FILTER (WHERE month >= $1 AND ishora = 1 AND currency = 'USD') AS acc_usd,
+        SUM(amount) FILTER (WHERE month >= $1 AND ishora = -1 AND currency = 'UZS') AS paid_uzs,
+        SUM(amount) FILTER (WHERE month >= $1 AND ishora = -1 AND currency = 'USD') AS paid_usd
+        FROM h WHERE month <= $2 GROUP BY worker_id
     )
     SELECT w.id, w.name, w.position, w.staff_group, w.active,
            COALESCE(sc.name, w.dept) AS dept, sh.name AS shop,
@@ -92,10 +104,12 @@ router.get('/', need(...KO), wrap(async (req, res) => {
            COALESCE(s.paid_usd, 0)::numeric(18,2) AS paid_usd,
            (SELECT COALESCE(SUM(p.amount), 0) FROM piece_work p
              WHERE p.worker_id = w.id
-               AND date_trunc('month', p.work_date)::date = $1)::numeric(18,2) AS piece_usd,
+               AND CASE WHEN $3 THEN p.work_date
+                        ELSE date_trunc('month', p.work_date)::date END
+                   BETWEEN $1 AND $2)::numeric(18,2) AS piece_usd,
            (SELECT note FROM payroll_accruals a
-             WHERE a.worker_id = w.id AND a.month = $1
-             ORDER BY a.currency DESC LIMIT 1) AS note
+             WHERE a.worker_id = w.id AND a.month BETWEEN $1 AND $2
+             ORDER BY a.month DESC, a.currency DESC LIMIT 1) AS note
       FROM workers w
       LEFT JOIN s ON s.worker_id = w.id
       LEFT JOIN sections sc ON sc.id = w.section_id
@@ -104,8 +118,8 @@ router.get('/', need(...KO), wrap(async (req, res) => {
      --  unga qarzimiz qolgan va u jimgina ro'yxatdan tushib ketmasin.
      WHERE (w.active OR s.worker_id IS NOT NULL
             OR w.pay_open_uzs <> 0 OR w.pay_open_usd <> 0)
-       AND ($2::int[] IS NULL OR COALESCE(w.shop_id, sc.shop_id) = ANY($2))
-     ORDER BY sh.name NULLS LAST, w.name`, [m, sh]);
+       AND ($4::int[] IS NULL OR COALESCE(w.shop_id, sc.shop_id) = ANY($4))
+     ORDER BY sh.name NULLS LAST, w.name`, [or.lo, or.hi, or.kunlik, sh]);
   for (const r of rows) {
     r.close_uzs = (Number(r.open_uzs) + Number(r.acc_uzs) - Number(r.paid_uzs)).toFixed(2);
     r.close_usd = (Number(r.open_usd) + Number(r.acc_usd) - Number(r.paid_usd)).toFixed(2);
@@ -117,14 +131,16 @@ router.get('/', need(...KO), wrap(async (req, res) => {
   for (const k of ['open_uzs', 'open_usd', 'acc_uzs', 'acc_usd', 'paid_uzs',
                    'paid_usd', 'close_uzs', 'close_usd'])
     total[k] = list.reduce((a, r) => a + Number(r[k]), 0).toFixed(2);
-  res.json({ month: m.slice(0, 7), rows: list, total,
+  res.json({ month: or.month ? or.month.slice(0, 7) : null,
+             from: or.kunlik ? or.lo : null, to: or.kunlik ? or.hi : null,
+             rows: list, total,
              can_edit: req.user.permissions.includes(YOZ) });
 }));
 
 //  Bitta xodim, bitta oy: nima hisoblandi va QAYSI hujjat bilan
 //  to'landi. «Men oldim-ku» degan savolga raqam emas, hujjat javob.
 router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
-  const m = oy(req.query.month) || bugungiOy();
+  const or = oraliq(req.query);
   const id = Number(req.params.id) || 0;
   const sh = tsexlar(req);
   if (sh && !(await db.query(`SELECT 1 FROM workers w LEFT JOIN sections sc ON sc.id = w.section_id
@@ -132,15 +148,18 @@ router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
     [id, sh])).rowCount)
     return res.status(403).json({ error: 'Bu xodim sizning tsexingizda emas' });
   const [acc, paid, piece] = await Promise.all([
-    db.query(`SELECT currency, amount, note FROM payroll_accruals
-               WHERE worker_id = $1 AND month = $2 ORDER BY currency DESC`, [id, m]),
+    db.query(`SELECT to_char(month, 'YYYY-MM') AS month, currency, amount, note FROM payroll_accruals
+               WHERE worker_id = $1 AND month BETWEEN $2 AND $3
+               ORDER BY month, currency DESC`, [id, or.lo, or.hi]),
     db.query(`SELECT o.id, o.doc_no, o.op_date, o.currency, o.amount, o.note,
                      i.name AS item
                 FROM cash_ops o
                 LEFT JOIN expense_items i ON i.id = o.expense_item_id
                WHERE o.status = 'ok' AND o.staff_id = $1
-                 AND COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) = $2
-               ORDER BY o.op_date, o.id`, [id, m]),
+                 AND CASE WHEN $4 THEN o.op_date
+                          ELSE COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) END
+                     BETWEEN $2 AND $3
+               ORDER BY o.op_date, o.id`, [id, or.lo, or.hi, or.kunlik]),
     //  Ishbay — bo'lim va mahsulot bo'yicha jamlab: oyiga yuzlab
     //  o'tkazish bo'ladi va har biri alohida qator o'qilmasdi.
     db.query(`SELECT s.name AS section, pr.name AS product, p.rate,
@@ -150,9 +169,10 @@ router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
                 JOIN sections s ON s.id = p.section_id
                 LEFT JOIN products pr ON pr.id = p.product_id
                WHERE p.worker_id = $1
-                 AND date_trunc('month', p.work_date)::date = $2
+                 AND CASE WHEN $4 THEN p.work_date
+                          ELSE date_trunc('month', p.work_date)::date END BETWEEN $2 AND $3
                GROUP BY s.name, s.sort, pr.name, p.rate
-               ORDER BY s.sort, pr.name`, [id, m]),
+               ORDER BY s.sort, pr.name`, [id, or.lo, or.hi, or.kunlik]),
   ]);
   res.json({ accruals: acc.rows, payments: paid.rows, piece: piece.rows });
 }));
