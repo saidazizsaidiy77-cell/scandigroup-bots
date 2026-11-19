@@ -42,7 +42,8 @@ const oy = (v) => {
 //  ★ SANADAN SANAGACHA (zavod qarori, 2026-11). Bitta to'liq oy
 //  tanlansa (1-kundan oxirgi kungacha) — eskicha OY rejimi: to'landi
 //  foyda-zarar oyi bo'yicha. Boshqa har qanday oraliq — KUNLIK rejim:
-//  to'landi KASSADAN berilgan KUN bo'yicha (`op_date`), ishbay ish
+//  to'landi KASSADAN berilgan KUN bo'yicha (`op_date`, lekin o'z
+//  foyda-zarar oyining ichida — `TOLOV_KUNI`), ishbay ish
 //  bajarilgan kun bo'yicha, hisoblangan oylik esa o'z oyining 1-kuniga
 //  yoziladi. Qoidasi bitta: boshiga + hisoblandi − to'landi = oxiriga.
 const sana = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
@@ -63,6 +64,16 @@ const bugungiOy = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+//  ★ TO'LOV O'Z OYINI YOPADI (zavod qarori, 2026-11). Kunlik rejimda
+//  ham to'lov «qaysi oy uchun» (`pl_month`) ichida qoladi: oktabr
+//  oyligi noyabrda berilsa oktabrning OXIRGI kuniga, noyabr avansi
+//  oktabrda berilsa noyabrning 1-kuniga yoziladi; oy ichida berilgani
+//  o'z kunida. Shunda 1-noyabrdagi «boshiga» oxirgi sana qanday
+//  bo'lmasin bir xil va oy rejimi bilan AYNAN teng.
+const TOLOV_KUNI = `(CASE WHEN o.pl_month IS NULL THEN o.op_date
+   ELSE LEAST(GREATEST(o.op_date, o.pl_month),
+              (o.pl_month + interval '1 month' - interval '1 day')::date) END)`;
+
 //  To'langan pulning OYI: foyda-zarar oyi, u bo'lmasa to'lov kuni
 //  (oy rejimi). ★ ISHBAY hisoblanganga O'ZI qo'shiladi (izoh:
 //  sql/cash.sql), dollarda, ish bajarilgan kun bo'yicha.
@@ -80,7 +91,7 @@ router.get('/', need(...KO), wrap(async (req, res) => {
         FROM piece_work
       UNION ALL
       SELECT o.staff_id, o.currency, o.amount,
-             CASE WHEN $3 THEN o.op_date
+             CASE WHEN $3 THEN ${TOLOV_KUNI}
                   ELSE COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) END, -1
         FROM cash_ops o WHERE o.status = 'ok' AND o.staff_id IS NOT NULL
     ), s AS (
@@ -156,7 +167,7 @@ router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
                 FROM cash_ops o
                 LEFT JOIN expense_items i ON i.id = o.expense_item_id
                WHERE o.status = 'ok' AND o.staff_id = $1
-                 AND CASE WHEN $4 THEN o.op_date
+                 AND CASE WHEN $4 THEN ${TOLOV_KUNI}
                           ELSE COALESCE(o.pl_month, date_trunc('month', o.op_date)::date) END
                      BETWEEN $2 AND $3
                ORDER BY o.op_date, o.id`, [id, or.lo, or.hi, or.kunlik]),

@@ -3203,6 +3203,15 @@ hisoblangan oylik o'z oyining 1-kuni bo'yicha; boshiga + hisoblandi −
 to'landi = oxiriga saqlanadi. Kunlik rejimda hisoblash faqat
 ko'rsatiladi (u OYGA yoziladi). `?month=` eskicha ishlaydi.
 
+**★ TO'LOV O'Z OYINI YOPADI — KUNLIK REJIMDA HAM** (zavod qarori,
+2026-11; `TOLOV_KUNI`). Oktabr oyligi noyabrda berilsa OKTABRNI yopadi:
+kunlik rejimda u oktabrning OXIRGI kuniga, oldindan berilgan avans esa
+o'z oyining 1-kuniga tushadi; oy ichida berilgani o'z kunida. Ilgari
+kunlik rejim to'lovni faqat berilgan kun bo'yicha olardi va «1–30
+noyabr» bilan «1–15 noyabr» da bir xil 1-noyabrning «boshiga» si har
+xil chiqardi. Endi boshiga oxirgi sanaga qaramaydi va oy rejimi bilan
+AYNAN teng (test solishtiradi).
+
 **★ TSEX BOSHLIG'I O'Z ODAMLARINI KO'RADI** (`payroll.shop`, zavod
 qarori 2026-11). `tsex_usta` da «Ish haqi» sahifasi ochiq, lekin FAQAT
 o'z tsexining xodimlari — ROLNING tsexi (`scope_shop_main`), **qo'shimcha
