@@ -13504,9 +13504,10 @@ test('ish haqi: hisoblandi kassadan to\'langani bilan oyma-oy', async () => {
   assert.equal(Number(okt.acc_uzs), 3000000);
   assert.equal(Number(okt.close_uzs), 5000000);
 
-  //  ★ SANADAN SANAGACHA (zavod qarori, 2026-11). To'liq oy — oy rejimi
-  //  (to'landi foyda-zarar oyi bo'yicha); boshqa oraliq — kunlik:
-  //  to'landi kassadan berilgan KUN bo'yicha, hisoblangan oy 1-kunida.
+  //  ★ SANADAN SANAGACHA (zavod qarori, 2026-11). To'liq oy — oy rejimi;
+  //  boshqa oraliq — kunlik, lekin to'lov O'Z OYINI yopadi: P26-9701
+  //  3-oktabrda berilgan, «sentabr uchun» — u sentabrning oxirgi kuniga
+  //  tushadi va 1-oktabrdagi «boshiga» oxirgi sanaga qaramaydi.
   const qq = async (f, t) => (await admin('GET', `/api/payroll?from=${f}&to=${t}`)).body;
   const toliq = await qq('2026-09-01', '2026-09-30');
   assert.equal(toliq.month, '2026-09');
@@ -13515,12 +13516,17 @@ test('ish haqi: hisoblandi kassadan to\'langani bilan oyma-oy', async () => {
   assert.equal(k1.month, null);
   const r1 = k1.rows.find(x => x.id === w);
   assert.deepEqual([r1.open_uzs, r1.acc_uzs, r1.paid_uzs, r1.close_uzs].map(Number),
-    [3000000, 3000000, 1000000, 5000000], 'to\'lov 3-oktabr kuni');
-  const r2 = (await qq('2026-10-04', '2026-10-31')).rows.find(x => x.id === w);
-  assert.deepEqual([r2.open_uzs, r2.acc_uzs, r2.paid_uzs, r2.close_uzs].map(Number),
-    [5000000, 0, 0, 5000000]);
-  const d1 = (await admin('GET', `/api/payroll/worker/${w}?from=2026-10-01&to=2026-10-05`)).body;
-  assert.deepEqual(d1.payments.map(p => p.doc_no), ['P26-9701']);
+    [2000000, 3000000, 0, 5000000], 'sentabr uchun to\'lov sentabrni yopadi');
+  assert.equal(Number(r1.open_uzs), Number(okt.open_uzs), 'boshiga oy rejimi bilan bir xil');
+  const r2 = (await qq('2026-10-01', '2026-10-15')).rows.find(x => x.id === w);
+  assert.equal(Number(r2.open_uzs), Number(r1.open_uzs), 'boshiga oxirgi sanaga qaramaydi');
+  const s2 = (await qq('2026-09-20', '2026-09-30')).rows.find(x => x.id === w);
+  assert.equal(Number(s2.paid_uzs), 1000000, 'sentabr oxirgi kunida');
+  assert.deepEqual((await admin('GET',
+    `/api/payroll/worker/${w}?from=2026-10-01&to=2026-10-05`)).body.payments, []);
+  assert.deepEqual((await admin('GET',
+    `/api/payroll/worker/${w}?from=2026-09-20&to=2026-09-30`)).body.payments
+    .map(p => p.doc_no), ['P26-9701']);
 
   //  Bo'sh — «yo'q»: qatori o'chadi
   assert.equal((await admin('PUT', '/api/payroll/accrual',
