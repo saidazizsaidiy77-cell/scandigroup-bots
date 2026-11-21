@@ -42,6 +42,12 @@ UPDATE product_groups g SET route_template_id = t.rt
 --  mahsulot. Dollarda, butun tizimdagi hisob-kitob kabi.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS price_opt    NUMERIC(14,2);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS price_retail NUMERIC(14,2);
+--  ★ NORMATIV TANNARX (zavod qarori, 2026-11; `sql/materials.sql`,
+--  `v_cogs_lines`). Sarfi yozilmagan konver (boshlang'ich qoldiq,
+--  hisob boshlanishidan oldin yasalgani) foyda-zararga NOL tannarx
+--  bilan tushardi va foyda yolg'on yuqori chiqardi. Shu konverga bir
+--  donaning normativ tannarxi olinadi; sarf bor bo'lsa — haqiqiysi.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS std_cost     NUMERIC(14,2);
 
 DROP VIEW IF EXISTS v_catalog;
 CREATE VIEW v_catalog AS

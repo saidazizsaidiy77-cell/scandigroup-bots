@@ -1220,7 +1220,17 @@ router.get('/pl', need(...READ), wrap(async (req, res) => {
       WHERE pl_month >= $1 AND pl_month <= $2
       ORDER BY kind DESC, group_sort, group_name, item_sort, item_name`,
     [from, to]);
-  res.json({ from: from.slice(0, 7), to: to.slice(0, 7), rows });
+  //  ★ TANNARX QAYERDAN — oy bo'yicha manba (izoh: sql/materials.sql,
+  //  `v_cogs_lines`): qancha qismi normativdan va nechta dona umuman
+  //  tannarxsiz. Raqamning o'zi yolg'on emas, tushuntirilmagani bo'lardi.
+  const { rows: manba } = await db.query(
+    `SELECT to_char(pl_month, 'YYYY-MM') AS mon, manba,
+            COALESCE(SUM(amount), 0)::numeric(16,2) AS amount,
+            COALESCE(SUM(qty), 0)::numeric AS qty
+       FROM v_cogs_lines
+      WHERE pl_month >= $1 AND pl_month <= $2
+      GROUP BY 1, 2 ORDER BY 1, 2`, [from, to]);
+  res.json({ from: from.slice(0, 7), to: to.slice(0, 7), rows, manba });
 }));
 
 // ═══════════════════════════════════════════════ PUL OQIMI HISOBOTI
