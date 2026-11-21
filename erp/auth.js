@@ -19,7 +19,8 @@ async function loadWorker(workerId) {
   const w = (await db.query(
     `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
             sees_cash, can_add_supplier,
-            can_release, can_release_own, can_request_unit, can_add_customer, mat_scope
+            can_release, can_release_own, can_request_unit, can_add_customer, mat_scope,
+            sees_cost
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles, extra] = await Promise.all([
@@ -58,7 +59,9 @@ async function loadWorker(workerId) {
       //  olib tashlansa HAMMASI birdan yopiladi: menyu, sahifa va
       //  API (`sees_warehouse` bilan aynan bir xil idiom).
       .filter((p) => w.sees_cash !== false || !p.startsWith('cash.'))
-      .filter((p) => w.can_request_unit !== false || p !== 'production.request'),
+      .filter((p) => w.can_request_unit !== false || p !== 'production.request')
+      //  Tannarx — faqat belgisi bor boshliqqa (izoh: sql/units.sql).
+      .filter((p) => w.sees_cost === true || p !== 'cost.shop'),
     roles: roles.rows,
     // Usta faqat o'z tsexini ko'rishi uchun: rollardagi eng tor doira
     //  Qo'shimchasi faqat doirasi BOR xodimga qo'shiladi: doirasi yo'q

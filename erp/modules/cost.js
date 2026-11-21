@@ -33,8 +33,19 @@ const router = express.Router();
 //  Tannarx — PUL hisoboti: rahbariyat, buxgalter, ishlab chiqarish
 //  boshlig'i, xom ashyo mudiri va ta'minot. Tsex boshlig'ida
 //  `materials.view` bor, lekin unga ochilmaydi.
-const HUQUQ = ['cash.view', 'cash.manage', 'production.manage',
+const TOLIQ = ['cash.view', 'cash.manage', 'production.manage',
                'materials.manage', 'purchasing.view'];
+//  ★ TSEX BOSHLIG'I O'Z TSEXINI KO'RADI (`cost.shop`, zavod qarori
+//  2026-11): stul boshlig'iga stul tannarxi. Mahsulot qaysi tsexniki —
+//  `shopOfProduct` bilan BIR XIL qoida (javobgar tsex → marshrutning
+//  birinchi qadami). Doira — ROLNING tsexi (`scope_shop_main`), ish
+//  haqi sahifasi bilan bir xil. Chegara SERVERDA.
+const HUQUQ = [...TOLIQ, 'cost.shop'];
+const doira = (req) => (TOLIQ.some((p) => req.user.permissions.includes(p))
+  ? null : (req.user.scope_shop_main || []));
+const MAHSULOT_TSEXI = `COALESCE(g.owner_shop_id,
+  (SELECT sc.shop_id FROM v_product_route r JOIN sections sc ON sc.id = r.section_id
+    WHERE r.product_id = p.id ORDER BY r.step_no LIMIT 1))`;
 
 //  Material qatorlari — har konver raqami × material. Ikkala yo'l
 //  ham shundan o'qiydi: ro'yxat (jami) va ochilgan qator (tafsilot).
@@ -112,18 +123,40 @@ const SARF = `
       FROM cash_ops c JOIN expense_items ei ON ei.id = c.expense_item_id
      WHERE c.status = 'ok' AND ei.group_code = 'MAOSH' AND ei.shop_id IS NOT NULL
      GROUP BY 1, 2),
+  --  ★ ISHBAY — KONVERGA TO'G'RIDAN-TO'G'RI (zavod qarori, 2026-11).
+  --  Stulda ish dona bilan to'lanadi va har yozuv o'z konverini
+  --  biladi (piece_work.conveyor_no): taqsimlash shart emas va oylik
+  --  kassadan berilishini kutmaydi — konver bo'limdan o'tgan kuniyoq
+  --  tannarxga tushadi. Kassadagi «Oylik stul» ichida o'sha ishbay
+  --  ham bor, shuning uchun tsex-oy bo'yicha undan AYIRILADI va
+  --  faqat QOLGANI (boshliq, ishbaysiz bo'limlar) eskicha
+  --  taqsimlanadi — bitta pul ikki marta sanalmaydi.
+  ishbay AS (
+    SELECT s.shop_id, date_trunc('month', p.work_date)::date AS oy,
+           p.conveyor_no, SUM(p.amount) AS summa
+      FROM piece_work p JOIN sections s ON s.id = p.section_id
+     GROUP BY 1, 2, 3),
+  qolgan AS (
+    SELECT ol.shop_id, ol.oy,
+           GREATEST(ol.summa - COALESCE(
+             (SELECT SUM(i.summa) FROM ishbay i
+               WHERE i.shop_id = ol.shop_id AND i.oy = ol.oy), 0), 0) AS summa
+      FROM oylik ol),
   vazn AS (
     SELECT ch.shop_id, ch.oy, ch.conveyor_no, ch.qty,
            ch.qty * COALESCE(k.dona, 0) AS w
       FROM chiqish ch LEFT JOIN k USING (conveyor_no)),
   taqsim AS (
-    SELECT v.conveyor_no, v.shop_id, v.oy,
+    SELECT v.conveyor_no, v.shop_id, v.oy, 'oylik' AS tur,
            ol.summa * CASE WHEN t.w > 0 THEN v.w / t.w
                            ELSE v.qty / NULLIF(t.q, 0) END AS summa
       FROM vazn v
       JOIN (SELECT shop_id, oy, SUM(w) AS w, SUM(qty) AS q
               FROM vazn GROUP BY 1, 2) t USING (shop_id, oy)
-      JOIN oylik ol USING (shop_id, oy)),
+      JOIN qolgan ol USING (shop_id, oy)
+     WHERE ol.summa > 0
+    UNION ALL
+    SELECT conveyor_no, shop_id, oy, 'ishbay', summa FROM ishbay),
   ish AS (
     SELECT conveyor_no, SUM(summa) AS summa FROM taqsim GROUP BY conveyor_no),
   --  Oldingi konver — SHU mahsulotning, sarfi bor, omborga oldin
@@ -166,8 +199,9 @@ router.get('/', need(...HUQUQ), wrap(async (req, res) => {
                 AND ($1::date IS NULL OR k.kirgan >= $1)
                 AND ($2::date IS NULL OR k.kirgan <= $2))
             OR ($3 AND k.kirgan IS NULL))
+        AND ($4::int[] IS NULL OR ${MAHSULOT_TSEXI} = ANY($4))
       ORDER BY k.kirgan NULLS LAST, k.boshlangan NULLS LAST, k.conveyor_no`,
-    [from, to, yolda]);
+    [from, to, yolda, doira(req)]);
   res.json({ rows });
 }));
 
@@ -183,6 +217,17 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
        FROM k LEFT JOIN oldin o USING (conveyor_no)
       WHERE k.conveyor_no = $1`, [no]);
   if (!k) return res.status(404).json({ error: 'Konver topilmadi' });
+  const sh = doira(req);
+  if (sh) {
+    const { rows: [t] } = await db.query(
+      `SELECT ${MAHSULOT_TSEXI} AS shop_id
+         FROM production_units u JOIN products p ON p.id = u.product_id
+         LEFT JOIN product_groups g ON g.id = p.group_id
+        WHERE u.conveyor_no = $1 LIMIT 1`, [no]);
+    if (!t || !sh.includes(t.shop_id)) {
+      return res.status(403).json({ error: 'Bu konver sizning tsexingizniki emas' });
+    }
+  }
   const { rows } = await db.query(
     `WITH ${SARF}
      SELECT s.conveyor_no, s.material_id, m.name AS material, m.code, m.uom,
@@ -213,11 +258,11 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
   //  oylikdan» degan savolga javob.
   const { rows: ish } = await db.query(
     `WITH ${SARF}
-     SELECT sh.name AS shop, to_char(t.oy, 'YYYY-MM') AS oy,
+     SELECT sh.name AS shop, to_char(t.oy, 'YYYY-MM') AS oy, t.tur,
             t.summa::NUMERIC(16,2) AS summa
        FROM taqsim t JOIN shops sh ON sh.id = t.shop_id
       WHERE t.conveyor_no = $1 AND t.summa IS NOT NULL
-      ORDER BY t.oy, sh.name`, [k.conveyor_no]);
+      ORDER BY t.oy, sh.name, t.tur`, [k.conveyor_no]);
   res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
              prev_soni: k.prev_soni, rows: out, ish });
 }));

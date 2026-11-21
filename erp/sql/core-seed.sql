@@ -110,6 +110,9 @@ INSERT INTO permissions (code, module, name) VALUES
   --  o'z odamlarining hisoblangan va to'langanini KO'RADI — faqat
   --  o'qish va faqat tsex doirasidagi xodimlar (`modules/payroll.js`).
   ('payroll.shop',      'payroll',    'O''z tsexining ish haqini ko''rish'),
+  --  ★ O'Z TSEXINING TANNARXI (zavod qarori, 2026-11): stul boshlig'iga
+  --  stul konverlari — faqat o'qish, tsex doirasi (`modules/cost.js`).
+  ('cost.shop',         'reports',    'O''z tsexining tannarxini ko''rish'),
   -- Boshqaruv
   ('admin.users',       'admin',      'Xodim va rollarni boshqarish'),
   ('admin.audit',       'admin',      'Audit jurnalini ko''rish')
@@ -306,6 +309,7 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
   --  rad etadi (`modules/cash.js`, `can_hold_cash`).
   ('tsex_usta',    'cash.entry'),
   ('tsex_usta',    'payroll.shop'),
+  ('tsex_usta',    'cost.shop'),
   --  Ta'minotchi ham: u bozorga naqd pul bilan boradi va qaytib kelib
   --  nimaga sarflaganini yozadi — bu roldagi odamning asosiy ishi.
   --  Yuqoridagi izoh («ta'minotchi bozorga ketgan») buni allaqachon

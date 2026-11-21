@@ -370,7 +370,7 @@ const App = (() => {
       title: 'Tannarx', lead: 'Konver bo\'yicha',
       text: "Har konver ketma-ket \u00b7 bir donaga xom ashyo \u00b7 oldingi konverga nisbatan farq",
       perm: ['cash.view', 'cash.manage', 'production.manage',
-             'materials.manage', 'purchasing.view'] },
+             'materials.manage', 'purchasing.view', 'cost.shop'] },
     //  SOF AYLANMA KAPITAL — «qo'limizda nima qoldi». Foyda-zarar
     //  «qancha ishladik» degan savolga javob beradi va ikkalasi
     //  bir-birini almashtirmaydi: foyda bo'lishi, lekin puli

@@ -687,6 +687,14 @@ LEFT JOIN production_units u ON u.id = q.unit_id;
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS
   can_request_unit BOOLEAN NOT NULL DEFAULT true;
 
+--  ★ TANNARX — XODIM BELGISIDA (`sees_cost`, zavod qarori 2026-11).
+--  `cost.shop` tsex boshlig'i ROLIDA turadi, lekin tannarxni hamma
+--  boshliq emas, bittasi ko'rishi kerak — rol buni ajrata olmaydi.
+--  Standarti `false`: hech kimga o'zidan-o'zi ochilmaydi; belgi
+--  qo'yilmasa `cost.shop` UMUMAN o'qilmaydi (`erp/auth.js`).
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS
+  sees_cost BOOLEAN NOT NULL DEFAULT false;
+
 -- ───────────────────────────── MASHINA YOZGAN IZOHNI TOZALASH
 --
 --  ★ IZOH — ODAM ODAMGA YOZGAN GAP (zavod qarori, 2026-10). Savdo

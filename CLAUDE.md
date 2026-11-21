@@ -4230,7 +4230,7 @@ Rol huquqlari **kodda** (`sql/core-seed.sql`), saytdan tahrirlanmaydi.
 
 | Rol | Huquq | Ko'radi |
 |---|---|---|
-| `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry`, `payroll.shop` | faqat «Bo'limlar aro harakat», faqat o'z tsexi; muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi. **Konver so'rovi xodim belgisida** (`can_request_unit`): stol va stulni savdo so'raydi, ya'ni o'sha tsex boshlig'ida sahifa yopiladi |
+| `tsex_usta` | `production.entry`, `production.request`, `production.plan`, `cash.entry`, `payroll.shop`, `cost.shop` (belgi bilan) | faqat «Bo'limlar aro harakat», faqat o'z tsexi; muddat rejasini qo'yadi va qo'lidagi podotchyot sarfini o'zi yozadi. **Konver so'rovi xodim belgisida** (`can_request_unit`): stol va stulni savdo so'raydi, ya'ni o'sha tsex boshlig'ida sahifa yopiladi |
 | `kirituvchi` | `production.entry`, `production.request`, `warehouse.view` | **«Konver qo'shish»**, va belgisi qo'yilgan bo'lsa **ombor qoldig'i** — o'z tsexiniki: ertaga nima so'rashni hal qilish uchun javonda nechta turganini biladi (`sees_warehouse`, xodim bo'yicha). Jurnal, boshlang'ich qoldiq va hisobotlar YO'Q |
 | `ishlab_boshl` | + `production.manage` | hammasi, tarixni tuzatish |
 | `omborchi` | `warehouse.*`, `materials.view` | faqat «Ombor» bo'limi — barcha omborlar, xom ashyonikini ham (faqat KO'RISH) |
@@ -6006,6 +6006,25 @@ $» va **«Tannarx donaga»** (xom ashyo + ish haqi); ochilgan qatorda
 qaysi tsex, qaysi oy. Konver chiqmagan oydagi oylik hech kimga
 tushmaydi. Foyda-zararda oylik HARAJATda qoladi (ikki marta sanalmaydi
 — bu tannarx hisoboti, P&L emas).
+
+**★ ISHBAY — KONVERGA DARROV** (zavod qarori, 2026-11; `cost.js` dagi
+`ishbay`, `qolgan`). Kassadagi oylik keyingi oyda beriladi, ya'ni
+joriy oy konverlarida ish haqi BO'SH turardi. Stulda esa ish dona
+bilan to'lanadi va har yozuv o'z konverini biladi
+(`piece_work.conveyor_no`): u bo'limdan o'tgan kuniyoq tannarxga
+tushadi, taqsimlanmaydi. Kassadagi tsex oyligidan o'sha oyning
+ishbayi AYIRILADI va faqat QOLGANI (boshliq, ishbaysiz bo'limlar)
+eskicha taqsimlanadi — bitta pul ikki marta sanalmaydi. Ochilgan
+qatorda «· ishbay» bo'lib yoziladi.
+
+**★ TSEX BOSHLIG'IGA — FAQAT BELGI BILAN** (zavod qarori, 2026-11;
+`cost.shop`, `workers.sees_cost`). Huquq `tsex_usta` rolida turadi,
+lekin tannarxni hamma boshliq emas, bittasi ko'radi — rol buni ajrata
+olmaydi, shuning uchun belgi XODIMDA (Xodimlar sahifasi, «Tannarx — o'z
+tsexi», standarti `false`; `can_request_unit` bilan bir xil idiom:
+belgisiz `cost.shop` UMUMAN o'qilmaydi). Ko'rinadigani — faqat O'Z
+tsexining mahsuloti (`shopOfProduct` qoidasi, rolning tsexi
+`scope_shop_main`), boshqa konver id bilan so'ralsa 403. Faqat o'qish.
 
 **Mahsulot turi filtri** (penal, stul…) va qidiruv KLIENTDA: ro'yxatda
 LIMIT yo'q, ya'ni hammasi sahifada turadi. Turlar yuklangan qatorlardan

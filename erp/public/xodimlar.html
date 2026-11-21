@@ -633,6 +633,16 @@ function openForm(id){
                 <span class="muted" style="font-size:12px">· belgilanmasa
                   menyuda «Konver qo'shish» umuman chizilmaydi. Stol va
                   stulni baribir savdo so'raydi</span></span>
+            </div>
+            <!--  ★ TANNARX — XODIM BELGISIDA (izoh: sql/units.sql):
+                  tsex boshlig'iga faqat O'Z tsexining konverlari. -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="wCost" style="width:auto"
+                     ${w?.sees_cost ? 'checked' : ''}>
+              <span style="flex:1">Tannarx — o'z tsexi
+                <span class="muted" style="font-size:12px">· tsex boshlig'iga
+                  Hisobotlar → Tannarx ochiladi, faqat o'z tsexining
+                  mahsuloti</span></span>
             </div></div>
 
           <!--  ★ OMBOR DOIRASI (izoh: sql/materials.sql). Tsex doirasi
@@ -880,6 +890,7 @@ async function save(id){
     kpi_bonus_tushum: $('wBonusTushum').checked,
     task_watch: $('wTaskWatch').checked,
     ai_access: $('wAi').checked,
+    sees_cost: $('wCost').checked,
     sees_cash: $('wCashSee').checked,
     can_add_supplier: $('wSupAdd').checked,
     can_request_unit: $('wReq').checked,
