@@ -1526,15 +1526,15 @@ END $$;
 --  ★ SARF NORMATIVDAN ANCHA KAM BO'LSA — NORMATIV (zavod qarori,
 --  2026-11). Sarfi QISMAN yozilgan konver (bir-ikki bo'lim) haqiqiy
 --  sarf bo'lib o'tib, tannarxni yana kam ko'rsatardi. Chegara BAZADA
---  (`app_settings.normativ_chegara`, foiz, standarti 70): bir donaning
+--  (`app_settings.normativ_chegara`, foiz, standarti 90): bir donaning
 --  sarfi normativning shu foizidan kam bo'lsa normativ olinadi.
-INSERT INTO app_settings (key, val) VALUES ('normativ_chegara', '70')
+INSERT INTO app_settings (key, val) VALUES ('normativ_chegara', '90')
 ON CONFLICT (key) DO NOTHING;
 DROP VIEW IF EXISTS v_cogs_lines CASCADE;
 CREATE VIEW v_cogs_lines AS
 WITH chegara AS (
       SELECT COALESCE((SELECT NULLIF(val, '')::numeric FROM app_settings
-                        WHERE key = 'normativ_chegara'), 70) / 100 AS k),
+                        WHERE key = 'normativ_chegara'), 90) / 100 AS k),
     ortacha AS (
       SELECT place_id, material_id,
              SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)

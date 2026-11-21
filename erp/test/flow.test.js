@@ -14130,12 +14130,12 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
     .reduce((a, r) => a + Number(r.amount_usd), 0), 100, '2 × normativ 50');
   assert.ok(m5.manba.some((x) => x.manba === 'normativ' && Number(x.amount) === 100));
   //  Sarfi yetarli konverga normativ TEGMAYDI: donasi 20 $, normativ
-  //  25 $ ning 70% i 17,5 — haqiqiy sarf qoladi.
-  await admin('PATCH', '/api/catalog/products/' + penal.id, { std_cost: 25 });
+  //  22 $ ning 90% i 19,8 — haqiqiy sarf qoladi.
+  await admin('PATCH', '/api/catalog/products/' + penal.id, { std_cost: 22 });
   const pl4 = async () => (await admin('GET', '/api/cash/pl?from=2032-04&to=2032-04')).body
     .rows.filter((r) => r.kind === 'cogs').reduce((a, r) => a + Number(r.amount_usd), 0);
-  assert.equal(await pl4(), 72, 'sarf 20 ≥ 25 × 70% — haqiqiy sarf');
-  //  ★ SARF NORMATIVDAN ANCHA KAM — normativ: 20 < 50 × 70%
+  assert.equal(await pl4(), 72, 'sarf 20 ≥ 22 × 90% — haqiqiy sarf');
+  //  ★ SARF NORMATIVDAN KAM — normativ: 20 < 50 × 90%
   await admin('PATCH', '/api/catalog/products/' + penal.id, { std_cost: 50 });
   assert.equal(await pl4(), 3 * 50 + 12, 'kam sarf o\'rniga normativ + furnitura');
   const nr = (await admin('GET', '/api/catalog/prices?q=' + encodeURIComponent(penal.name))).body.rows

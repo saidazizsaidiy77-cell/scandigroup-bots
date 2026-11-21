@@ -3382,8 +3382,8 @@ foyda yolg'on yuqori chiqardi. Endi har chiqqan konver qatori o'z
 MANBASI bilan: `sarf` (haqiqiy) → `xarid` (`buy_price`) → `normativ`
 (katalogdagi bir donaning normativ tannarxi) → `yoq`. **Sarf
 normativdan ANCHA KAM bo'lsa ham normativ** (qisman yozilgan sarf):
-chegara bazada — `app_settings.normativ_chegara`, foiz, standarti 70
-(bir donaning sarfi normativning 70% idan kam bo'lsa). Normativ **Narxlar** sahifasida
+chegara bazada — `app_settings.normativ_chegara`, foiz, standarti 90
+(bir donaning sarfi normativning 90% idan kam bo'lsa). Normativ **Narxlar** sahifasida
 (`sales.discount`), ostida «haqiqiy o'rtacha» — sarfi yozilgan
 chiqqan konverlardan, raqam qo'yishga yordam. Foyda-zararda tannarx
 ochilganda «shundan normativ tannarxdan» va qizil «tannarxi yo'q,
