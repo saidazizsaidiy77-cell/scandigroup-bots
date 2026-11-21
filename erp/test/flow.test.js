@@ -3136,7 +3136,21 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
     { product_id: PENAL, qty: 4, color: 'Oq', section_id: ARRA }] })).body.created[0];
   assert.equal((await usta('POST', '/api/materials/unit/' + u2.id + '/consume',
     { items: [{ material_id: m.id, qty: 8 }] })).status, 200);
-  assert.equal((await usta('GET', '/api/cost?yolda=1')).status, 403);
+  //  ★ TSEX BOSHLIG'I O'Z TSEXINI KO'RADI (`cost.shop`), lekin faqat
+  //  BELGISI bo'lsa (`sees_cost`, standarti yo'q): korpus boshlig'iga
+  //  penal bor, stul boshlig'iga yo'q va id bilan ham 403.
+  assert.equal((await usta('GET', '/api/cost?yolda=1')).status, 403, 'belgisiz yopiq');
+  await db.query(`UPDATE workers SET sees_cost = true
+                   WHERE name IN ('Sinov sarf boshlig''i', 'Sinov sarf stul')`);
+  const uT = await usta('GET', '/api/cost?yolda=1');
+  assert.equal(uT.status, 200, uT.text);
+  assert.ok(uT.body.rows.some((r) => r.conveyor_no === u2.conveyor_no));
+  const bT = await begona('GET', '/api/cost?yolda=1');
+  assert.equal(bT.status, 200, bT.text);
+  assert.ok(!bT.body.rows.some((r) => r.conveyor_no === u2.conveyor_no),
+    'stul boshlig\'iga penal ko\'rinmaydi');
+  assert.equal((await begona('GET', '/api/cost/' + encodeURIComponent(u2.conveyor_no)))
+    .status, 403);
   const tn = await xom('GET', '/api/cost?yolda=1');
   assert.equal(tn.status, 200, tn.text);
   const t1 = tn.body.rows.find((r) => r.conveyor_no === u.conveyor_no);
@@ -3198,17 +3212,26 @@ test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
      VALUES ('P31-9001', '2031-04-05', 'account', $1, 'expense', $2,
              'USD', 300, 'ok', '2031-03-01', $2)`, [kassa, modda]);
 
+  //  ★ ISHBAY konverga to'g'ridan-to'g'ri: e1 ga 2 × 15 = 30 $. Kassadagi
+  //  oylikdan AYIRILADI (300 − 30 = 270) va qolgani donadan bo'linadi:
+  //  e1 = 90 + 30, e2 = 180 — jami baribir 300, ikki marta sanalmaydi.
+  const ishchi = (await H.id(`SELECT id FROM workers ORDER BY id LIMIT 1`)).id;
+  await db.query(
+    `INSERT INTO piece_work (conveyor_no, product_id, section_id, worker_id, qty, rate, work_date)
+     VALUES ($1, $2, $3, $4, 2, 15, '2031-03-09')`, [e1.conveyor_no, pid, kor, ishchi]);
+
   const tn = (await admin('GET', '/api/cost?yolda=1')).body.rows;
   const t1 = tn.find((r) => r.conveyor_no === e1.conveyor_no);
   const t2 = tn.find((r) => r.conveyor_no === e2.conveyor_no);
-  assert.equal(Number(t1.ish_haqi), 100);
-  assert.equal(Number(t2.ish_haqi), 200);
-  assert.equal(Number(t2.jami_dona), 50, 'materialsiz: 200 $ ÷ 4');
+  assert.equal(Number(t1.ish_haqi), 120);
+  assert.equal(Number(t2.ish_haqi), 180);
+  assert.equal(Number(t2.jami_dona), 45, 'materialsiz: 180 $ ÷ 4');
   const tf = (await admin('GET', '/api/cost/' + encodeURIComponent(e1.conveyor_no))).body;
-  assert.equal(tf.ish.length, 1);
-  assert.equal(tf.ish[0].oy, '2031-03');
+  assert.deepEqual(tf.ish.map((x) => [x.oy, x.tur, Number(x.summa)]),
+    [['2031-03', 'ishbay', 30], ['2031-03', 'oylik', 90]]);
   //  Sinov operatsiyasi boshqa testlarning kassa va P&L hisobiga tushmasin.
   await db.query(`DELETE FROM cash_ops WHERE doc_no = 'P31-9001'`);
+  await db.query(`DELETE FROM piece_work WHERE conveyor_no = $1`, [e1.conveyor_no]);
   //  ★ MAXSUS BUYURTMA SO'ROVI: topshirish kuni, kimga va tarkibi.
   //  Raqam zakazning 757 dan emas, o'z hisobidan (Z26-0001…).
   const sotuv = await xodim('Sinov maxsus sotuvchi', 'sotuvchi');

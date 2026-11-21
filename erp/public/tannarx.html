@@ -57,9 +57,10 @@ tr.k-det>td{background:var(--surface-2)}
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
   <p class="muted" style="font-size:12px;margin-top:10px">
     Tannarx = <b>xom ashyo + ish haqi</b>; kommunal keyingi bosqichda.
-    Ish haqi — tsexning oy oyligi (kassadagi «Oylik …» moddasi, foyda-zarar
-    oyi) o'sha oyda tsexdan chiqqan konverlarga material tannarxiga
-    proporsional bo'linadi. Bir donaga = konverning jami materiali ÷ chiqqan dona
+    Ish haqi — ishbay bo'lsa («Kim bajardi?») konverga darrov tushadi;
+    qolgan tsex oyligi (kassadagi «Oylik …» moddasi, foyda-zarar oyi,
+    ishbay ayirilgan) o'sha oyda tsexdan chiqqan konverlarga material
+    tannarxiga proporsional bo'linadi. Bir donaga = konverning jami materiali ÷ chiqqan dona
     (brak ham kiradi). Narx — material olingan omborning o'rtacha kirim
     narxi. «Oldingi» — shu mahsulotning sarfi bor oldingi konveri.
     <span class="no-print">Qator bosilsa material bo'yicha farq chiqadi.</span></p>
@@ -176,7 +177,7 @@ function detal() {
   if (!det) return '<span class="muted">Yuklanmoqda…</span>';
   if (det.error) return esc(det.error);
   const ish = (det.ish || []).length ? `<p style="margin:0 0 8px"><b>Ish haqi:</b> ${
-    det.ish.map((x) => `${esc(x.shop)} · ${esc(x.oy)} — ${usd(x.summa)} $`).join(' \u00b7 ')}</p>` : '';
+    det.ish.map((x) => `${esc(x.shop)} · ${esc(x.oy)}${x.tur === 'ishbay' ? ' · ishbay' : ''} — ${usd(x.summa)} $`).join(' \u00b7 ')}</p>` : '';
   if (!det.rows.length) return ish + '<span class="muted">Material biriktirilmagan.</span>';
   const p = det.prev_no;
   return ish + `<table style="background:transparent">
@@ -227,7 +228,7 @@ function exportCsv() {
 }
 
 App.start(() => davr('oy'), 'cash.view', 'cash.manage', 'production.manage',
-          'materials.manage', 'purchasing.view');
+          'materials.manage', 'purchasing.view', 'cost.shop');
 </script>
 </body>
 </html>

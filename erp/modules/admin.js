@@ -52,7 +52,7 @@ router.get('/workers', need('admin.users'), wrap(async (_req, res) => {
     //  YANGISI qo'yiladi.
     `SELECT w.id, w.name, w.phone, w.tg_id, w.active, w.can_hold_cash,
             w.sales_head_id, w.sees_cash, w.can_add_supplier, w.kpi_bonus_tushum,
-            w.task_watch, w.ai_access,
+            w.task_watch, w.ai_access, w.sees_cost,
             w.can_release, w.can_release_own, w.can_request_unit, w.can_add_customer,
             w.supply_reports, w.daily_digest,
             w.mat_scope,
@@ -329,7 +329,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
           can_spend_cash, sees_warehouse, can_release,
           can_request_unit, can_add_customer, supply_reports, daily_digest,
           mat_scope, sales_head_id, sees_cash, can_add_supplier,
-          kpi_bonus_tushum, task_watch, can_release_own, ai_access, roles } = req.body;
+          kpi_bonus_tushum, task_watch, can_release_own, ai_access, sees_cost,
+          roles } = req.body;
   const kod = req.body.pin ? String(req.body.pin) : null;
   if (kod && !/^\d{4,6}$/.test(kod))
     return res.status(400).json({ error: 'PIN 4-6 raqamdan iborat bo\'lishi kerak' });
@@ -424,7 +425,9 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
          --  sql/sales.sql) — yuborilmasa tegilmaydi.
          can_release_own = COALESCE($31, can_release_own),
          --  Tahlilchi AI ga kirishi (izoh: sql/ai.sql).
-         ai_access = COALESCE($32, ai_access)
+         ai_access = COALESCE($32, ai_access),
+         --  Tannarx (o'z tsexi) — izoh: sql/units.sql.
+         sees_cost = COALESCE($33, sees_cost)
        WHERE id = $1`,
       [id, name || null, phone || null, pinCols(kod)[0],
        tg, typeof active === 'boolean' ? active : null,
@@ -452,7 +455,8 @@ router.patch('/workers/:id', need('admin.users'), wrap(async (req, res) => {
        typeof kpi_bonus_tushum === 'boolean' ? kpi_bonus_tushum : null,
        typeof task_watch === 'boolean' ? task_watch : null,
        typeof can_release_own === 'boolean' ? can_release_own : null,
-       typeof ai_access === 'boolean' ? ai_access : null]);
+       typeof ai_access === 'boolean' ? ai_access : null,
+       typeof sees_cost === 'boolean' ? sees_cost : null]);
     if (Array.isArray(roles)) {
       await client.query(`DELETE FROM worker_roles WHERE worker_id = $1`, [id]);
       for (const r of roles) {
