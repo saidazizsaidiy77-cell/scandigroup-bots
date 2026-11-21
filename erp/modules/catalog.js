@@ -298,24 +298,29 @@ router.patch('/products/:id', need('production.manage', 'sales.discount'),
   wrap(async (req, res) => {
   const { active, route_template_id, is_set } = req.body;
   const opt = narx(req.body.price_opt), ret = narx(req.body.price_retail);
+  //  Normativ tannarx ham narx siyosati — o'sha huquqda (izoh: sql/catalog.sql).
+  const std = narx(req.body.std_cost);
   //  ★ Narxga FAQAT direktor tegadi. Katalogni yuritadigan odam
   //  mahsulotni yoqadi, marshrutini qo'yadi — lekin narxga emas:
   //  tekshiruv SERVERDA, katakni yashirish himoya emas.
-  if ((opt !== undefined || ret !== undefined)
+  if ((opt !== undefined || ret !== undefined || std !== undefined)
       && !req.user.permissions.includes('sales.discount'))
     return res.status(403).json({ error: 'Narxni direktor qo\'yadi' });
-  if ((opt != null && !(opt >= 0)) || (ret != null && !(ret >= 0)))
+  if ((opt != null && !(opt >= 0)) || (ret != null && !(ret >= 0))
+      || (std != null && !(std >= 0)))
     return res.status(400).json({ error: "Narx noto'g'ri" });
   const { rows } = await db.query(
     `UPDATE products SET active            = COALESCE($2, active),
                          route_template_id = COALESCE($3, route_template_id),
                          is_set            = COALESCE($4, is_set),
                          price_opt    = CASE WHEN $5::boolean THEN $6 ELSE price_opt END,
-                         price_retail = CASE WHEN $7::boolean THEN $8 ELSE price_retail END
+                         price_retail = CASE WHEN $7::boolean THEN $8 ELSE price_retail END,
+                         std_cost     = CASE WHEN $9::boolean THEN $10 ELSE std_cost END
       WHERE id = $1 RETURNING id`,
     [req.params.id, typeof active === 'boolean' ? active : null,
      route_template_id || null, typeof is_set === 'boolean' ? is_set : null,
-     opt !== undefined, opt ?? null, ret !== undefined, ret ?? null]);
+     opt !== undefined, opt ?? null, ret !== undefined, ret ?? null,
+     std !== undefined, std ?? null]);
   if (!rows[0]) return res.status(404).json({ error: 'Mahsulot topilmadi' });
   await audit(req, { module: 'production', action: 'update', entity: 'product',
                      entity_id: req.params.id, payload: req.body });
@@ -362,7 +367,13 @@ async function narxRows(query) {
   const { rows } = await db.query(
     `SELECT p.id, p.sku, p.name, p.size_label, p.active,
             g.name AS group_name, g.sort AS group_sort,
-            p.price_opt, p.price_retail
+            p.price_opt, p.price_retail, p.std_cost,
+            --  Haqiqiy o'rtacha — normativni qo'yishga yordam: sarfi
+            --  yozilgan, chiqib ketgan konverlarning bir donasi
+            --  (foyda-zarar bilan BITTA manba, v_cogs_lines).
+            (SELECT (SUM(c.qty * c.sarf_narx) / NULLIF(SUM(c.qty), 0))::numeric(14,2)
+               FROM v_cogs_lines c
+              WHERE c.product_id = p.id AND c.sarf_narx IS NOT NULL) AS fakt_cost
        FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE ($1::text IS NULL
              OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
@@ -396,10 +407,11 @@ const csvNum = (v) => v == null ? '' : String(v).replace('.', ',');
 router.get('/prices/export', need(...PRICE), wrap(async (req, res) => {
   const rows = await narxRows(req.query);
   const head = ['Mahsulot', "O'lcham", 'SKU', 'Guruh',
-                'Ulgurji, $', 'Chakana, $', 'Holati'];
+                'Ulgurji, $', 'Chakana, $', 'Normativ tannarx, $',
+                "Haqiqiy o'rtacha, $", 'Holati'];
   const body = rows.map((r) => [
     csvCell(r.name), csvCell(r.size_label), csvCell(r.sku), csvCell(r.group_name),
-    csvNum(r.price_opt), csvNum(r.price_retail),
+    csvNum(r.price_opt), csvNum(r.price_retail), csvNum(r.std_cost), csvNum(r.fakt_cost),
     r.active ? '' : 'faolsiz'].join(';'));
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition',

@@ -176,6 +176,21 @@ function draw() {
     return foiz(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by, t.by);
   }).join('');
 
+  //  ★ TANNARX QAYERDAN (zavod qarori, 2026-11): sarfi yozilmagan
+  //  konverga katalogdagi NORMATIV tannarx olinadi. Qanchasi normativdan
+  //  va nechta dona umuman tannarxsiz qolgani tannarx ochilganda turadi.
+  const manbaQator = () => {
+    const nrm = {}, yoq = {};
+    (d.manba || []).forEach(x => {
+      if (x.manba === 'normativ') nrm[x.mon] = (nrm[x.mon] || 0) + Number(x.amount);
+      if (x.manba === 'yoq') yoq[x.mon] = (yoq[x.mon] || 0) + Number(x.qty);
+    });
+    const ty = ms.reduce((a, m) => a + (yoq[m] || 0), 0);
+    return qator(`<span style="padding-left:22px" class="muted">shundan normativ tannarxdan</span>`, nrm)
+      + (ty ? `<tr><td><span style="padding-left:22px;color:var(--bad)">tannarxi yo'q, dona</span></td>
+          ${ms.map(m => `<td class="num" style="color:var(--bad)">${yoq[m] || ''}</td>`).join('')}
+          <td class="num" style="color:var(--bad)"><b>${ty}</b></td></tr>` : '');
+  };
   const qator = (nom, by, cls, bosh) => {
     const t = ms.reduce((a, m) => a + (by[m] || 0), 0);
     return `<tr class="${cls || ''}"${bosh || ''}>
@@ -237,7 +252,7 @@ function draw() {
         cogs, '', ` onclick="toggle('TANNARX')" style="cursor:pointer"`)}
       ${ochiq.has('TANNARX') ? tan.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
-              t.by)).join('') : ''}
+              t.by)).join('') + manbaQator() : ''}
       ${qator(`<span class="muted" style="margin-right:6px">${
           ochiq.has('YALPI') ? '&minus;' : '+'}</span><b>Yalpi foyda</b>`,
         yalpi, '', ` onclick="toggle('YALPI')" style="cursor:pointer"`)}
@@ -267,7 +282,8 @@ function draw() {
       Savdo va tannarx chiqib ketgan mahsulotdan, harajat hisobot oyi bo'yicha.
       Tannarx — konverga yozilgan xom ashyo sarfi, yuk xatiga berilgan
       furnitura va sotib olingan mahsulot narxi, mahsulotning turkumi
-      bo'yicha; ish haqi harajatda. Ta'minotchiga to'lov bu
+      bo'yicha; sarfi yozilmagan konverga — katalogdagi normativ tannarx
+      (Narxlar sahifasi); ish haqi harajatda. Ta'minotchiga to'lov bu
       yerda emas: material tannarx bo'lib kiradi.</p>`;
 }
 

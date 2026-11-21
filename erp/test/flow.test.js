@@ -14113,6 +14113,37 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   assert.equal(Number(oy.tannarx), 72);
   assert.equal(Number(oy.foyda), Number(oy.tushum) - 72 - Number(oy.harajat));
 
+  //  ★ NORMATIV TANNARX: sarfi yozilmagan konver avval «tannarxi yo'q»
+  //  bo'lib turadi, katalogda normativ qo'yilgach o'sha bilan tushadi.
+  const u2 = (await admin('POST', '/api/units/', { items: [
+    { product_id: penal.id, qty: 2, color: 'Oq', unit_price: 300,
+      is_opening: true, fg_on: '2032-05-01' }] })).body.created[0];
+  await db.query(`UPDATE production_units SET status = 'shipped', ship_on = '2032-05-05'
+                   WHERE id = $1`, [u2.id]);
+  const pl5 = async () => (await admin('GET', '/api/cash/pl?from=2032-05&to=2032-05')).body;
+  let m5 = await pl5();
+  assert.ok(m5.manba.some((x) => x.manba === 'yoq' && Number(x.qty) === 2), 'tannarxsiz 2 dona');
+  assert.equal((await admin('PATCH', '/api/catalog/products/' + penal.id,
+    { std_cost: 50 })).status, 200);
+  m5 = await pl5();
+  assert.equal(m5.rows.filter((r) => r.kind === 'cogs')
+    .reduce((a, r) => a + Number(r.amount_usd), 0), 100, '2 × normativ 50');
+  assert.ok(m5.manba.some((x) => x.manba === 'normativ' && Number(x.amount) === 100));
+  //  Sarfi yetarli konverga normativ TEGMAYDI: donasi 20 $, normativ
+  //  22 $ ning 90% i 19,8 — haqiqiy sarf qoladi.
+  await admin('PATCH', '/api/catalog/products/' + penal.id, { std_cost: 22 });
+  const pl4 = async () => (await admin('GET', '/api/cash/pl?from=2032-04&to=2032-04')).body
+    .rows.filter((r) => r.kind === 'cogs').reduce((a, r) => a + Number(r.amount_usd), 0);
+  assert.equal(await pl4(), 72, 'sarf 20 ≥ 22 × 90% — haqiqiy sarf');
+  //  ★ SARF NORMATIVDAN KAM — normativ: 20 < 50 × 90%
+  await admin('PATCH', '/api/catalog/products/' + penal.id, { std_cost: 50 });
+  assert.equal(await pl4(), 3 * 50 + 12, 'kam sarf o\'rniga normativ + furnitura');
+  const nr = (await admin('GET', '/api/catalog/prices?q=' + encodeURIComponent(penal.name))).body.rows
+    .find((r) => r.id === penal.id);
+  assert.equal(Number(nr.std_cost), 50);
+  assert.ok(nr.fakt_cost != null, 'haqiqiy o\'rtacha ko\'rinadi');
+  await admin('PATCH', '/api/catalog/products/' + penal.id, { std_cost: '' });
+
   //  Ta'minotchiga to'lov foyda-zararga tushmaydi
   const tm = (await H.id(`SELECT in_pl FROM expense_items
     WHERE group_code = 'TAMIN' AND lower(name) = lower('Ta''minotchilarga to''lov')`));

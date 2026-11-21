@@ -3374,6 +3374,23 @@ mahsulotdan chiqqan donaga bo'linadi (`order_no` + `product_id`,
 `sotilgan-narx` bilan bir xil bog'lanish). Faqat narx huquqida.
 Tannarx hisoboti (`/tannarx.html`) hali faqat konver sarfini ko'radi.
 
+**★ NORMATIV TANNARX — SARFI YOZILMAGAN KONVERGA** (zavod qarori,
+2026-11; `products.std_cost`, `v_cogs_lines`, `sql/materials.sql`).
+Oktyabrda chiqqan konverlarning ko'pi boshlang'ich qoldiqdan yoki sarf
+yozila boshlashidan oldin yasalgan: tannarxi NOL bo'lib tushardi va
+foyda yolg'on yuqori chiqardi. Endi har chiqqan konver qatori o'z
+MANBASI bilan: `sarf` (haqiqiy) → `xarid` (`buy_price`) → `normativ`
+(katalogdagi bir donaning normativ tannarxi) → `yoq`. **Sarf
+normativdan ANCHA KAM bo'lsa ham normativ** (qisman yozilgan sarf):
+chegara bazada — `app_settings.normativ_chegara`, foiz, standarti 90
+(bir donaning sarfi normativning 90% idan kam bo'lsa). Normativ **Narxlar** sahifasida
+(`sales.discount`), ostida «haqiqiy o'rtacha» — sarfi yozilgan
+chiqqan konverlardan, raqam qo'yishga yordam. Foyda-zararda tannarx
+ochilganda «shundan normativ tannarxdan» va qizil «tannarxi yo'q,
+dona» qatorlari turadi (`/api/cash/pl` dagi `manba`). `v_cogs_lines`
+`v_material_flow` ga bog'liq, shuning uchun u o'sha view'dan OLDIN
+CASCADE bilan tashlanadi va fayl oxirida qayta quriladi.
+
 **★ MARJA FOIZDA** (zavod qarori, 2026-11; `/foyda-zarar.html`). Savdo
 yaxshi oyda tannarx ham katta bo'ladi — dollardagi raqam o'zgarishni
 ko'rsatmaydi, ULUSH esa ko'rsatadi. Foiz BITTA:

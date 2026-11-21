@@ -245,6 +245,9 @@ CREATE INDEX IF NOT EXISTS material_moves_doc_idx
 --  oluvchida plyus (`v_cash_flow` bilan bir xil). Shundan keyin har
 --  qanday qoldiq bitta yig'indi bo'lib qoladi — omborniki ham, tsex
 --  omboriniki ham, buyurtmaga berilgani ham.
+--  `v_cogs_lines` (fayl oxirida) shu view'dan o'qiydi va uni ham,
+--  `v_pl_month` ni ham olib ketadi — ikkalasi pastda qayta quriladi.
+DROP VIEW IF EXISTS v_cogs_lines CASCADE;
 DROP VIEW IF EXISTS v_material_stock;
 DROP VIEW IF EXISTS v_material_flow;
 CREATE VIEW v_material_flow AS
@@ -1511,6 +1514,88 @@ END $$;
 --  Turkumi YO'Q guruh «Turkumsiz» bo'lib turadi va yo'qolmaydi: yangi
 --  guruh qo'shilib, katagi to'ldirilmagani ko'rinib tursin — aks
 --  holda uning sotuvi hisobotdan jimgina tushib qolardi.
+--  ★ TANNARX QATORLARI — BITTA MANBA (zavod qarori, 2026-11). Har
+--  chiqqan (va qaytgan) konver qatori o'z tannarxi va MANBASI bilan:
+--  `sarf` — konverga yozilgan xom ashyo; `xarid` — sotib olingan
+--  mahsulot (`buy_price`); `normativ` — sarf yozilmagan, katalogdagi
+--  `products.std_cost`; `yoq` — ikkalasi ham yo'q (summa NULL);
+--  `furnitura` — yuk xatiga yozilgani. Foyda-zarar ham, «qaysi qismi
+--  normativdan» degan izoh ham shundan o'qiydi — ikki nusxa bir kun
+--  ajralib ketardi.
+--
+--  ★ SARF NORMATIVDAN ANCHA KAM BO'LSA — NORMATIV (zavod qarori,
+--  2026-11). Sarfi QISMAN yozilgan konver (bir-ikki bo'lim) haqiqiy
+--  sarf bo'lib o'tib, tannarxni yana kam ko'rsatardi. Chegara BAZADA
+--  (`app_settings.normativ_chegara`, foiz, standarti 90): bir donaning
+--  sarfi normativning shu foizidan kam bo'lsa normativ olinadi.
+INSERT INTO app_settings (key, val) VALUES ('normativ_chegara', '90')
+ON CONFLICT (key) DO NOTHING;
+DROP VIEW IF EXISTS v_cogs_lines CASCADE;
+CREATE VIEW v_cogs_lines AS
+WITH chegara AS (
+      SELECT COALESCE((SELECT NULLIF(val, '')::numeric FROM app_settings
+                        WHERE key = 'normativ_chegara'), 90) / 100 AS k),
+    ortacha AS (
+      SELECT place_id, material_id,
+             SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
+             / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
+               AS price
+        FROM v_material_flow WHERE kind = 'warehouse'
+       GROUP BY place_id, material_id),
+    narxli AS (
+      SELECT mv.*, mv.qty * COALESCE(mv.price_usd, o.price) AS summa
+        FROM material_moves mv
+        LEFT JOIN ortacha o ON o.place_id = mv.from_id
+                           AND o.material_id = mv.material_id
+                           AND mv.from_kind = 'warehouse'
+       WHERE mv.status = 'ok' AND mv.to_kind IN ('unit', 'order')),
+    raqam AS (
+      SELECT u.conveyor_no, SUM(n.summa) AS summa
+        FROM narxli n JOIN production_units u ON u.id = n.to_id
+       WHERE n.to_kind = 'unit'
+       GROUP BY 1),
+    soni AS (
+      SELECT conveyor_no,
+             SUM(CASE WHEN status = 'shipped' THEN qty - COALESCE(returned_qty, 0)
+                      ELSE qty END) FILTER (WHERE status <> 'cancelled') AS soni
+        FROM production_units GROUP BY conveyor_no),
+    dona AS (
+      SELECT r.conveyor_no, r.summa / NULLIF(s.soni, 0) AS narx
+        FROM raqam r JOIN soni s USING (conveyor_no)),
+    qator AS (
+      SELECT date_trunc('month', u.ship_on)::date AS pl_month, u.product_id,
+             u.conveyor_no, u.qty::numeric AS qty, u.buy_price, d.narx
+        FROM production_units u LEFT JOIN dona d USING (conveyor_no)
+       WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+      UNION ALL
+      --  mijozdan qaytgani — qaytgan oyda ayiriladi
+      SELECT date_trunc('month', r.ret_on)::date, u.product_id, u.conveyor_no,
+             -i.qty::numeric, u.buy_price, d.narx
+        FROM cust_return_items i
+        JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
+        JOIN production_units u ON u.id = i.unit_id
+        LEFT JOIN dona d ON d.conveyor_no = u.conveyor_no)
+SELECT q.pl_month, q.product_id, q.conveyor_no, q.qty,
+       CASE WHEN q.buy_price IS NOT NULL THEN q.qty * q.buy_price
+            WHEN q.narx IS NOT NULL AND (p.std_cost IS NULL
+                 OR q.narx >= p.std_cost * c.k) THEN q.qty * q.narx
+            WHEN p.std_cost IS NOT NULL  THEN q.qty * p.std_cost END AS amount,
+       CASE WHEN q.buy_price IS NOT NULL THEN 'xarid'
+            WHEN q.narx IS NOT NULL AND (p.std_cost IS NULL
+                 OR q.narx >= p.std_cost * c.k) THEN 'sarf'
+            WHEN p.std_cost IS NOT NULL  THEN 'normativ'
+            ELSE 'yoq' END AS manba,
+       --  Haqiqiy sarf (donasi) — normativ olingan qatorda ham turadi:
+       --  Narxlar sahifasidagi «haqiqiy o'rtacha» shundan.
+       q.narx AS sarf_narx
+  FROM qator q JOIN products p ON p.id = q.product_id CROSS JOIN chegara c
+UNION ALL
+--  yuk xatiga yozilgan furnitura — o'sha mahsulotning turkumiga
+SELECT date_trunc('month', o.shipped_on)::date, n.product_id, NULL, NULL,
+       n.summa, 'furnitura', NULL
+  FROM narxli n JOIN orders o ON o.id = n.to_id
+ WHERE n.to_kind = 'order' AND o.status = 'shipped' AND o.shipped_on IS NOT NULL;
+
 DROP VIEW IF EXISTS v_pl_month CASCADE;
 CREATE VIEW v_pl_month AS
 SELECT date_trunc('month', x.on_date)::date AS pl_month,
@@ -1577,62 +1662,7 @@ UNION ALL
 SELECT t.pl_month, 'cogs', 'TANNARX', 'Tannarx', -1, NULL::int,
        COALESCE(sc.name, 'Turkumsiz')::text, SUM(t.amount)::numeric(16,2),
        COUNT(*)::int, COALESCE(sc.sort, 99)::int
-  FROM (
-    WITH ortacha AS (
-      SELECT place_id, material_id,
-             SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
-             / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
-               AS price
-        FROM v_material_flow WHERE kind = 'warehouse'
-       GROUP BY place_id, material_id),
-    narxli AS (
-      SELECT mv.*, mv.qty * COALESCE(mv.price_usd, o.price) AS summa
-        FROM material_moves mv
-        LEFT JOIN ortacha o ON o.place_id = mv.from_id
-                           AND o.material_id = mv.material_id
-                           AND mv.from_kind = 'warehouse'
-       WHERE mv.status = 'ok' AND mv.to_kind IN ('unit', 'order')),
-    raqam AS (
-      SELECT u.conveyor_no, SUM(n.summa) AS summa
-        FROM narxli n JOIN production_units u ON u.id = n.to_id
-       WHERE n.to_kind = 'unit'
-       GROUP BY 1),
-    soni AS (
-      SELECT conveyor_no,
-             SUM(CASE WHEN status = 'shipped' THEN qty - COALESCE(returned_qty, 0)
-                      ELSE qty END) FILTER (WHERE status <> 'cancelled') AS soni
-        FROM production_units GROUP BY conveyor_no),
-    dona AS (
-      SELECT r.conveyor_no, r.summa / NULLIF(s.soni, 0) AS narx
-        FROM raqam r JOIN soni s USING (conveyor_no))
-    --  chiqqan konver
-    SELECT date_trunc('month', u.ship_on)::date AS pl_month, u.product_id,
-           u.qty * d.narx AS amount
-      FROM production_units u JOIN dona d USING (conveyor_no)
-     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
-    UNION ALL
-    --  mijozdan qaytgani — qaytgan oyda ayiriladi
-    SELECT date_trunc('month', r.ret_on)::date, u.product_id, -(i.qty * d.narx)
-      FROM cust_return_items i
-      JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
-      JOIN production_units u ON u.id = i.unit_id
-      JOIN dona d ON d.conveyor_no = u.conveyor_no
-    UNION ALL
-    --  sotib olingan mahsulot
-    SELECT date_trunc('month', u.ship_on)::date, u.product_id, u.qty * u.buy_price
-      FROM production_units u
-     WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL AND u.buy_price IS NOT NULL
-    UNION ALL
-    SELECT date_trunc('month', r.ret_on)::date, u.product_id, -(i.qty * u.buy_price)
-      FROM cust_return_items i
-      JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
-      JOIN production_units u ON u.id = i.unit_id AND u.buy_price IS NOT NULL
-    UNION ALL
-    --  yuk xatiga yozilgan furnitura — o'sha mahsulotning turkumiga
-    SELECT date_trunc('month', o.shipped_on)::date, n.product_id, n.summa
-      FROM narxli n JOIN orders o ON o.id = n.to_id
-     WHERE n.to_kind = 'order' AND o.status = 'shipped' AND o.shipped_on IS NOT NULL
-  ) t
+  FROM v_cogs_lines t
   LEFT JOIN products p          ON p.id = t.product_id
   LEFT JOIN product_groups g    ON g.id = p.group_id
   LEFT JOIN sales_categories sc ON sc.code = g.sales_category
