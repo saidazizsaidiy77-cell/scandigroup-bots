@@ -3229,6 +3229,10 @@ test('maxsus buyurtma: guruh, harf, turkum; tannarxda ish haqi', async () => {
   const tf = (await admin('GET', '/api/cost/' + encodeURIComponent(e1.conveyor_no))).body;
   assert.deepEqual(tf.ish.map((x) => [x.oy, x.tur, Number(x.summa)]),
     [['2031-03', 'ishbay', 30], ['2031-03', 'oylik', 90]]);
+  //  Qaysi ishga necha puldan — bo'lim bo'yicha, yozilgan dona bilan.
+  const shk = tf.ishbay.find((x) => x.qty > 0);
+  assert.equal(shk.qty, 2);
+  assert.equal(shk.summa, 30);
   //  Sinov operatsiyasi boshqa testlarning kassa va P&L hisobiga tushmasin.
   await db.query(`DELETE FROM cash_ops WHERE doc_no = 'P31-9001'`);
   await db.query(`DELETE FROM piece_work WHERE conveyor_no = $1`, [e1.conveyor_no]);

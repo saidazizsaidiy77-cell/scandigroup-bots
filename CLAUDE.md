@@ -6017,6 +6017,14 @@ ishbayi AYIRILADI va faqat QOLGANI (boshliq, ishbaysiz bo'limlar)
 eskicha taqsimlanadi — bitta pul ikki marta sanalmaydi. Ochilgan
 qatorda «· ishbay» bo'lib yoziladi.
 
+**★ QAYSI ISHGA NECHA PULDAN** (zavod qarori, 2026-11; `/api/cost/:no`
+dagi `ishbay`). Ochilgan qatorda «Ish haqi» yozuvi bosilsa marshrutdagi
+narxi bor har bo'lim chiqadi: 1 dona narxi, yozilgan dona, summa,
+donaga va oldingi konver bilan farq. Stulda to'liq yo'l 16,10 $ (12
+dona — 193,20); 48 $ chiqqan konverda faqat Qoplash yozilgan — qolgan
+bo'lim **«yozilmagan»** (qizil) bo'lib turadi, yarmi yozilgani «4 / 12».
+Material jadvali joyida qoladi.
+
 **★ TSEX BOSHLIG'IGA — FAQAT BELGI BILAN** (zavod qarori, 2026-11;
 `cost.shop`, `workers.sees_cost`). Huquq `tsex_usta` rolida turadi,
 lekin tannarxni hamma boshliq emas, bittasi ko'radi — rol buni ajrata

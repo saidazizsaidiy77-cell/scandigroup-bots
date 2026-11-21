@@ -176,8 +176,10 @@ async function och(no) {
 function detal() {
   if (!det) return '<span class="muted">Yuklanmoqda…</span>';
   if (det.error) return esc(det.error);
-  const ish = (det.ish || []).length ? `<p style="margin:0 0 8px"><b>Ish haqi:</b> ${
-    det.ish.map((x) => `${esc(x.shop)} · ${esc(x.oy)}${x.tur === 'ishbay' ? ' · ishbay' : ''} — ${usd(x.summa)} $`).join(' \u00b7 ')}</p>` : '';
+  const ish = (det.ish || []).length ? `<p style="margin:0 0 8px;cursor:pointer" onclick="ishOch()"
+      title="Bosing — qaysi ishga necha puldan"><b>Ish haqi:</b> ${
+    det.ish.map((x) => `${esc(x.shop)} · ${esc(x.oy)}${x.tur === 'ishbay' ? ' · ishbay' : ''} — ${usd(x.summa)} $`).join(' \u00b7 ')}
+    <span class="muted">${ishOchiq ? '▴ yopish' : '▾ ishlar bo\'yicha'}</span></p>${ishOchiq ? ishJadval() : ''}` : '';
   if (!det.rows.length) return ish + '<span class="muted">Material biriktirilmagan.</span>';
   const p = det.prev_no;
   return ish + `<table style="background:transparent">
@@ -194,6 +196,43 @@ function detal() {
           <td>${Math.abs(f) < 0.005 ? '<span class="muted">—</span>'
             : `<span class="${f > 0 ? 'up' : 'down'}">${f > 0 ? '+' : ''}${usd(f)} $</span>`}</td>` : ''}</tr>`;
     }).join('')}</tbody></table>`;
+}
+
+//  ★ ISHBAY — QAYSI ISHGA NECHA PULDAN. Marshrutdagi narxi bor har
+//  bo'lim: bir dona narxi, yozilgan dona, summa va donaga — oldingi
+//  konver bilan yonma-yon. «Yozilmagan» — «Kim bajardi?» da xodim
+//  tanlanmagan: ish haqi farqi ko'pincha shundan.
+let ishOchiq = false;
+function ishOch() { ishOchiq = !ishOchiq; chiz(); }
+function ishJadval() {
+  const L = det.ishbay || [];
+  if (!L.length) return '<p class="muted" style="margin:0 0 10px">Bu mahsulotda ishbay narxi yo\'q — ish haqi tsex oyligidan taqsimlangan.</p>';
+  const p = det.prev_no, sn = det.soni || 0, ps = det.prev_soni || 0;
+  const dona = (v, n) => (n ? v / n : null);
+  let jami = 0, pjami = 0;
+  const qat = L.map((x) => {
+    jami += x.summa; pjami += x.prev_summa;
+    const d = dona(x.summa, sn), pd = dona(x.prev_summa, ps);
+    const f = d != null && pd != null ? d - pd : null;
+    return `<tr><td>${esc(x.section)}</td>
+      <td class="num">${x.rate == null ? '—' : usd(x.rate)}</td>
+      <td class="num">${x.qty ? x.qty + (x.qty < sn ? ` <span class="late">/ ${sn}</span>` : '')
+        : '<span class="late">yozilmagan</span>'}</td>
+      <td class="num">${x.summa ? usd(x.summa) : '—'}</td>
+      <td class="num">${x.summa && d != null ? usd(d) : '—'}</td>
+      ${p ? `<td class="num">${x.prev_summa && pd != null ? usd(pd) : '<span class="muted">—</span>'}</td>
+        <td>${f == null || Math.abs(f) < 0.005 ? '<span class="muted">—</span>'
+          : `<span class="${f > 0 ? 'up' : 'down'}">${f > 0 ? '+' : ''}${usd(f)} $</span>`}</td>` : ''}</tr>`;
+  }).join('');
+  return `<table style="background:transparent;margin-bottom:12px">
+    <thead><tr><th>Ish (bo'lim)</th><th class="num">1 dona narxi, $</th><th class="num">Dona</th>
+      <th class="num">Summa, $</th><th class="num">Donaga, $</th>
+      ${p ? `<th class="num">${esc(p)}: donaga</th><th>Farq</th>` : ''}</tr></thead>
+    <tbody>${qat}
+      <tr><td><b>Jami ishbay</b></td><td></td><td></td><td class="num"><b>${usd(jami)}</b></td>
+        <td class="num"><b>${sn ? usd(jami / sn) : '—'}</b></td>
+        ${p ? `<td class="num"><b>${ps ? usd(pjami / ps) : '—'}</b></td><td></td>` : ''}</tr>
+    </tbody></table>`;
 }
 
 //  Varaq o'zi aytsin: qaysi oraliq, qaysi qidiruv, kim va qachon.

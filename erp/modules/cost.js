@@ -263,8 +263,43 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
        FROM taqsim t JOIN shops sh ON sh.id = t.shop_id
       WHERE t.conveyor_no = $1 AND t.summa IS NOT NULL
       ORDER BY t.oy, sh.name, t.tur`, [k.conveyor_no]);
+  //  ★ ISHBAY — QAYSI ISHGA NECHA PULDAN (zavod qarori, 2026-11).
+  //  «Nega bu konverda ish haqi boshqa» degan savolning javobi: marshrut
+  //  bo'yicha narxi bor har bo'lim, uning bir dona narxi, «Kim bajardi?»
+  //  da yozilgan dona va summa — shu konver va oldingisi yonma-yon.
+  //  Yozilmagan bo'lim ham qatorda turadi: farq ko'pincha shundan.
+  const { rows: ib } = await db.query(
+    `WITH pr AS (
+       SELECT DISTINCT ON (u.conveyor_no) u.conveyor_no, u.product_id
+         FROM production_units u WHERE u.conveyor_no = ANY($1)
+        ORDER BY u.conveyor_no, u.id),
+     yol AS (
+       SELECT r.section_id, MIN(r.step_no) AS step
+         FROM pr JOIN v_product_route r ON r.product_id = pr.product_id
+        GROUP BY r.section_id),
+     pw AS (
+       SELECT conveyor_no, section_id, SUM(qty)::int AS qty, SUM(amount) AS summa
+         FROM piece_work WHERE conveyor_no = ANY($1)
+        GROUP BY 1, 2)
+     SELECT s.id AS section_id, s.name AS section, s.piece_rate AS rate,
+            yol.step, pw.conveyor_no, pw.qty, pw.summa::NUMERIC(14,2) AS summa
+       FROM sections s
+       LEFT JOIN yol ON yol.section_id = s.id
+       LEFT JOIN pw ON pw.section_id = s.id
+      WHERE pw.section_id IS NOT NULL
+         OR (yol.section_id IS NOT NULL AND COALESCE(s.piece_rate, 0) > 0)
+      ORDER BY yol.step NULLS LAST, s.name`,
+    [[k.conveyor_no, k.prev_no].filter(Boolean)]);
+  const ishbay = new Map();
+  for (const r of ib) {
+    const x = ishbay.get(r.section_id) || ishbay.set(r.section_id,
+      { section: r.section, rate: r.rate == null ? null : Number(r.rate),
+        qty: 0, summa: 0, prev_qty: 0, prev_summa: 0 }).get(r.section_id);
+    if (r.conveyor_no === k.conveyor_no) { x.qty += r.qty; x.summa += Number(r.summa); }
+    else if (r.conveyor_no === k.prev_no) { x.prev_qty += r.qty; x.prev_summa += Number(r.summa); }
+  }
   res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
-             prev_soni: k.prev_soni, rows: out, ish });
+             prev_soni: k.prev_soni, rows: out, ish, ishbay: [...ishbay.values()] });
 }));
 
 module.exports = router;
