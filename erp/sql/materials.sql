@@ -1522,9 +1522,20 @@ END $$;
 --  `furnitura` — yuk xatiga yozilgani. Foyda-zarar ham, «qaysi qismi
 --  normativdan» degan izoh ham shundan o'qiydi — ikki nusxa bir kun
 --  ajralib ketardi.
+--
+--  ★ SARF NORMATIVDAN ANCHA KAM BO'LSA — NORMATIV (zavod qarori,
+--  2026-11). Sarfi QISMAN yozilgan konver (bir-ikki bo'lim) haqiqiy
+--  sarf bo'lib o'tib, tannarxni yana kam ko'rsatardi. Chegara BAZADA
+--  (`app_settings.normativ_chegara`, foiz, standarti 70): bir donaning
+--  sarfi normativning shu foizidan kam bo'lsa normativ olinadi.
+INSERT INTO app_settings (key, val) VALUES ('normativ_chegara', '70')
+ON CONFLICT (key) DO NOTHING;
 DROP VIEW IF EXISTS v_cogs_lines CASCADE;
 CREATE VIEW v_cogs_lines AS
-WITH ortacha AS (
+WITH chegara AS (
+      SELECT COALESCE((SELECT NULLIF(val, '')::numeric FROM app_settings
+                        WHERE key = 'normativ_chegara'), 70) / 100 AS k),
+    ortacha AS (
       SELECT place_id, material_id,
              SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
              / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
@@ -1566,17 +1577,22 @@ WITH ortacha AS (
         LEFT JOIN dona d ON d.conveyor_no = u.conveyor_no)
 SELECT q.pl_month, q.product_id, q.conveyor_no, q.qty,
        CASE WHEN q.buy_price IS NOT NULL THEN q.qty * q.buy_price
-            WHEN q.narx IS NOT NULL      THEN q.qty * q.narx
+            WHEN q.narx IS NOT NULL AND (p.std_cost IS NULL
+                 OR q.narx >= p.std_cost * c.k) THEN q.qty * q.narx
             WHEN p.std_cost IS NOT NULL  THEN q.qty * p.std_cost END AS amount,
        CASE WHEN q.buy_price IS NOT NULL THEN 'xarid'
-            WHEN q.narx IS NOT NULL      THEN 'sarf'
+            WHEN q.narx IS NOT NULL AND (p.std_cost IS NULL
+                 OR q.narx >= p.std_cost * c.k) THEN 'sarf'
             WHEN p.std_cost IS NOT NULL  THEN 'normativ'
-            ELSE 'yoq' END AS manba
-  FROM qator q JOIN products p ON p.id = q.product_id
+            ELSE 'yoq' END AS manba,
+       --  Haqiqiy sarf (donasi) — normativ olingan qatorda ham turadi:
+       --  Narxlar sahifasidagi «haqiqiy o'rtacha» shundan.
+       q.narx AS sarf_narx
+  FROM qator q JOIN products p ON p.id = q.product_id CROSS JOIN chegara c
 UNION ALL
 --  yuk xatiga yozilgan furnitura — o'sha mahsulotning turkumiga
 SELECT date_trunc('month', o.shipped_on)::date, n.product_id, NULL, NULL,
-       n.summa, 'furnitura'
+       n.summa, 'furnitura', NULL
   FROM narxli n JOIN orders o ON o.id = n.to_id
  WHERE n.to_kind = 'order' AND o.status = 'shipped' AND o.shipped_on IS NOT NULL;
 

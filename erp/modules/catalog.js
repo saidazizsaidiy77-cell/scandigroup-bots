@@ -371,9 +371,9 @@ async function narxRows(query) {
             --  Haqiqiy o'rtacha — normativni qo'yishga yordam: sarfi
             --  yozilgan, chiqib ketgan konverlarning bir donasi
             --  (foyda-zarar bilan BITTA manba, v_cogs_lines).
-            (SELECT (SUM(c.amount) / NULLIF(SUM(c.qty), 0))::numeric(14,2)
+            (SELECT (SUM(c.qty * c.sarf_narx) / NULLIF(SUM(c.qty), 0))::numeric(14,2)
                FROM v_cogs_lines c
-              WHERE c.product_id = p.id AND c.manba = 'sarf') AS fakt_cost
+              WHERE c.product_id = p.id AND c.sarf_narx IS NOT NULL) AS fakt_cost
        FROM products p JOIN product_groups g ON g.id = p.group_id
       WHERE ($1::text IS NULL
              OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
