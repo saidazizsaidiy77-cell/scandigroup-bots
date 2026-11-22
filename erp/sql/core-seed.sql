@@ -113,6 +113,10 @@ INSERT INTO permissions (code, module, name) VALUES
   --  ★ O'Z TSEXINING TANNARXI (zavod qarori, 2026-11): stul boshlig'iga
   --  stul konverlari — faqat o'qish, tsex doirasi (`modules/cost.js`).
   ('cost.shop',         'reports',    'O''z tsexining tannarxini ko''rish'),
+  --  ★ NORMATIV TANNARX (zavod qarori, 2026-11): faqat direktor va
+  --  administrator ko'radi va qo'yadi — Narxlar sahifasidagi ustun,
+  --  Excel va foyda-zarardagi «shundan normativ» qatori.
+  ('cost.std',          'reports',    'Normativ tannarxni ko''rish va qo''yish'),
   -- Boshqaruv
   ('admin.users',       'admin',      'Xodim va rollarni boshqarish'),
   ('admin.audit',       'admin',      'Audit jurnalini ko''rish')
@@ -211,6 +215,7 @@ UNION ALL SELECT 'direktor', 'production.reports'
 UNION ALL SELECT 'direktor', 'production.approve'
 --  Chegirmani ham DIREKTOR tasdiqlaydi: narx siyosati uning ishi.
 UNION ALL SELECT 'direktor', 'sales.discount'
+UNION ALL SELECT 'direktor', 'cost.std'
 UNION ALL SELECT 'direktor', 'admin.audit'
 ON CONFLICT DO NOTHING;
 

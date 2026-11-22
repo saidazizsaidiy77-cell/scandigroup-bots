@@ -1223,7 +1223,9 @@ router.get('/pl', need(...READ), wrap(async (req, res) => {
   //  ★ TANNARX QAYERDAN — oy bo'yicha manba (izoh: sql/materials.sql,
   //  `v_cogs_lines`): qancha qismi normativdan va nechta dona umuman
   //  tannarxsiz. Raqamning o'zi yolg'on emas, tushuntirilmagani bo'lardi.
-  const { rows: manba } = await db.query(
+  //  Faqat `cost.std` da (direktor, administrator) — normativ tannarx.
+  const { rows: manba } = !req.user.permissions.includes('cost.std') ? { rows: [] }
+    : await db.query(
     `SELECT to_char(pl_month, 'YYYY-MM') AS mon, manba,
             COALESCE(SUM(amount), 0)::numeric(16,2) AS amount,
             COALESCE(SUM(qty), 0)::numeric AS qty

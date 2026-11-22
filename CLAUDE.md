@@ -3388,6 +3388,11 @@ chegara bazada — `app_settings.normativ_chegara`, foiz, standarti 90
 chiqqan konverlardan, raqam qo'yishga yordam. Foyda-zararda tannarx
 ochilganda «shundan normativ tannarxdan» va qizil «tannarxi yo'q,
 dona» qatorlari turadi (`/api/cash/pl` dagi `manba`). `v_cogs_lines`
+**Ko'rish va qo'yish faqat direktor va administratorda** (`cost.std`,
+zavod qarori 2026-11): qolganlarga Narxlardagi ustun, Excel ustuni va
+foyda-zarardagi «shundan normativ» qatori kelmaydi — tekshiruv
+SERVERDA. Foyda-zararning O'Z tannarx raqami esa hammaga bir xil.
+`v_cogs_lines`
 `v_material_flow` ga bog'liq, shuning uchun u o'sha view'dan OLDIN
 CASCADE bilan tashlanadi va fayl oxirida qayta quriladi.
 

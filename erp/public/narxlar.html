@@ -64,7 +64,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g,
 const money = (v) => v == null || v === '' ? ''
   : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 
-let rows = [], groups = [];
+let rows = [], groups = [], STD = false;
 
 function toast(msg, bad) {
   const el = document.createElement('div');
@@ -95,7 +95,8 @@ function params() {
 }
 
 async function load() {
-  rows = (await App.api('/api/catalog/prices?' + params())).rows;
+  const d = await App.api('/api/catalog/prices?' + params());
+  rows = d.rows; STD = !!d.std;
   draw();
 }
 
@@ -117,7 +118,7 @@ function draw() {
   $('body').innerHTML = `<div style="overflow-x:auto"><table>
     <thead><tr><th>Mahsulot</th><th>Guruh</th>
       <th class="num">Ulgurji, $</th><th class="num">Chakana, $</th>
-      <th class="num" title="Sarfi yozilmagan konver foyda-zararga shu narx bilan tushadi">Normativ tannarx, $</th></tr></thead>
+      ${STD ? '<th class="num" title="Sarfi yozilmagan konver foyda-zararga shu narx bilan tushadi">Normativ tannarx, $</th>' : ''}</tr></thead>
     <tbody>${rows.map((r) => `<tr${r.active ? '' : ' style="opacity:.5"'}>
       <td><b>${esc(r.name)}</b>${r.size_label
           ? ` <span class="muted">· ${esc(r.size_label)}</span>` : ''}
@@ -136,12 +137,12 @@ function draw() {
       <!--  ★ NORMATIV TANNARX (izoh: sql/catalog.sql). Ostida HAQIQIY
             o'rtacha — sarfi yozilgan chiqqan konverlardan: raqamni
             ko'rib qo'yish oson bo'lsin. -->
-      <td class="num"><div class="row" style="gap:6px;justify-content:flex-end">
+      ${STD ? `<td class="num"><div class="row" style="gap:6px;justify-content:flex-end">
         <input type="number" step="0.01" min="0"
           value="${r.std_cost ?? ''}" style="width:110px;text-align:right"
           onchange="saqla(${r.id}, 'std_cost', this)">
         <span class="belgi" style="width:14px"></span></div>
-        ${r.fakt_cost != null ? `<div class="muted" style="font-size:11px">haqiqiy o'rtacha ${Number(r.fakt_cost).toFixed(2).replace('.', ',')}</div>` : ''}</td>
+        ${r.fakt_cost != null ? `<div class="muted" style="font-size:11px">haqiqiy o'rtacha ${Number(r.fakt_cost).toFixed(2).replace('.', ',')}</div>` : ''}</td>` : ''}
     </tr>`).join('')}</tbody></table></div>`;
 }
 

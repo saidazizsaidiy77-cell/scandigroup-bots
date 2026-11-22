@@ -306,6 +306,9 @@ router.patch('/products/:id', need('production.manage', 'sales.discount'),
   if ((opt !== undefined || ret !== undefined || std !== undefined)
       && !req.user.permissions.includes('sales.discount'))
     return res.status(403).json({ error: 'Narxni direktor qo\'yadi' });
+  //  ★ Normativ tannarx — faqat `cost.std` (direktor, administrator).
+  if (std !== undefined && !req.user.permissions.includes('cost.std'))
+    return res.status(403).json({ error: 'Normativ tannarxni direktor qo\'yadi' });
   if ((opt != null && !(opt >= 0)) || (ret != null && !(ret >= 0))
       || (std != null && !(std >= 0)))
     return res.status(400).json({ error: "Narx noto'g'ri" });
@@ -362,7 +365,10 @@ const PRICE = ['sales.discount'];
 //  Ro'yxat BITTA so'rovdan: ekran ham, Excel fayli ham. Ikki nusxa
 //  yozilsa filtr bir kun ajralib, faylda ekrandagidan boshqa qatorlar
 //  turardi.
-async function narxRows(query) {
+async function narxRows(query, user) {
+  //  ★ Normativ tannarx faqat `cost.std` da (direktor, administrator):
+  //  qolganiga ustun ham, «haqiqiy o'rtacha» ham kelmaydi.
+  const std = (user.permissions || []).includes('cost.std');
   const q = String(query.q || '').trim() || null;
   const { rows } = await db.query(
     `SELECT p.id, p.sku, p.name, p.size_label, p.active,
@@ -382,11 +388,13 @@ async function narxRows(query) {
       ORDER BY g.sort, p.name, p.size_label NULLS FIRST
       LIMIT 2000`,
     [q, Number(query.group_id) || null, query.all === '1']);
+  if (!std) rows.forEach((r) => { delete r.std_cost; delete r.fakt_cost; });
   return rows;
 }
 
 router.get('/prices', need(...PRICE), wrap(async (req, res) => {
-  res.json({ rows: await narxRows(req.query) });
+  res.json({ rows: await narxRows(req.query, req.user),
+             std: req.user.permissions.includes('cost.std') });
 }));
 
 //  ★ EXCELGA YUKLASH (zavod qarori, 2026-10). Narx ro'yxati boshqa
@@ -405,13 +413,14 @@ const csvCell = (v) => {
 const csvNum = (v) => v == null ? '' : String(v).replace('.', ',');
 
 router.get('/prices/export', need(...PRICE), wrap(async (req, res) => {
-  const rows = await narxRows(req.query);
-  const head = ['Mahsulot', "O'lcham", 'SKU', 'Guruh',
-                'Ulgurji, $', 'Chakana, $', 'Normativ tannarx, $',
-                "Haqiqiy o'rtacha, $", 'Holati'];
+  const rows = await narxRows(req.query, req.user);
+  const std = req.user.permissions.includes('cost.std');
+  const head = ['Mahsulot', "O'lcham", 'SKU', 'Guruh', 'Ulgurji, $', 'Chakana, $',
+                ...(std ? ['Normativ tannarx, $', "Haqiqiy o'rtacha, $"] : []), 'Holati'];
   const body = rows.map((r) => [
     csvCell(r.name), csvCell(r.size_label), csvCell(r.sku), csvCell(r.group_name),
-    csvNum(r.price_opt), csvNum(r.price_retail), csvNum(r.std_cost), csvNum(r.fakt_cost),
+    csvNum(r.price_opt), csvNum(r.price_retail),
+    ...(std ? [csvNum(r.std_cost), csvNum(r.fakt_cost)] : []),
     r.active ? '' : 'faolsiz'].join(';'));
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition',

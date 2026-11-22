@@ -12414,6 +12414,11 @@ test('ta\'sischi hamma narsani ko\'radi, hech narsaga tegmaydi', async () => {
                      '/api/admin/audit'])
     assert.equal((await eg('GET', yol)).status, 200, yol + ' ochilmadi');
 
+  //  ★ NORMATIV TANNARX faqat direktor va administratorda (`cost.std`):
+  //  ta'sischi foyda-zararni ko'radi, lekin «shundan normativ» kelmaydi.
+  assert.ok(!huq.includes('cost.std'));
+  assert.deepEqual((await eg('GET', '/api/cash/pl')).body.manba, []);
+
   //  ★ KPI — HAMMA MENEJERNIKI, LEKIN REJA QO'YMAYDI. Ilgari
   //  ikkalasi bitta huquqda edi va ta'sischi o'z varag'ini (bo'sh)
   //  ko'rib, butun bo'limning natijasini ko'ra olmasdi.
