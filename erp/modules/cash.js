@@ -1209,6 +1209,54 @@ router.get('/dashboard', need(...READ), wrap(async (req, res) => {
   });
 }));
 
+//  ★ MAHSULOT BO'YICHA FOYDA (zavod qarori, 2026-11; foyda-zarardagi
+//  «Mahsulotlar bo'yicha» kartochkasi). Turkum qatori «qaysi turkumdan
+//  qancha» deydi, direktorning keyingi savoli esa «qaysi MAHSULOTDAN» —
+//  foydasi past mahsulotni ro'yxatdan chiqarish uchun. Manba v_pl_month
+//  bilan AYNAN bir xil: savdo chiqqan konverdan (qaytgani qaytgan oyda
+//  ayiriladi), tannarx v_cogs_lines dan; test yig'indini turkum
+//  qatorlariga solishtiradi.
+router.get('/pl/products', need(...READ), wrap(async (req, res) => {
+  const bugun = new Date();
+  const from = oyQ(req.query.from, `${bugun.getFullYear()}-01-01`);
+  const to   = oyQ(req.query.to,   `${bugun.getFullYear()}-12-01`);
+  const { rows } = await db.query(
+    `WITH s AS (
+       SELECT product_id, SUM(qty) AS qty, SUM(amount) AS savdo FROM (
+         SELECT u.product_id, u.qty::numeric AS qty, u.total_amount AS amount,
+                date_trunc('month', u.ship_on)::date AS m
+           FROM production_units u
+          WHERE u.status = 'shipped' AND u.ship_on IS NOT NULL
+         UNION ALL
+         SELECT u.product_id, -i.qty::numeric, -(i.qty * COALESCE(i.price, 0)),
+                date_trunc('month', r.ret_on)::date
+           FROM cust_return_items i
+           JOIN cust_returns r ON r.id = i.return_id AND r.status = 'accepted'
+           JOIN production_units u ON u.id = i.unit_id) x
+        WHERE m >= $1 AND m <= $2
+        GROUP BY 1),
+     c AS (
+       SELECT product_id,
+              SUM(amount) FILTER (WHERE amount IS NOT NULL) AS tannarx,
+              SUM(qty) FILTER (WHERE manba = 'yoq') AS yoq
+         FROM v_cogs_lines
+        WHERE pl_month >= $1 AND pl_month <= $2
+        GROUP BY 1)
+     SELECT p.id AS product_id, p.name, p.size_label, g.name AS group_name, g.uom,
+            COALESCE(sc.name, 'Turkumsiz') AS turkum, COALESCE(sc.sort, 99) AS turkum_sort,
+            COALESCE(s.qty, 0)::numeric AS qty,
+            COALESCE(s.savdo, 0)::numeric(16,2) AS savdo,
+            COALESCE(c.tannarx, 0)::numeric(16,2) AS tannarx,
+            COALESCE(c.yoq, 0)::numeric AS yoq
+       FROM s FULL JOIN c USING (product_id)
+       JOIN products p            ON p.id = COALESCE(s.product_id, c.product_id)
+       JOIN product_groups g      ON g.id = p.group_id
+       LEFT JOIN sales_categories sc ON sc.code = g.sales_category
+      ORDER BY COALESCE(s.savdo, 0) - COALESCE(c.tannarx, 0) DESC`,
+    [from, to]);
+  res.json({ from: from.slice(0, 7), to: to.slice(0, 7), rows });
+}));
+
 router.get('/pl', need(...READ), wrap(async (req, res) => {
   const bugun = new Date();
   //  Sukut bo'yicha — joriy yil: direktor hisobotni «shu yil qanday»

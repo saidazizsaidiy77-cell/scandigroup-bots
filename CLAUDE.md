@@ -3411,6 +3411,19 @@ qatori (tannarx %, harajat %, sof marja %) ataylab yo'q. «Jami» —
 yig'indilar nisbati, oylik foizlarning o'rtachasi EMAS. Foyda
 kartochkasi ostida ham, CSV da ham. Moliya paneliga qo'shilmadi.
 
+**★ MAHSULOT BO'YICHA FOYDA** (zavod qarori, 2026-11;
+`GET /api/cash/pl/products`, foyda-zarar ostidagi «Mahsulotlar
+bo'yicha» kartochkasi). Turkum «nimadan qancha» deydi, direktorning
+keyingi savoli — «qaysi MAHSULOTDAN»: foydasi yuqorisiga fokus,
+foydasizini ro'yxatdan chiqarish. Har mahsulot: sotildi · savdo ·
+tannarx · yalpi foyda · marja %, sarlavha bosilsa saralanadi,
+standarti yalpi foyda bo'yicha. Turkum chiplari va qidiruv (nom,
+turi); jadvaldagi turkum qatori (savdo, tannarx, yalpi, marja) bosilsa
+shu turkum ochiladi. Manba `v_pl_month` bilan AYNAN bir xil (savdo
+konverdan, qaytgani qaytgan oyda; tannarx `v_cogs_lines`), test
+yig'indini turkum qatorlariga solishtiradi. Tannarxsiz donasi bor
+mahsulot qizil izoh bilan — marjasi haqiqatdan yuqori.
+
 **★ TA'MINOTCHIGA TO'LOV FOYDA-ZARARDAN CHIQDI** (`expense_items.in_pl`,
 `migration_flags`: `taminot-pl-dan`). Material tannarx bo'lib keladi;
 to'lov ham harajat bo'lib tursa bitta material ikki marta ayirilardi.

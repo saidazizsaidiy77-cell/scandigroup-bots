@@ -39,6 +39,20 @@
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
 </div>
 
+<!--  ★ MAHSULOT BO'YICHA FOYDA (zavod qarori, 2026-11): turkum «nimadan
+      qancha» deydi, bu esa «qaysi MAHSULOTDAN» — foydasi yuqorisiga
+      fokus, foydasizini ro'yxatdan chiqarish uchun. Oraliq tepadagi
+      bilan bir xil; turkum qatori bosilsa shu yerda ochiladi. -->
+<div class="card" style="margin-top:16px" id="mahCard">
+  <h2>Mahsulotlar bo'yicha — qaysi mahsulotdan qancha foyda</h2>
+  <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 12px">
+    <span id="mahChip" class="row" style="flex-wrap:wrap;gap:6px"></span>
+    <input id="mahQ" placeholder="Mahsulot yoki turi (penal, stul…)" style="min-width:240px"
+      oninput="mahDraw()">
+  </div>
+  <div id="mahBody"><p class="muted">Yuklanmoqda…</p></div>
+</div>
+
 <script>
 //  FOYDA-ZARAR — oy bo'yicha ustunlar, ko'rsatkichlar qator.
 //
@@ -167,13 +181,15 @@ function draw() {
     const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
     const by = {};
     ms.forEach(m => by[m] = (t.by[m] || 0) - (tc[m] || 0));
-    return qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by);
+    return qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by, '',
+      ` data-t="${esc(t.name)}" onclick="mahTur(this.dataset.t)" style="cursor:pointer" title="Mahsulotlarini ko'rish"`);
   }).join('');
   const turMarja = () => tur.map(t => {
     const tc = (tan.find(x => x.name === t.name) || { by: {} }).by;
     const by = {};
     ms.forEach(m => by[m] = (t.by[m] || 0) - (tc[m] || 0));
-    return foiz(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by, t.by);
+    return foiz(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`, by, t.by,
+      ` data-t="${esc(t.name)}" onclick="mahTur(this.dataset.t)" style="cursor:pointer" title="Mahsulotlarini ko'rish"`);
   }).join('');
 
   //  ★ TANNARX QAYERDAN (zavod qarori, 2026-11): sarfi yozilmagan
@@ -238,7 +254,7 @@ function draw() {
         inc, '', ` onclick="toggle('SOTUV')" style="cursor:pointer"`)}
       ${ochiq.has('SOTUV') ? tur.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
-              t.by)).join('') : ''}
+              t.by, '', ` data-t="${esc(t.name)}" onclick="mahTur(this.dataset.t)" style="cursor:pointer" title="Mahsulotlarini ko'rish"`)).join('') : ''}
       <!--  ★ AVVAL JAMI, KEYIN TAFSILOTI — pul oqimi bilan bir xil.
             Direktorning savoli «qancha harajat bo'ldi», keyin esa
             «nimaga». Ilgari guruhlar yuqorida turib, «Jami harajat»
@@ -252,7 +268,7 @@ function draw() {
         cogs, '', ` onclick="toggle('TANNARX')" style="cursor:pointer"`)}
       ${ochiq.has('TANNARX') ? tan.map(t =>
         qator(`<span style="padding-left:22px" class="muted">${esc(t.name)}</span>`,
-              t.by)).join('') + manbaQator() : ''}
+              t.by, '', ` data-t="${esc(t.name)}" onclick="mahTur(this.dataset.t)" style="cursor:pointer" title="Mahsulotlarini ko'rish"`)).join('') + manbaQator() : ''}
       ${qator(`<span class="muted" style="margin-right:6px">${
           ochiq.has('YALPI') ? '&minus;' : '+'}</span><b>Yalpi foyda</b>`,
         yalpi, '', ` onclick="toggle('YALPI')" style="cursor:pointer"`)}
@@ -355,13 +371,82 @@ function exportCsv() {
   a.click();
 }
 
+//  ── Mahsulotlar bo'yicha ─────────────────────────────────────────
+let mah = [], mahT = '', mahS = { k: 'yalpi', d: -1 };
+const mahF = (v) => (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+
+function mahTur(t) {
+  mahT = t; mahDraw();
+  $('mahCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function mahSort(k) {
+  mahS = mahS.k === k ? { k, d: -mahS.d } : { k, d: k === 'name' || k === 'group_name' ? 1 : -1 };
+  mahDraw();
+}
+
+function mahDraw() {
+  const turlar = [...new Map(mah.map(r => [r.turkum, r.turkum_sort])).entries()]
+    .sort((a, b) => a[1] - b[1]).map(x => x[0]);
+  if (mahT && !turlar.includes(mahT)) mahT = '';
+  $('mahChip').innerHTML = ['', ...turlar].map(t =>
+    `<button class="${t === mahT ? 'primary' : ''}" data-t="${esc(t)}"
+       onclick="mahT=this.dataset.t;mahDraw()">${t ? esc(t) : 'Hammasi'}</button>`).join('');
+  const q = $('mahQ').value.trim().toLowerCase();
+  const rows = mah.map(r => ({ ...r, savdo: Number(r.savdo), tannarx: Number(r.tannarx),
+      qty: Number(r.qty), yoq: Number(r.yoq) }))
+    .map(r => ({ ...r, yalpi: r.savdo - r.tannarx,
+      marja: r.savdo ? (r.savdo - r.tannarx) / r.savdo * 100 : null }))
+    .filter(r => (!mahT || r.turkum === mahT) && (!q
+      || [r.name, r.size_label, r.group_name, r.turkum].some(x => String(x || '').toLowerCase().includes(q))));
+  const k = mahS.k;
+  rows.sort((a, b) => {
+    const x = a[k], y = b[k];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * mahS.d;
+  });
+  if (!rows.length) { $('mahBody').innerHTML = '<p class="muted">Bu oraliqda sotilgan mahsulot yo\'q.</p>'; return; }
+  const J = rows.reduce((a, r) => ({ savdo: a.savdo + r.savdo, tannarx: a.tannarx + r.tannarx,
+    yoq: a.yoq + r.yoq }), { savdo: 0, tannarx: 0, yoq: 0 });
+  const fz = (v) => v == null ? '<span class="muted">&mdash;</span>'
+    : `<span${v < 0 ? ' style="color:var(--bad)"' : ''}>${v.toFixed(1).replace('.', ',')}%</span>`;
+  const th = (key, nom, num) => `<th class="${num ? 'num' : ''}" style="cursor:pointer"
+    onclick="mahSort('${key}')">${nom}${mahS.k === key ? (mahS.d > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+  $('mahBody').innerHTML = `<div class="tbox"><table>
+    <thead><tr>${th('name', 'Mahsulot')}${th('group_name', 'Turi')}${th('qty', 'Sotildi', 1)}
+      ${th('savdo', 'Savdo, $', 1)}${th('tannarx', 'Tannarx, $', 1)}
+      ${th('yalpi', 'Yalpi foyda, $', 1)}${th('marja', 'Marja, %', 1)}</tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td><b>${esc(r.name)}</b>${r.size_label ? ` <span class="muted">· ${esc(r.size_label)}</span>` : ''}
+        ${r.yoq ? `<div style="font-size:11px;color:var(--bad)">${mahF(r.yoq)} ${esc(r.uom)} tannarxsiz — foyda yuqori ko'rinadi</div>` : ''}</td>
+      <td class="muted">${esc(r.group_name)}</td>
+      <td class="num">${mahF(r.qty)} <span class="muted">${esc(r.uom)}</span></td>
+      <td class="num">${son(r.savdo)}</td>
+      <td class="num">${son(r.tannarx)}</td>
+      <td class="num"><b>${son(r.yalpi)}</b></td>
+      <td class="num">${fz(r.marja)}</td></tr>`).join('')}
+      <tr><td><b>Jami</b> <span class="muted">· ${rows.length} ta mahsulot</span>
+        ${J.yoq ? `<div style="font-size:11px;color:var(--bad)">${mahF(J.yoq)} dona/komplekt tannarxsiz</div>` : ''}</td>
+        <td></td><td></td>
+        <td class="num"><b>${usd(J.savdo)}</b></td><td class="num"><b>${usd(J.tannarx)}</b></td>
+        <td class="num"><b>${son(J.savdo - J.tannarx)}</b></td>
+        <td class="num"><b>${fz(J.savdo ? (J.savdo - J.tannarx) / J.savdo * 100 : null)}</b></td></tr>
+    </tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-top:8px">Tepadagi oraliq bo'yicha. Sarlavha bosilsa
+      saralanadi. Tannarxsiz donasi bor mahsulotda marja haqiqatdan yuqori — avval normativ
+      tannarxni yozing. Ish haqi va harajat bu yerda yo'q: bu YALPI foyda.</p>`;
+}
+
 async function load() {
   const q = new URLSearchParams();
   if ($('fFrom').value) q.set('from', $('fFrom').value);
   if ($('fTo').value)   q.set('to', $('fTo').value);
-  d = await App.api('/api/cash/pl?' + q);
+  const [a, b] = await Promise.all([App.api('/api/cash/pl?' + q),
+                                    App.api('/api/cash/pl/products?' + q)]);
+  d = a; mah = b.rows;
   $('fFrom').value = d.from; $('fTo').value = d.to;
-  draw();
+  draw(); mahDraw();
 }
 
 App.start(load, 'cash.view', 'cash.manage');
