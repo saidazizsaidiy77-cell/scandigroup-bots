@@ -14108,6 +14108,16 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   assert.ok(cogs.every((r) => r.item_name !== 'Furnitura'), 'furnitura alohida qator emas');
   assert.ok(cogs.some((r) => r.item_name === 'Mehmonxona to\'plami'), 'savdo turkumi bo\'yicha');
 
+  //  ★ MAHSULOT BO'YICHA FOYDA: yig'indi turkum qatorlariga AYNAN teng
+  const mp = (await admin('GET', '/api/cash/pl/products?from=2032-04&to=2032-04')).body.rows;
+  const sm = (a, k) => a.reduce((x, r) => x + Number(r[k]), 0);
+  assert.equal(Math.round(sm(mp, 'tannarx') * 100), Math.round(sm(cogs, 'amount_usd') * 100));
+  assert.equal(Math.round(sm(mp, 'savdo') * 100),
+    Math.round(sm(pl.rows.filter((r) => r.kind === 'income'), 'amount_usd') * 100));
+  const mpen = mp.find((r) => r.product_id === penal.id);
+  assert.equal(Number(mpen.tannarx), 72);
+  assert.equal(Number(mpen.qty), 3);
+
   //  Konver pasportida furnitura chiqqan donaga qo'shiladi
   const ps = (await admin('GET', '/api/materials/conveyor?no=' + u.conveyor_no)).body;
   assert.equal(ps.furn.length, 1);
