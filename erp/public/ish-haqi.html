@@ -242,8 +242,31 @@ function detail(r) {
       <tbody>${d.piece.map(p => `<tr><td>${esc(p.section)}</td>
         <td>${esc(p.product || '—')}<div class="muted" style="font-size:11px">${esc(p.konverlar || '')}</div></td>
         <td class="num">${p.qty}</td><td class="num">${money(p.rate)}</td>
-        <td class="num">${money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        <td class="num">${money(p.amount)}</td></tr>`).join('')}</tbody>
+      <tfoot>${pieceJami(d.piece)}</tfoot></table></div>` : '';
   return tahrir + ishbay + pays;
+}
+
+//  ★ JAMI — BO'LIM BO'YICHA. Bitta stul Zborkadan ham, Qoplashdan ham
+//  o'tadi: hamma qatorni qo'shsak bir dona ikki marta sanalardi. Shuning
+//  uchun dona har bo'limda alohida, summa esa umumiy (pul qo'shiladi).
+function pieceJami(rows) {
+  const g = new Map();
+  for (const p of rows) {
+    const s = g.get(p.section) || { qty: 0, amount: 0 };
+    s.qty += Number(p.qty) || 0; s.amount += Number(p.amount) || 0;
+    g.set(p.section, s);
+  }
+  const bir = g.size === 1;
+  let html = [...g].map(([sec, s]) => `<tr style="font-weight:600">
+      <td colspan="2">Jami${bir ? '' : ' — ' + esc(sec)}</td>
+      <td class="num">${s.qty}</td><td></td><td class="num">${money(s.amount)}</td></tr>`).join('');
+  if (!bir) {
+    const sum = [...g.values()].reduce((a, s) => a + s.amount, 0);
+    html += `<tr style="font-weight:700"><td colspan="4">Jami summa</td>
+      <td class="num">${money(sum)}</td></tr>`;
+  }
+  return html;
 }
 
 async function saqla(id) {
