@@ -940,6 +940,40 @@ test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
     `SELECT COALESCE(SUM(qty), 0)::int AS qty FROM piece_work
       WHERE conveyor_no = $1 AND section_id = $2`, [u.conveyor_no, ZBOR.id]);
   assert.ok(qoldi.qty < 10, 'qaytarilgan o\'tkazishning ishbayi o\'chdi');
+
+  //  ★ MODEL NARXI (zavod qarori, 2026-11): Onix Zborkasi 2 $ — bo'lim
+  //  narxidan ustun; «qayta» bilan hisoblangan yozuvlar ham 2 $ ga o'tadi.
+  assert.equal((await stul('PUT', '/api/ishbay/product',
+    { product_id: yol.id, section_id: ZBOR.id, rate: 2, qayta: true })).status, 403);
+  const mr = await admin('PUT', '/api/ishbay/product',
+    { product_id: yol.id, section_id: ZBOR.id, rate: 2, qayta: true });
+  assert.equal(mr.status, 200, mr.text);
+  assert.ok(mr.body.qayta.n > 0, 'eski yozuvlar qayta hisoblandi');
+  const qayta = await H.id(
+    `SELECT COUNT(*) FILTER (WHERE rate <> 2)::int AS boshqa,
+            SUM(qty)::int AS qty, SUM(amount)::float AS amount
+       FROM piece_work WHERE product_id = $1 AND section_id = $2`, [yol.id, ZBOR.id]);
+  assert.equal(qayta.boshqa, 0);
+  assert.equal(qayta.amount, qayta.qty * 2);
+  const g = (await admin('GET', '/api/ishbay')).body;
+  assert.ok(g.rates.some((r) => r.product_id === yol.id && Number(r.rate) === 2));
+  //  Keyingi ish ham 2 $ dan
+  const u2 = (await admin('POST', '/api/units/', {
+    items: [{ product_id: yol.id, qty: 3, section_id: ZBOR.id }] })).body.created[0];
+  await xomsiz();
+  assert.equal((await admin('POST', '/api/units/move', {
+    items: [{ unit_id: u2.id }], ishchi })).status, 200);
+  const yangi = await H.id(
+    `SELECT rate::float AS rate, amount::float AS amount FROM piece_work
+      WHERE conveyor_no = $1 AND section_id = $2`, [u2.conveyor_no, ZBOR.id]);
+  assert.equal(yangi.rate, 2);
+  assert.equal(yangi.amount, 6);
+  //  Olib tashlansa bo'lim narxi qaytadi (qayta bilan — eski yozuvlar ham)
+  assert.equal((await admin('PUT', '/api/ishbay/product',
+    { product_id: yol.id, section_id: ZBOR.id, rate: '', qayta: true })).status, 200);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM piece_work
+      WHERE product_id = $1 AND section_id = $2 AND rate <> 3.8`, [yol.id, ZBOR.id])).n, 0);
   await db.query(`SELECT 1`);
 });
 

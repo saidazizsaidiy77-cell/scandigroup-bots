@@ -1073,6 +1073,18 @@ CREATE TABLE IF NOT EXISTS piece_work (
 CREATE INDEX IF NOT EXISTS piece_work_worker_idx ON piece_work (worker_id, work_date);
 CREATE INDEX IF NOT EXISTS piece_work_conv_idx   ON piece_work (conveyor_no, section_id);
 
+--  ★ MODEL BO'YICHA NARX (zavod qarori, 2026-11). Bo'lim narxi umumiy
+--  qoida, lekin ba'zi modelda ish boshqacha: Onix stulning Zborkasi
+--  3,8 $ emas, 2 $. Mahsulot narxi bo'limnikidan USTUN, bo'sh bo'lsa
+--  bo'limniki olinadi (`ishbayKerak`, `modules/units.js`). Narx saytdan
+--  qo'yiladi (`/ishbay.html`), kodga model nomi yozilmaydi.
+CREATE TABLE IF NOT EXISTS product_piece_rates (
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  section_id INT NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  rate       NUMERIC(10,2) NOT NULL CHECK (rate > 0),
+  PRIMARY KEY (product_id, section_id)
+);
+
 --  Zavod bergan narxlar — bir martalik: keyin saytdan yoki bazadan
 --  o'zgartirilgani keyingi deploy'da qaytarib qo'yilmasin.
 DO $$

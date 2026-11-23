@@ -3161,10 +3161,15 @@ function xomXato(royxat) {
 async function ishbayKerak(client, unitId, targetId, qty) {
   const u = (await client.query(
     `SELECT u.id, u.conveyor_no, u.product_id, u.qty, u.current_section_id,
-            s.name AS section, s.piece_rate
+            s.name AS section,
+            --  Model narxi bo'limnikidan USTUN (product_piece_rates)
+            COALESCE(pr.rate, s.piece_rate) AS piece_rate
        FROM production_units u
        JOIN sections s ON s.id = u.current_section_id
-      WHERE u.id = $1 AND u.status = 'production' AND s.piece_rate > 0`,
+       LEFT JOIN product_piece_rates pr
+              ON pr.product_id = u.product_id AND pr.section_id = s.id
+      WHERE u.id = $1 AND u.status = 'production'
+        AND COALESCE(pr.rate, s.piece_rate) > 0`,
     [unitId])).rows[0];
   if (!u) return null;
   const route = (await client.query(

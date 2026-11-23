@@ -3265,6 +3265,17 @@ bo'limning xodimi server rad etadi. Yozuv harakatga bog'langan
 (`move_id`, `ON DELETE CASCADE`): o'tkazish orqaga qaytarilsa ishbay
 ham o'chadi. Narx yozuv bilan qotadi.
 
+**★ MODEL NARXI BO'LIMNIKIDAN USTUN** (zavod qarori, 2026-11;
+`product_piece_rates`, `modules/ishbay.js`, Ma'lumotnomalar →
+**«Ishbay narxlari»**, `/ishbay.html`). Onix stulning Zborkasi 3,8 $
+emas, 2 $: model narxi qo'yilsa o'sha model uchun bo'lim narxi
+o'rniga turadi, olib tashlansa bo'limniki qaytadi. Bo'lim narxi ham
+shu sahifadan. Narx yozuv bilan qotadi, lekin **«hisoblanganlarni ham
+qayta hisoblash»** belgisi bilan shu model + bo'limning ESKI yozuvlari
+ham yangi narxga o'tadi — hisoblandi ish haqida o'zi o'zgaradi,
+kassada berilgan pulga tegilmaydi; eski va yangi summa auditda
+(`piece-rate`). Kodga model nomi yozilmaydi. Huquqi `production.manage`.
+
 **Bitta raqam — bir marta**: orqaga qaytarish ishbay emas, va shu
 bo'limda shu raqam uchun yozilgan dona raqamning umumiy donasidan
 oshmaydi — qaytib kelgan bo'lak qayta o'tganda ikkinchi marta

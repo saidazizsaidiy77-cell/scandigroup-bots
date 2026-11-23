@@ -281,7 +281,12 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
        SELECT conveyor_no, section_id, SUM(qty)::int AS qty, SUM(amount) AS summa
          FROM piece_work WHERE conveyor_no = ANY($1)
         GROUP BY 1, 2)
-     SELECT s.id AS section_id, s.name AS section, s.piece_rate AS rate,
+     SELECT s.id AS section_id, s.name AS section,
+            --  Model narxi bo'limnikidan ustun (izoh: sql/cash.sql)
+            COALESCE((SELECT ppr.rate FROM product_piece_rates ppr
+                        JOIN pr ON pr.product_id = ppr.product_id
+                       WHERE pr.conveyor_no = $2 AND ppr.section_id = s.id),
+                     s.piece_rate) AS rate,
             yol.step, pw.conveyor_no, pw.qty, pw.summa::NUMERIC(14,2) AS summa
        FROM sections s
        LEFT JOIN yol ON yol.section_id = s.id
@@ -289,7 +294,7 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
       WHERE pw.section_id IS NOT NULL
          OR (yol.section_id IS NOT NULL AND COALESCE(s.piece_rate, 0) > 0)
       ORDER BY yol.step NULLS LAST, s.name`,
-    [[k.conveyor_no, k.prev_no].filter(Boolean)]);
+    [[k.conveyor_no, k.prev_no].filter(Boolean), k.conveyor_no]);
   const ishbay = new Map();
   for (const r of ib) {
     const x = ishbay.get(r.section_id) || ishbay.set(r.section_id,
