@@ -940,6 +940,93 @@ test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
     `SELECT COALESCE(SUM(qty), 0)::int AS qty FROM piece_work
       WHERE conveyor_no = $1 AND section_id = $2`, [u.conveyor_no, ZBOR.id]);
   assert.ok(qoldi.qty < 10, 'qaytarilgan o\'tkazishning ishbayi o\'chdi');
+
+  //  ★ MODEL NARXI (zavod qarori, 2026-11): Onix Zborkasi 2 $ — bo'lim
+  //  narxidan ustun; «qayta» bilan hisoblangan yozuvlar ham 2 $ ga o'tadi.
+  assert.equal((await stul('PUT', '/api/ishbay/product',
+    { product_id: yol.id, section_id: ZBOR.id, rate: 2, qayta: true })).status, 403);
+  const mr = await admin('PUT', '/api/ishbay/product',
+    { product_id: yol.id, section_id: ZBOR.id, rate: 2, qayta: true });
+  assert.equal(mr.status, 200, mr.text);
+  assert.ok(mr.body.qayta.n > 0, 'eski yozuvlar qayta hisoblandi');
+  const qayta = await H.id(
+    `SELECT COUNT(*) FILTER (WHERE rate <> 2)::int AS boshqa,
+            SUM(qty)::int AS qty, SUM(amount)::float AS amount
+       FROM piece_work WHERE product_id = $1 AND section_id = $2`, [yol.id, ZBOR.id]);
+  assert.equal(qayta.boshqa, 0);
+  assert.equal(qayta.amount, qayta.qty * 2);
+  const g = (await admin('GET', '/api/ishbay')).body;
+  assert.ok(g.rates.some((r) => r.product_id === yol.id && Number(r.rate) === 2));
+  //  Keyingi ish ham 2 $ dan
+  const u2 = (await admin('POST', '/api/units/', {
+    items: [{ product_id: yol.id, qty: 3, section_id: ZBOR.id }] })).body.created[0];
+  await xomsiz();
+  assert.equal((await admin('POST', '/api/units/move', {
+    items: [{ unit_id: u2.id }], ishchi })).status, 200);
+  const yangi = await H.id(
+    `SELECT rate::float AS rate, amount::float AS amount FROM piece_work
+      WHERE conveyor_no = $1 AND section_id = $2`, [u2.conveyor_no, ZBOR.id]);
+  assert.equal(yangi.rate, 2);
+  assert.equal(yangi.amount, 6);
+  //  Olib tashlansa bo'lim narxi qaytadi (qayta bilan — eski yozuvlar ham)
+  assert.equal((await admin('PUT', '/api/ishbay/product',
+    { product_id: yol.id, section_id: ZBOR.id, rate: '', qayta: true })).status, 200);
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM piece_work
+      WHERE product_id = $1 AND section_id = $2 AND rate <> 3.8`, [yol.id, ZBOR.id])).n, 0);
+
+  //  ★ TSEX BOSHLIG'I — T/M OMBORGA KIRGAN HAR DONADAN 1,5 $
+  const EXIT = await H.id(
+    `SELECT s.id FROM v_product_route r JOIN sections s ON s.id = r.section_id
+      WHERE r.product_id = $1 AND s.is_exit`, [yol.id]);
+  const boshliq = usta.id;
+  assert.equal((await admin('PUT', '/api/ishbay/shop/' + stulTsex,
+    { head_worker_id: boshliq, rate: 1.5 })).status, 200);
+  //  Chiqish bo'limidan oldingi qadamda ochiladi va chiqishga o'tkaziladi
+  const OLD = await H.id(
+    `SELECT r.section_id AS id FROM v_product_route r
+      JOIN v_product_route e ON e.product_id = r.product_id AND e.section_id = $2
+     WHERE r.product_id = $1 AND r.step_no = e.step_no - 1`, [yol.id, EXIT.id]);
+  const u3 = (await admin('POST', '/api/units/', {
+    items: [{ product_id: yol.id, qty: 4, section_id: OLD.id }] })).body.created[0];
+  await xomsiz();
+  const ot = await admin('POST', '/api/units/move', { items: [{ unit_id: u3.id }], ishchi });
+  assert.equal(ot.status, 200, JSON.stringify(ot.body));
+  assert.equal((await admin('POST', '/api/units/handover', { items: [u3.id] })).status, 200);
+  const qb = await admin('POST', '/api/units/stock/accept', { items: [{ unit_id: u3.id, qty: 3 }] });
+  assert.equal(qb.status, 200, JSON.stringify(qb.body));
+  const hb = await H.id(
+    `SELECT worker_id, unit_id, qty, amount::float AS amount FROM piece_work
+      WHERE conveyor_no = $1 AND kind = 'boshliq'`, [u3.conveyor_no]);
+  assert.equal(hb.worker_id, boshliq);
+  assert.equal(hb.qty, 3);
+  assert.equal(hb.amount, 4.5);
+  //  Ish haqida «T/M omborga topshirildi» bo'lib turadi
+  const tb = (await admin('GET', `/api/payroll/worker/${boshliq}?month=${oy}`)).body;
+  assert.ok(tb.piece.some((p) => p.section === 'T/M omborga topshirildi' && Number(p.amount) === 4.5));
+  //  Qabul qaytarilsa yozuv ham o'chadi
+  assert.equal((await admin('POST', '/api/units/stock/accept',
+    { items: [hb.unit_id], undo: true })).status, 200);
+  assert.equal((await H.id(`SELECT COUNT(*)::int AS n FROM piece_work
+    WHERE conveyor_no = $1 AND kind = 'boshliq'`, [u3.conveyor_no])).n, 0);
+  //  Boshliq qo'yilmagan paytda qabul qilingani — keyin sanadan beri yoziladi
+  assert.equal((await admin('PUT', '/api/ishbay/shop/' + stulTsex,
+    { head_worker_id: '', rate: '' })).status, 200);
+  assert.equal((await admin('POST', '/api/units/stock/accept', { items: [u3.id] })).status, 200);
+  assert.equal((await H.id(`SELECT COUNT(*)::int AS n FROM piece_work
+    WHERE conveyor_no = $1 AND kind = 'boshliq'`, [u3.conveyor_no])).n, 0);
+  const bf = await admin('PUT', '/api/ishbay/shop/' + stulTsex,
+    { head_worker_id: boshliq, rate: 1.5, from: new Date().toISOString().slice(0, 10) });
+  assert.equal(bf.status, 200, bf.text);
+  const yozildi = await H.id(`SELECT SUM(qty)::int AS qty FROM piece_work
+    WHERE conveyor_no = $1 AND kind = 'boshliq'`, [u3.conveyor_no]);
+  assert.equal(yozildi.qty, 1, 'qabul qilingan 1 dona yozildi');
+  //  Qayta bosilsa ikki marta yozilmaydi
+  await admin('PUT', '/api/ishbay/shop/' + stulTsex,
+    { head_worker_id: boshliq, rate: 1.5, from: new Date().toISOString().slice(0, 10) });
+  assert.equal((await H.id(`SELECT SUM(qty)::int AS qty FROM piece_work
+    WHERE conveyor_no = $1 AND kind = 'boshliq'`, [u3.conveyor_no])).qty, 1);
+  await admin('PUT', '/api/ishbay/shop/' + stulTsex, { head_worker_id: '', rate: '' });
   await db.query(`SELECT 1`);
 });
 

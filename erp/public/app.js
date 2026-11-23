@@ -504,6 +504,12 @@ const App = (() => {
       title: 'Ranglar va matolar', lead: "Tanlov ro'yxati",
       text: "Yangi rang va matoni qo'shish, adashib yozilganini ro'yxatdan olib tashlash",
       perm: ['production.manage'] },
+    //  ★ ISHBAY NARXLARI (zavod qarori, 2026-11): bo'lim narxi va
+    //  undan ustun turadigan model narxi (izoh: modules/ishbay.js).
+    { href: '/ishbay.html', mod: 'refs', nav: 'Ishbay narxlari',
+      title: 'Ishbay narxlari', lead: "Bo'lim va model bo'yicha",
+      text: "Bir dona ish uchun narx \u00b7 model narxi bo'limnikidan ustun \u00b7 eski yozuvlarni qayta hisoblash",
+      perm: ['production.manage'] },
     { href: '/katalog.html', mod: 'refs', nav: 'Katalog',
       title: 'Katalog', lead: 'Mahsulot nomi va guruhi',
       text: "Fason, guruh va marshrut \u2014 yangi mahsulot qo'shish uchun kod tegilmaydi",

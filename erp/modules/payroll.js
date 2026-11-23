@@ -173,7 +173,8 @@ router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
                ORDER BY o.op_date, o.id`, [id, or.lo, or.hi, or.kunlik]),
     //  Ishbay — bo'lim va mahsulot bo'yicha jamlab: oyiga yuzlab
     //  o'tkazish bo'ladi va har biri alohida qator o'qilmasdi.
-    db.query(`SELECT s.name AS section, pr.name AS product, p.rate,
+    db.query(`SELECT CASE WHEN p.kind = 'boshliq' THEN 'T/M omborga topshirildi'
+                          ELSE s.name END AS section, pr.name AS product, p.rate,
                      SUM(p.qty)::int AS qty, SUM(p.amount)::numeric(14,2) AS amount,
                      string_agg(DISTINCT p.conveyor_no, ', ') AS konverlar
                 FROM piece_work p
@@ -182,7 +183,7 @@ router.get('/worker/:id', need(...KO), wrap(async (req, res) => {
                WHERE p.worker_id = $1
                  AND CASE WHEN $4 THEN p.work_date
                           ELSE date_trunc('month', p.work_date)::date END BETWEEN $2 AND $3
-               GROUP BY s.name, s.sort, pr.name, p.rate
+               GROUP BY p.kind, s.name, s.sort, pr.name, p.rate
                ORDER BY s.sort, pr.name`, [id, or.lo, or.hi, or.kunlik]),
   ]);
   res.json({ accruals: acc.rows, payments: paid.rows, piece: piece.rows });

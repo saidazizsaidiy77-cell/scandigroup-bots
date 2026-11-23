@@ -1073,6 +1073,32 @@ CREATE TABLE IF NOT EXISTS piece_work (
 CREATE INDEX IF NOT EXISTS piece_work_worker_idx ON piece_work (worker_id, work_date);
 CREATE INDEX IF NOT EXISTS piece_work_conv_idx   ON piece_work (conveyor_no, section_id);
 
+--  ★ MODEL BO'YICHA NARX (zavod qarori, 2026-11). Bo'lim narxi umumiy
+--  qoida, lekin ba'zi modelda ish boshqacha: Onix stulning Zborkasi
+--  3,8 $ emas, 2 $. Mahsulot narxi bo'limnikidan USTUN, bo'sh bo'lsa
+--  bo'limniki olinadi (`ishbayKerak`, `modules/units.js`). Narx saytdan
+--  qo'yiladi (`/ishbay.html`), kodga model nomi yozilmaydi.
+--  ★ TSEX BOSHLIG'I — T/M OMBORGA KIRGAN HAR DONADAN (zavod qarori,
+--  2026-11). Stul tsexining boshlig'i har stuldan 1,5 $ oladi, lekin
+--  bo'limdan o'tganda emas: mahsulot T/M omborga QABUL qilinganda
+--  (`acceptStock`). Kim va qancha — TSEXDA (`shops.head_*`), kodga ism
+--  yozilmaydi (4-qoida). Yozuv o'sha `piece_work` ga tushadi
+--  (`kind = 'boshliq'`, `unit_id`): ish haqi «hisoblandi» si ham,
+--  tannarx ham uni o'zi oladi. Ombor qabuli qaytarilsa yozuv o'chadi.
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS head_worker_id INT REFERENCES workers(id);
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS head_piece_rate NUMERIC(10,2)
+  CHECK (head_piece_rate IS NULL OR head_piece_rate > 0);
+ALTER TABLE piece_work ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'bolim';
+ALTER TABLE piece_work ADD COLUMN IF NOT EXISTS unit_id INT
+  REFERENCES production_units(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS product_piece_rates (
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  section_id INT NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  rate       NUMERIC(10,2) NOT NULL CHECK (rate > 0),
+  PRIMARY KEY (product_id, section_id)
+);
+
 --  Zavod bergan narxlar — bir martalik: keyin saytdan yoki bazadan
 --  o'zgartirilgani keyingi deploy'da qaytarib qo'yilmasin.
 DO $$

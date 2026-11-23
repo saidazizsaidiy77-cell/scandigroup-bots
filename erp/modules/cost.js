@@ -279,9 +279,14 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
         GROUP BY r.section_id),
      pw AS (
        SELECT conveyor_no, section_id, SUM(qty)::int AS qty, SUM(amount) AS summa
-         FROM piece_work WHERE conveyor_no = ANY($1)
+         FROM piece_work WHERE conveyor_no = ANY($1) AND kind = 'bolim'
         GROUP BY 1, 2)
-     SELECT s.id AS section_id, s.name AS section, s.piece_rate AS rate,
+     SELECT s.id AS section_id, s.name AS section,
+            --  Model narxi bo'limnikidan ustun (izoh: sql/cash.sql)
+            COALESCE((SELECT ppr.rate FROM product_piece_rates ppr
+                        JOIN pr ON pr.product_id = ppr.product_id
+                       WHERE pr.conveyor_no = $2 AND ppr.section_id = s.id),
+                     s.piece_rate) AS rate,
             yol.step, pw.conveyor_no, pw.qty, pw.summa::NUMERIC(14,2) AS summa
        FROM sections s
        LEFT JOIN yol ON yol.section_id = s.id
@@ -289,7 +294,7 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
       WHERE pw.section_id IS NOT NULL
          OR (yol.section_id IS NOT NULL AND COALESCE(s.piece_rate, 0) > 0)
       ORDER BY yol.step NULLS LAST, s.name`,
-    [[k.conveyor_no, k.prev_no].filter(Boolean)]);
+    [[k.conveyor_no, k.prev_no].filter(Boolean), k.conveyor_no]);
   const ishbay = new Map();
   for (const r of ib) {
     const x = ishbay.get(r.section_id) || ishbay.set(r.section_id,
@@ -297,6 +302,23 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
         qty: 0, summa: 0, prev_qty: 0, prev_summa: 0 }).get(r.section_id);
     if (r.conveyor_no === k.conveyor_no) { x.qty += r.qty; x.summa += Number(r.summa); }
     else if (r.conveyor_no === k.prev_no) { x.prev_qty += r.qty; x.prev_summa += Number(r.summa); }
+  }
+  //  ★ TSEX BOSHLIG'I — T/M omborga kirgan har donadan (izoh:
+  //  sql/cash.sql, `shops.head_*`): bo'lim emas, alohida qator.
+  const { rows: bosh } = await db.query(
+    `SELECT conveyor_no, SUM(qty)::int AS qty, SUM(amount)::numeric(14,2) AS summa,
+            MAX(rate) AS rate
+       FROM piece_work WHERE conveyor_no = ANY($1) AND kind = 'boshliq'
+      GROUP BY 1`, [[k.conveyor_no, k.prev_no].filter(Boolean)]);
+  if (bosh.length) {
+    const x = { section: "Tsex boshlig'i — T/M omborga", rate: null,
+                qty: 0, summa: 0, prev_qty: 0, prev_summa: 0 };
+    for (const r of bosh) {
+      if (r.conveyor_no === k.conveyor_no) {
+        x.qty += r.qty; x.summa += Number(r.summa); x.rate = Number(r.rate);
+      } else { x.prev_qty += r.qty; x.prev_summa += Number(r.summa); }
+    }
+    ishbay.set('boshliq', x);
   }
   res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
              prev_soni: k.prev_soni, rows: out, ish, ishbay: [...ishbay.values()] });
