@@ -34,6 +34,13 @@
     hisoblash» ni belgilang (kassada berilgan pulga tegilmaydi).</p>
 </div>
 
+<div class="card" style="margin-bottom:16px">
+  <h2>Tsex boshlig'i — T/M omborga kirgan har donadan</h2>
+  <p class="muted" style="font-size:12px;margin:4px 0 10px">Mahsulot T/M omborga QABUL qilinganda
+    boshliqqa dona × narx yoziladi. Ombor qabuli qaytarilsa yozuv ham o'chadi.</p>
+  <div id="tsex"></div>
+</div>
+
 <div class="grid g2">
   <div class="card"><h2>Bo'lim narxi</h2><div id="sec"></div></div>
   <div class="card"><h2>Model narxi</h2><div id="mod"></div></div>
@@ -48,6 +55,18 @@ let d = { sections: [], rates: [], products: [] };
 
 async function load() {
   d = await App.api('/api/ishbay');
+  $('tsex').innerHTML = `<table><thead><tr><th>Tsex</th><th>Boshliq</th>
+      <th class="num">Narx, $</th><th>Shu sanadan beri kirganlarni ham</th><th class="num">Shu oy</th><th></th>
+    </tr></thead><tbody>${d.shops.map((t) => `<tr>
+      <td><b>${esc(t.name)}</b></td>
+      <td><select id="hw${t.id}"><option value="">— yo'q —</option>
+        ${d.workers.map((w) => `<option value="${w.id}" ${w.id === t.head_worker_id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select></td>
+      <td class="num"><input id="hr${t.id}" type="number" step="0.01" min="0" style="width:80px;text-align:right"
+        value="${t.head_piece_rate ?? ''}"></td>
+      <td><input id="hf${t.id}" type="date"></td>
+      <td class="num">${Number(t.shu_oy) ? usd(t.shu_oy) + ' $' : '—'}</td>
+      <td class="num"><button class="primary" onclick="tsexSaqla(${t.id})">Saqlash</button></td></tr>`).join('')}
+    </tbody></table><div id="tsexMsg" style="margin-top:8px"></div>`;
   $('sec').innerHTML = `<table><thead><tr><th>Bo'lim</th><th>Tsex</th>
       <th class="num">Narx, $</th></tr></thead><tbody>${d.sections.map((s) => `<tr>
       <td><b>${esc(s.name)}</b></td><td class="muted">${esc(s.shop)}</td>
@@ -91,6 +110,16 @@ async function bolimSaqla(id, inp) {
       body: JSON.stringify({ rate: inp.value }) });
     xabar('secMsg', 'Saqlandi — keyingi ishlarga', true);
   } catch (e) { xabar('secMsg', e.message); }
+}
+
+async function tsexSaqla(id) {
+  try {
+    const r = await App.api('/api/ishbay/shop/' + id, { method: 'PUT', body: JSON.stringify({
+      head_worker_id: $('hw' + id).value, rate: $('hr' + id).value, from: $('hf' + id).value }) });
+    await load();
+    xabar('tsexMsg', r.qayta ? `Saqlandi. Omborga kirganlardan ${r.qayta.dona} dona yozildi: ${usd(r.qayta.summa)} $`
+      : 'Saqlandi — bundan keyin omborga kirganlarga', true);
+  } catch (e) { xabar('tsexMsg', e.message); }
 }
 
 async function yubor(body) {

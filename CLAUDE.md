@@ -3276,6 +3276,19 @@ ham yangi narxga o'tadi — hisoblandi ish haqida o'zi o'zgaradi,
 kassada berilgan pulga tegilmaydi; eski va yangi summa auditda
 (`piece-rate`). Kodga model nomi yozilmaydi. Huquqi `production.manage`.
 
+**★ TSEX BOSHLIG'I — T/M OMBORGA KIRGAN HAR DONADAN** (zavod qarori,
+2026-11; `shops.head_worker_id`, `shops.head_piece_rate`,
+`piece_work.kind = 'boshliq'`). Stul tsexining boshlig'i har stuldan
+1,5 $ oladi — bo'limdan o'tganda emas, mahsulot T/M omborga QABUL
+qilinganda (`acceptStock`, qisman qabulda — qabul qilingan dona). Kim
+va qancha TSEXDA, «Ishbay narxlari» sahifasida (kodga ism yozilmaydi,
+4-qoida). Ombor qabuli qaytarilsa yozuv o'chadi (`unit_id`). **«Shu
+sanadan beri»** — boshliq qo'yilishidan oldin qabul qilinganlar ham
+yoziladi, RAQAM bo'yicha allaqachon yozilgan dona ayirilib (ikki marta
+yozilmaydi). Ish haqida «T/M omborga topshirildi» qatori, tannarxda
+«Tsex boshlig'i» qatori; bo'lim ishbayining «bitta raqam — bir marta»
+hisobiga aralashmaydi (`kind = 'bolim'`).
+
 **Bitta raqam — bir marta**: orqaga qaytarish ishbay emas, va shu
 bo'limda shu raqam uchun yozilgan dona raqamning umumiy donasidan
 oshmaydi — qaytib kelgan bo'lak qayta o'tganda ikkinchi marta

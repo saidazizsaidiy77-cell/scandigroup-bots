@@ -3184,7 +3184,8 @@ async function ishbayKerak(client, unitId, targetId, qty) {
     `SELECT (SELECT COALESCE(SUM(qty), 0) FROM production_units
               WHERE conveyor_no = $1 AND status <> 'cancelled') AS jami,
             (SELECT COALESCE(SUM(qty), 0) FROM piece_work
-              WHERE conveyor_no = $1 AND section_id = $2) AS yozilgan`,
+              WHERE conveyor_no = $1 AND section_id = $2
+                AND kind = 'bolim') AS yozilgan`,
     [u.conveyor_no, u.current_section_id]);
   const dona = Math.min(n, Number(h.jami) - Number(h.yozilgan));
   if (!(dona > 0)) return null;
@@ -3841,6 +3842,9 @@ async function acceptStock(client, req, it, undo) {
     await client.query(
       `UPDATE production_units SET status = 'production', fg_on = NULL,
               warehouse_id = NULL, fg_by = NULL WHERE id = $1`, [unitId]);
+    //  Qabul qaytarildi — tsex boshlig'ining shu qabuldagi haqi ham
+    await client.query(
+      `DELETE FROM piece_work WHERE unit_id = $1 AND kind = 'boshliq'`, [unitId]);
     await refreshStock(client, u.product_id);
     return { unit_id: unitId, conveyor_no: u.conveyor_no, accepted: false };
   }
@@ -3892,6 +3896,16 @@ async function acceptStock(client, req, it, undo) {
             warehouse_id = COALESCE(warehouse_id,
                                     (SELECT id FROM warehouses WHERE code = 'TM'))
       WHERE id = $1`, [id, req.user.id]);
+  //  ★ TSEX BOSHLIG'I — T/M OMBORGA KIRGAN HAR DONADAN (izoh:
+  //  sql/cash.sql, `shops.head_*`). Tsex — chiqish bo'limining tsexi.
+  await client.query(
+    `INSERT INTO piece_work (kind, unit_id, conveyor_no, product_id, section_id,
+                             worker_id, qty, rate, work_date, created_by)
+     SELECT 'boshliq', $1, $2, $3, s.id, sh.head_worker_id, $4, sh.head_piece_rate,
+            (SELECT fg_on FROM production_units WHERE id = $1), $5
+       FROM sections s JOIN shops sh ON sh.id = s.shop_id
+      WHERE s.id = $6 AND sh.head_worker_id IS NOT NULL AND sh.head_piece_rate > 0`,
+    [id, u.conveyor_no, u.product_id, n, req.user.id, u.current_section_id]);
   await refreshStock(client, u.product_id);
   return { unit_id: id, conveyor_no: u.conveyor_no, accepted: true, qty: n };
 }
