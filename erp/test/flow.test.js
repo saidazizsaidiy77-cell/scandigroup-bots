@@ -6025,6 +6025,21 @@ test('oylik: kimga berilgani so\'raladi va qo\'lidagi pulga qo\'shilmaydi', asyn
     from_kind: 'account', from_id: kassa, to_kind: 'expense',
     currency: 'USD', amount: 10, pl_month: '2026-09',
     expense_item_id: boshqa.id })).status, 200, 'boshqa harajat eskicha yoziladi');
+
+  //  ★ MAXSUS BUYURTMA XARAJATLARI — alohida guruh, oyligi xodim bilan
+  const mx = refs.items.find((x) => x.group_code === 'MAXSUS' && /^oylik/i.test(x.name));
+  assert.ok(mx, 'maxsus buyurtma oyligi moddasi bor');
+  assert.equal(mx.needs_worker, true, 'kimga berilgani so\'raladi');
+  assert.equal((await yoz({ expense_item_id: mx.id })).status, 400, 'xodimsiz yozilmaydi');
+  const mo = await yoz({ expense_item_id: mx.id, staff_id: xodim, amount: 50 });
+  assert.equal(mo.status, 200, mo.text);
+  const pl2 = (await kassir('GET', '/api/cash/pl?from=2026-09&to=2026-09')).body;
+  assert.equal(Number(pl2.rows.find((x) => x.item_id === mx.id).amount_usd), 50);
+  assert.ok(pl2.rows.some((x) => x.group_code === 'MAXSUS' && x.kind === 'expense'),
+    'foyda-zararda o\'z guruhi');
+  const ph2 = (await admin('GET', '/api/payroll?month=2026-09')).body.rows
+    .find((r) => r.id === xodim);
+  assert.equal(Number(ph2.paid_usd), 350, 'ish haqida ham to\'landi bo\'lib turadi');
 });
 
 //  ★ OYLIK MODDASINING DOIRASI. «Oylik korpus» ni tanlagan kassirga
