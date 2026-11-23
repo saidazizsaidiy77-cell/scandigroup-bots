@@ -227,6 +227,33 @@ ALTER TABLE expense_items ADD COLUMN IF NOT EXISTS needs_worker BOOLEAN NOT NULL
 UPDATE expense_items SET needs_worker = true
  WHERE group_code = 'MAOSH' AND NOT needs_worker;
 
+--  ★ MAXSUS BUYURTMA XARAJATLARI — ALOHIDA GURUH (zavod qarori,
+--  2026-11). Maxsus buyurtma mijozining puli asosiy kassaga tushadi va
+--  undan qisman maxsus buyurtmaning o'z xarajatlari qilinadi. Ular
+--  umumiy moddalarga aralashsa foyda-zararda «maxsus buyurtma qancha
+--  xarajat qildi» degan savolga javob qolmasdi. Guruh foyda-zararda
+--  O'Z qatori bo'lib chiqadi (`v_pl_month`, `kind = 'expense'`).
+--
+--  ★ OYLIK HAM SHU YERDA: maxsus buyurtmada ishlagan xodimning oyligi
+--  shu guruhga yoziladi va kimga berilgani so'raladi (`needs_worker`).
+--  Ish haqi sahifasi «to'landi» ni `staff_id` dan o'qiydi, ya'ni oylik
+--  u yerda ham ko'rinadi; tannarxdagi tsex oyligi taqsimotiga
+--  (`MAOSH` + tsex) esa tushmaydi — ikki marta sanalmaydi.
+INSERT INTO expense_groups (code, name, sort) VALUES
+  ('MAXSUS', 'Maxsus buyurtma xarajatlari', 45)
+ON CONFLICT (code) DO NOTHING;
+INSERT INTO expense_items (group_code, name, sort) VALUES
+  ('MAXSUS', 'Oylik (maxsus buyurtma)', 10),
+  ('MAXSUS', 'Material va furnitura', 20),
+  ('MAXSUS', 'Xizmat va usta', 30),
+  ('MAXSUS', 'Yetkazib berish va o''rnatish', 40),
+  ('MAXSUS', 'Boshqa xarajat', 50)
+ON CONFLICT (group_code, lower(name)) DO NOTHING;
+--  Doimiy qoida (MAOSH bilan bir xil idiom): guruhdagi har «Oylik…»
+--  moddasi xodimni so'raydi — keyin qo'shilgani ham.
+UPDATE expense_items SET needs_worker = true
+ WHERE group_code = 'MAXSUS' AND lower(name) LIKE 'oylik%' AND NOT needs_worker;
+
 -- ──────────────────────────────────────────────────────── OPERATSIYA
 CREATE TABLE IF NOT EXISTS cash_ops (
   id        SERIAL PRIMARY KEY,

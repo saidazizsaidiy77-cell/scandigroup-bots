@@ -2819,6 +2819,21 @@ sarflaydi, ya'ni uchinchi bosqich aynan unga kerak.
 ta'minotchini so'raydi, yo xodimni. Ta'minotchiga to'lov odamga,
 oylik esa ta'minotchiga bog'lanmaydi.
 
+**★ MAXSUS BUYURTMA XARAJATLARI — ALOHIDA GURUH** (zavod qarori,
+2026-11; `expense_groups.code = 'MAXSUS'`, `sql/cash.sql`). Maxsus
+buyurtma mijozini direktor yuritadi (mijoz kartochkasida menejer —
+kod emas, 4-qoida), puli ASOSIY kassaga tushadi va undan qisman
+maxsus buyurtmaning o'z xarajatlari qilinadi. Ular umumiy moddalarga
+aralashsa «maxsus buyurtma qancha xarajat qildi» degan savolga javob
+qolmasdi, shuning uchun guruh alohida: oylik · material va furnitura ·
+xizmat va usta · yetkazib berish va o'rnatish · boshqa. Foyda-zararda
+O'Z qatori, savdosi esa «Maxsus buyurtma» turkumida.
+
+**Oylik ham shu guruhda** va xodimni so'raydi (`needs_worker`,
+«Oylik…» moddalariga DOIMIY qoida): ish haqi sahifasida to'landi
+bo'lib ko'rinadi (`staff_id`), tannarxdagi tsex oyligi taqsimotiga
+(`MAOSH` + tsex) esa tushmaydi — ikki marta sanalmaydi.
+
 **★ RO'YXAT MODDANING DOIRASIGA QISQARADI** (`expense_items.shop_id`,
 `expense_items.staff_group`; zavod qarori 2026-09). «Oylik korpus» ni
 tanlagan kassirga oltmish oltita ism kerak emas: javob o'sha tsexning
