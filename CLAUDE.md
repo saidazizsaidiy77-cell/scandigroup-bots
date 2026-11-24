@@ -3297,7 +3297,9 @@ bo'limning xodimlari ochilib qolmasin).
 
 Ish haqi sahifasida ishbay «Hisoblandi, $» ga O'ZI qo'shiladi (ish
 bajarilgan kunning oyi), qator ostida «shundan ishbay», ochilganda
-bo'lim va mahsulot bo'yicha jadval.
+bo'lim va mahsulot bo'yicha jadval. Jadval ostida **JAMI** — dona BO'LIM bo'yicha
+(bitta stul Zborkadan ham, Qoplashdan ham o'tadi va qo'shilsa ikki
+marta sanalardi), summa esa umumiy (`pieceJami`).
 
 **★ XODIMGA PUL BERAYOTGANDA SHU OY UCHUN OLGANI KO'RINADI** (zavod
 qarori, 2026-11; `GET /api/cash/staff-paid`, chiqim oynasidagi «Kimga —
