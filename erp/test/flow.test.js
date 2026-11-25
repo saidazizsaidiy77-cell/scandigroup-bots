@@ -4129,7 +4129,16 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   // Ombor mudiri hali ko'rmaydi — savdo yubormagan
   assert.equal((await mudir('GET', '/api/sales/shipping')).body.rows.length, 0);
 
-  // Omborga yuborish
+  //  ★ MIJOZGA CHIQARISH — FAQAT T/M OMBORDA TO'LIQ TURGANDA (zavod
+  //  qarori, 2026-11): ikkitasi hali tsexda — yuborilmaydi, qaysi konver
+  //  ekani yoziladi
+  const erta = await admin('POST', `/api/sales/orders/${z.id}/send`, {});
+  assert.equal(erta.status, 400);
+  assert.match(erta.body.error, /T\/M omborga kelmagan/);
+  assert.match(erta.body.error, new RegExp(yolda.conveyor_no));
+  // Yo'ldagini omborga kiritamiz (jurnaldan tuzatish yo'li bilan)
+  assert.equal((await admin('POST', `/api/units/${yolda.id}/to-warehouse`,
+    { warehouse_code: 'TM' })).status, 200);
   assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`,
     { })).status, 200);
   const ro = (await mudir('GET', '/api/sales/shipping')).body.rows;
@@ -4139,7 +4148,7 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal(ro[0].address, 'Toshkent, Navoiy 5');
   assert.equal(ro[0].receiver_phone, '+998901110022');
   assert.equal(ro[0].assigned_qty, 6);
-  assert.equal(ro[0].in_warehouse_qty, 4, 'ikkitasi hali tsexda');
+  assert.equal(ro[0].in_warehouse_qty, 6, 'hammasi T/M omborda');
   assert.equal(ro[0].units.length, 2);
 
   // Yuborilgach savdo tahrirlay olmaydi
@@ -4151,26 +4160,11 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   //  savdo buning uchun ombor sahifasiga kirardi, u yerda esa faqat
   //  omborga TUSHGANI ko'rinadi — tsexdagisi topilmasdi.
   const konver = (await admin('GET', '/api/sales/orders/' + z.id)).body.units;
-  const tsexda = konver.find((u) => u.conveyor_no === yolda.conveyor_no);
-  assert.equal(tsexda.status, 'production');
-  assert.equal(tsexda.section, 'Arra', "bo'limi yoziladi");
-  assert.ok(tsexda.shop, 'tsexi ham yoziladi');
-  //  Omborga tushgani esa bo'limsiz — u endi javonda, tsexda emas
+  //  Omborga tushgani bo'limsiz — u endi javonda, tsexda emas
   const javonda = konver.find((u) => u.conveyor_no === tayyor.conveyor_no);
   assert.equal(javonda.status, 'fg');
   assert.equal(javonda.section, null);
   assert.equal(javonda.warehouse_code, 'TM');
-
-  // Hammasi kelmagunча chiqarib bo'lmaydi
-  await H.furnBer(z.id);
-  const erta = await mudir('POST', `/api/sales/orders/${z.id}/ship`);
-  assert.equal(erta.status, 400);
-  assert.match(erta.body.error, /T\/M omborda yo'q/);
-  assert.match(erta.body.error, new RegExp(yolda.conveyor_no));
-
-  // Yo'ldagini omborga kiritamiz (jurnaldan tuzatish yo'li bilan)
-  assert.equal((await admin('POST', `/api/units/${yolda.id}/to-warehouse`,
-    { warehouse_code: 'TM' })).status, 200);
 
   //  ★ MIJOZ SO'RAGAN DONAGA KONVER BIRIKTIRILGAN BO'LISHI SHART.
   //  Yuqoridagi tekshiruv boshqa savolga javob beradi — BIRIKTIRILGANI
@@ -4187,17 +4181,13 @@ test('chiqadigan buyurtma ombor mudiriga yuboriladi va u chiqaradi', async () =>
   assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
     { items: [{ id: qator.id, product_id: PENAL, qty: 8, color: 'Sut',
                 unit_price: 250 }] })).status, 200);
-  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/send`)).status, 200);
-
-  await H.furnBer(z.id);
-  const kam = await mudir('POST', `/api/sales/orders/${z.id}/ship`,
-    { ship_on: '2026-10-04' });
+  //  Yuborishda ham tutiladi — shart `/ship` niki bilan bitta (`tmTayyor`)
+  const kam = await admin('POST', `/api/sales/orders/${z.id}/send`);
   assert.equal(kam.status, 400, kam.text);
   assert.match(kam.body.error, /Konver biriktirilmagan/);
   assert.match(kam.body.error, /2 ta/, 'yetishmayotgani soni bilan yoziladi');
 
-  //  Qatorni qaytarib 6 ta qilamiz — endi to'liq
-  assert.equal((await admin('POST', `/api/sales/orders/${z.id}/unsend`)).status, 200);
+  //  Qatorni 6 ta qilamiz — endi to'liq
   assert.equal((await admin('PATCH', '/api/sales/orders/' + z.id,
     { items: [{ id: qator.id, product_id: PENAL, qty: 6, color: 'Sut',
                 unit_price: 250 }] })).status, 200);
