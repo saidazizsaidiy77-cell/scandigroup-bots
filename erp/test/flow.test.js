@@ -14397,6 +14397,13 @@ test("xom ashyo tasdig'i: T/M omborga kirishdan oldin", async () => {
   const ship = (await admin('GET', '/api/sales/shipping')).body.rows.length;
   assert.equal(navA.filter((q) => q.page === '/omborlar.html').reduce((s, q) => s + q.n, 0),
     (await inbox()).filter((x) => !x.mat_wait).length + ship);
+  //  Zavoddagi hammasi — tsexda yurgan har raqam, bitta qator
+  const b0 = (await admin('POST', '/api/units/', {
+    items: [{ product_id: yol.id, qty: 2, section_id: OLD.id }] })).body.created[0];
+  const all = (await qodir('GET', '/api/units/mat-check?all=1')).body;
+  assert.ok(all.some((x) => x.conveyor_no === b0.conveyor_no), 'jo\'natilmagani ham bor');
+  assert.equal(new Set(all.map((x) => x.conveyor_no.toLowerCase())).size, all.length);
+  assert.equal((await qodir('GET', '/api/units/track?no=' + b0.conveyor_no)).status, 200);
   //  Sarf tafsiloti narx bilan ochiladi
   const det = await qodir('GET', '/api/materials/conveyor?no=' + a.conveyor_no);
   assert.equal(det.status, 200, det.text);

@@ -317,6 +317,9 @@ sanalmaydi) va tasdiqlovchining navbati. Huquq faqat BELGIDAN
 (`production.matcheck`, `erp/auth.js`; rolda yo'q, administratorda
 ham). **Belgi hech kimda bo'lmasa qoida UXLAYDI** — deploy kuni ombor
 to'xtab qolmasin.
+**«Zavoddagi hammasi»** tabi (`?all=1`): tsexda yurgan istalgan
+konverning sarfi, raqam bo'yicha bitta qator, faqat ko'rish; konver
+pasporti ham shu belgiga ochiq.
 
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
 vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,

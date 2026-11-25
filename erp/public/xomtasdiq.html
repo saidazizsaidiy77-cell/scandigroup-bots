@@ -37,10 +37,18 @@
     Sarf — shu konver <b>raqamining</b> hamma bo'lagiga yozilgan xom ashyo,
     manba omborning o'rtacha kirim narxida. «Oldingi» — shu mahsulotning
     sarfi bor oldingi konveri. Qatorni bossangiz materiallar ochiladi.</p>
+  <!--  ★ ZAVODDAGI HAMMASI (zavod qarori, 2026-11): jo'natilganidan
+        tashqari tsexda yurgan istalgan konverning sarfi — faqat ko'rish. -->
+  <div class="row" style="gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <button id="tKut" class="primary" onclick="rejim(false)">Tasdiq kutmoqda</button>
+    <button id="tAll" onclick="rejim(true)">Zavoddagi hammasi</button>
+    <input id="q" placeholder="Raqam, mahsulot yoki bo'lim" style="max-width:260px"
+           oninput="chiz()">
+  </div>
   <div id="msg"></div>
   <div class="tbox"><table>
     <thead><tr>
-      <th>Konver</th><th>Mahsulot</th><th class="num">Soni</th><th>Tsex · kim</th>
+      <th>Konver</th><th>Mahsulot</th><th class="num">Soni</th><th>Tsex</th>
       <th class="num">Sarf, $</th><th class="num">Donaga, $</th>
       <th class="num">Oldingi</th><th id="thStd" class="num" hidden>Normativ</th><th></th>
     </tr></thead>
@@ -57,6 +65,13 @@ const usd = (v) => v == null ? '—' : Number(v).toLocaleString('ru-RU',
 const sana = (v) => v ? String(v).slice(0, 10).split('-').reverse().join('.') : '';
 let rows = [];
 let ochiq = null;
+let hammasi = false;
+async function rejim(h) {
+  hammasi = h; ochiq = null;
+  $('tKut').className = h ? '' : 'primary';
+  $('tAll').className = h ? 'primary' : '';
+  await load();
+}
 const msg = (t, ok) => { $('msg').innerHTML = t ? `<div class="tag ${ok ? 'ok' : 'bad'}"
   style="white-space:normal;margin-bottom:10px">${esc(t)}</div>` : ''; };
 
@@ -68,34 +83,43 @@ function farq(v, base) {
 }
 
 async function load() {
-  rows = await App.api('/api/units/mat-check');
+  rows = await App.api('/api/units/mat-check' + (hammasi ? '?all=1' : ''));
+  chiz();
+}
+
+function chiz() {
+  const q = $('q').value.trim().toLowerCase();
+  const ko = q ? rows.filter((r) => [r.conveyor_no, r.product, r.product_type, r.joy, r.shop]
+    .some((v) => String(v || '').toLowerCase().includes(q))) : rows;
   const std = rows.some((r) => 'std_cost' in r);
   $('thStd').hidden = !std;
   const cols = std ? 9 : 8;
-  $('rows').innerHTML = rows.map((r) => `
+  $('rows').innerHTML = ko.map((r) => `
     <tr data-id="${r.id}" class="${ochiq === r.id ? 'ochiq' : ''}" style="cursor:pointer" onclick="och(${r.id})">
       <td><b>${esc(r.conveyor_no)}</b><div class="muted" style="font-size:11px">${sana(r.handover_on)}</div></td>
       <td>${esc(r.product)}<div class="muted" style="font-size:11px">${esc(r.product_type || '')}</div></td>
       <td class="num">${r.qty}${r.total_qty && r.total_qty !== r.qty
         ? `<div class="muted" style="font-size:11px">raqamda ${r.total_qty}</div>` : ''}</td>
-      <td>${esc(r.shop || '')}<div class="muted" style="font-size:11px">${esc(r.sent_by || '')}</div></td>
+      <td>${esc(r.shop || '')}<div class="muted" style="font-size:11px">${esc(hammasi
+        ? (r.joy || '') : (r.sent_by || ''))}</div></td>
       <td class="num">${r.lines ? usd(r.summa) : '<span class="late">sarf yozilmagan</span>'}
         ${r.no_price ? `<div class="late" style="font-size:11px">${r.no_price} qatorda narx yo'q</div>` : ''}</td>
       <td class="num">${r.lines ? usd(r.per_dona) + farq(r.per_dona, r.prev_per_dona) : '—'}</td>
       <td class="num">${r.prev_per_dona != null ? usd(r.prev_per_dona)
         + `<div class="muted" style="font-size:11px">${esc(r.prev_no || '')}</div>` : '—'}</td>
       ${std ? `<td class="num">${r.std_cost != null ? usd(r.std_cost) + farq(r.per_dona, r.std_cost) : '—'}</td>` : ''}
-      <td style="white-space:nowrap" onclick="event.stopPropagation()">
+      <td style="white-space:nowrap" onclick="event.stopPropagation()">${hammasi ? '' : `
         <button class="primary" onclick="maqul(${r.id})">✓ Ma'qul</button>
-        <button onclick="rad(${r.id})">Rad etish</button></td>
+        <button onclick="rad(${r.id})">Rad etish</button>`}</td>
     </tr>
     ${ochiq === r.id ? `<tr class="det"><td colspan="${cols}" id="det${r.id}">
       <span class="muted">Yuklanmoqda…</span></td></tr>` : ''}`).join('')
-    || `<tr><td colspan="${cols}" class="muted">Tasdiq kutayotgan konver yo'q</td></tr>`;
+    || `<tr><td colspan="${cols}" class="muted">${q ? 'Topilmadi'
+      : hammasi ? 'Ishlab chiqarishda konver yo\'q' : 'Tasdiq kutayotgan konver yo\'q'}</td></tr>`;
   if (ochiq) tafsilot(rows.find((r) => r.id === ochiq));
 }
 
-async function och(id) { ochiq = ochiq === id ? null : id; await load(); }
+async function och(id) { ochiq = ochiq === id ? null : id; chiz(); }
 
 async function tafsilot(r) {
   if (!r) return;

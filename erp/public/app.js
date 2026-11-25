@@ -277,7 +277,8 @@ const App = (() => {
     { href: '/konver.html', mod: 'production', nav: 'Konver qidirish',
       title: 'Konver', lead: "Raqam bo'yicha",
       text: "Nechta yasalgan \u00b7 qaysi tsexda, qaysi omborda \u00b7 kimga, qaysi yuk xati bilan chiqib ketgan",
-      perm: ['production.view', 'production.entry', 'warehouse.view', 'sales.view'] },
+      perm: ['production.view', 'production.entry', 'warehouse.view', 'sales.view',
+             'production.matcheck'] },
     //  Konver so'rovi: tsex boshlig'i yozadi, direktor tasdiqlaydi
     //  (izoh: sql/units.sql). Ikkala huquq ham shu sahifani ochadi —
     //  biri yozish, ikkinchisi tasdiqlash uchun.

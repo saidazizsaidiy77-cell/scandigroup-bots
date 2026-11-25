@@ -880,7 +880,7 @@ router.get('/opening-log/export', need(...QOLDIQ_KORISH), wrap(async (req, res) 
 //  buyurtmasi qayerda turganini, tsex boshlig'i esa o'zi yasagan
 //  konverni ko'rishi kerak. Narx YO'Q — u savdo va kassaniki.
 router.get('/track', need('production.view', 'production.entry',
-                          'warehouse.view', 'sales.view'),
+                          'warehouse.view', 'sales.view', 'production.matcheck'),
   wrap(async (req, res) => {
   const no = String(req.query.no || '').trim();
   if (!no) return res.status(400).json({ error: 'Konver raqami yozilmagan' });
@@ -4232,13 +4232,27 @@ router.post('/stock/return', need('warehouse.move', 'production.manage'),
 //  ekranda esa RAQAMNING butun sarfi — tannarx qoidasi bilan bir xil.
 const MAT_HUQUQ = 'production.matcheck';
 
+//  `?all=1` — ZAVODDAGI HAMMASI (zavod qarori, 2026-11): tasdiqlovchi
+//  faqat jo'natilganini emas, tsexda yurgan istalgan konverning sarfini
+//  ham ko'radi — raqam bo'yicha bitta qator, faqat o'qish.
 router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
-  const { rows } = await db.query(
-    `WITH kut AS (
-       SELECT u.* FROM production_units u
+  const hammasi = req.query.all === '1';
+  const kut = hammasi
+    ? `SELECT DISTINCT ON (lower(u.conveyor_no)) u.*,
+              SUM(u.qty) OVER (PARTITION BY lower(u.conveyor_no))::int AS zqty,
+              (SELECT string_agg(DISTINCT COALESCE(s2.name, 'boshlanmagan'), ', ')
+                 FROM production_units x LEFT JOIN sections s2 ON s2.id = x.current_section_id
+                WHERE lower(x.conveyor_no) = lower(u.conveyor_no)
+                  AND x.status = 'production') AS joy
+         FROM production_units u
+        WHERE u.status = 'production'
+        ORDER BY lower(u.conveyor_no), u.id`
+    : `SELECT u.*, u.qty AS zqty, NULL::text AS joy FROM production_units u
          JOIN sections sc ON sc.id = u.current_section_id AND sc.is_exit
         WHERE u.status = 'production' AND u.handover_on IS NOT NULL
-          AND u.mat_ok_at IS NULL),
+          AND u.mat_ok_at IS NULL`;
+  const { rows } = await db.query(
+    `WITH kut AS (${kut}),
      raqam AS (
        SELECT lower(p.conveyor_no) AS k, MIN(p.product_id) AS product_id,
               MIN(p.created_at) AS ochildi,
@@ -4268,9 +4282,9 @@ router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
      donaga AS (
        SELECT r.k, r.product_id, r.ochildi, s.summa / NULLIF(r.dona, 0) AS pd
          FROM raqam r JOIN sarf s ON s.k = r.k)
-     SELECT u.id, u.conveyor_no, u.qty, u.product_id,
+     SELECT u.id, u.conveyor_no, u.zqty AS qty, u.product_id, u.joy,
             pr.name AS product, g.name AS product_type,
-            sh.name AS shop, u.handover_on, w.name AS sent_by,
+            COALESCE(sh.name, csh.name) AS shop, u.handover_on, w.name AS sent_by,
             r.dona AS total_qty,
             COALESCE(s.qator, 0) AS lines, COALESCE(s.narxsiz, 0) AS no_price,
             s.summa::NUMERIC(16,2) AS summa,
@@ -4281,6 +4295,8 @@ router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
        JOIN products pr       ON pr.id = u.product_id
        JOIN product_groups g  ON g.id = pr.group_id
        LEFT JOIN shops sh     ON sh.id = u.handover_shop_id
+       LEFT JOIN sections cs  ON cs.id = u.current_section_id
+       LEFT JOIN shops csh    ON csh.id = cs.shop_id
        LEFT JOIN workers w    ON w.id = u.handover_by
        LEFT JOIN raqam r      ON r.k = lower(u.conveyor_no)
        LEFT JOIN sarf s       ON s.k = lower(u.conveyor_no)
@@ -4290,7 +4306,7 @@ router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
           WHERE d.product_id = u.product_id AND d.k <> lower(u.conveyor_no)
             AND d.ochildi <= r.ochildi
           ORDER BY d.ochildi DESC LIMIT 1) prev ON true
-      ORDER BY u.handover_at, u.conveyor_no`);
+      ORDER BY ${hammasi ? 'u.conveyor_no' : 'u.handover_at, u.conveyor_no'}`);
   //  Normativ — faqat `cost.std` da (izoh: sql/materials.sql)
   if (!req.user.permissions.includes('cost.std'))
     rows.forEach((x) => { delete x.std_cost; });
