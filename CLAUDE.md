@@ -322,6 +322,10 @@ konverning sarfi, raqam bo'yicha bitta qator, faqat ko'rish; konver
 pasporti ham shu belgiga ochiq. Ustida **tsex** va **mahsulot turi** filtri
 (jurnaldagidek, KLIENTDA — ro'yxatda LIMIT yo'q); boshlanmagan konver
 «Boshlanmagan» tsexi bo'lib turadi.
+**Tsex — bo'lak TURGAN bo'limning tsexi** (`shops`), jo'natgan tsex
+(`handover_shop_id`) emas: u iz bo'lib qabuldan keyin ham qoladi va
+Korpus jo'natgan konver Polirovkada «Korpus» bo'lib turardi. Bo'laklari
+ikki tsexda bo'lsa ikkalasida ham topiladi.
 
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
 vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,
