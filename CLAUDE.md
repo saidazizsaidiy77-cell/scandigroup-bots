@@ -319,7 +319,9 @@ ham). **Belgi hech kimda bo'lmasa qoida UXLAYDI** — deploy kuni ombor
 to'xtab qolmasin.
 **«Zavoddagi hammasi»** tabi (`?all=1`): tsexda yurgan istalgan
 konverning sarfi, raqam bo'yicha bitta qator, faqat ko'rish; konver
-pasporti ham shu belgiga ochiq.
+pasporti ham shu belgiga ochiq. Ustida **tsex** va **mahsulot turi** filtri
+(jurnaldagidek, KLIENTDA — ro'yxatda LIMIT yo'q); boshlanmagan konver
+«Boshlanmagan» tsexi bo'lib turadi.
 
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
 vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,
