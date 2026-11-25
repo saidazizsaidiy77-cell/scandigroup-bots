@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xom ashyo tasdig'i · ZELTA ERP</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230c0d0f%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%23c9a227%27/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f2ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ZELTA">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js"></script>
+<style>
+  tr.ochiq td{background:var(--bg2,#f7f6f3)}
+  .det td{padding-top:0}
+  .farq.yuq{color:#b3261e;font-weight:600}
+  .farq.past{color:#1f7a3a}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="dot"></span><h1>Xom ashyo tasdig'i</h1></div>
+  <div class="row" id="erpUser"></div>
+</div>
+
+<!--  ★ XOM ASHYO TASDIG'I (zavod qarori, 2026-11; izoh: sql/units.sql,
+      modules/units.js `/mat-check`). Tsex T/M omborga jo'natgan konver
+      shu yerda turadi: «Ma'qul» — ombor mudiri qabul qila oladi;
+      «Rad» — jo'natish bekor bo'ladi va konver sabab bilan tsexga
+      qaytadi. -->
+<div class="card">
+  <p class="muted" style="font-size:13px;margin:0 0 10px">
+    Sarf — shu konver <b>raqamining</b> hamma bo'lagiga yozilgan xom ashyo,
+    manba omborning o'rtacha kirim narxida. «Oldingi» — shu mahsulotning
+    sarfi bor oldingi konveri. Qatorni bossangiz materiallar ochiladi.</p>
+  <div id="msg"></div>
+  <div class="tbox"><table>
+    <thead><tr>
+      <th>Konver</th><th>Mahsulot</th><th class="num">Soni</th><th>Tsex · kim</th>
+      <th class="num">Sarf, $</th><th class="num">Donaga, $</th>
+      <th class="num">Oldingi</th><th id="thStd" class="num" hidden>Normativ</th><th></th>
+    </tr></thead>
+    <tbody id="rows"><tr><td colspan="9" class="muted">Yuklanmoqda…</td></tr></tbody>
+  </table></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const usd = (v) => v == null ? '—' : Number(v).toLocaleString('ru-RU',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sana = (v) => v ? String(v).slice(0, 10).split('-').reverse().join('.') : '';
+let rows = [];
+let ochiq = null;
+const msg = (t, ok) => { $('msg').innerHTML = t ? `<div class="tag ${ok ? 'ok' : 'bad'}"
+  style="white-space:normal;margin-bottom:10px">${esc(t)}</div>` : ''; };
+
+function farq(v, base) {
+  if (v == null || !base) return '';
+  const f = (Number(v) - Number(base)) / Number(base) * 100;
+  const k = f > 10 ? 'yuq' : f < -10 ? 'past' : '';
+  return ` <span class="farq ${k}">${f > 0 ? '+' : ''}${f.toFixed(0)}%</span>`;
+}
+
+async function load() {
+  rows = await App.api('/api/units/mat-check');
+  const std = rows.some((r) => 'std_cost' in r);
+  $('thStd').hidden = !std;
+  const cols = std ? 9 : 8;
+  $('rows').innerHTML = rows.map((r) => `
+    <tr data-id="${r.id}" class="${ochiq === r.id ? 'ochiq' : ''}" style="cursor:pointer" onclick="och(${r.id})">
+      <td><b>${esc(r.conveyor_no)}</b><div class="muted" style="font-size:11px">${sana(r.handover_on)}</div></td>
+      <td>${esc(r.product)}<div class="muted" style="font-size:11px">${esc(r.product_type || '')}</div></td>
+      <td class="num">${r.qty}${r.total_qty && r.total_qty !== r.qty
+        ? `<div class="muted" style="font-size:11px">raqamda ${r.total_qty}</div>` : ''}</td>
+      <td>${esc(r.shop || '')}<div class="muted" style="font-size:11px">${esc(r.sent_by || '')}</div></td>
+      <td class="num">${r.lines ? usd(r.summa) : '<span class="late">sarf yozilmagan</span>'}
+        ${r.no_price ? `<div class="late" style="font-size:11px">${r.no_price} qatorda narx yo'q</div>` : ''}</td>
+      <td class="num">${r.lines ? usd(r.per_dona) + farq(r.per_dona, r.prev_per_dona) : '—'}</td>
+      <td class="num">${r.prev_per_dona != null ? usd(r.prev_per_dona)
+        + `<div class="muted" style="font-size:11px">${esc(r.prev_no || '')}</div>` : '—'}</td>
+      ${std ? `<td class="num">${r.std_cost != null ? usd(r.std_cost) + farq(r.per_dona, r.std_cost) : '—'}</td>` : ''}
+      <td style="white-space:nowrap" onclick="event.stopPropagation()">
+        <button class="primary" onclick="maqul(${r.id})">✓ Ma'qul</button>
+        <button onclick="rad(${r.id})">Rad etish</button></td>
+    </tr>
+    ${ochiq === r.id ? `<tr class="det"><td colspan="${cols}" id="det${r.id}">
+      <span class="muted">Yuklanmoqda…</span></td></tr>` : ''}`).join('')
+    || `<tr><td colspan="${cols}" class="muted">Tasdiq kutayotgan konver yo'q</td></tr>`;
+  if (ochiq) tafsilot(rows.find((r) => r.id === ochiq));
+}
+
+async function och(id) { ochiq = ochiq === id ? null : id; await load(); }
+
+async function tafsilot(r) {
+  if (!r) return;
+  const d = await App.api('/api/materials/conveyor?no=' + encodeURIComponent(r.conveyor_no));
+  const ok = d.rows.filter((x) => x.status === 'ok');
+  const jami = new Map();
+  for (const x of ok) {
+    const j = jami.get(x.material_id) || { material: x.material, uom: x.uom, qty: 0, summa: 0, narxsiz: false };
+    j.qty += Number(x.qty);
+    if (x.price == null) j.narxsiz = true; else j.summa += Number(x.qty) * Number(x.price);
+    jami.set(x.material_id, j);
+  }
+  const dona = r.total_qty || r.qty;
+  const el = $('det' + r.id);
+  if (!el) return;
+  el.innerHTML = ok.length ? `<table style="font-size:13px;margin:6px 0 10px">
+    <thead><tr><th>Material</th><th class="num">Soni</th><th class="num">Donaga</th>
+      <th class="num">Summa, $</th></tr></thead>
+    <tbody>${[...jami.values()].sort((a, b) => b.summa - a.summa).map((j) => `<tr>
+      <td>${esc(j.material)}</td><td class="num">${usd(j.qty)} ${esc(j.uom || '')}</td>
+      <td class="num">${usd(j.qty / dona)}</td>
+      <td class="num">${j.narxsiz ? '<span class="late">narx yo\'q</span>' : usd(j.summa)}</td></tr>`).join('')}
+    </tbody></table>
+    <a href="/konver.html?no=${encodeURIComponent(r.conveyor_no)}" target="_blank">Konver pasporti →</a>`
+    : `<p class="late">Bu konverga xom ashyo umuman yozilmagan.</p>`;
+}
+
+async function maqul(id) {
+  try {
+    await App.api('/api/units/mat-check/approve', { method: 'POST',
+      body: JSON.stringify({ items: [id] }) });
+    if (ochiq === id) ochiq = null;
+    msg("Tasdiqlandi — ombor mudiri qabul qila oladi", true);
+    await load();
+  } catch (e) { msg(e.message); }
+}
+
+async function rad(id) {
+  const r = rows.find((x) => x.id === id);
+  const reason = prompt(`${r.conveyor_no} — nega rad etilmoqda? Sabab tsex ekranida turadi.`);
+  if (reason == null) return;
+  if (!reason.trim()) return msg('Sababini yozing');
+  try {
+    await App.api('/api/units/mat-check/reject', { method: 'POST',
+      body: JSON.stringify({ unit_id: id, reason }) });
+    if (ochiq === id) ochiq = null;
+    msg(`${r.conveyor_no} tsexga qaytarildi`, true);
+    await load();
+  } catch (e) { msg(e.message); }
+}
+
+App.start(load, 'production.matcheck');
+</script>
+</body>
+</html>

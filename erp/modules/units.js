@@ -3097,6 +3097,13 @@ async function xomYoqmi(client, unitId) {
 //  Sarf RAQAM bo'yicha qaraladi (tannarx qoidasi): konver bo'linadi va
 //  mato qaysi bo'lakka yozilgani tasodif. Qaytaradi: yetishmayotgan
 //  bo'lim nomi, yoki null.
+//  ★ XOM ASHYO TASDIG'I (zavod qarori, 2026-11; izoh: sql/units.sql).
+//  Shart BITTA joyda: ombor qabuli, qabul ro'yxati, menyudagi navbat va
+//  tasdiqlovchining ro'yxati shundan o'qiydi. Belgili xodim yo'q bo'lsa
+//  qoida uxlaydi — deploy kuni ombor to'xtab qolmasin.
+const MAT_YOQIQ = `EXISTS (SELECT 1 FROM workers WHERE active AND mat_approver)`;
+const MAT_KUTADI = (u = 'u') => `(${u}.mat_ok_at IS NULL AND ${MAT_YOQIQ})`;
+
 async function qoplamaYoqmi(client, unitId) {
   const { rows } = await client.query(
     `SELECT u.conveyor_no, s.name AS section, sh.name AS shop
@@ -3702,7 +3709,8 @@ async function handoverOne(client, req, it, undo) {
     await client.query(
       `UPDATE production_units
           SET handover_on = NULL, handover_at = NULL,
-              handover_by = NULL, handover_shop_id = NULL
+              handover_by = NULL, handover_shop_id = NULL,
+              mat_ok_at = NULL, mat_ok_by = NULL
         WHERE id = $1`, [unitId]);
     return { unit_id: unitId, conveyor_no: u.conveyor_no, sent: false };
   }
@@ -3733,8 +3741,14 @@ async function handoverOne(client, req, it, undo) {
   await client.query(
     `UPDATE production_units
         SET handover_on = CURRENT_DATE, handover_at = NOW(),
-            handover_by = $2, handover_shop_id = $3
+            handover_by = $2, handover_shop_id = $3,
+            --  Har jo'natish o'z tasdig'ini oladi (izoh: MAT_KUTADI)
+            mat_ok_at = NULL, mat_ok_by = NULL
       WHERE id = $1`, [id, req.user.id, u.shop_id]);
+  //  Qayta jo'natildi — eski rad sababi endi javob emas
+  await client.query(
+    `UPDATE production_units SET mat_rej_note = NULL, mat_rej_at = NULL, mat_rej_by = NULL
+      WHERE id = ANY($1::int[]) AND mat_rej_note IS NOT NULL`, [[unitId, id]]);
   //  Qayerga ketayotgani xabar uchun qaytariladi (izoh: `/handover`):
   //  keyingi TSEXGA yoki chiqish bo'limidan T/M OMBORGA.
   return { unit_id: id, conveyor_no: u.conveyor_no, sent: true, qty: n,
@@ -3793,7 +3807,18 @@ router.post('/handover', need('production.entry'), wrap(async (req, res) => {
           body: qatorlar.join('\n')
                 + `\n\nKim jo'natdi: ${req.user.name}`,
         }, client);
-      if (omborga.length)
+      //  ★ Tasdiq yoqiq bo'lsa avval TASDIQLOVCHIGA: mudirga xabar
+      //  «ma'qul» bosilganda ketadi (`/mat-check/approve`).
+      const tasdiq = omborga.length && (await client.query(
+        `SELECT id FROM workers WHERE active AND mat_approver`)).rows;
+      if (tasdiq && tasdiq.length) {
+        for (const t of tasdiq)
+          await notify.queue({
+            worker_id: t.id, module: 'production', kind: 'mat_check',
+            title: `${omborga.length} ta konver xom ashyo tasdig'ini kutmoqda`,
+            body: omborga.join('\n') + `\n\nKim jo'natdi: ${req.user.name}`,
+          }, client);
+      } else if (omborga.length)
         await notify.queueWarehouse({
           perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
           module: 'warehouse', kind: 'fg_inbox',
@@ -3856,6 +3881,9 @@ async function acceptStock(client, req, it, undo) {
   if (!u.handover_on)
     throw new Error(`${u.conveyor_no}: hali jo'natilmagan — qadoqlash tsexi «jo'natdim» deyishi kerak`);
   await qoplamaYoqmi(client, u.id);
+  if ((await client.query(
+    `SELECT ${MAT_KUTADI()} AS k FROM production_units u WHERE u.id = $1`, [unitId])).rows[0].k)
+    throw new Error(`${u.conveyor_no}: xom ashyo tasdig'ini kutmoqda — hali «ma'qul» deyilmagan`);
 
   //  ★ BIR QISMI HAM QABUL QILINADI (zavod qarori, 2026-09).
   //
@@ -3924,7 +3952,10 @@ router.get('/stock/inbox', need('warehouse.view', 'production.view'), wrap(async
             --  bitta jadvaldan hisoblanadi, ya'ni bir-biriga zid
             --  javob bermaydi.
             COALESCE(b.qty, 0)::int AS booked_qty,
-            b.kim
+            b.kim,
+            --  Xom ashyo tasdig'ini kutayotgani ro'yxatda turadi, lekin
+            --  qabul qilinmaydi (izoh: MAT_KUTADI)
+            ${MAT_KUTADI()} AS mat_wait
        FROM v_unit_register r
        JOIN production_units u ON u.id = r.id
        JOIN sections sc        ON sc.id = u.current_section_id AND sc.is_exit
@@ -4185,6 +4216,166 @@ router.post('/stock/return', need('warehouse.move', 'production.manage'),
                        payload: { units: done.map((x) => x.conveyor_no) } }, client);
     await client.query('COMMIT');
     res.json({ done });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+// ═══════════════════════════════════ XOM ASHYO TASDIG'I (T/M OMBORDAN OLDIN)
+//
+//  ★ (zavod qarori, 2026-11; izoh: sql/units.sql). Tsex «T/M omborga
+//  jo'natdim» degach belgili xodim konverga yozilgan xom ashyoni ko'radi:
+//  «ma'qul» — ombor mudiri qabul qila oladi; «rad» — jo'natish bekor
+//  bo'ladi, konver tsex ekraniga qaytadi va sabab o'sha yerda turadi.
+//  Har JO'NATISH alohida tasdiqlanadi (qisman jo'natilgan bo'lak ham),
+//  ekranda esa RAQAMNING butun sarfi — tannarx qoidasi bilan bir xil.
+const MAT_HUQUQ = 'production.matcheck';
+
+router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `WITH kut AS (
+       SELECT u.* FROM production_units u
+         JOIN sections sc ON sc.id = u.current_section_id AND sc.is_exit
+        WHERE u.status = 'production' AND u.handover_on IS NOT NULL
+          AND u.mat_ok_at IS NULL),
+     raqam AS (
+       SELECT lower(p.conveyor_no) AS k, MIN(p.product_id) AS product_id,
+              MIN(p.created_at) AS ochildi,
+              SUM(p.qty) FILTER (WHERE p.status <> 'cancelled')::int AS dona
+         FROM production_units p
+        WHERE p.product_id IN (SELECT product_id FROM kut)
+        GROUP BY 1),
+     ortacha AS (
+       SELECT place_id, material_id,
+              SUM(qty * price_usd) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL)
+              / NULLIF(SUM(qty) FILTER (WHERE qty > 0 AND price_usd IS NOT NULL), 0)
+                AS price
+         FROM v_material_flow WHERE kind = 'warehouse'
+        GROUP BY place_id, material_id),
+     sarf AS (
+       SELECT lower(u2.conveyor_no) AS k, COUNT(*)::int AS qator,
+              SUM(mv.qty * o.price) AS summa,
+              COUNT(*) FILTER (WHERE o.price IS NULL)::int AS narxsiz
+         FROM material_moves mv
+         JOIN production_units u2 ON u2.id = mv.to_id
+         LEFT JOIN ortacha o ON o.place_id = mv.from_id
+                            AND o.material_id = mv.material_id
+                            AND mv.from_kind = 'warehouse'
+        WHERE mv.to_kind = 'unit' AND mv.status = 'ok'
+          AND lower(u2.conveyor_no) IN (SELECT k FROM raqam)
+        GROUP BY 1),
+     donaga AS (
+       SELECT r.k, r.product_id, r.ochildi, s.summa / NULLIF(r.dona, 0) AS pd
+         FROM raqam r JOIN sarf s ON s.k = r.k)
+     SELECT u.id, u.conveyor_no, u.qty, u.product_id,
+            pr.name AS product, g.name AS product_type,
+            sh.name AS shop, u.handover_on, w.name AS sent_by,
+            r.dona AS total_qty,
+            COALESCE(s.qator, 0) AS lines, COALESCE(s.narxsiz, 0) AS no_price,
+            s.summa::NUMERIC(16,2) AS summa,
+            (s.summa / NULLIF(r.dona, 0))::NUMERIC(16,2) AS per_dona,
+            prev.pd::NUMERIC(16,2) AS prev_per_dona, prev.k AS prev_no,
+            pr.std_cost
+       FROM kut u
+       JOIN products pr       ON pr.id = u.product_id
+       JOIN product_groups g  ON g.id = pr.group_id
+       LEFT JOIN shops sh     ON sh.id = u.handover_shop_id
+       LEFT JOIN workers w    ON w.id = u.handover_by
+       LEFT JOIN raqam r      ON r.k = lower(u.conveyor_no)
+       LEFT JOIN sarf s       ON s.k = lower(u.conveyor_no)
+       --  Solishtirish: shu mahsulotning sarfi bor OLDINGI raqami
+       LEFT JOIN LATERAL (
+         SELECT d.k, d.pd FROM donaga d
+          WHERE d.product_id = u.product_id AND d.k <> lower(u.conveyor_no)
+            AND d.ochildi <= r.ochildi
+          ORDER BY d.ochildi DESC LIMIT 1) prev ON true
+      ORDER BY u.handover_at, u.conveyor_no`);
+  //  Normativ — faqat `cost.std` da (izoh: sql/materials.sql)
+  if (!req.user.permissions.includes('cost.std'))
+    rows.forEach((x) => { delete x.std_cost; });
+  res.json(rows);
+}));
+
+async function matKonver(client, id) {
+  const u = (await client.query(
+    `SELECT u.id, u.conveyor_no, u.qty, u.status, u.handover_on, u.handover_shop_id,
+            u.mat_ok_at, sc.is_exit, pr.name AS product, g.name AS product_type
+       FROM production_units u
+       JOIN products pr ON pr.id = u.product_id
+       JOIN product_groups g ON g.id = pr.group_id
+       LEFT JOIN sections sc ON sc.id = u.current_section_id
+      WHERE u.id = $1 FOR UPDATE OF u`, [id])).rows[0];
+  if (!u) throw new Error('Konver topilmadi');
+  if (u.status !== 'production' || !u.handover_on || !u.is_exit)
+    throw new Error(`${u.conveyor_no}: T/M omborga jo'natilgan holatda emas`);
+  if (u.mat_ok_at) throw new Error(`${u.conveyor_no}: allaqachon tasdiqlangan`);
+  return u;
+}
+const matQator = (u) => `${u.conveyor_no} · ${u.product}`
+  + (u.product_type ? ` (${u.product_type})` : '') + ` · ${u.qty} ta`;
+
+router.post('/mat-check/approve', need(MAT_HUQUQ), wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.items) ? req.body.items : [req.body.unit_id];
+  if (!ids.filter(Boolean).length) throw new Error('Konver tanlanmagan');
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const done = [];
+    for (const id of ids) {
+      const u = await matKonver(client, id);
+      await client.query(
+        `UPDATE production_units SET mat_ok_at = NOW(), mat_ok_by = $2 WHERE id = $1`,
+        [u.id, req.user.id]);
+      done.push(u);
+    }
+    //  Endi mudirning navbati — xabar shu yerda ketadi (`/handover` da emas)
+    await notify.queueWarehouse({
+      perms: ['warehouse.move', 'warehouse.manage', 'production.manage'],
+      module: 'warehouse', kind: 'fg_inbox',
+      title: `${done.length} ta konver T/M omborga qabul qilishni kutmoqda`,
+      body: done.map(matQator).join('\n')
+            + `\n\nXom ashyoni tasdiqladi: ${req.user.name}`,
+    }, client);
+    await audit(req, { module: 'production', action: 'mat-approve', entity: 'unit',
+                       entity_id: done.length,
+                       payload: { units: done.map((x) => x.conveyor_no) } }, client);
+    await client.query('COMMIT');
+    res.json({ done: done.map((x) => ({ unit_id: x.id, conveyor_no: x.conveyor_no })) });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
+//  RAD — jo'natish bekor bo'ladi (`handoverOne` undo bilan AYNAN bir xil
+//  yozuv, lekin tsex doirasi tekshirilmaydi: tasdiqlovchi tsexda emas).
+//  Sabab MAJBURIY va tsex ekranida turadi — qayta jo'natilganda o'chadi.
+router.post('/mat-check/reject', need(MAT_HUQUQ), wrap(async (req, res) => {
+  const reason = String(req.body.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'Sababini yozing' });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const u = await matKonver(client, req.body.unit_id);
+    await client.query(
+      `UPDATE production_units
+          SET handover_on = NULL, handover_at = NULL,
+              handover_by = NULL, handover_shop_id = NULL,
+              mat_rej_note = $2, mat_rej_at = NOW(), mat_rej_by = $3
+        WHERE id = $1`, [u.id, reason, req.user.id]);
+    await notify.queueShop({
+      shop_id: u.handover_shop_id, perms: ['production.entry', 'production.view'],
+      module: 'production', kind: 'mat_reject',
+      title: `${u.conveyor_no}: xom ashyo rad etildi — T/M omborga qabul qilinmadi`,
+      body: `${matQator(u)}\n\nSabab: ${reason}\nKim: ${req.user.name}`
+            + `\n\nSarfni to'g'rilab, qaytadan jo'nating.`,
+    }, client);
+    await audit(req, { module: 'production', action: 'mat-reject', entity: 'unit',
+                       entity_id: u.id, payload: { conveyor_no: u.conveyor_no, reason } },
+                client);
+    await client.query('COMMIT');
+    res.json({ ok: true });
   } catch (e) {
     await client.query('ROLLBACK');
     return res.status(400).json({ error: e.message });
@@ -4569,6 +4760,10 @@ router.get('/board', need('production.view', 'production.entry'), wrap(async (re
              AND pu.handover_shop_id = COALESCE(r.owner_shop_id, ns.shop_id)) AS sent,
             pu.handover_on,
             hw.name AS sent_by,
+            --  ★ XOM ASHYO RAD ETILGAN (izoh: sql/units.sql) — sabab
+            --  tsex ekranida turadi, qayta jo'natilganda o'chadi.
+            pu.mat_rej_note,
+            ${MAT_KUTADI('pu')} AS mat_wait,
             n.section_id AS next_section_id,
             ns.name      AS next_section,
             -- Keyingi qadamning JAVOBGAR tsexi. Ekranda shu qiymat
@@ -4981,6 +5176,8 @@ async function stampUnit(client, unitId) {
 }
 
 module.exports.scopeOf = scopeOf;
+//  Xom ashyo tasdig'ini kutayotgani — menyudagi navbat ham shundan
+module.exports.MAT_KUTADI = MAT_KUTADI;
 //  Konver so'rovi savdodan ham yoziladi (modules/sales.js): buyurtmaga
 //  mahsulot topilmasa menejer ishlab chiqarishga so'rov yuboradi.
 //  Qoida bitta joyda tursin — raqam, rang va muddat tekshiruvi bilan.

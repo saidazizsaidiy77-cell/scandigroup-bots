@@ -695,6 +695,21 @@ ALTER TABLE workers ADD COLUMN IF NOT EXISTS
 ALTER TABLE workers ADD COLUMN IF NOT EXISTS
   sees_cost BOOLEAN NOT NULL DEFAULT false;
 
+--  ★ XOM ASHYO TASDIG'I — T/M OMBORGA KIRISHDAN OLDIN (zavod qarori,
+--  2026-11; `modules/units.js`, `/xomtasdiq.html`). Tsex «T/M omborga
+--  jo'natdim» degach konverga yozilgan xom ashyoni belgili xodim ko'rib
+--  chiqadi: «ma'qul» — ombor mudiri qabul qila oladi; «rad» — jo'natish
+--  bekor bo'ladi, konver tsexga qaytadi va sabab tsex ekranida turadi.
+--  Kim tasdiqlashi XODIMDA (4-qoida), standarti `false`. Belgi hech
+--  kimda bo'lmasa qoida UXLAYDI: deploy kuni ombor to'xtab qolmasin.
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS
+  mat_approver BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS mat_ok_at   TIMESTAMPTZ;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS mat_ok_by   INT REFERENCES workers(id);
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS mat_rej_note TEXT;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS mat_rej_at  TIMESTAMPTZ;
+ALTER TABLE production_units ADD COLUMN IF NOT EXISTS mat_rej_by  INT REFERENCES workers(id);
+
 -- ───────────────────────────── MASHINA YOZGAN IZOHNI TOZALASH
 --
 --  ★ IZOH — ODAM ODAMGA YOZGAN GAP (zavod qarori, 2026-10). Savdo

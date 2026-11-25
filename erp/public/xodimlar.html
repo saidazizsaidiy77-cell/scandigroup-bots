@@ -643,6 +643,16 @@ function openForm(id){
                 <span class="muted" style="font-size:12px">· tsex boshlig'iga
                   Hisobotlar → Tannarx ochiladi, faqat o'z tsexining
                   mahsuloti</span></span>
+            </div>
+            <!--  ★ XOM ASHYO TASDIG'I (izoh: sql/units.sql). Belgi hech
+                  kimda bo'lmasa qoida ishlamaydi. -->
+            <div class="row" style="gap:10px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="wMatOk" style="width:auto"
+                     ${w?.mat_approver ? 'checked' : ''}>
+              <span style="flex:1">Xom ashyo tasdig'i
+                <span class="muted" style="font-size:12px">· T/M omborga
+                  jo'natilgan konverning sarfini ko'rib «ma'qul» deydi —
+                  shundan keyin ombor qabul qiladi</span></span>
             </div></div>
 
           <!--  ★ OMBOR DOIRASI (izoh: sql/materials.sql). Tsex doirasi
@@ -891,6 +901,7 @@ async function save(id){
     task_watch: $('wTaskWatch').checked,
     ai_access: $('wAi').checked,
     sees_cost: $('wCost').checked,
+    mat_approver: $('wMatOk').checked,
     sees_cash: $('wCashSee').checked,
     can_add_supplier: $('wSupAdd').checked,
     can_request_unit: $('wReq').checked,

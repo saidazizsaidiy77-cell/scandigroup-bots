@@ -287,6 +287,12 @@ const App = (() => {
       //  Savdo ham shu sahifadan yozadi: stol va stul so'rovini endi
       //  FAQAT u beradi (izoh: modules/units.js, requestOne).
       perm: ['production.request', 'production.approve', 'sales.manage'] },
+    //  ★ XOM ASHYO TASDIG'I (izoh: sql/units.sql) — T/M omborga
+    //  jo'natilgan konverning sarfini belgili xodim ko'rib chiqadi.
+    { href: '/xomtasdiq.html', mod: 'production', nav: "Xom ashyo tasdig'i",
+      title: "Xom ashyo tasdig'i", lead: 'T/M omborga kirishdan oldin',
+      text: "Jo'natilgan konverga yozilgan xom ashyo \u00b7 ma'qul yoki rad",
+      perm: ['production.matcheck'] },
     { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
       title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',
       text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",

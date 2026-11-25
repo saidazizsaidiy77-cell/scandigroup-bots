@@ -14340,6 +14340,101 @@ test('tahlilchi AI: huquq, vosita va jurnal', async () => {
   }
 });
 
+//  ★ XOM ASHYO TASDIG'I (zavod qarori, 2026-11; izoh: sql/units.sql).
+//  Belgi hech kimda bo'lmasa qoida uxlaydi; qo'yilgach T/M omborga
+//  jo'natilgan konver «ma'qul» deyilmaguncha qabul qilinmaydi, rad
+//  etilgani esa sabab bilan tsexga qaytadi.
+test("xom ashyo tasdig'i: T/M omborga kirishdan oldin", async () => {
+  const { db } = require('../db');
+  const ZBOR = await H.id(`SELECT id FROM sections WHERE code = 'STU-ZBOR'`);
+  const yol = await H.id(
+    `SELECT r.product_id AS id FROM v_product_route r
+      WHERE r.section_id = $1 ORDER BY r.product_id LIMIT 1`, [ZBOR.id]);
+  const EXIT = await H.id(
+    `SELECT s.id FROM v_product_route r JOIN sections s ON s.id = r.section_id
+      WHERE r.product_id = $1 AND s.is_exit`, [yol.id]);
+  const OLD = await H.id(
+    `SELECT r.section_id AS id FROM v_product_route r
+      JOIN v_product_route e ON e.product_id = r.product_id AND e.section_id = $2
+     WHERE r.product_id = $1 AND r.step_no = e.step_no - 1`, [yol.id, EXIT.id]);
+  const ishchi = await ishchilar();
+  const jonat = async (qty) => {
+    const u = (await admin('POST', '/api/units/', {
+      items: [{ product_id: yol.id, qty, section_id: OLD.id }] })).body.created[0];
+    await xomsiz();
+    const m = await admin('POST', '/api/units/move', { items: [{ unit_id: u.id }], ishchi });
+    assert.equal(m.status, 200, m.text);
+    const h = await admin('POST', '/api/units/handover', { items: [u.id] });
+    assert.equal(h.status, 200, h.text);
+    return u;
+  };
+  const inbox = async () => (await admin('GET', '/api/units/stock/inbox')).body;
+
+  //  Belgi hech kimda yo'q — qoida uxlaydi
+  const a = await jonat(2);
+  assert.equal((await inbox()).find((x) => x.id === a.id).mat_wait, false);
+
+  //  Belgi qo'yiladi — Xodimlar sahifasidan
+  await db.query(`INSERT INTO workers (name) VALUES ('Xom tasdiq')`);
+  const qid = (await H.id(`SELECT id FROM workers WHERE name = 'Xom tasdiq'`)).id;
+  assert.equal((await admin('PATCH', '/api/admin/workers/' + qid,
+    { mat_approver: true })).status, 200);
+  const qodir = H.api(base, await H.sessionFor('Xom tasdiq'));
+  assert.equal((await inbox()).find((x) => x.id === a.id).mat_wait, true);
+  const yoq = await admin('POST', '/api/units/stock/accept', { items: [a.id] });
+  assert.equal(yoq.status, 400);
+  assert.match(yoq.body.error, /tasdig/);
+
+  //  Ro'yxat — faqat belgili xodimga; navbat ro'yxat bilan bir xil
+  assert.equal((await admin('GET', '/api/units/mat-check')).status, 403);
+  const ro = (await qodir('GET', '/api/units/mat-check')).body;
+  assert.ok(ro.some((x) => x.id === a.id));
+  const navQ = (await qodir('GET', '/api/navbat')).body.navbat;
+  assert.equal(navQ.filter((q) => q.page === '/xomtasdiq.html')
+    .reduce((s, q) => s + q.n, 0), ro.length);
+  //  Mudirning navbati tasdiq kutayotganini sanamaydi
+  const navA = (await admin('GET', '/api/navbat')).body.navbat;
+  const ship = (await admin('GET', '/api/sales/shipping')).body.rows.length;
+  assert.equal(navA.filter((q) => q.page === '/omborlar.html').reduce((s, q) => s + q.n, 0),
+    (await inbox()).filter((x) => !x.mat_wait).length + ship);
+  //  Sarf tafsiloti narx bilan ochiladi
+  const det = await qodir('GET', '/api/materials/conveyor?no=' + a.conveyor_no);
+  assert.equal(det.status, 200, det.text);
+  assert.equal(det.body.narx, true);
+
+  //  Rad — sababsiz bo'lmaydi; sabab bilan tsexga qaytadi
+  assert.equal((await qodir('POST', '/api/units/mat-check/reject',
+    { unit_id: a.id })).status, 400);
+  const rd = await qodir('POST', '/api/units/mat-check/reject',
+    { unit_id: a.id, reason: 'Lak yozilmagan' });
+  assert.equal(rd.status, 200, rd.text);
+  const ar = await H.id(`SELECT handover_on, mat_rej_note FROM production_units WHERE id = $1`, [a.id]);
+  assert.equal(ar.handover_on, null);
+  assert.equal(ar.mat_rej_note, 'Lak yozilmagan');
+  assert.ok(!(await qodir('GET', '/api/units/mat-check')).body.some((x) => x.id === a.id));
+
+  //  Qayta jo'natiladi — sabab o'chadi; «ma'qul» dan keyin qabul ochiq
+  assert.equal((await admin('POST', '/api/units/handover', { items: [a.id] })).status, 200);
+  assert.equal((await H.id(`SELECT mat_rej_note FROM production_units WHERE id = $1`,
+    [a.id])).mat_rej_note, null);
+  const ok = await qodir('POST', '/api/units/mat-check/approve', { items: [a.id] });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal((await inbox()).find((x) => x.id === a.id).mat_wait, false);
+  assert.equal((await qodir('POST', '/api/units/mat-check/approve',
+    { items: [a.id] })).status, 400, 'ikki marta tasdiqlanmaydi');
+  const qb = await admin('POST', '/api/units/stock/accept', { items: [a.id] });
+  assert.equal(qb.status, 200, qb.text);
+
+  //  Qisman jo'natilgan bo'lak alohida tasdiqlanadi
+  const b = await jonat(3);
+  await qodir('POST', '/api/units/mat-check/approve', { items: [b.id] });
+  assert.equal((await admin('POST', '/api/units/handover', { items: [b.id], undo: true })).status, 200);
+  assert.equal((await H.id(`SELECT mat_ok_at FROM production_units WHERE id = $1`,
+    [b.id])).mat_ok_at, null, 'jo\'natish qaytarilsa tasdiq ham o\'chadi');
+
+  await db.query(`UPDATE workers SET mat_approver = false WHERE id = $1`, [qid]);
+});
+
 test('yakun', async () => {
   server.close();
   await require('../db').db.end();
