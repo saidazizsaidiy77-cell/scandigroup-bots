@@ -277,7 +277,8 @@ const App = (() => {
     { href: '/konver.html', mod: 'production', nav: 'Konver qidirish',
       title: 'Konver', lead: "Raqam bo'yicha",
       text: "Nechta yasalgan \u00b7 qaysi tsexda, qaysi omborda \u00b7 kimga, qaysi yuk xati bilan chiqib ketgan",
-      perm: ['production.view', 'production.entry', 'warehouse.view', 'sales.view'] },
+      perm: ['production.view', 'production.entry', 'warehouse.view', 'sales.view',
+             'production.matcheck'] },
     //  Konver so'rovi: tsex boshlig'i yozadi, direktor tasdiqlaydi
     //  (izoh: sql/units.sql). Ikkala huquq ham shu sahifani ochadi —
     //  biri yozish, ikkinchisi tasdiqlash uchun.
@@ -287,6 +288,12 @@ const App = (() => {
       //  Savdo ham shu sahifadan yozadi: stol va stul so'rovini endi
       //  FAQAT u beradi (izoh: modules/units.js, requestOne).
       perm: ['production.request', 'production.approve', 'sales.manage'] },
+    //  ★ XOM ASHYO TASDIG'I (izoh: sql/units.sql) — T/M omborga
+    //  jo'natilgan konverning sarfini belgili xodim ko'rib chiqadi.
+    { href: '/xomtasdiq.html', mod: 'production', nav: "Xom ashyo tasdig'i",
+      title: "Xom ashyo tasdig'i", lead: 'T/M omborga kirishdan oldin',
+      text: "Jo'natilgan konverga yozilgan xom ashyo \u00b7 ma'qul yoki rad",
+      perm: ['production.matcheck'] },
     { href: '/qoldiq.html', mod: 'production', nav: "Boshlang'ich qoldiq",
       title: "Boshlang'ich qoldiq", lead: 'Bir martalik kiritish',
       text: "Tizim ishga tushgan kundagi konveyerdagi va T/M omboridagi mahsulotlar",

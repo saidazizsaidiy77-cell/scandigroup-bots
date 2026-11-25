@@ -18,6 +18,8 @@ const TURLAR = [
   { kod: 'unit_inbox',     bolim: 'Ishlab chiqarish', nom: 'Konver qabul qilishingizni kutmoqda' },
   { kod: 'unit_bron',      bolim: 'Ishlab chiqarish', nom: 'Konverga yangi buyurtma' },
   { kod: 'unit_due',       bolim: 'Ishlab chiqarish', nom: 'Ertaga topshiriladi' },
+  { kod: 'mat_check',      bolim: 'Ishlab chiqarish', nom: "Xom ashyo tasdig'ini kutmoqda" },
+  { kod: 'mat_reject',     bolim: 'Ishlab chiqarish', nom: 'Xom ashyo rad etildi — tsexga qaytdi' },
 
   { kod: 'fg_inbox',       bolim: 'Ombor', nom: 'T/M omborga qabul qilishni kutmoqda' },
   { kod: 'wh_return',      bolim: 'Ombor', nom: 'Omborlar aro hujjat' },

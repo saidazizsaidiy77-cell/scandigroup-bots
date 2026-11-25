@@ -37,7 +37,7 @@
 const express = require('express');
 const { db, wrap } = require('../db');
 const { ownOf } = require('../auth');
-const { scopeOf } = require('./units');
+const { scopeOf, MAT_KUTADI } = require('./units');
 
 const router = express.Router();
 
@@ -164,9 +164,25 @@ const NAVBATLAR = [
          FROM v_unit_register r
          JOIN production_units u ON u.id = r.id
          JOIN sections sc        ON sc.id = u.current_section_id AND sc.is_exit
-        WHERE r.status = 'production' AND u.handover_on IS NOT NULL`);
+        WHERE r.status = 'production' AND u.handover_on IS NOT NULL
+          --  Xom ashyo tasdig'ini kutayotgani hali mudirning ishi emas
+          AND NOT ${MAT_KUTADI()}`);
     return [{ page: '/omborlar.html', mod: 'warehouse', n,
               izoh: `${n} ta konver omborga jo'natilgan — qabul qilinmagan` }];
+  },
+
+  //  4b. XOM ASHYO TASDIG'I — belgili xodimning navbati. Shart
+  //  `modules/units.js` dagi `/mat-check` bilan bir xil.
+  async (req) => {
+    if (!bor(req, 'production.matcheck')) return [];
+    const n = await son(
+      `SELECT COUNT(*)::int AS n
+         FROM production_units u
+         JOIN sections sc ON sc.id = u.current_section_id AND sc.is_exit
+        WHERE u.status = 'production' AND u.handover_on IS NOT NULL
+          AND u.mat_ok_at IS NULL`);
+    return [{ page: '/xomtasdiq.html', mod: 'production', n,
+              izoh: `${n} ta konver xom ashyo tasdig'ini kutmoqda` }];
   },
 
   //  5. CHIQARISHNI KUTAYOTGAN BUYURTMA — ombor mudirining ikkinchi

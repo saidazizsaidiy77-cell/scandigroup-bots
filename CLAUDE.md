@@ -300,6 +300,27 @@ Konver bo'linadi: jo'natilgani YANGI bo'lak bo'ladi (raqami o'sha),
 qolgani esa eski qatorda, o'z bo'limida va belgisiz turaveradi. Ekranda
 o'tkazish bilan BITTA oyna — savol boshqa («nechtasi jo'natiladi»).
 
+**★ XOM ASHYO TASDIG'I — T/M OMBORGA KIRISHDAN OLDIN** (zavod qarori,
+2026-11; `workers.mat_approver`, `production_units.mat_ok_*`/`mat_rej_*`,
+`/api/units/mat-check`, `/xomtasdiq.html`). Tsex «T/M omborga
+jo'natdim» degach belgili xodim konverga yozilgan xom ashyoni ko'radi:
+raqamning butun sarfi, donaga, shu mahsulotning OLDINGI konveri bilan
+farq (normativ — faqat `cost.std` da). **«Ma'qul»** — mudirga
+`fg_inbox` xabari ketadi va qabul ochiladi; **«Rad»** (sabab
+MAJBURIY) — jo'natish bekor bo'ladi, konver tsex ekraniga qaytadi va
+sabab o'sha yerda qizil turadi, qayta jo'natilganda o'chadi. Har
+JO'NATISH alohida tasdiqlanadi (qisman bo'lak ham); jo'natish
+qaytarilsa tasdiq ham o'chadi. Hamma yasalgan mahsulotga (matras
+jo'natilmaydi). Shart BITTA joyda (`MAT_KUTADI`): `acceptStock`,
+`/stock/inbox` dagi `mat_wait`, mudirning navbati (kutayotgani
+sanalmaydi) va tasdiqlovchining navbati. Huquq faqat BELGIDAN
+(`production.matcheck`, `erp/auth.js`; rolda yo'q, administratorda
+ham). **Belgi hech kimda bo'lmasa qoida UXLAYDI** — deploy kuni ombor
+to'xtab qolmasin.
+**«Zavoddagi hammasi»** tabi (`?all=1`): tsexda yurgan istalgan
+konverning sarfi, raqam bo'yicha bitta qator, faqat ko'rish; konver
+pasporti ham shu belgiga ochiq.
+
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
 vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,
 `sql/warehouse.sql` da. `kind='fg'` — qoldiq konver hisobida;
@@ -3953,7 +3974,8 @@ Navbatlar (`erp/modules/nav.js`, `GET /api/navbat`):
 | `/sorovlar.html` | tasdiq kutayotgan konver so'rovi | `production.approve` |
 | `/harakat.html` | tsexga jo'natilgan, qabul qilinmagan konver | tsex doirasi bor `production.entry` |
 | `/harakat.html` | konverga tushgan YANGI buyurtma (`unit_bron_seen`) | o'sha |
-| `/omborlar.html` | omborga jo'natilgan, qabul qilinmagan konver | `warehouse.move`/`manage` |
+| `/xomtasdiq.html` | T/M omborga jo'natilgan, xom ashyosi tasdiqlanmagan konver | `production.matcheck` (belgi) |
+| `/omborlar.html` | omborga jo'natilgan, qabul qilinmagan konver (tasdiq kutayotgani sanalmaydi) | `warehouse.move`/`manage` |
 | `/omborlar.html` | chiqarishni kutayotgan buyurtma (`to_ship`) | o'sha |
 | `/omborlar.html` | vitrinadan qaytarish hujjati | T/M da `confirmed`, vitrinada `new` |
 | `/buyurtmalar.html` | bronning hammasi omborga kelgan, lekin yuborilmagan buyurtma | `sales.manage` |

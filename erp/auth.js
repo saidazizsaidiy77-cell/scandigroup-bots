@@ -20,7 +20,7 @@ async function loadWorker(workerId) {
     `SELECT id, name, phone, tg_id, cash_all_customers, sees_warehouse,
             sees_cash, can_add_supplier,
             can_release, can_release_own, can_request_unit, can_add_customer, mat_scope,
-            sees_cost
+            sees_cost, mat_approver
        FROM workers WHERE id = $1 AND active`, [workerId])).rows[0];
   if (!w) return null;
   const [perms, roles, extra] = await Promise.all([
@@ -61,7 +61,11 @@ async function loadWorker(workerId) {
       .filter((p) => w.sees_cash !== false || !p.startsWith('cash.'))
       .filter((p) => w.can_request_unit !== false || p !== 'production.request')
       //  Tannarx — faqat belgisi bor boshliqqa (izoh: sql/units.sql).
-      .filter((p) => w.sees_cost === true || p !== 'cost.shop'),
+      .filter((p) => w.sees_cost === true || p !== 'cost.shop')
+      //  ★ XOM ASHYO TASDIG'I — faqat belgidan (izoh: sql/units.sql).
+      //  Hech bir rolda yo'q, administratorda ham: tasdiqlovchi bitta
+      //  odam va u Xodimlar sahifasida belgilanadi.
+      .concat(w.mat_approver === true ? ['production.matcheck'] : []),
     roles: roles.rows,
     // Usta faqat o'z tsexini ko'rishi uchun: rollardagi eng tor doira
     //  Qo'shimchasi faqat doirasi BOR xodimga qo'shiladi: doirasi yo'q
@@ -102,6 +106,7 @@ async function loadWorker(workerId) {
     //  Faqat O'Z buyurtmasini chiqarishga beradi (izoh: sql/sales.sql).
     can_release_own: w.can_release_own === true,
     can_request_unit: w.can_request_unit !== false,
+    mat_approver: w.mat_approver === true,
     //  ★ MIJOZNI HAR MENEJER QO'SHMAYDI (izoh: sql/units.sql).
     //  Mijoz bazasi savdoning o'qi: bitta mijoz ikki nom bilan kirsa
     //  qarzi ham ikkiga bo'linib qolardi. Belgi XODIMDA, rolda emas —

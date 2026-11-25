@@ -301,7 +301,7 @@ function draw() {
               qilinsa, o'sha kuniyoq chiqarib yuboriladi. -->
         <tbody>${rows.map(r => `
           <tr>
-            <td class="c-sel">${canAccept ? `<input type="checkbox" style="width:auto"
+            <td class="c-sel">${canAccept && !r.mat_wait ? `<input type="checkbox" style="width:auto"
               ${picked.has(r.id) ? 'checked' : ''} onchange="pick(${r.id},this.checked)">` : ''}</td>
             <td class="c-no"><b>${esc(r.conveyor_no)}</b></td>
             <td class="c-name">${esc(r.product)}${r.color
@@ -321,7 +321,12 @@ function draw() {
                   kelmagan bo'lsa qator ombor ro'yxatida osilib
                   qolmasin. Ikkinchi ikkitasi kichik: ular kunda bir
                   marta kerak bo'ladigan tuzatish, asosiy amal emas. -->
-            <td class="c-act">${canAccept ? `
+            <!--  ★ XOM ASHYO TASDIG'I (izoh: sql/units.sql): «ma'qul»
+                  deyilmaguncha qabul tugmasi chizilmaydi, sababi yoziladi. -->
+            <td class="c-act">${canAccept && r.mat_wait ? `
+              <span class="tag" title="Konverga yozilgan xom ashyo hali ko'rib chiqilmagan">xom ashyo tasdig'ini kutmoqda</span>
+              <button class="ic" title="Tsexga qaytarish — mahsulot kelmagan"
+                onclick="qaytar(${r.id})">&#8629;</button>` : canAccept ? `
               <button class="primary" onclick="accept([{unit_id:${r.id}}])">Qabul qildim</button>
               ${r.qty > 1 ? `<button class="ic" title="Bir qismini qabul qilish"
                 onclick="askQty(${r.id})">qismi</button>` : ''}
@@ -403,7 +408,7 @@ async function qaytar(id) {
 
 function bulk() {
   const sel = rows.filter(r => picked.has(r.id)).map(r => ({ unit_id: r.id }));
-  if (!sel.length) { rows.forEach(r => picked.add(r.id)); return draw(); }
+  if (!sel.length) { rows.filter(r => !r.mat_wait).forEach(r => picked.add(r.id)); return draw(); }
   accept(sel);
 }
 

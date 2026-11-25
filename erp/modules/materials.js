@@ -1007,8 +1007,11 @@ const OMBOR = `
 //  Narx faqat narx huquqi borida: pasport savdo va ombor uchun ham
 //  ochiq va u yerda pul turmaydi. Narx — manba omborning O'RTACHA
 //  kirim narxi (`v_material_stock` bilan bir xil formula).
-const SARF_NARX = [...NARX_HUQUQ, 'production.manage', 'cash.view'];
-router.get('/conveyor', need(...VIEW, 'production.view', 'production.entry'),
+//  Xom ashyo tasdiqlovchisi ham pulni ko'radi: qaror sarfning qiymatiga
+//  qarab qilinadi (izoh: sql/units.sql, `mat_approver`).
+const SARF_NARX = [...NARX_HUQUQ, 'production.manage', 'cash.view', 'production.matcheck'];
+router.get('/conveyor', need(...VIEW, 'production.view', 'production.entry',
+  'production.matcheck'),
   wrap(async (req, res) => {
   const no = String(req.query.no || '').trim();
   if (!no) return res.status(400).json({ error: 'Konver raqami yozilmagan' });

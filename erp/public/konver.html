@@ -392,7 +392,8 @@ App.start(async () => {
   const no = new URLSearchParams(location.search).get('no');
   if (no) { $('q').value = no; await qidir(); }
   else $('q').focus();
-}, 'production.view', 'production.entry', 'warehouse.view', 'sales.view');
+}, 'production.view', 'production.entry', 'warehouse.view', 'sales.view',
+   'production.matcheck');
 </script>
 </body>
 </html>
