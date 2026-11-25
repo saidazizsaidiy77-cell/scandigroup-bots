@@ -169,6 +169,8 @@ async function sarf(d) {
   SARF.product = `${d.product}${d.product_type ? ' · ' + d.product_type : ''}`;
   SARF.total = d.total; SARF.uom = d.uom || 'dona';
   const narx = SARF.narx;
+  //  ✎ — sarfni yozadigan huquqda; doira SERVERDA (`/consume/:id/fix`)
+  const tuz = App.can('materials.request', 'materials.manage', 'production.manage');
   const ok = SARF.rows.filter((r) => r.status === 'ok');
   //  Material bo'yicha jami — tekshiruvning savoli «nima, qancha ketdi».
   const jam = new Map();
@@ -205,7 +207,9 @@ async function sarf(d) {
           <td class="num">${n3(r.qty)} <span class="muted">${esc(r.uom || '')}</span></td>
           <td class="num">${r.unit_qty ?? '<span class="muted">—</span>'}</td>
           <td>${esc(r.warehouse || '')}${r.section ? ` <span class="muted">· ${esc(r.section)}</span>` : ''}</td>
-          <td>${esc(r.worker || '')}</td>
+          <td>${esc(r.worker || '')}${tuz && r.status === 'ok' ? ` <button class="no-print"
+            title="Sonini tuzatish" style="padding:2px 8px"
+            onclick="sarfTuz(${r.id}, ${Number(r.qty)})">✎</button>` : ''}</td>
           ${narx ? `<td class="num">${r.price == null ? '<span class="muted">—</span>' : n2(r.price)}</td>
                     <td class="num">${sum(r)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
       <h3 style="margin:14px 0 8px;font-size:14px">Material bo'yicha jami</h3>
@@ -226,6 +230,24 @@ async function sarf(d) {
             SARF.total ? n2(jami / SARF.total) : '—'} $ (${SARF.total} ${esc(SARF.uom)})
             · narx — manba omborning o'rtacha kirim narxi</td></tr>` : ''}
         </tbody></table></div>`}`;
+}
+
+//  ★ SARF SONI JOYIDA TUZATILADI (zavod qarori, 2026-11): konverni
+//  yozilgan bo'limga orqaga haydash shart emas. Sabab MAJBURIY.
+async function sarfTuz(id, eski) {
+  const v = prompt(`To'g'ri soni (hozir ${n3(eski)}). 0 — butunlay bekor, `
+    + `farq o'z omboriga qaytadi:`, String(eski));
+  if (v == null) return;
+  const qty = Number(String(v).replace(',', '.').replace(/\s/g, ''));
+  if (!(qty >= 0) || String(v).trim() === '') return alert('Sonini yozing');
+  const reason = prompt('Nega tuzatilmoqda? (sabab audit jurnalida qoladi)');
+  if (reason == null) return;
+  if (!reason.trim()) return alert('Sababini yozing');
+  try {
+    await App.api('/api/materials/consume/' + id + '/fix', { method: 'POST',
+      body: JSON.stringify({ qty, reason }) });
+    location.reload();
+  } catch (e) { alert(e.message); }
 }
 
 //  Varaq o'zi aytsin: qaysi konver, qaysi mahsulot, kim va qachon

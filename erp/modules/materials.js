@@ -1219,6 +1219,59 @@ router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
   res.json({ ok: true });
 }));
 
+//  ★ SARFNING SONI TUZATILADI — KONVER QAYERDA TURGANIDAN QAT'I NAZAR
+//  (zavod qarori, 2026-11; konver pasportidagi ✎). C26-292 da korpus
+//  tsexi Owen oyoqni 76 ta deb yozgan, xato esa xom ashyo tasdig'ida —
+//  konver qadoqlashda — topildi. ▣ faqat O'Z bo'limidagi konverda, ya'ni
+//  tuzatish uchun konverni lakdan korpusgacha orqaga haydash kerak
+//  bo'lardi: yolg'on harakat, faqat bitta raqam uchun. Endi o'sha
+//  QATORNING o'zi tuzatiladi: bo'lim, ombor, kun va kim yozgani
+//  qoladi, faqat soni almashadi; eski va yangi soni hamda SABAB
+//  auditda (`consume-fix`). Doira bekor qilish bilan BITTA (`sarfDoira`
+//  — konverning egasi tsexi, joyi emas). Ko'paytirishda ombor to'sig'i
+//  faqat FARQQA qo'yiladi: eski soni allaqachon qoldiqdan ayirilgan.
+router.post('/consume/:id/fix', need('materials.request', ...MANAGE),
+  wrap(async (req, res) => {
+  const qty = Number(req.body?.qty);
+  const sabab = String(req.body?.reason || '').trim();
+  //  0 — butunlay bekor: hammasi o'z omboriga qaytadi (C26-292: 76 ta
+  //  Owen oyoq korpus tsex omboriga qaytishi kerak edi)
+  if (!(qty >= 0) || req.body?.qty === '' || req.body?.qty == null)
+    return res.status(400).json({ error: "Sonini yozing (0 — butunlay bekor)" });
+  if (!sabab) return res.status(400).json({ error: 'Sababini yozing' });
+  //  Doira tranzaksiyadan OLDIN: `konverDoira` hovuzdan o'qiydi (3-qoida)
+  const bor = (await db.query(
+    `SELECT to_id, section_id FROM material_moves
+      WHERE id = $1 AND to_kind = 'unit' AND status = 'ok'`, [req.params.id])).rows[0];
+  if (!bor) return res.status(404).json({ error: 'Sarf topilmadi' });
+  await sarfDoira(db, req, bor.to_id, bor.section_id);
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const mv = (await client.query(
+      `SELECT id, to_id, section_id, from_kind, from_id, material_id, qty
+         FROM material_moves
+        WHERE id = $1 AND to_kind = 'unit' AND status = 'ok' FOR UPDATE`,
+      [req.params.id])).rows[0];
+    if (!mv) throw Object.assign(new Error('Sarf topilmadi'), { status: 404 });
+    const farq = qty - Number(mv.qty);
+    if (farq > 0 && mv.from_kind === 'warehouse')
+      await yetarlimi(client, mv.from_id, mv.material_id, farq);
+    if (qty === 0)
+      await client.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`, [mv.id]);
+    else
+      await client.query(`UPDATE material_moves SET qty = $2 WHERE id = $1`, [mv.id, qty]);
+    await audit(req, { module: 'materials', action: 'consume-fix',
+      entity: 'material_moves', entity_id: mv.id,
+      payload: { edi: Number(mv.qty), boldi: qty, sabab } }, client);
+    await client.query('COMMIT');
+    res.json({ ok: true, edi: Number(mv.qty), boldi: qty });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(e.status || 400).json({ error: e.message });
+  } finally { client.release(); }
+}));
+
 //  ★ ADASHIB YOZILGAN BOSHLANG'ICH QOLDIQ BEKOR QILINADI (zavod
 //  qarori, 2026-09). Qoldiq bir martalik ish va o'sha bir martada
 //  adashish oson: material boshqa omborga tushib qolardi va uni
