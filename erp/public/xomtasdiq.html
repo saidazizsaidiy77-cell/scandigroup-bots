@@ -147,8 +147,16 @@ async function tafsilot(r) {
   const ok = d.rows.filter((x) => x.status === 'ok');
   const jami = new Map();
   for (const x of ok) {
-    const j = jami.get(x.material_id) || { material: x.material, uom: x.uom, qty: 0, summa: 0, narxsiz: false };
+    const j = jami.get(x.material_id) || { material: x.material, uom: x.uom, qty: 0, summa: 0,
+      narxsiz: false, kim: new Map() };
     j.qty += Number(x.qty);
+    //  ★ KIM KIRITGANI (zavod qarori, 2026-11): xato sarf topilganda
+    //  savol «kim yozdi» — har xodim o'z soni va kuni bilan
+    const kk = x.worker || '—';
+    const kv = j.kim.get(kk) || { qty: 0, kun: x.moved_on };
+    kv.qty += Number(x.qty);
+    if (x.moved_on > kv.kun) kv.kun = x.moved_on;
+    j.kim.set(kk, kv);
     if (x.price == null) j.narxsiz = true; else j.summa += Number(x.qty) * Number(x.price);
     jami.set(x.material_id, j);
   }
@@ -157,11 +165,13 @@ async function tafsilot(r) {
   if (!el) return;
   el.innerHTML = ok.length ? `<table style="font-size:13px;margin:6px 0 10px">
     <thead><tr><th>Material</th><th class="num">Soni</th><th class="num">Donaga</th>
-      <th class="num">Summa, $</th></tr></thead>
+      <th class="num">Summa, $</th><th>Kim kiritgan</th></tr></thead>
     <tbody>${[...jami.values()].sort((a, b) => b.summa - a.summa).map((j) => `<tr>
       <td>${esc(j.material)}</td><td class="num">${usd(j.qty)} ${esc(j.uom || '')}</td>
       <td class="num">${usd(j.qty / dona)}</td>
-      <td class="num">${j.narxsiz ? '<span class="late">narx yo\'q</span>' : usd(j.summa)}</td></tr>`).join('')}
+      <td class="num">${j.narxsiz ? '<span class="late">narx yo\'q</span>' : usd(j.summa)}</td>
+      <td style="font-size:12px">${[...j.kim].map(([k, v]) => `${esc(k)} — ${usd(v.qty)}`
+        + `<span class="muted"> · ${sana(v.kun)}</span>`).join('<br>')}</td></tr>`).join('')}
     </tbody></table>
     <a href="/konver.html?no=${encodeURIComponent(r.conveyor_no)}" target="_blank">Konver pasporti →</a>`
     : `<p class="late">Bu konverga xom ashyo umuman yozilmagan.</p>`;

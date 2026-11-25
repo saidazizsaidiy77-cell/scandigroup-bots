@@ -326,6 +326,9 @@ pasporti ham shu belgiga ochiq. Ustida **tsex** va **mahsulot turi** filtri
 (`handover_shop_id`) emas: u iz bo'lib qabuldan keyin ham qoladi va
 Korpus jo'natgan konver Polirovkada «Korpus» bo'lib turardi. Bo'laklari
 ikki tsexda bo'lsa ikkalasida ham topiladi.
+Ochilgan qatorda har material yonida **kim kiritgani** — xodim, soni va
+kuni (zavod qarori, 2026-11): xato sarf topilganda birinchi savol
+«kim yozdi».
 
 **Omborlar** (`warehouses`) — zavodda bitta ombor yo'q: T/M ombor, uchta
 vitrina (showroom) va xom ashyo omborlari. Ro'yxat bazada,
