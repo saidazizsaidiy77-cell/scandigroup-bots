@@ -3196,6 +3196,33 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
   assert.equal((await usta('POST', '/api/materials/consume/' + oxirgi.id + '/cancel'))
     .status, 404);
 
+  //  ★ SONI JOYIDA TUZATILADI (konver pasportidagi ✎): sababsiz yo'q,
+  //  qoldiq farq bilan o'zgaradi, kim yozgani qoladi, audit `consume-fix`.
+  const tirik = (await usta('GET', '/api/materials/unit/' + u.id)).body.rows
+    .find((r) => r.status === 'ok');
+  assert.equal((await usta('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 5 })).status, 400, 'sababsiz bo\'lmaydi');
+  const fx = await usta('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 5, reason: '12 emas, 5 ta' });
+  assert.equal(fx.status, 200, fx.text);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id && r.warehouse_id === wh).qty), 45);
+  assert.ok((await H.id(`SELECT 1 AS x FROM audit_log WHERE action = 'consume-fix'
+     AND entity_id = $1`, [String(tirik.id)])), 'auditda');
+  assert.equal((await usta('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 12, reason: 'qaytarildi' })).status, 200);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id && r.warehouse_id === wh).qty), 38);
+  assert.equal((await usta('POST', '/api/materials/consume/' + oxirgi.id + '/fix',
+    { qty: 1, reason: 'x' })).status, 404, 'bekor qilingani tuzatilmaydi');
+  //  0 — butunlay bekor, hammasi omborga qaytadi; keyin tiklanadi
+  assert.equal((await usta('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 0, reason: 'umuman ishlatilmagan' })).status, 200);
+  assert.equal(Number((await xom('GET', '/api/materials/stock')).body.rows
+    .find((r) => r.material_id === m.id && r.warehouse_id === wh).qty), 50);
+  assert.equal((await usta('POST', '/api/materials/consume/' + tirik.id + '/restore'))
+    .status, 200);
+
   //  ★ DOIRA CHEGARA: stul tsexining boshlig'i korpus konveriga
   //  material yoza olmaydi — ro'yxatni chetlab id yuborsa ham.
   const stul = (await H.id(`SELECT id FROM shops WHERE code='STUL'`)).id;

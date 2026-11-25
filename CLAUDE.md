@@ -5868,6 +5868,16 @@ yozilmaganining BELGISI** bo'ladi va ekranda QIZIL bo'lib turadi —
 ham oynadagi ro'yxatda, ham ombor qoldig'ida. Nolga qisish yolg'on
 bo'lardi, yashirish esa xatoni ko'rinmas qilardi.
 
+**★ SARF SONI JOYIDA TUZATILADI** (zavod qarori, 2026-11;
+`POST /api/materials/consume/:id/fix`, konver pasportidagi **✎**).
+C26-292 da korpus tsexi Owen oyoqni 76 ta deb yozgan, xato esa
+xom ashyo tasdig'ida — konver qadoqlashda — topildi. ▣ faqat O'Z
+bo'limidagi konverda, ya'ni tuzatish uchun konverni lakdan korpusgacha
+orqaga haydash kerak bo'lardi. Endi qatorning O'ZI tuzatiladi: bo'lim,
+ombor, kun va kim yozgani qoladi, farq o'z omboriga qaytadi; **0 —
+butunlay bekor**. Sabab MAJBURIY, audit `consume-fix` (`edi`/`boldi`).
+Doira bekor qilish bilan bir xil (konverning egasi tsexi, joyi emas).
+
 **Adashib yozilgani O'CHIRILMAYDI, bekor qilinadi**: qoldiqdan
 chiqadi, tarixda o'chirilgan holida qoladi (kassadagi operatsiya
 bilan bir xil qoida). Sarf PULGA tegadi va yo'qolgan qator savol
