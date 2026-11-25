@@ -4243,11 +4243,20 @@ router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
               (SELECT string_agg(DISTINCT COALESCE(s2.name, 'boshlanmagan'), ', ')
                  FROM production_units x LEFT JOIN sections s2 ON s2.id = x.current_section_id
                 WHERE lower(x.conveyor_no) = lower(u.conveyor_no)
-                  AND x.status = 'production') AS joy
+                  AND x.status = 'production') AS joy,
+              --  Tsex — bo'lak TURGAN bo'limning tsexi. \`handover_shop_id\`
+              --  emas: u jo'natgan tsexning izi va qabuldan keyin ham qoladi
+              --  (Korpus jo'natgan konver Polirovkada «Korpus» bo'lib turardi)
+              (SELECT array_agg(DISTINCT COALESCE(sh2.name, 'Boshlanmagan'))
+                 FROM production_units x
+                 LEFT JOIN sections s2 ON s2.id = x.current_section_id
+                 LEFT JOIN shops sh2   ON sh2.id = s2.shop_id
+                WHERE lower(x.conveyor_no) = lower(u.conveyor_no)
+                  AND x.status = 'production') AS shops
          FROM production_units u
         WHERE u.status = 'production'
         ORDER BY lower(u.conveyor_no), u.id`
-    : `SELECT u.*, u.qty AS zqty, NULL::text AS joy FROM production_units u
+    : `SELECT u.*, u.qty AS zqty, NULL::text AS joy, NULL::text[] AS shops FROM production_units u
          JOIN sections sc ON sc.id = u.current_section_id AND sc.is_exit
         WHERE u.status = 'production' AND u.handover_on IS NOT NULL
           AND u.mat_ok_at IS NULL`;
@@ -4284,7 +4293,8 @@ router.get('/mat-check', need(MAT_HUQUQ), wrap(async (req, res) => {
          FROM raqam r JOIN sarf s ON s.k = r.k)
      SELECT u.id, u.conveyor_no, u.zqty AS qty, u.product_id, u.joy,
             pr.name AS product, g.name AS product_type,
-            COALESCE(sh.name, csh.name) AS shop, u.handover_on, w.name AS sent_by,
+            COALESCE(array_to_string(u.shops, ', '), sh.name, csh.name) AS shop,
+            u.shops, u.handover_on, w.name AS sent_by,
             r.dona AS total_qty,
             COALESCE(s.qator, 0) AS lines, COALESCE(s.narxsiz, 0) AS no_price,
             s.summa::NUMERIC(16,2) AS summa,

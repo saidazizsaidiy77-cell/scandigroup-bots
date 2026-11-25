@@ -95,17 +95,19 @@ async function load() {
     $(id).innerHTML = `<option value="">${bosh}</option>`
       + v.map((x) => `<option ${x === eski ? 'selected' : ''}>${esc(x)}</option>`).join('');
   };
-  tanla('fShop', 'Barcha tsex', rows.map(tsexi));
+  tanla('fShop', 'Barcha tsex', rows.flatMap(tsexlar));
   tanla('fType', 'Barcha turlar', rows.map((r) => r.product_type || '—'));
   chiz();
 }
 
 const tsexi = (r) => r.shop || 'Boshlanmagan';
+//  Bo'laklari bir necha tsexda bo'lsa har birida topiladi (server `shops`)
+const tsexlar = (r) => r.shops || [tsexi(r)];
 
 function chiz() {
   const q = $('q').value.trim().toLowerCase();
   const sh = $('fShop').value, tp = $('fType').value;
-  const ko = rows.filter((r) => (!sh || tsexi(r) === sh)
+  const ko = rows.filter((r) => (!sh || tsexlar(r).includes(sh))
     && (!tp || (r.product_type || '—') === tp)
     && (!q || [r.conveyor_no, r.product, r.product_type, r.joy, r.shop]
       .some((v) => String(v || '').toLowerCase().includes(q))));

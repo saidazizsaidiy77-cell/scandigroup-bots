@@ -14403,6 +14403,14 @@ test("xom ashyo tasdig'i: T/M omborga kirishdan oldin", async () => {
   const all = (await qodir('GET', '/api/units/mat-check?all=1')).body;
   assert.ok(all.some((x) => x.conveyor_no === b0.conveyor_no), 'jo\'natilmagani ham bor');
   assert.equal(new Set(all.map((x) => x.conveyor_no.toLowerCase())).size, all.length);
+  //  Tsex — bo'laklar TURGAN bo'limlarning tsexi (jo'natgan tsex emas)
+  const kutTsex = await H.id(
+    `SELECT array_agg(DISTINCT COALESCE(sh.name, 'Boshlanmagan') ORDER BY COALESCE(sh.name, 'Boshlanmagan')) AS t
+       FROM production_units x LEFT JOIN sections s ON s.id = x.current_section_id
+       LEFT JOIN shops sh ON sh.id = s.shop_id
+      WHERE lower(x.conveyor_no) = lower($1) AND x.status = 'production'`, [b0.conveyor_no]);
+  const b0r = all.find((x) => x.conveyor_no === b0.conveyor_no);
+  assert.deepEqual([...b0r.shops].sort(), [...kutTsex.t].sort());
   assert.equal((await qodir('GET', '/api/units/track?no=' + b0.conveyor_no)).status, 200);
   //  Sarf tafsiloti narx bilan ochiladi
   const det = await qodir('GET', '/api/materials/conveyor?no=' + a.conveyor_no);
