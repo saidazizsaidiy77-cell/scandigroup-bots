@@ -42,6 +42,10 @@
   <div class="row" style="gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <button id="tKut" class="primary" onclick="rejim(false)">Tasdiq kutmoqda</button>
     <button id="tAll" onclick="rejim(true)">Zavoddagi hammasi</button>
+    <!--  Filtr jurnaldagidek: tsex va mahsulot turi. KLIENTDA — ro'yxatda
+          LIMIT yo'q, qatorlarning hammasi sahifada turadi. -->
+    <select id="fShop" style="max-width:200px" onchange="chiz()"></select>
+    <select id="fType" style="max-width:200px" onchange="chiz()"></select>
     <input id="q" placeholder="Raqam, mahsulot yoki bo'lim" style="max-width:260px"
            oninput="chiz()">
   </div>
@@ -84,13 +88,27 @@ function farq(v, base) {
 
 async function load() {
   rows = await App.api('/api/units/mat-check' + (hammasi ? '?all=1' : ''));
+  //  Ro'yxatlar yuklangan qatorlardan yig'iladi; tanlangani saqlanadi
+  const tanla = (id, bosh, qiym) => {
+    const eski = $(id).value;
+    const v = [...new Set(qiym)].sort((a, b) => a.localeCompare(b));
+    $(id).innerHTML = `<option value="">${bosh}</option>`
+      + v.map((x) => `<option ${x === eski ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  };
+  tanla('fShop', 'Barcha tsex', rows.map(tsexi));
+  tanla('fType', 'Barcha turlar', rows.map((r) => r.product_type || '—'));
   chiz();
 }
 
+const tsexi = (r) => r.shop || 'Boshlanmagan';
+
 function chiz() {
   const q = $('q').value.trim().toLowerCase();
-  const ko = q ? rows.filter((r) => [r.conveyor_no, r.product, r.product_type, r.joy, r.shop]
-    .some((v) => String(v || '').toLowerCase().includes(q))) : rows;
+  const sh = $('fShop').value, tp = $('fType').value;
+  const ko = rows.filter((r) => (!sh || tsexi(r) === sh)
+    && (!tp || (r.product_type || '—') === tp)
+    && (!q || [r.conveyor_no, r.product, r.product_type, r.joy, r.shop]
+      .some((v) => String(v || '').toLowerCase().includes(q))));
   const std = rows.some((r) => 'std_cost' in r);
   $('thStd').hidden = !std;
   const cols = std ? 9 : 8;
@@ -100,7 +118,7 @@ function chiz() {
       <td>${esc(r.product)}<div class="muted" style="font-size:11px">${esc(r.product_type || '')}</div></td>
       <td class="num">${r.qty}${r.total_qty && r.total_qty !== r.qty
         ? `<div class="muted" style="font-size:11px">raqamda ${r.total_qty}</div>` : ''}</td>
-      <td>${esc(r.shop || '')}<div class="muted" style="font-size:11px">${esc(hammasi
+      <td>${esc(tsexi(r))}<div class="muted" style="font-size:11px">${esc(hammasi
         ? (r.joy || '') : (r.sent_by || ''))}</div></td>
       <td class="num">${r.lines ? usd(r.summa) : '<span class="late">sarf yozilmagan</span>'}
         ${r.no_price ? `<div class="late" style="font-size:11px">${r.no_price} qatorda narx yo'q</div>` : ''}</td>
@@ -114,7 +132,7 @@ function chiz() {
     </tr>
     ${ochiq === r.id ? `<tr class="det"><td colspan="${cols}" id="det${r.id}">
       <span class="muted">Yuklanmoqda…</span></td></tr>` : ''}`).join('')
-    || `<tr><td colspan="${cols}" class="muted">${q ? 'Topilmadi'
+    || `<tr><td colspan="${cols}" class="muted">${q || sh || tp ? 'Topilmadi'
       : hammasi ? 'Ishlab chiqarishda konver yo\'q' : 'Tasdiq kutayotgan konver yo\'q'}</td></tr>`;
   if (ochiq) tafsilot(rows.find((r) => r.id === ochiq));
 }
