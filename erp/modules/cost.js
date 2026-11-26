@@ -38,11 +38,15 @@ const TOLIQ = ['cash.view', 'cash.manage', 'production.manage',
 //  ★ TSEX BOSHLIG'I O'Z TSEXINI KO'RADI (`cost.shop`, zavod qarori
 //  2026-11): stul boshlig'iga stul tannarxi. Mahsulot qaysi tsexniki —
 //  `shopOfProduct` bilan BIR XIL qoida (javobgar tsex → marshrutning
-//  birinchi qadami). Doira — ROLNING tsexi (`scope_shop_main`), ish
-//  haqi sahifasi bilan bir xil. Chegara SERVERDA.
+//  birinchi qadami). Doira — rolning tsexi va QO'SHIMCHA tsexlari
+//  (`scope_shop_ids`), ish haqi sahifasi bilan bir xil. Chegara SERVERDA.
+//  ★ TSEX BOSHLIG'IGA PUL YO'Q (zavod qarori, 2026-11): u faqat xom
+//  ashyo SARFINI — nechta, donaga va oldingi konver bilan farq —
+//  ko'radi; narx, summa va ish haqi javobdan SERVERDA olib tashlanadi.
 const HUQUQ = [...TOLIQ, 'cost.shop'];
-const doira = (req) => (TOLIQ.some((p) => req.user.permissions.includes(p))
-  ? null : (req.user.scope_shop_main || []));
+const toliq = (req) => TOLIQ.some((p) => req.user.permissions.includes(p));
+const doira = (req) => (toliq(req) ? null : (req.user.scope_shop_ids || []));
+const PUL = ['summa', 'dona', 'ish_haqi', 'ish_dona', 'jami_dona', 'prev_dona', 'narxsiz'];
 const MAHSULOT_TSEXI = `COALESCE(g.owner_shop_id,
   (SELECT sc.shop_id FROM v_product_route r JOIN sections sc ON sc.id = r.section_id
     WHERE r.product_id = p.id ORDER BY r.step_no LIMIT 1))`;
@@ -202,6 +206,13 @@ router.get('/', need(...HUQUQ), wrap(async (req, res) => {
         AND ($4::int[] IS NULL OR ${MAHSULOT_TSEXI} = ANY($4))
       ORDER BY k.kirgan NULLS LAST, k.boshlangan NULLS LAST, k.conveyor_no`,
     [from, to, yolda, doira(req)]);
+  if (!toliq(req)) {
+    for (const r of rows) {
+      r.sarf = r.nom > 0;
+      for (const k of PUL) delete r[k];
+    }
+    return res.json({ rows, pulsiz: true });
+  }
   res.json({ rows });
 }));
 
@@ -319,6 +330,11 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
       } else { x.prev_qty += r.qty; x.prev_summa += Number(r.summa); }
     }
     ishbay.set('boshliq', x);
+  }
+  if (!toliq(req)) {
+    for (const r of out) { delete r.summa; delete r.prev_summa; delete r.narxsiz; }
+    return res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
+                      prev_soni: k.prev_soni, rows: out, pulsiz: true });
   }
   res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
              prev_soni: k.prev_soni, rows: out, ish, ishbay: [...ishbay.values()] });

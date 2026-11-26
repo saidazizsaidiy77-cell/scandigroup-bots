@@ -3276,10 +3276,9 @@ AYNAN teng (test solishtiradi).
 
 **★ TSEX BOSHLIG'I O'Z ODAMLARINI KO'RADI** (`payroll.shop`, zavod
 qarori 2026-11). `tsex_usta` da «Ish haqi» sahifasi ochiq, lekin FAQAT
-o'z tsexining xodimlari — ROLNING tsexi (`scope_shop_main`), **qo'shimcha
-tsexlarsiz** (zavod qarori, 2026-11: qo'shimcha tsex boshliqqa u
-yerdagi O'Z mahsulotini ko'rish uchun beriladi — stul lak tsexida —
-o'sha tsexning odamlari esa uniki emas) va xodimning tsexi (`workers.shop_id`, bo'sh bo'lsa
+o'z tsexining xodimlari — rolning tsexi va **qo'shimcha tsexlari**
+(`scope_shop_ids`; zavod qarori, 2026-11: boshliq ikki tsexni birga
+yuritsa ikkalasining odamlari ham uniki — lak + korpus) va xodimning tsexi (`workers.shop_id`, bo'sh bo'lsa
 bo'limining tsexi). Hisoblandi, ishbay va to'landi hujjatlari bilan,
 faqat O'QISH: yozish `payroll.manage` da qoladi. Doirasi yo'q
 boshliqqa hech kim ko'rinmaydi. Chegara SERVERDA (`tsexlar`,
@@ -6157,8 +6156,12 @@ lekin tannarxni hamma boshliq emas, bittasi ko'radi — rol buni ajrata
 olmaydi, shuning uchun belgi XODIMDA (Xodimlar sahifasi, «Tannarx — o'z
 tsexi», standarti `false`; `can_request_unit` bilan bir xil idiom:
 belgisiz `cost.shop` UMUMAN o'qilmaydi). Ko'rinadigani — faqat O'Z
-tsexining mahsuloti (`shopOfProduct` qoidasi, rolning tsexi
-`scope_shop_main`), boshqa konver id bilan so'ralsa 403. Faqat o'qish.
+tsexining mahsuloti (`shopOfProduct` qoidasi, rolning tsexi va
+qo'shimcha tsexlari — `scope_shop_ids`), boshqa konver id bilan
+so'ralsa 403. Faqat o'qish. **★ PUL YO'Q** (zavod qarori, 2026-11):
+boshliq faqat xom ashyo SARFINI ko'radi — materiallar, donaga soni va
+oldingi konver bilan farq (%); narx, summa va ish haqi javobdan
+SERVERDA olib tashlanadi (`pulsiz`, `modules/cost.js`).
 
 **Mahsulot turi filtri** (penal, stul…) va qidiruv KLIENTDA: ro'yxatda
 LIMIT yo'q, ya'ni hammasi sahifada turadi. Turlar yuklangan qatorlardan

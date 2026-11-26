@@ -22,17 +22,17 @@ const YOZ = 'payroll.manage';
 
 //  ★ TSEX BOSHLIG'I — FAQAT O'Z ODAMLARI (zavod qarori, 2026-11;
 //  `payroll.shop`). To'liq huquqi (view/manage) bor odamda chegara yo'q
-//  (null). Qolganida — ROLNING tsexi (`scope_shop_main`), QO'SHIMCHA
-//  TSEXLARSIZ (zavod qarori, 2026-11): qo'shimcha tsex boshliqqa u
-//  yerdagi O'Z mahsulotini ko'rish uchun beriladi (stul lak tsexida),
-//  o'sha tsexning xodimlari esa uniki emas. Va xodimning shtatdagi tsexi (`workers.shop_id`, bo'sh
-//  bo'lsa bo'limining tsexi).
+//  (null). Qolganida — rolning tsexi VA QO'SHIMCHA TSEXLARI
+//  (`scope_shop_ids`; zavod qarori, 2026-11: boshliq ikki tsexni birga
+//  yuritsa ikkalasining odamlari ham uniki — Erbol lak + korpus). Va
+//  xodimning shtatdagi tsexi (`workers.shop_id`, bo'sh bo'lsa
+//  bo'limining tsexi).
 //  Doirasi yo'q bo'lsa BO'SH massiv: hech kim ko'rinmaydi — butun
 //  zavodning oyligini ochib qo'yish yo'l emas. Chegara SERVERDA.
 const tsexlar = (req) => {
   const p = req.user.permissions;
   if (p.includes('payroll.view') || p.includes('payroll.manage')) return null;
-  return req.user.scope_shop_main || [];
+  return req.user.scope_shop_ids || [];
 };
 
 const oy = (v) => {

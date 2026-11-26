@@ -460,7 +460,7 @@ router.get('/staff-paid', need(...ANY), wrap(async (req, res) => {
     ? req.query.month + '-01' : null;
   if (!wid || !m) return res.status(400).json({ error: 'Xodim va oy kerak' });
   if (!can(req, 'cash.manage', 'cash.view', 'payroll.view', 'payroll.manage')) {
-    const sh = req.user.scope_shop_main || [];
+    const sh = req.user.scope_shop_ids || [];
     const ok = sh.length && (await db.query(
       `SELECT 1 FROM workers w LEFT JOIN sections sc ON sc.id = w.section_id
         WHERE w.id = $1 AND COALESCE(w.shop_id, sc.shop_id) = ANY($2)`, [wid, sh])).rowCount;
