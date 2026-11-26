@@ -4309,6 +4309,16 @@ ham shu: bo'lim tanlangan zahoti tsex katagi o'ziga keladi, tsex
 tanlansa esa bo'limlar ro'yxati o'sha tsexnikiga qisqaradi (zavodda
 yigirma sakkizta bo'lim bor va «Qadoqlash» ikkita tsexda uchraydi).
 
+**★ KARTOCHKA TO'RT BO'LIMDA** (zavod qarori, 2026-11; `bolaklarga`,
+`public/xodimlar.html`). Yigirmadan ortiq katakcha bitta uzun ro'yxatda
+turardi, rollar esa eng pastda edi. Endi: **Asosiy** (ism, shtat,
+telefon, PIN, Telegram ID, faol) · **Rol va doira** (rollar, tsex,
+qo'shimcha tsexlar, ombor doirasi) · **Qo'shimcha huquqlar** (kassa,
+ombor, savdo, ishlab chiqarish) · **Xabarlar**. Tepada XULOSA: rol
+(doirasi bilan) va belgilanganlarning nomi — bu ko'rinish, hisob emas.
+Kataklar o'sha-o'sha, faqat joyi (blok sarlavhasidan), saqlash
+o'zgarmadi.
+
 **Fayldan yuklanadi** (`POST /api/import/workers`, Xodimlar →
 «Fayldan yuklash»): oltmish oltita qatorni qo'lda terib chiqish yarim
 kunlik ish va o'nlab xato bo'lardi. Mijozlar va ta'minotchilar bilan

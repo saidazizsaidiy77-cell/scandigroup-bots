@@ -324,6 +324,7 @@ function tsexBolimdan(){
 }
 
 function openForm(id){
+  bolakTanlangan = 'asosiy';
   const w = id ? workers.find(x => x.id === id) : null;
   const checked = (code) => w?.roles.some(r => r.code === code);
   const scopeOf = (code) => w?.roles.find(r => r.code === code)?.scope_shop_id || '';
@@ -341,9 +342,9 @@ function openForm(id){
 
   $('modalRoot').innerHTML = `
     <div class="overlay" onclick="if(event.target===this)close_()">
-      <div class="modal" style="max-width:640px">
+      <div class="modal" style="max-width:680px">
         <div class="row" style="justify-content:space-between;margin-bottom:18px">
-          <h1>${w ? 'Xodimni tahrirlash' : "Yangi xodim"}</h1>
+          <h1>${w ? esc(w.name) : "Yangi xodim"}</h1>
           <button onclick="close_()">Yopish</button></div>
         <div class="stack">
           <div><label>Ism familiya</label>
@@ -862,6 +863,84 @@ function openForm(id){
   //  tanlangan tsexga bog'liq va shablon ichida hisoblanmaydi.
   bolimlarChiz();
   if (w?.section_id) $('wSection').value = String(w.section_id);
+  bolaklarga();
+}
+
+//  ★ KARTOCHKA TO'RT BO'LIMDA (zavod qarori, 2026-11). Yigirmadan ortiq
+//  katakcha bitta uzun ro'yxatda turardi va rollar eng PASTDA edi —
+//  kim nima qilishini tushunish uchun butun oynani o'qib chiqish kerak
+//  edi. Endi: Asosiy · Rol va doira · Huquqlar · Xabarlar, tepada esa
+//  belgilanganlarning qisqa XULOSASI. Kataklar o'sha-o'sha (faqat
+//  joyi), ya'ni saqlash o'zgarmaydi; qaysi blok qaysi bo'limga tushishi
+//  uning sarlavhasidan (label) aniqlanadi.
+const BOLAK = [['asosiy', 'Asosiy'], ['rol', 'Rol va doira'],
+               ['huquq', "Qo'shimcha huquqlar"], ['xabar', 'Xabarlar']];
+let bolakTanlangan = 'asosiy';
+function bolakOf(el) {
+  const t = (el.querySelector('label')?.textContent || '').trim();
+  if (t.startsWith('Rollar') || t.startsWith("Qo'shimcha tsex") || t.startsWith('Ombor doirasi')) return 'rol';
+  if (['Kassa', 'Ombor', 'Savdo', 'Ishlab chiqarish'].includes(t)) return 'huquq';
+  if (t.startsWith("Ta'minot") || t.startsWith('Telegram xabarlari')) return 'xabar';
+  return 'asosiy';
+}
+function bolaklarga() {
+  const st = document.querySelector('#modalRoot .modal > .stack');
+  if (!st) return;
+  const saqla = st.querySelector(':scope > button.primary');
+  const pane = {};
+  const bar = document.createElement('div');
+  bar.className = 'row no-print';
+  bar.style.cssText = 'gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px';
+  for (const [k, nom] of BOLAK) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = nom; b.dataset.k = k;
+    b.onclick = () => { bolakTanlangan = k; bolakKorsat(); };
+    bar.appendChild(b);
+    pane[k] = document.createElement('div');
+    pane[k].className = 'stack'; pane[k].dataset.bolak = k;
+  }
+  for (const el of [...st.children]) {
+    if (el === saqla) continue;
+    pane[bolakOf(el)].appendChild(el);
+  }
+  //  Ta'minot bloki — aslida xabarlar va kuzatuv: sarlavhasi shunday
+  const tl = pane.xabar.querySelector('label');
+  if (tl && tl.textContent.trim().startsWith("Ta'minot")) tl.textContent = 'Xabar va kuzatuv';
+  const xul = document.createElement('div');
+  xul.id = 'wXulosa';
+  xul.style.cssText = 'font-size:13px;background:var(--surface-2);border-radius:10px;padding:10px 12px';
+  st.prepend(xul, bar, ...BOLAK.map(([k]) => pane[k]));
+  st.addEventListener('change', xulosa);
+  bolakKorsat();
+  xulosa();
+}
+function bolakKorsat() {
+  document.querySelectorAll('#modalRoot [data-bolak]').forEach((p) => {
+    p.style.display = p.dataset.bolak === bolakTanlangan ? '' : 'none'; });
+  document.querySelectorAll('#modalRoot [data-k]').forEach((b) => {
+    b.className = b.dataset.k === bolakTanlangan ? 'primary' : ''; });
+}
+//  Belgilanganlar oddiy so'z bilan: rollar (doirasi bilan) va har
+//  belgilangan katakchaning nomi. Bu HISOB EMAS, faqat ko'rinish —
+//  kim nima ko'rishini baribir server hal qiladi.
+function xulosa() {
+  const el = $('wXulosa'); if (!el) return;
+  const matn = (cb) => (cb.closest('.row')?.querySelector('span')?.firstChild?.textContent
+    || cb.closest('label')?.textContent || '').trim();
+  const rollar = [...document.querySelectorAll('#modalRoot .role:checked')].map((cb) => {
+    const nom = matn(cb);
+    const sh = document.querySelector(`.scope[data-role="${cb.value}"]`);
+    const ch = document.querySelector(`.chan[data-role="${cb.value}"]`);
+    const d = sh?.value ? sh.selectedOptions[0].textContent : ch?.value ? ch.selectedOptions[0].textContent : '';
+    return `<b>${esc(nom)}</b>${d ? ` <span class="muted">(${esc(d)})</span>` : ''}`;
+  });
+  const xsh = [...document.querySelectorAll('#modalRoot .xshop:checked')]
+    .map((cb) => (cb.closest('label')?.textContent || '').trim());
+  const h = [...document.querySelectorAll('#modalRoot [data-bolak="huquq"] input[type=checkbox]:checked, #modalRoot [data-bolak="xabar"] input[type=checkbox][id]:checked')]
+    .map(matn).filter(Boolean);
+  el.innerHTML = `<div><span class="muted">Rol:</span> ${rollar.join(', ') || '<span class="late">rol yo\'q — dasturga kira olmaydi</span>'}${
+    xsh.length ? ` <span class="muted">· qo'shimcha tsex:</span> ${esc(xsh.join(', '))}` : ''}</div>
+    ${h.length ? `<div style="margin-top:4px"><span class="muted">Belgilangan:</span> ${esc(h.join(' · '))}</div>` : ''}`;
 }
 const close_ = () => { $('modalRoot').innerHTML = ''; };
 
