@@ -767,3 +767,21 @@ CREATE TABLE IF NOT EXISTS unit_palette (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS unit_palette_name_uq
   ON unit_palette (kind, LOWER(TRIM(name)));
+
+--  ★ TA'MINOT XABARI ADMINISTRATORGA O'CHIQ (zavod qarori, 2026-11;
+--  `prod_new`, `prod_start`). Xabar `purchasing.manage` bo'yicha ketadi
+--  va administratorda hamma huquq bor — unga har konver haqida xabar
+--  kelardi. Bir martalik: keyin saytdan («Xabarlar») qayta yoqilsa
+--  migratsiya uni yana o'chirmaydi.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migration_flags WHERE key = 'taminot-xabar-admin') THEN
+    INSERT INTO worker_notify_off (worker_id, kind)
+    SELECT DISTINCT wr.worker_id, k.kind
+      FROM worker_roles wr
+     CROSS JOIN (VALUES ('prod_new'), ('prod_start')) k(kind)
+     WHERE wr.role_code = 'admin'
+    ON CONFLICT DO NOTHING;
+    INSERT INTO migration_flags (key) VALUES ('taminot-xabar-admin');
+  END IF;
+END $$;
