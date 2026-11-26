@@ -1135,12 +1135,20 @@ router.post('/unit/:id/consume', need('materials.request', ...MANAGE),
   try {
     await client.query('BEGIN');
     const u = (await client.query(
-      `SELECT u.id, u.qty, u.current_section_id AS section_id, s.shop_id
+      `SELECT u.id, u.qty, u.status, u.current_section_id AS section_id, s.shop_id
          FROM production_units u
          LEFT JOIN sections s ON s.id = u.current_section_id
         WHERE u.id = $1 AND u.status <> 'cancelled'`,
       [req.params.id])).rows[0];
     if (!u) throw new Error('Konver topilmadi');
+    //  ★ TSEXDAN CHIQQAN KONVERGA — FAQAT ADMINISTRATOR (`sales.fix`,
+    //  zavod qarori 2026-11; pasportdagi «+ Xom ashyo»). Omborda yoki
+    //  mijozda turgan konverning tannarxi yopilgan oyga tegadi — tsex
+    //  boshlig'i sarfni tsexda (▣) yozadi.
+    if (u.status !== 'production' && !(req.user.permissions || []).includes('sales.fix'))
+      throw Object.assign(new Error('Tsexdan chiqqan konverga xom ashyoni faqat administrator qo\'shadi'),
+                          { status: 403 });
+    delete u.status;
     //  Begona bo'limda sarf O'SHA bo'limga yoziladi: ish shu yerda
     //  qilingan va «qaysi bo'limda sarflandi» degan savolning javobi.
     if (mehmon) Object.assign(u, mehmon);
