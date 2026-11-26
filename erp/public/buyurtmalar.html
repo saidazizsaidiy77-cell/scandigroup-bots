@@ -1015,10 +1015,15 @@ function draw(){
                 UMUMAN chizilmaydi va sababi yozilib turadi — tugmani
                 topolmagan odam uni qidirib yurmasin. Tekshiruv
                 baribir serverda: yashirish himoya emas. -->
-          ${relOk(o)
+          ${!relOk(o)
+            ? `<span class="muted" style="font-size:13px">Mijozga
+                 chiqarishga ruxsatni boshqa xodim beradi</span>`
+            //  ★ FAQAT T/M OMBORDA TO'LIQ TURGANDA (zavod qarori, 2026-11):
+            //  «Tayyor» holati — server ham shuni talab qiladi (`tmTayyor`)
+            : o.holat === 'reserved'
             ? `<button onclick="sendToWh()">Mijozga chiqarish</button>`
-            : `<span class="muted" style="font-size:13px">Mijozga
-                 chiqarishga ruxsatni boshqa xodim beradi</span>`}
+            : `<span class="muted" style="font-size:13px">Mijozga chiqarish
+                 mahsulot to'liq T/M omborga kelgach ochiladi</span>`}
           <button onclick="cancelOrder()">Buyurtmani bekor qilish</button>`}
       </div>`}
       <!--  PUL KIRIM SANASI — savdo menejeriniki. Buyurtma olinayotganda

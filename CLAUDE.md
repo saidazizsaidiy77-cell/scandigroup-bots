@@ -1962,7 +1962,16 @@ qilib kesish soat mintaqasi bilan bir kun surilib ketardi.
 Huquqi: olish — `SHIP` (ombor mudiri), hisobni ko'rish — savdo va
 ombor huquqlari (`KUN`), ya'ni direktorga ham ochiq (`%.view`).
 
-**★ CHEGARA CHIQARISHDA, YUBORISHDA EMAS.** To'liq bo'lmagan buyurtma
+**★ MIJOZGA CHIQARISH — FAQAT T/M OMBORDA TO'LIQ TURGANDA** (zavod
+qarori, 2026-11; `tmTayyor`, `modules/sales.js`). Pastdagi «chegara
+chiqarishda» qoidasi BEKOR: mudirning ro'yxati hali tsexda yurgan
+buyurtmalar bilan to'lardi. Endi `sendOne` ham `/ship` bilan AYNAN
+bir xil ikki shartni qo'yadi (bitta funksiya): biriktirilgan har
+konver T/M omborda va mijoz so'ragan har donaga konver biriktirilgan.
+Ekranda tugma faqat «Tayyor» holatda, qolganida sababi yoziladi.
+Quyidagi matn tarix uchun.
+
+**CHEGARA CHIQARISHDA, YUBORISHDA EMAS (eski qoida).** To'liq bo'lmagan buyurtma
 ham omborga YUBORILADI va bu ataylab: savdo mudirga OLDINDAN aytadi —
 «bu ketadi, qolganini kutyapmiz» — mudir esa kunini shunga qarab
 tuzadi va konverlar qayerda turganini o'z ekranida ko'rib boradi.

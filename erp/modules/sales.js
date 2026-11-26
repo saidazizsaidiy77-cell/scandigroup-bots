@@ -2412,6 +2412,52 @@ router.post('/orders/:id/discount', need('sales.discount'), wrap(async (req, res
 //  Ikki nusxada bo'lsa chegirma, «qayerga» va ruxsat tekshiruvlari
 //  bir kun bir-biridan ajralib ketardi — to'dalab yuborilgan buyurtma
 //  bitta-bitta yuborilganidan boshqa qoidaga bo'ysunardi.
+//  ★ T/M OMBORDA TO'LIQ TURIBDIMI — BITTA JOYDA (zavod qarori, 2026-11).
+//  Ikki savol: biriktirilgan har konver javondami (`kutmoqda`) va mijoz
+//  so'ragan har donaga konver biriktirilganmi (`kam`). `/ship` ham,
+//  «Mijozga chiqarish» (`sendOne`) ham shundan o'qiydi — ikki nusxa bir
+//  kun ajralib ketardi va tugma bosilib, mudirda chiqarish to'xtardi.
+async function tmTayyor(client, orderId) {
+    const kutmoqda = (await client.query(
+      `SELECT u.conveyor_no, u.status, s.name AS section
+         FROM unit_reservations r
+         JOIN order_items i      ON i.id = r.order_item_id
+         JOIN production_units u ON u.id = r.unit_id
+         LEFT JOIN sections s    ON s.id = u.current_section_id
+        --  ★ «T/M OMBORDA EMAS» DEGANI «ISHLAB CHIQARISHDA» DAN
+        --  KENGROQ (zavod qarori, 2026-10). Shart ilgari faqat
+        --  production ni qarardi va o'rtada bitta holat ochiq
+        --  qolardi: allaqachon CHIQIB KETGAN konver. U buyurtmaga
+        --  bron bo'lib turgan bo'lsa ikkala tekshiruvdan ham
+        --  o'tib ketardi — birinchisi uni production emas deb
+        --  qo'yib yuborardi, ikkinchisi esa bronni SANARDI
+        --  (u.status <> 'cancelled'). Chiqarish esa faqat
+        --  fg ni oladi, ya'ni o'sha dona zavoddan CHIQMASDI.
+        --
+        --  Natijasi qog'oz bilan haqiqatni ajratardi: yuk xatida
+        --  40 dona, konverlar bo'yicha 29 ta — mijoz imzolagan
+        --  hujjat uning balansidan farq qilardi va buni faqat
+        --  shikoyat kelganda bilinardi.
+        --
+        --  Endi shart TESKARI yoziladi: javonda turmagan har
+        --  qanday konver chiqarishni to'xtatadi.
+        WHERE i.order_id = $1 AND u.status NOT IN ('fg', 'cancelled')
+        ORDER BY u.conveyor_no`, [orderId])).rows;
+    const kam = (await client.query(
+      `SELECT p.name AS product, g.name AS product_type, i.qty, b.bron
+         FROM order_items i
+         JOIN products p        ON p.id = i.product_id
+         JOIN product_groups g  ON g.id = p.group_id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(r.qty), 0)::int AS bron
+             FROM unit_reservations r
+             JOIN production_units u ON u.id = r.unit_id
+            WHERE r.order_item_id = i.id AND u.status <> 'cancelled') b ON true
+        WHERE i.order_id = $1 AND b.bron < i.qty
+        ORDER BY p.name`, [orderId])).rows;
+  return { kutmoqda, kam };
+}
+
 async function sendOne(req, id) {
   const client = await db.connect();
   try {
@@ -2432,14 +2478,24 @@ async function sendOne(req, id) {
     if (o.status === 'cancelled') throw new Error('Buyurtma bekor qilingan');
     if (o.status === 'to_ship') throw new Error('Allaqachon chiqarishga berilgan');
     if (!o.bron) throw new Error('Avval konver biriktiring');
-    //  ★ TO'LIQ BO'LMAGAN BUYURTMA HAM YUBORILADI, va bu ATAYLAB:
-    //  savdo mudirga OLDINDAN aytadi — «bu ketadi, qolganini kutyapmiz».
-    //  Mudir uni ro'yxatida ko'rib turadi va kunini shunga qarab
-    //  tuzadi. To'siq keyingi bosqichda: `/ship` bronning hammasi
-    //  javonga kelmaguncha chiqarmaydi (qaysi konver yetishmayotgani
-    //  nomi bilan yoziladi) — mahsulot zavoddan chiqmaydi, mijozning
-    //  qarzi ham oshmaydi. Ya'ni chegara CHIQARISHDA, yuborishda
-    //  emas.
+    //  (Ilgari to'liq bo'lmagan buyurtma ham yuborilardi — endi yo'q:
+    //  pastda, `tmTayyor`.)
+    //  ★ MIJOZGA CHIQARISH — FAQAT T/M OMBORDA TO'LIQ TURGANDA (zavod
+    //  qarori, 2026-11). Ilgari to'liq bo'lmagan buyurtma ham yuborilardi
+    //  («qolganini kutyapmiz») va mudirning ro'yxati hali tsexda yurgan
+    //  buyurtmalar bilan to'lardi. Endi chegara YUBORISHDA ham: shart
+    //  `/ship` niki bilan AYNAN bir xil (`tmTayyor`).
+    {
+      const { kutmoqda, kam } = await tmTayyor(client, o.id);
+      if (kutmoqda.length)
+        throw new Error('Hali T/M omborga kelmagan: ' + kutmoqda
+          .map((u) => `${u.conveyor_no} (${u.status === 'shipped'
+            ? 'allaqachon chiqib ketgan' : u.section || 'boshlanmagan'})`).join(', '));
+      if (kam.length)
+        throw new Error('Konver biriktirilmagan: ' + kam
+          .map((x) => `${x.product}${x.product_type ? ' · ' + x.product_type : ''}`
+                      + ` — ${x.qty - x.bron} ta`).join(', '));
+    }
     if (!o.ship_to) throw new Error('«Qayerga» tanlanmagan');
     //  ★ TASDIQLANMAGAN CHEGIRMA OMBORGA O'TMAYDI. Shu yer —
     //  qaytib bo'lmaydigan nuqta: ombordan mahsulot chiqadi va
@@ -3228,31 +3284,7 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     if (o.status !== 'to_ship')
       throw new Error('Buyurtma chiqarishga berilmagan');
 
-    const kutmoqda = (await client.query(
-      `SELECT u.conveyor_no, u.status, s.name AS section
-         FROM unit_reservations r
-         JOIN order_items i      ON i.id = r.order_item_id
-         JOIN production_units u ON u.id = r.unit_id
-         LEFT JOIN sections s    ON s.id = u.current_section_id
-        --  ★ «T/M OMBORDA EMAS» DEGANI «ISHLAB CHIQARISHDA» DAN
-        --  KENGROQ (zavod qarori, 2026-10). Shart ilgari faqat
-        --  production ni qarardi va o'rtada bitta holat ochiq
-        --  qolardi: allaqachon CHIQIB KETGAN konver. U buyurtmaga
-        --  bron bo'lib turgan bo'lsa ikkala tekshiruvdan ham
-        --  o'tib ketardi — birinchisi uni production emas deb
-        --  qo'yib yuborardi, ikkinchisi esa bronni SANARDI
-        --  (u.status <> 'cancelled'). Chiqarish esa faqat
-        --  fg ni oladi, ya'ni o'sha dona zavoddan CHIQMASDI.
-        --
-        --  Natijasi qog'oz bilan haqiqatni ajratardi: yuk xatida
-        --  40 dona, konverlar bo'yicha 29 ta — mijoz imzolagan
-        --  hujjat uning balansidan farq qilardi va buni faqat
-        --  shikoyat kelganda bilinardi.
-        --
-        --  Endi shart TESKARI yoziladi: javonda turmagan har
-        --  qanday konver chiqarishni to'xtatadi.
-        WHERE i.order_id = $1 AND u.status NOT IN ('fg', 'cancelled')
-        ORDER BY u.conveyor_no`, [o.id])).rows;
+    const { kutmoqda, kam } = await tmTayyor(client, o.id);
     if (kutmoqda.length)
       throw new Error('T/M omborda yo\'q: ' + kutmoqda
         .map((u) => `${u.conveyor_no} (${u.status === 'shipped'
@@ -3275,18 +3307,6 @@ router.post('/orders/:id/ship', need(...SHIP), wrap(async (req, res) => {
     //  Yetishmayotgani MAHSULOT NOMI bilan yoziladi: buyurtmada bir
     //  nechta qator bo'ladi va «to'liq emas» degan xabar qaysi biri
     //  ekanini aytmasdi.
-    const kam = (await client.query(
-      `SELECT p.name AS product, g.name AS product_type, i.qty, b.bron
-         FROM order_items i
-         JOIN products p        ON p.id = i.product_id
-         JOIN product_groups g  ON g.id = p.group_id
-         LEFT JOIN LATERAL (
-           SELECT COALESCE(SUM(r.qty), 0)::int AS bron
-             FROM unit_reservations r
-             JOIN production_units u ON u.id = r.unit_id
-            WHERE r.order_item_id = i.id AND u.status <> 'cancelled') b ON true
-        WHERE i.order_id = $1 AND b.bron < i.qty
-        ORDER BY p.name`, [o.id])).rows;
     if (kam.length)
       throw new Error('Konver biriktirilmagan: ' + kam
         .map((x) => `${x.product}${x.product_type ? ' · ' + x.product_type : ''}`
