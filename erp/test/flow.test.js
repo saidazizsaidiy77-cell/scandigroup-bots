@@ -8006,6 +8006,57 @@ test('topshirish ikki bosqich: xodim jo\'natadi, kassir sanab qabul qiladi', asy
   assert.equal((await u('PATCH', '/api/cash/ops/' + t.body.id)).status, 403);
 });
 
+test('mijoz pulini menejer kassirga topshirgunga qadar o\'zi tuzatadi', async () => {
+  const { db } = require('../db');
+  await db.query(`INSERT INTO workers (name) VALUES ('Sinov tuzatuvchi')
+                  ON CONFLICT DO NOTHING`);
+  await db.query(`INSERT INTO worker_roles (worker_id, role_code)
+                  SELECT id, 'sotuvchi' FROM workers WHERE name='Sinov tuzatuvchi'
+                  ON CONFLICT DO NOTHING`);
+  const wid = (await H.id(`SELECT id FROM workers WHERE name='Sinov tuzatuvchi'`)).id;
+  const mijoz = (await H.id(`SELECT id FROM customers WHERE name='Kanalsiz mijoz'`)).id;
+  const u = H.api(base, await H.sessionFor('Sinov tuzatuvchi'));
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const qolda = async () => Number((await H.id(
+    `SELECT COALESCE(usd, 0) AS usd FROM v_worker_cash WHERE id=$1`, [wid]) || {}).usd || 0);
+
+  const p = await u('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: mijoz, currency: 'USD', amount: 500 });
+  assert.equal(p.status, 200, p.text);
+  //  Lenta ✎ ni server aytadi.
+  const lenta = (await u('GET', '/api/cash/ops?a=me')).body.rows;
+  assert.equal(lenta.find((o) => o.id === p.body.id).tahrir, true);
+
+  const bugun = new Date().toISOString().slice(0, 10);
+  const fix = await u('PATCH', `/api/cash/ops/${p.body.id}/own`, {
+    from_id: mijoz, currency: 'USD', amount: 450, op_date: bugun, note: 'xato edi' });
+  assert.equal(fix.status, 200, fix.text);
+  assert.equal(await qolda(), 450, 'qo\'lidagi pul tuzatildi');
+  assert.ok(await H.id(`SELECT 1 FROM audit_log WHERE action='fix'
+                          AND entity='cash_op' AND entity_id=$1`, [p.body.id]));
+
+  //  Boshqa odamning yozuviga tegmaydi.
+  const boshqa = H.api(base, await H.sessionFor('Sinov topshiruvchi'));
+  assert.equal((await boshqa('PATCH', `/api/cash/ops/${p.body.id}/own`, {
+    from_id: mijoz, currency: 'USD', amount: 1, op_date: bugun })).status, 400);
+
+  //  Kassirga topshirdi (hali qabul qilinmagan) — endi YOPIQ.
+  const t = await u('POST', '/api/cash/ops', { to_kind: 'account', currency: 'USD', amount: 450 });
+  assert.equal(t.status, 200, t.text);
+  const yop = await u('PATCH', `/api/cash/ops/${p.body.id}/own`, {
+    from_id: mijoz, currency: 'USD', amount: 400, op_date: bugun });
+  assert.equal(yop.status, 400);
+  assert.match(yop.body.error, /kassirga topshirilgan/);
+  assert.equal((await u('GET', '/api/cash/ops?a=me')).body.rows
+    .find((o) => o.id === p.body.id).tahrir, false);
+  assert.equal((await u('PATCH', '/api/cash/ops/' + p.body.id)).status, 403);
+
+  //  Topshirish rad etilsa yana ochiladi.
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + t.body.id)).status, 200);
+  assert.equal((await u('PATCH', '/api/cash/ops/' + p.body.id)).status, 200, 'bekor qildi');
+  assert.equal(await qolda(), 0);
+});
+
 test('ombor bo\'limi xodim bo\'yicha yopiladi', async () => {
   //  ★ BITTA ROLDA IKKI XIL ODAM. Ombor qoldig'i ma'lumot
   //  kirituvchiga «ertaga nima so'rayman» degan savol uchun ochilgan,

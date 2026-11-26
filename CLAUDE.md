@@ -2485,6 +2485,18 @@ tegmaydi. Qabul qilingandan keyin esa bu kassirning ishi — konver
 so'rovi bilan bir xil idiom (`rejected` boshqaniki, `cancelled`
 o'zinikidir).
 
+**★ MIJOZ PULINI MENEJER O'ZI TUZATADI — KASSIRGA TOPSHIRGUNCHA**
+(zavod qarori, 2026-11; `OZ_OCHIQ`, `PATCH /api/cash/ops/:id/own`,
+«Mening pulim» lentasidagi **✎** va **×**). Menejer mijozdan olgan
+pulni xato yozsa (summa, mijoz, kurs, sana) tuzatadigan yo'l yo'q edi.
+Endi o'zi yozgan `mijoz → o'zi` yozuvini, undan KEYIN kassaga
+topshirish (kutib turgani ham, qabul qilingani ham) yozilmaguncha,
+o'zi tuzatadi yoki bekor qiladi: pulni hali hech kim sanab olmagan.
+Topshirgach yopiladi — kassirning ishi; topshirish rad etilsa yana
+ochiladi. Qaysi qator ochiqligini SERVER aytadi (`/ops` dagi
+`tahrir`). Mijoz doirasi yozishdagi bilan bitta (`assertSide`),
+qo'ldagi pul minusga tushmaydi (`minus_cash`), audit `fix`.
+
 **Navbat menyuda turadi** (`/api/navbat`, `cash` bo'limi): kassir
 kassa sahifasini ochib ko'rmasa, pul xodimning qo'lida kechgacha
 qolib ketardi. Kassalar ro'yxatining USTIDA ham kartochka bo'lib
