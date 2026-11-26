@@ -223,20 +223,21 @@ function detalSarf() {
 
 async function och(no) {
   if (ochiq === no) { ochiq = null; chiz(); return; }
-  ochiq = no; det = null; chiz();
+  ochiq = no; det = null; bolimOchiq = null; chiz();
   try { det = await App.api('/api/cost/' + encodeURIComponent(no)); }
   catch (e) { det = { error: e.message }; }
   if (ochiq === no) chiz();
 }
 
-//  ★ TAFSILOT — TO'RT BO'LIM (zavod qarori, 2026-11): xom ashyo,
-//  furnitura, ish haqi, matras. Har qatorda nomi · soni · narxi ·
-//  summasi — konverning JAMI raqami, donaga emas.
-function bolim(sarl, L, bosh) {
-  if (!L.length) return '';
-  const jami = L.reduce((a, x) => a + Number(x.summa || 0), 0);
-  return `<h3 style="margin:12px 0 6px;font-size:14px">${sarl} · ${usd(jami)} $</h3>
-    <table style="background:transparent"><thead><tr><th>${bosh || 'Nomi'}</th>
+//  ★ TAFSILOT — TO'RT QATOR (zavod qarori, 2026-11): avval faqat
+//  xom ashyo · furnitura · ish haqi · matras va har birining SUMMASI;
+//  qator bosilsa o'sha bo'limning ichi ochiladi (nomi · soni · narxi ·
+//  summasi — konverning JAMI raqami, donaga emas).
+let bolimOchiq = null;
+function bolimOch(k) { bolimOchiq = bolimOchiq === k ? null : k; chiz(); }
+
+function jadval(L, bosh) {
+  return `<table style="background:transparent;margin:4px 0 10px"><thead><tr><th>${bosh}</th>
       <th class="num">Soni</th><th class="num">Narxi, $</th><th class="num">Summasi, $</th></tr></thead>
     <tbody>${L.map((x) => `<tr><td>${esc(x.name)}${x.code ? ` <span class="muted">${esc(x.code)}</span>` : ''}</td>
       <td class="num">${n3(x.qty)} <span class="muted">${esc(x.uom || '')}</span></td>
@@ -246,14 +247,8 @@ function bolim(sarl, L, bosh) {
 
 //  Ish haqi — QAYSI BO'LIMGA: ishbay (bo'lim · dona · 1 dona narxi ·
 //  summa; yozilmagan bo'lim qizil) va tsex oyligidan taqsimlangani.
-function ishBolim() {
-  const ib = (det.ishbay || []).filter((x) => x.qty || x.rate);
-  const oy = (det.ish || []).filter((x) => x.tur === 'oylik');
-  if (!ib.length && !oy.length) return '';
-  const jami = ib.reduce((a, x) => a + Number(x.summa || 0), 0)
-             + oy.reduce((a, x) => a + Number(x.summa || 0), 0);
-  return `<h3 style="margin:12px 0 6px;font-size:14px">Ish haqi · ${usd(jami)} $</h3>
-    <table style="background:transparent"><thead><tr><th>Bo'lim</th>
+function ishJadval(ib, oy) {
+  return `<table style="background:transparent;margin:4px 0 10px"><thead><tr><th>Bo'lim</th>
       <th class="num">Soni</th><th class="num">Narxi, $</th><th class="num">Summasi, $</th></tr></thead>
     <tbody>${ib.map((x) => `<tr><td>${esc(x.section)}</td>
       <td class="num">${x.qty ? x.qty + (x.qty < det.soni ? ` <span class="late">/ ${det.soni}</span>` : '')
@@ -267,11 +262,24 @@ function ishBolim() {
 function detal() {
   if (!det) return '<span class="muted">Yuklanmoqda…</span>';
   if (det.error) return esc(det.error);
-  const html = bolim('Xom ashyo', det.xom || [], 'Xom ashyo')
-             + bolim('Furnitura', det.furn || [], 'Furnitura')
-             + ishBolim()
-             + bolim('Matras', det.matras || [], 'Matras');
-  return html || '<span class="muted">Hech narsa yozilmagan.</span>';
+  const sum = (L) => L.reduce((a, x) => a + Number(x.summa || 0), 0);
+  const ib = (det.ishbay || []).filter((x) => x.qty || x.rate);
+  const oy = (det.ish || []).filter((x) => x.tur === 'oylik');
+  const B = [
+    ['xom', 'Xom ashyo', det.xom || [], () => jadval(det.xom, 'Xom ashyo')],
+    ['furn', 'Furnitura', det.furn || [], () => jadval(det.furn, 'Furnitura')],
+    ['ish', 'Ish haqi', [...ib, ...oy], () => ishJadval(ib, oy)],
+    ['matras', 'Matras', det.matras || [], () => jadval(det.matras, 'Matras')],
+  ];
+  const jami = B.reduce((a, [, , L]) => a + sum(L), 0);
+  return `<table style="background:transparent;max-width:520px">
+    <tbody>${B.map(([k, nom, L, ich]) => `
+      <tr${L.length ? ` class="k-row" onclick="event.stopPropagation();bolimOch('${k}')"` : ''}>
+        <td>${L.length ? `<span class="muted">${bolimOchiq === k ? '▾' : '▸'}</span> ` : ''}${nom}</td>
+        <td class="num">${L.length ? `<b>${usd(sum(L))}</b> $` : '<span class="muted">—</span>'}</td></tr>
+      ${bolimOchiq === k && L.length ? `<tr><td colspan="2">${ich()}</td></tr>` : ''}`).join('')}
+      <tr><td><b>Umumiy</b></td><td class="num"><b>${usd(jami)}</b> $</td></tr>
+    </tbody></table>`;
 }
 
 //  Varaq o'zi aytsin: qaysi oraliq, qaysi qidiruv, kim va qachon.

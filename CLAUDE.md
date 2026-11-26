@@ -6208,8 +6208,11 @@ oldingi donaga · farq. Furnitura — yuk xatiga MAHSULOT bo'yicha
 yozilgani, shu buyurtmada shu mahsulotdan chiqqan donaga bo'lingan
 (konver pasporti bilan bir xil bog'lanish, `furn` CTE); matras —
 `buy_price` × soni (marshrutsiz, sotib olingan mahsulot ham ro'yxatda).
-Oldingi konver va farq UMUMIY donaga bo'yicha. Qator bosilsa to'rt
-bo'lim: xom ashyo, furnitura, matras — har qatorda nomi · soni · narxi
+Oldingi konver va farq UMUMIY donaga bo'yicha. Qator bosilsa avval
+faqat TO'RT QATOR — xom ashyo · furnitura · ish haqi · matras va har
+birining summasi (zavod qarori, 2026-11: sarlavhali to'rt jadval birdan
+ochilib, ekranni to'ldirardi); qatori bosilsa o'sha bo'lim ochiladi:
+xom ashyo, furnitura, matras — har qatorda nomi · soni · narxi
 · summasi (konverning JAMI raqami, `/api/cost/:no` dagi `xom`, `furn`,
 `matras`); ish haqi — qaysi bo'limga ishbay (dona · narx · summa,
 yozilmagani qizil) va qaysi tsex oyligidan taqsimlangani.
