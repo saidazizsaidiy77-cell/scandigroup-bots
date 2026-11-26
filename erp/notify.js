@@ -19,6 +19,10 @@ const TURLAR = [
   { kod: 'unit_bron',      bolim: 'Ishlab chiqarish', nom: 'Konverga yangi buyurtma' },
   { kod: 'unit_due',       bolim: 'Ishlab chiqarish', nom: 'Ertaga topshiriladi' },
   { kod: 'mat_check',      bolim: 'Ishlab chiqarish', nom: "Xom ashyo tasdig'ini kutmoqda" },
+  //  Ta'minot uchun (`purchasing.manage`): zavodga qanday ish kelgani
+  //  va qachon boshlangani — xom ashyoni oldindan tayyorlash uchun.
+  { kod: 'prod_new',       bolim: 'Ishlab chiqarish', nom: 'Ishlab chiqarishga yangi konver (ta\'minot)' },
+  { kod: 'prod_start',     bolim: 'Ishlab chiqarish', nom: 'Konver ishga tushdi (ta\'minot)' },
   { kod: 'mat_reject',     bolim: 'Ishlab chiqarish', nom: 'Xom ashyo rad etildi — tsexga qaytdi' },
 
   { kod: 'fg_inbox',       bolim: 'Ombor', nom: 'T/M omborga qabul qilishni kutmoqda' },

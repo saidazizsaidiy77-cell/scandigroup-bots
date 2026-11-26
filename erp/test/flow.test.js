@@ -3676,6 +3676,13 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
       WHERE wr.scope_shop_id = $1 AND n.title LIKE '%boshlanmagan%'
       ORDER BY n.id DESC LIMIT 1`, [STULTSEX2]);
   assert.ok(xab, 'stul tsexi boshlig\'iga xabar ketdi');
+  //  ★ TA'MINOTGA HAM: huquq bo'yicha, konver raqami bilan.
+  const tYangi = await H.id(
+    `SELECT permission_code, body FROM notifications WHERE kind = 'prod_new'
+      ORDER BY id DESC LIMIT 1`);
+  assert.equal(tYangi.permission_code, 'purchasing.manage');
+  assert.ok(tYangi.body.startsWith(so.body.conveyor_no + ' · '), tYangi.body);
+  assert.ok(tYangi.body.includes('5 ta'), tYangi.body);
 
   //  ★ MENYUDAGI BELGI ro'yxat bilan bir xil raqamni beradi.
   const stulchi = H.api(base, await H.sessionFor('Stul ustasi'));
@@ -3689,6 +3696,11 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   await xomsiz();
   assert.equal((await stulchi('POST', '/api/units/move',
     { items: [{ unit_id: ok.body.unit_id }] })).status, 200);
+  const tBosh = await H.id(
+    `SELECT body FROM notifications WHERE kind = 'prod_start'
+      ORDER BY id DESC LIMIT 1`);
+  assert.ok(tBosh && tBosh.body.startsWith(so.body.conveyor_no), 'ishga tushdi — ta\'minotga');
+  assert.match(tBosh.body, /Bo'lim: /);
   const ro2 = (await admin('GET', '/api/sales/orders?q=' + z.order_no)).body.rows[0];
   assert.equal(Number(ro2.not_started_qty), 0, 'boshlangach chernovik tugadi');
 

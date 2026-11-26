@@ -4072,6 +4072,17 @@ jo'natuvchi daqiqada bir marta yuradi (`xabarJadvali`,
 `notify.sendPending`). `ERP_TG_TOKEN` yo'q bo'lsa JIM turadi va hech
 narsani buzmaydi — xabarlar navbatda yig'ilaveradi.
 
+**★ TA'MINOT ISHLAB CHIQARISHNI KUZATADI** (zavod qarori, 2026-11;
+`prod_new`, `prod_start`, `taminotXabari`, `modules/units.js`).
+Ta'minotchi xom ashyoni OLDINDAN olib kelishi kerak, bo'limlar
+ekranini esa ochmaydi. Ikki voqeada Telegram ketadi: konver so'rovi
+TASDIQLANIB konver ochilganda («Ishlab chiqarishga yangi konver») va
+konver BIRINCHI bo'limga kirganda («Konver ishga tushdi» — bo'lim va
+tsex bilan). Matnda raqam · mahsulot · turi · soni, rangi, zakaz va
+mijoz, izoh. Kimga — huquqdan (`purchasing.manage`, 4-qoida); har
+xodim turini Xodimlar → «Xabarlar» da o'chira oladi (administrator
+ham — unda hamma huquq bor).
+
 ### Nega xabar bormaydi — zanjir to'rt bo'g'inli
 
 Xabar to'rtta bo'g'indan o'tadi va bittasi uzilsa natija bir xil:
