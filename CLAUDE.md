@@ -5922,7 +5922,11 @@ bo'limidagi konverda, ya'ni tuzatish uchun konverni lakdan korpusgacha
 orqaga haydash kerak bo'lardi. Endi qatorning O'ZI tuzatiladi: bo'lim,
 ombor, kun va kim yozgani qoladi, farq o'z omboriga qaytadi; **0 —
 butunlay bekor**. Sabab MAJBURIY, audit `consume-fix` (`edi`/`boldi`).
-Doira bekor qilish bilan bir xil (konverning egasi tsexi, joyi emas).
+Doira bekor qilish bilan bir xil (konverning egasi tsexi, joyi emas)
+**yoki QATOR YOZILGAN tsex** (zavod qarori, 2026-11; `sarfQatorDoira`):
+qator yozilgan bo'limning yoki manba omborning tsexi doirada bo'lsa
+ham ✎, bekor va tiklash ochiq — stol korpusniki, xato esa lakda
+yozilgan va lak boshlig'iga «doirangizda emas» chiqardi.
 
 **Adashib yozilgani O'CHIRILMAYDI, bekor qilinadi**: qoldiqdan
 chiqadi, tarixda o'chirilgan holida qoladi (kassadagi operatsiya
