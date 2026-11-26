@@ -14332,6 +14332,13 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   const ps = (await admin('GET', '/api/materials/conveyor?no=' + u.conveyor_no)).body;
   assert.equal(ps.furn.length, 1);
   assert.equal(Number(ps.furn[0].summa), 12);
+  //  ★ CHIQIB KETGAN KONVERGA HAM XOM ASHYO QO'SHILADI (pasportdagi
+  //  «+ Xom ashyo»): o'sha /consume yo'li, sana tanlanadi.
+  const qo = await admin('POST', `/api/materials/unit/${u.id}/consume`,
+    { warehouse_id: furnWh.id, on: '2032-04-10', items: [{ material_id: mat, qty: 1 }] });
+  assert.equal(qo.status, 200, qo.text);
+  await db.query(`UPDATE material_moves SET status = 'cancelled'
+                   WHERE to_kind = 'unit' AND to_id = $1 AND moved_on = '2032-04-10'`, [u.id]);
   //  ★ TANNARX TAFSILOTI — nomi · soni · narxi · summasi (jami, donaga emas)
   const tt = (await admin('GET', '/api/cost/' + encodeURIComponent(u.conveyor_no))).body;
   assert.deepEqual(tt.xom.map((x) => [x.qty, x.price, x.summa]), [[8, 10, 80]]);

@@ -168,6 +168,14 @@ async function sarf(d) {
   catch (e) { el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   SARF.product = `${d.product}${d.product_type ? ' · ' + d.product_type : ''}`;
   SARF.total = d.total; SARF.uom = d.uom || 'dona';
+  //  ★ «+ XOM ASHYO» — chiqib ketgan konverga ham (zavod qarori, 2026-11).
+  //  ▣ faqat tsexda turgan konverda; chiqib ketgani u ro'yxatda yo'q va
+  //  yozilmay qolgan material tannarxdan tushib qolardi. Sarf raqamga
+  //  ilinadi (tannarx raqam bo'yicha), shuning uchun bo'lak — eng
+  //  kattasi; doira va ombor tekshiruvi ▣ bilan bitta (`/consume`).
+  const bolak = (d.rows || []).filter((r) => r.id && r.status !== 'cancelled')
+    .sort((a, b) => Number(b.qty) - Number(a.qty))[0];
+  SARF.unitId = bolak ? bolak.id : null;
   const narx = SARF.narx;
   //  ✎ — sarfni yozadigan huquqda; doira SERVERDA (`/consume/:id/fix`)
   const tuz = App.can('materials.request', 'materials.manage', 'production.manage');
@@ -190,12 +198,15 @@ async function sarf(d) {
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;
       margin-bottom:10px">
       <h2 style="margin:0">Xom ashyo sarfi</h2>
-      ${SARF.rows.length ? `<button class="no-print" onclick="sarfChop()">Chop etish</button>` : ''}
+      <div class="row no-print" style="gap:8px">
+        ${tuz && SARF.unitId ? `<button onclick="xqOch()">+ Xom ashyo</button>` : ''}
+        ${SARF.rows.length ? `<button onclick="sarfChop()">Chop etish</button>` : ''}</div>
     </div>
     <div id="sarfHead" class="print-only print-head"></div>
     ${!SARF.rows.length && !furn.length
       ? `<p class="muted" style="font-size:13px">Bu konverga hali xom ashyo
-           biriktirilmagan. Sarf tsex ekranidagi ▣ tugmasidan yoziladi.</p>`
+           biriktirilmagan. Sarf tsex ekranidagi ▣ tugmasidan yoki shu yerdagi
+           «+ Xom ashyo» dan yoziladi.</p>`
       : `<div class="tbox"><table>
         <thead><tr><th>Sana</th><th>Material</th><th class="num">Soni</th>
           <th class="num">Donaga</th><th>Ombor · bo'lim</th><th>Kim</th>
@@ -230,6 +241,93 @@ async function sarf(d) {
             SARF.total ? n2(jami / SARF.total) : '—'} $ (${SARF.total} ${esc(SARF.uom)})
             · narx — manba omborning o'rtacha kirim narxi</td></tr>` : ''}
         </tbody></table></div>`}`;
+}
+
+// ─── «+ XOM ASHYO» OYNASI: ombor · sana · material qidiruvi · soni
+let XQ = null;
+async function xqOch() {
+  XQ = { wh: null, whs: [], stock: [], all: [], rows: [] };
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="overlay" id="xqBox" onclick="if(event.target===this)xqYop()">
+      <div class="modal" style="max-width:540px">
+        <h2 style="margin-bottom:4px">${esc(SARF.conveyor_no)} · xom ashyo qo'shish</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">${esc(SARF.product)}
+          · ${SARF.total} ${esc(SARF.uom)}. Material tanlangan omborning qoldig'idan ayiriladi.</p>
+        <div id="xqBody" class="muted">Yuklanmoqda…</div>
+        <button style="width:100%;margin-top:12px" onclick="xqYop()">Yopish</button>
+      </div></div>`);
+  try {
+    const d = await App.api('/api/materials/unit/' + SARF.unitId);
+    XQ.whs = d.warehouses; XQ.wh = d.warehouses[0] ? d.warehouses[0].id : null;
+    XQ.all = (await App.api('/api/materials')).rows;
+    await xqQoldiq(); xqChiz();
+  } catch (e) {
+    if ($('xqBody')) $('xqBody').innerHTML = `<span class="tag bad">${esc(e.message)}</span>`;
+  }
+}
+const xqYop = () => { $('xqBox')?.remove(); };
+async function xqQoldiq() {
+  XQ.stock = XQ.wh ? (await App.api('/api/materials/stock?warehouse_id=' + XQ.wh)).rows : [];
+}
+function xqChiz() {
+  const bugun = new Date().toISOString().slice(0, 10);
+  $('xqBody').innerHTML = !XQ.whs.length
+    ? '<p class="tag bad">Sizga biriktirilgan xom ashyo ombori yo\'q</p>'
+    : `<div class="row" style="gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px"><label>Ombor</label>
+          <select id="xqWh" onchange="xqWhCh()">${XQ.whs.map((w) =>
+            `<option value="${w.id}"${w.id === XQ.wh ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>
+        <div><label>Sana</label><input id="xqOn" type="date" value="${bugun}" max="${bugun}"></div></div>
+      <label style="margin-top:12px">Material</label>
+      <input id="xqQ" placeholder="nomi yoki kodi bo'yicha qidiring" oninput="xqTop()" autocomplete="off">
+      <div id="xqList" style="margin-top:6px"></div>
+      <div id="xqRows" style="margin-top:10px"></div>
+      <button class="primary" id="xqSave" style="width:100%;margin-top:10px" onclick="xqSaqla()" hidden>Saqlash</button>`;
+  xqTop(); xqRows();
+}
+async function xqWhCh() { XQ.wh = Number($('xqWh').value) || null; await xqQoldiq(); xqTop(); }
+function xqTop() {
+  const q = ($('xqQ')?.value || '').trim().toLowerCase();
+  const bor = new Map(XQ.stock.map((r) => [r.material_id, r]));
+  const tan = new Set(XQ.rows.map((r) => r.id));
+  const mos = (t) => !q || String(t).toLowerCase().includes(q);
+  const L = [
+    ...XQ.stock.filter((r) => mos(r.material + ' ' + (r.code || '')) && !tan.has(r.material_id))
+      .map((r) => ({ id: r.material_id, name: r.material, uom: r.uom_name || r.uom, qoldiq: r.qty })),
+    ...(q ? XQ.all.filter((m) => mos(m.name + ' ' + (m.code || '')) && !bor.has(m.id) && !tan.has(m.id))
+      .map((m) => ({ id: m.id, name: m.name, uom: m.uom_name || m.uom, qoldiq: null })) : []),
+  ].slice(0, 30);
+  if (!$('xqList')) return;
+  $('xqList').innerHTML = L.length ? L.map((m) => `<button style="width:100%;text-align:left;
+      margin-bottom:4px;display:flex;justify-content:space-between;gap:10px" onclick="xqQosh(${m.id})">
+      <span>${esc(m.name)}</span><span class="muted" style="font-size:12px">${
+        m.qoldiq == null ? esc(m.uom || '') : `${n3(m.qoldiq)} ${esc(m.uom || '')}`}</span></button>`).join('')
+    : `<p class="muted" style="font-size:13px">${q ? 'Topilmadi' : 'Nomini yozib qidiring'}</p>`;
+}
+function xqQosh(id) {
+  const st = XQ.stock.find((r) => r.material_id === id);
+  const m = st ? { name: st.material, uom: st.uom_name || st.uom } : XQ.all.find((x) => x.id === id);
+  if (!m) return;
+  XQ.rows.unshift({ id, name: m.name, uom: m.uom, qty: '' });
+  $('xqQ').value = ''; xqTop(); xqRows();
+}
+function xqRows() {
+  $('xqRows').innerHTML = XQ.rows.map((r, i) => `<div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+      <div style="flex:1"><b>${esc(r.name)}</b> <span class="muted" style="font-size:12px">${esc(r.uom || '')}</span></div>
+      <input type="number" min="0" step="0.001" value="${r.qty}" style="width:110px;text-align:right"
+        oninput="XQ.rows[${i}].qty=this.value" placeholder="soni">
+      <button class="ic" onclick="XQ.rows.splice(${i},1);xqTop();xqRows()">&times;</button></div>`).join('');
+  $('xqSave').hidden = !XQ.rows.length;
+}
+async function xqSaqla() {
+  const items = XQ.rows.map((r) => ({ material_id: r.id, qty: Number(r.qty) || 0 }))
+    .filter((x) => x.qty > 0);
+  if (!items.length) return alert('Soni yozilmadi');
+  try {
+    await App.api('/api/materials/unit/' + SARF.unitId + '/consume', { method: 'POST',
+      body: JSON.stringify({ warehouse_id: XQ.wh, items, on: $('xqOn').value || null }) });
+    location.reload();
+  } catch (e) { alert(e.message); }
 }
 
 //  ★ SARF SONI JOYIDA TUZATILADI (zavod qarori, 2026-11): konverni

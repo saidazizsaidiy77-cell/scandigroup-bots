@@ -6041,6 +6041,15 @@ o'rtacha kirim narxi; savdo va ombor uchun pasportda pul yo'q.
 **«Chop etish»** qog'ozga faqat shu kartochkani chiqaradi, sarlavhada
 konver, mahsulot, kun-soat va chop etgan xodim.
 
+**★ CHIQIB KETGAN KONVERGA HAM XOM ASHYO QO'SHILADI** (zavod qarori,
+2026-11; pasportdagi **«+ Xom ashyo»**, `xqOch`, `public/konver.html`).
+▣ faqat tsexda turgan konverda, chiqib ketgani u ro'yxatda yo'q va
+yozilmay qolgan material tannarxdan tushib qolardi. Yo'l ▣ bilan BITTA
+(`POST /unit/:id/consume`): ombor, doira, `yetarlimi` o'sha. Bo'lak —
+raqamning eng katta qatori (tannarx raqam bo'yicha). Sana tanlanadi
+(standarti bugun) — ombor qoldig'i o'sha kundan kamayadi; tannarx esa
+konver chiqqan oyda, ya'ni o'sha oyning foyda-zarari o'zgaradi.
+
 **★ BEGONA BO'LIM — FAQAT XOM ASHYO** (zavod qarori, 2026-10;
 `section_material_groups`, `sql/materials.sql`). SP suyanchig'iga mato
 stul tsexining «Qoplash» bo'limida qoplanadi, lekin konver u yerga
