@@ -46,7 +46,8 @@ const TOLIQ = ['cash.view', 'cash.manage', 'production.manage',
 const HUQUQ = [...TOLIQ, 'cost.shop'];
 const toliq = (req) => TOLIQ.some((p) => req.user.permissions.includes(p));
 const doira = (req) => (toliq(req) ? null : (req.user.scope_shop_ids || []));
-const PUL = ['summa', 'dona', 'ish_haqi', 'ish_dona', 'jami_dona', 'prev_dona', 'narxsiz'];
+const PUL = ['summa', 'dona', 'ish_haqi', 'ish_dona', 'jami_dona', 'prev_dona', 'narxsiz',
+             'furnitura', 'matras', 'umumiy'];
 const MAHSULOT_TSEXI = `COALESCE(g.owner_shop_id,
   (SELECT sc.shop_id FROM v_product_route r JOIN sections sc ON sc.id = r.section_id
     WHERE r.product_id = p.id ORDER BY r.step_no LIMIT 1))`;
@@ -74,6 +75,36 @@ const SARF = `
                          AND mv.from_kind = 'warehouse'
      WHERE mv.to_kind = 'unit' AND mv.status = 'ok'
      GROUP BY u.conveyor_no, mv.material_id),
+  --  ★ FURNITURA — yuk xatiga MAHSULOT bo'yicha yoziladi (izoh:
+  --  modules/materials.js, FURN_KERAK) va konverga shu buyurtmada shu
+  --  mahsulotdan chiqqan donaga bo'linadi — konver pasporti bilan BIR
+  --  XIL bog'lanish (order_no + product_id).
+  fmv AS (
+    SELECT o.order_no, mv.product_id, mv.material_id,
+           SUM(mv.qty) AS qty,
+           SUM(mv.qty * COALESCE(mv.price_usd, a.price)) AS summa
+      FROM material_moves mv
+      JOIN orders o ON o.id = mv.to_id AND o.status = 'shipped'
+      LEFT JOIN ortacha a ON a.place_id = mv.from_id
+                         AND a.material_id = mv.material_id
+     WHERE mv.to_kind = 'order' AND mv.status = 'ok'
+     GROUP BY 1, 2, 3),
+  fsoni AS (
+    SELECT order_no, product_id, SUM(qty) AS soni
+      FROM production_units
+     WHERE status = 'shipped' AND order_no IS NOT NULL
+     GROUP BY 1, 2),
+  furn AS (
+    SELECT u.conveyor_no, f.material_id,
+           SUM(f.qty * u.qty / NULLIF(fs.soni, 0)) AS qty,
+           SUM(f.summa * u.qty / NULLIF(fs.soni, 0)) AS summa
+      FROM production_units u
+      JOIN fmv f    ON f.order_no = u.order_no AND f.product_id = u.product_id
+      JOIN fsoni fs ON fs.order_no = u.order_no AND fs.product_id = u.product_id
+     WHERE u.status = 'shipped'
+     GROUP BY 1, 2),
+  fjam AS (
+    SELECT conveyor_no, SUM(summa) AS summa FROM furn GROUP BY conveyor_no),
   konv AS (
     SELECT u.conveyor_no,
            (array_agg(u.product_id ORDER BY u.id))[1] AS product_id,
@@ -81,6 +112,13 @@ const SARF = `
                              THEN u.qty - COALESCE(u.returned_qty, 0)
                              ELSE u.qty END)
                     FILTER (WHERE u.status <> 'cancelled'), 0)::int AS soni,
+           --  ★ MATRAS — sotib olingan mahsulotning tannarxi (buy_price,
+           --  dollarda): material ham, ish haqi ham yo'q.
+           SUM((CASE WHEN u.status = 'shipped'
+                     THEN u.qty - COALESCE(u.returned_qty, 0) ELSE u.qty END)
+               * u.buy_price)
+             FILTER (WHERE u.status <> 'cancelled' AND u.buy_price IS NOT NULL) AS matras,
+           MAX(u.buy_price) AS buy_price,
            MIN(u.fg_on) AS kirgan,
            MIN(u.started_on) AS boshlangan,
            bool_or(u.status = 'production') AS yolda,
@@ -163,15 +201,24 @@ const SARF = `
     SELECT conveyor_no, shop_id, oy, 'ishbay', summa FROM ishbay),
   ish AS (
     SELECT conveyor_no, SUM(summa) AS summa FROM taqsim GROUP BY conveyor_no),
-  --  Oldingi konver — SHU mahsulotning, sarfi bor, omborga oldin
-  --  kirgani. Sarfsiz konver solishtirishga olinmaydi: nol bilan
-  --  solishtirish «+100%» degan yolg'on javob berardi.
+  --  ★ UMUMIY TANNARX = xom ashyo + furnitura + matras + ish haqi
+  --  (zavod qarori, 2026-11).
+  tam AS (
+    SELECT k.*, fjam.summa AS furnitura, ish.summa AS ish_haqi,
+           NULLIF(COALESCE(k.summa, 0) + COALESCE(fjam.summa, 0)
+                  + COALESCE(k.matras, 0) + COALESCE(ish.summa, 0), 0) AS umumiy
+      FROM k
+      LEFT JOIN fjam USING (conveyor_no)
+      LEFT JOIN ish  USING (conveyor_no)),
+  --  Oldingi konver — SHU mahsulotning, tannarxi bor, omborga oldin
+  --  kirgani; solishtirish UMUMIY donaga bo'yicha. Tannarxsiz konver
+  --  olinmaydi: nol bilan solishtirish «+100%» degan yolg'on berardi.
   oldin AS (
     SELECT conveyor_no,
            LAG(conveyor_no) OVER w AS prev_no,
-           LAG(dona)        OVER w AS prev_dona
-      FROM k
-     WHERE dona IS NOT NULL
+           LAG(umumiy / NULLIF(soni, 0)) OVER w AS prev_dona
+      FROM tam
+     WHERE umumiy IS NOT NULL
     WINDOW w AS (PARTITION BY product_id
                  ORDER BY kirgan NULLS LAST, boshlangan NULLS LAST, conveyor_no))`;
 
@@ -186,18 +233,20 @@ router.get('/', need(...HUQUQ), wrap(async (req, res) => {
      SELECT k.conveyor_no, k.soni, k.kirgan, k.boshlangan, k.yolda,
             k.summa::NUMERIC(16,2) AS summa, k.dona::NUMERIC(16,2) AS dona,
             k.narxsiz, k.nom,
-            ish.summa::NUMERIC(16,2) AS ish_haqi,
-            (ish.summa / NULLIF(k.soni, 0))::NUMERIC(16,2) AS ish_dona,
-            ((COALESCE(k.summa, 0) + COALESCE(ish.summa, 0))
-              / NULLIF(k.soni, 0))::NUMERIC(16,2) AS jami_dona,
+            k.furnitura::NUMERIC(16,2) AS furnitura,
+            k.matras::NUMERIC(16,2) AS matras,
+            k.ish_haqi::NUMERIC(16,2) AS ish_haqi,
+            (k.ish_haqi / NULLIF(k.soni, 0))::NUMERIC(16,2) AS ish_dona,
+            k.umumiy::NUMERIC(16,2) AS umumiy,
+            (k.umumiy / NULLIF(k.soni, 0))::NUMERIC(16,2) AS jami_dona,
             o.prev_no, o.prev_dona::NUMERIC(16,2) AS prev_dona,
             p.id AS product_id, p.name AS product, g.name AS product_type, g.uom
-       FROM k
+       FROM tam k
        JOIN products p ON p.id = k.product_id
        LEFT JOIN product_groups g ON g.id = p.group_id
        LEFT JOIN oldin o ON o.conveyor_no = k.conveyor_no
-       LEFT JOIN ish ON ish.conveyor_no = k.conveyor_no
-      WHERE p.route_template_id IS NOT NULL
+      --  Marshrutsiz mahsulot faqat sotib olingan bo'lsa (matras).
+      WHERE (p.route_template_id IS NOT NULL OR k.matras IS NOT NULL)
         AND NOT k.opening AND k.soni > 0
         AND (  (k.kirgan IS NOT NULL
                 AND ($1::date IS NULL OR k.kirgan >= $1)
@@ -331,13 +380,38 @@ router.get('/:no', need(...HUQUQ), wrap(async (req, res) => {
     }
     ishbay.set('boshliq', x);
   }
+  //  ★ TAFSILOT — TO'RT BO'LIM, har birida nomi · soni · narxi ·
+  //  summasi (zavod qarori, 2026-11): «bu 700 $ qayerdan» degan savolga
+  //  konverning JAMI raqami bilan javob.
+  const { rows: xf } = await db.query(
+    `WITH ${SARF}
+     SELECT 'xom' AS tur, m.name, m.code, m.uom, s.qty, s.summa, s.narxsiz
+       FROM sarf s JOIN materials m ON m.id = s.material_id
+      WHERE s.conveyor_no = $1
+     UNION ALL
+     SELECT 'furn', m.name, m.code, m.uom, f.qty, f.summa, 0
+       FROM furn f JOIN materials m ON m.id = f.material_id
+      WHERE f.conveyor_no = $1
+     UNION ALL
+     SELECT 'matras', p.name, NULL, g.uom, k.soni, k.matras, 0
+       FROM k JOIN products p ON p.id = k.product_id
+       LEFT JOIN product_groups g ON g.id = p.group_id
+      WHERE k.conveyor_no = $1 AND k.matras IS NOT NULL
+     ORDER BY 1, 6 DESC NULLS LAST, 2`, [k.conveyor_no]);
+  const qism = (t) => xf.filter((r) => r.tur === t).map((r) => {
+    const qty = Number(r.qty), summa = r.summa == null ? null : Number(r.summa);
+    return { name: r.name, code: r.code, uom: r.uom, qty,
+             price: summa != null && qty ? summa / qty : null, summa,
+             narxsiz: r.narxsiz };
+  });
   if (!toliq(req)) {
     for (const r of out) { delete r.summa; delete r.prev_summa; delete r.narxsiz; }
     return res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
                       prev_soni: k.prev_soni, rows: out, pulsiz: true });
   }
   res.json({ conveyor_no: k.conveyor_no, soni: k.soni, prev_no: k.prev_no,
-             prev_soni: k.prev_soni, rows: out, ish, ishbay: [...ishbay.values()] });
+             prev_soni: k.prev_soni, rows: out, ish, ishbay: [...ishbay.values()],
+             xom: qism('xom'), furn: qism('furn'), matras: qism('matras') });
 }));
 
 module.exports = router;

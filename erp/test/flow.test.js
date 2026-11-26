@@ -11258,6 +11258,12 @@ test('matras ta\'minotchidan kirim hujjati bilan keladi', async () => {
     assert.equal(r.unit_price, null, 'sotuv narxi bo\'sh qoladi');
     assert.ok(Number(r.buy_price) > 0, 'olingan narx yozildi');
   }
+  //  ★ TANNARXDA MATRAS — olingan narx × soni, o'z ustunida.
+  const tm = (await admin('GET', '/api/cost')).body.rows
+    .find((x) => x.conveyor_no === rows[0].conveyor_no);
+  assert.ok(tm, 'matras tannarx ro\'yxatida');
+  assert.equal(Number(tm.matras), Number(rows[0].buy_price) * rows[0].qty);
+  assert.equal(Number(tm.umumiy), Number(tm.matras));
 
   //  Ta'minotchining qarzi o'sha zahoti oshdi — xom ashyo kirimi
   //  bilan bir xil: kirim omborni to'ldiradi VA qarzni oshiradi.
@@ -14326,6 +14332,11 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   const ps = (await admin('GET', '/api/materials/conveyor?no=' + u.conveyor_no)).body;
   assert.equal(ps.furn.length, 1);
   assert.equal(Number(ps.furn[0].summa), 12);
+  //  ★ TANNARX TAFSILOTI — nomi · soni · narxi · summasi (jami, donaga emas)
+  const tt = (await admin('GET', '/api/cost/' + encodeURIComponent(u.conveyor_no))).body;
+  assert.deepEqual(tt.xom.map((x) => [x.qty, x.price, x.summa]), [[8, 10, 80]]);
+  assert.deepEqual(tt.furn.map((x) => [x.qty, x.price, x.summa]), [[6, 2, 12]]);
+  assert.equal(tt.matras.length, 0);
 
   const d = (await admin('GET', '/api/cash/dashboard?from=2032-04&to=2032-04')).body;
   const oy = d.oylar.find((r) => r.mon === '2032-04');
