@@ -55,7 +55,7 @@ tr.k-det>td{background:var(--surface-2)}
 
 <div class="card" style="margin-top:16px">
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
-  <p class="muted" style="font-size:12px;margin-top:10px">
+  <p id="izoh" class="muted" style="font-size:12px;margin-top:10px">
     Tannarx = <b>xom ashyo + ish haqi</b>; kommunal keyingi bosqichda.
     Ish haqi — ishbay bo'lsa («Kim bajardi?») konverga darrov tushadi;
     qolgan tsex oyligi (kassadagi «Oylik …» moddasi, foyda-zarar oyi,
@@ -82,6 +82,10 @@ const d8 = v => !v ? '' : (s => `${s.slice(8,10)}.${s.slice(5,7)}.${s.slice(2,4)
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 let rows = [], ochiq = null, det = null;
+//  ★ TSEX BOSHLIG'IGA PUL YO'Q (zavod qarori, 2026-11): server narx va
+//  summani bermaydi (`pulsiz`), sahifa faqat sarfni — soni, donaga va
+//  oldingi konver bilan farqni — chizadi.
+let pulsiz = false;
 
 function davr(k) {
   const t = new Date();
@@ -96,7 +100,7 @@ async function load() {
   if ($('fFrom').value) q.set('from', $('fFrom').value);
   if ($('fTo').value) q.set('to', $('fTo').value);
   if ($('fYol').checked) q.set('yolda', '1');
-  try { rows = (await App.api('/api/cost?' + q)).rows; }
+  try { const d = await App.api('/api/cost?' + q); rows = d.rows; pulsiz = !!d.pulsiz; }
   catch (e) { $('body').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   ochiq = null; det = null;
   turlar();
@@ -131,6 +135,7 @@ function farq(r) {
 }
 
 function chiz() {
+  if (pulsiz) return chizSarf();
   const v = korinadi();
   const sarfsiz = v.filter((r) => r.summa == null).length;
   $('kN').textContent = v.length;
@@ -161,6 +166,55 @@ function chiz() {
         <td>${farq(r)}</td></tr>
       ${ochiq === r.conveyor_no ? `<tr class="k-det"><td colspan="11">${detal()}</td></tr>` : ''}`).join('')}
     </tbody></table></div>`;
+}
+
+//  Tsex boshlig'i ko'rinishi — faqat SARF (narx ham, summa ham yo'q).
+function chizSarf() {
+  const v = korinadi();
+  const sarfsiz = v.filter((r) => !r.sarf).length;
+  $('kN').textContent = v.length;
+  $('kNi').textContent = `${v.filter((r) => r.yolda).length} tasi hali ishlab chiqarishda`;
+  $('kS').closest('.card').hidden = true;
+  $('kI').closest('.card').hidden = true;
+  $('izoh').textContent = 'Faqat xom ashyo sarfi: donaga soni va shu mahsulotning oldingi konveri bilan farq. Qator bosilsa materiallar chiqadi.';
+  $('kY').innerHTML = sarfsiz ? `<span class="late">${sarfsiz}</span>` : '0';
+  if (!v.length) { $('body').innerHTML = `<p class="muted">Bu oraliqda omborga kirgan konver yo'q.</p>`; return; }
+  $('body').innerHTML = `<div class="tbox"><table>
+    <thead><tr><th>Kirgan</th><th>Konver</th><th>Mahsulot</th><th class="num">Soni</th>
+      <th>Xom ashyo</th><th>Oldingi</th></tr></thead>
+    <tbody>${v.map((r) => `
+      <tr class="k-row" onclick="och('${esc(r.conveyor_no)}')">
+        <td>${d8(r.kirgan) || '<span class="tag warn">yo\'lda</span>'}</td>
+        <td><a href="/konver.html?no=${encodeURIComponent(r.conveyor_no)}" target="_blank"
+          onclick="event.stopPropagation()">${esc(r.conveyor_no)}</a></td>
+        <td>${esc(r.product)} <span class="muted">· ${esc(r.product_type || '')}</span></td>
+        <td class="num">${r.soni} <span class="muted">${esc(r.uom || '')}</span></td>
+        <td>${r.sarf ? `${r.nom} xil material` : '<span class="late">sarf yozilmagan</span>'}</td>
+        <td>${r.prev_no ? esc(r.prev_no) : '<span class="muted">birinchi</span>'}</td></tr>
+      ${ochiq === r.conveyor_no ? `<tr class="k-det"><td colspan="6">${detalSarf()}</td></tr>` : ''}`).join('')}
+    </tbody></table></div>`;
+}
+
+//  Material bo'yicha BIR DONAGA soni, oldingi konver bilan — farq foizda.
+function detalSarf() {
+  if (!det) return '<span class="muted">Yuklanmoqda…</span>';
+  if (det.error) return esc(det.error);
+  if (!det.rows.length) return '<span class="muted">Material biriktirilmagan.</span>';
+  const p = det.prev_no;
+  return `<table style="background:transparent">
+    <thead><tr><th>Material</th><th class="num">Donaga soni</th>
+      ${p ? `<th class="num">${esc(p)}: donaga</th><th>Farq</th>` : ''}</tr></thead>
+    <tbody>${det.rows.map((m) => {
+      let f = '<span class="muted">—</span>';
+      if (m.qty != null && m.prev_qty) {
+        const pr = (m.qty - m.prev_qty) / m.prev_qty * 100;
+        if (Math.abs(pr) >= 0.05) f = `<span class="${pr > 0 ? 'up' : 'down'}">${pr > 0 ? '+' : ''}${pr.toFixed(1)}%</span>`;
+      } else if (m.qty == null && m.prev_qty) f = '<span class="down">yozilmagan</span>';
+      else if (m.qty != null && p && !m.prev_qty) f = '<span class="up">yangi</span>';
+      return `<tr><td>${esc(m.material)}${m.code ? ` <span class="muted">${esc(m.code)}</span>` : ''}</td>
+        <td class="num">${m.qty == null ? '—' : n3(m.qty)} <span class="muted">${esc(m.uom || '')}</span></td>
+        ${p ? `<td class="num">${m.prev_qty == null ? '—' : n3(m.prev_qty)}</td><td>${f}</td>` : ''}</tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 async function och(no) {
@@ -242,7 +296,7 @@ function chop() {
   const xodim = App.me()?.name ? ` · ${esc(App.me().name)}` : '';
   const q = $('fQ').value.trim(), tur = $('fTur').value;
   $('printHead').innerHTML = `
-    <h1>Tannarx (xom ashyo + ish haqi) · konver bo'yicha</h1>
+    <h1>${pulsiz ? 'Xom ashyo sarfi' : 'Tannarx (xom ashyo + ish haqi)'} · konver bo'yicha</h1>
     <div class="meta">Omborga kirgan: ${d8($('fFrom').value) || 'boshidan'} — ${
       d8($('fTo').value) || 'bugungacha'}${tur ? ` \u00b7 turi: ${esc(tur)}` : ''}${q ? ` · qidiruv: ${esc(q)}` : ''}${
       $('fYol').checked ? ' · ishlab chiqarishdagilar bilan' : ''}</div>
@@ -252,12 +306,21 @@ function chop() {
 }
 
 function exportCsv() {
+  if (pulsiz) {
+    const q2 = [['Kirgan', 'Konver', 'Mahsulot', 'Turi', 'Soni', 'Materiallar', 'Oldingi konver']];
+    for (const r of korinadi()) q2.push([d8(r.kirgan), r.conveyor_no, r.product,
+      r.product_type || '', r.soni, r.sarf ? r.nom : 'sarf yozilmagan', r.prev_no || '']);
+    return csvYukla(q2);
+  }
   const qat = [['Kirgan', 'Konver', 'Mahsulot', 'Turi', 'Soni', 'Xom ashyo $',
                 'Xom ashyo donaga $', 'Ish haqi $', 'Tannarx donaga $', 'Oldingi konver', 'Oldingisi donaga $', 'Farq $']];
   for (const r of korinadi()) qat.push([d8(r.kirgan), r.conveyor_no, r.product,
     r.product_type || '', r.soni, r.summa ?? '', r.dona ?? '', r.ish_haqi ?? '', r.jami_dona ?? '', r.prev_no || '',
     r.prev_dona ?? '', r.dona != null && r.prev_dona != null
       ? (Number(r.dona) - Number(r.prev_dona)).toFixed(2) : '']);
+  csvYukla(qat);
+}
+function csvYukla(qat) {
   const csv = '﻿' + qat.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`)
     .join(';')).join('\n');
   const a = document.createElement('a');

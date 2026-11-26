@@ -915,15 +915,15 @@ test('ishbay: bo\'limdan o\'tganda xodimga dona × narx yoziladi', async () => {
   const sp2 = await stul('GET', '/api/payroll?month=' + oy);
   assert.ok(!sp2.body.rows.some((r) => r.id === begonaX.id), 'begona tsex ko\'rinmaydi');
   assert.equal((await stul('GET', `/api/payroll/worker/${begonaX.id}?month=${oy}`)).status, 403);
-  //  Qo'shimcha tsex — MAHSULOTNI ko'rish uchun; o'sha tsexning
-  //  xodimlari ish haqida ko'rinmaydi (zavod qarori, 2026-11).
+  //  Qo'shimcha tsexning xodimlari ham ko'rinadi — boshliq ikki tsexni
+  //  birga yuritadi (zavod qarori, 2026-11).
   const usta = await H.id(`SELECT id FROM workers WHERE name = 'Stul ustasi'`);
   await H.id(
     `INSERT INTO worker_extra_shops (worker_id, shop_id)
      SELECT $1, s.shop_id FROM sections s JOIN workers w ON w.section_id = s.id
       WHERE w.id = $2 RETURNING shop_id`, [usta.id, begonaX.id]);
   const sp3 = await stul('GET', '/api/payroll?month=' + oy);
-  assert.ok(!sp3.body.rows.some((r) => r.id === begonaX.id), 'qo\'shimcha tsex xodimi ko\'rinmaydi');
+  assert.ok(sp3.body.rows.some((r) => r.id === begonaX.id), 'qo\'shimcha tsex xodimi ko\'rinadi');
   assert.ok(sp3.body.rows.some((r) => r.id === kim), 'o\'z tsexi qoladi');
   await H.id(`DELETE FROM worker_extra_shops WHERE worker_id = $1 RETURNING worker_id`, [usta.id]);
   await H.id(`UPDATE workers SET active = false WHERE id = $1 RETURNING id`, [begonaX.id]);
@@ -3259,6 +3259,15 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
   const uT = await usta('GET', '/api/cost?yolda=1');
   assert.equal(uT.status, 200, uT.text);
   assert.ok(uT.body.rows.some((r) => r.conveyor_no === u2.conveyor_no));
+  //  ★ Tsex boshlig'iga PUL YO'Q — faqat sarf (narx, summa, ish haqi yo'q)
+  assert.equal(uT.body.pulsiz, true);
+  const uR = uT.body.rows.find((r) => r.conveyor_no === u2.conveyor_no);
+  assert.ok(!('summa' in uR) && !('dona' in uR) && !('ish_haqi' in uR), 'pul yo\'q');
+  assert.equal(uR.sarf, true);
+  const uD = (await usta('GET', '/api/cost/' + encodeURIComponent(u2.conveyor_no))).body;
+  assert.equal(uD.pulsiz, true);
+  assert.ok(uD.rows.length && !('summa' in uD.rows[0]) && Number(uD.rows[0].qty) === 2);
+  assert.ok(!('ishbay' in uD) && !('ish' in uD));
   const bT = await begona('GET', '/api/cost?yolda=1');
   assert.equal(bT.status, 200, bT.text);
   assert.ok(!bT.body.rows.some((r) => r.conveyor_no === u2.conveyor_no),
