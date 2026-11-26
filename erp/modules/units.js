@@ -1794,6 +1794,10 @@ router.post('/requests/:id/approve', need('production.approve'), wrap(async (req
       }
     }
 
+    //  ★ TA'MINOTGA HAM (zavod qarori, 2026-11): xom ashyoni oldindan
+    //  tayyorlash uchun zavodga qanday ish kelganini biladi.
+    await taminotXabari(client, 'prod_new', u0.id, jamiQty);
+
     await audit(req, { module: 'production', action: 'approve', entity: 'unit_requests',
                        entity_id: id, payload: { unit_id: u0.id,
                          qatorlar: guruh.map((g) => g.id) } }, client);
@@ -2938,6 +2942,36 @@ async function birlashtir(client, eski, tirik) {
      ON CONFLICT (worker_id, unit_id) DO NOTHING`, [eski, tirik]);
 }
 
+//  ★ TA'MINOTGA XABAR (zavod qarori, 2026-11; `prod_new`, `prod_start`).
+//  Ta'minotchi xom ashyoni OLDINDAN olib kelishi kerak, ya'ni zavodga
+//  qanday konver kelgani va qaysi biri ishga tushgani unga kerak — u
+//  esa bo'limlar ekranini ochmaydi. Kimga — huquqdan
+//  (`purchasing.manage`, 4-qoida), har xodim turini o'zi o'chira oladi.
+async function taminotXabari(client, kind, unitId, qty, bolimId) {
+  const r = (await client.query(
+    `SELECT u.conveyor_no, u.order_no, u.color, u.note, p.name AS product,
+            g.name AS turi, c.name AS mijoz, s.name AS bolim, sh.name AS tsex
+       FROM production_units u
+       JOIN products p ON p.id = u.product_id
+       LEFT JOIN product_groups g ON g.id = p.group_id
+       LEFT JOIN customers c ON c.id = u.customer_id
+       LEFT JOIN sections s ON s.id = $2
+       LEFT JOIN shops sh ON sh.id = s.shop_id
+      WHERE u.id = $1`, [unitId, bolimId || null])).rows[0];
+  if (!r) return;
+  const qator = [`${r.conveyor_no} · ${[r.product, r.turi].filter(Boolean).join(' · ')} · ${qty} ta`];
+  if (r.color) qator.push(`Rangi: ${r.color}`);
+  if (r.order_no) qator.push(`Zakaz: ${r.order_no}${r.mijoz ? ' · ' + r.mijoz : ''}`);
+  if (r.bolim) qator.push(`Bo'lim: ${r.bolim}${r.tsex ? ' · ' + r.tsex : ''}`);
+  if (r.note) qator.push(`Izoh: ${r.note}`);
+  await notify.queue({
+    permission_code: 'purchasing.manage', module: 'production', kind,
+    title: kind === 'prod_new' ? 'Ishlab chiqarishga yangi konver'
+                               : 'Konver ishga tushdi',
+    body: qator.join('\n'),
+  }, client);
+}
+
 async function placePieces(client, req, u, toSection, n, movedOn) {
   //  ★ BOSH SANA — ISHGA TUSHGAN KUN (zavod qarori, 2026-10). Konver
   //  «boshlanmagan» bo'lib ochiladi va bosh sana ochilgan kun bo'lib
@@ -2958,6 +2992,7 @@ async function placePieces(client, req, u, toSection, n, movedOn) {
       ORDER BY id LIMIT 1 FOR UPDATE`,
     [u.conveyor_no, u.id, toSection, u.color ?? null, u.fabric ?? null])).rows[0] : null;
   const whole = n >= u.qty;
+  if (boshlanmoqda) await taminotXabari(client, 'prod_start', u.id, Math.min(n, u.qty), toSection);
 
   if (sibling) {
     await client.query(
