@@ -4080,8 +4080,9 @@ TASDIQLANIB konver ochilganda («Ishlab chiqarishga yangi konver») va
 konver BIRINCHI bo'limga kirganda («Konver ishga tushdi» — bo'lim va
 tsex bilan). Matnda raqam · mahsulot · turi · soni, rangi, zakaz va
 mijoz, izoh. Kimga — huquqdan (`purchasing.manage`, 4-qoida); har
-xodim turini Xodimlar → «Xabarlar» da o'chira oladi (administrator
-ham — unda hamma huquq bor).
+xodim turini Xodimlar → «Xabarlar» da o'chira oladi. **Administratorga
+boshidanoq O'CHIQ** (unda hamma huquq bor; bir martalik —
+`migration_flags`: `taminot-xabar-admin`, saytdan qayta yoqiladi).
 
 ### Nega xabar bormaydi — zanjir to'rt bo'g'inli
 

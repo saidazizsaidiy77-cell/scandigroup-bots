@@ -3683,6 +3683,11 @@ test('savdo stulga so\'rov yozadi, penalga emas', async () => {
   assert.equal(tYangi.permission_code, 'purchasing.manage');
   assert.ok(tYangi.body.startsWith(so.body.conveyor_no + ' · '), tYangi.body);
   assert.ok(tYangi.body.includes('5 ta'), tYangi.body);
+  //  Administratorga bu ikki tur boshidanoq O'CHIQ (hamma huquq bor).
+  assert.equal((await H.id(
+    `SELECT COUNT(*)::int AS n FROM worker_notify_off o
+       JOIN worker_roles wr ON wr.worker_id = o.worker_id AND wr.role_code = 'admin'
+      WHERE o.kind IN ('prod_new','prod_start')`)).n >= 2, true);
 
   //  ★ MENYUDAGI BELGI ro'yxat bilan bir xil raqamni beradi.
   const stulchi = H.api(base, await H.sessionFor('Stul ustasi'));
