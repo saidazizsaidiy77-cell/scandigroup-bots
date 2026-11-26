@@ -23,7 +23,9 @@
     ketgan oyda o'sha mahsulotning tannarxiga qo'shiladi.</p>
 </div>
 
-<div class="card" style="margin-top:16px">
+<div class="row" style="gap:8px;margin-top:16px" id="tabs"></div>
+
+<div class="card" style="margin-top:12px">
   <div id="body"><p class="muted">Yuklanmoqda…</p></div>
 </div>
 
@@ -40,7 +42,40 @@ const n3 = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits
 const d8 = (v) => v ? String(v).slice(8, 10) + '.' + String(v).slice(5, 7) + '.' + String(v).slice(2, 4) : '';
 const yozadi = () => App.can('materials.manage', 'production.manage');
 
+//  ★ IKKI TAB (zavod qarori, 2026-11): navbat va CHIQIB KETGAN — navbat
+//  chiqarilgach bo'shaydi, «nima berdik» degan savol esa qoladi.
+let tab = 'kut', fFrom = '', fTo = '';
+function tabs() {
+  $('tabs').innerHTML = [['kut', 'Kutmoqda'], ['chiqdi', 'Chiqib ketgan']]
+    .map(([k, t]) => `<button class="${tab === k ? 'primary' : ''}"
+      onclick="tab='${k}';load()">${t}</button>`).join('')
+    + (tab === 'chiqdi' ? `<span style="flex:1"></span>
+      <input type="date" value="${fFrom}" onchange="fFrom=this.value;load()">
+      <input type="date" value="${fTo}" onchange="fTo=this.value;load()">` : '');
+}
+
+async function loadChiqdi() {
+  let d;
+  try { d = await App.api(`/api/materials/furn/orders?tab=shipped&from=${fFrom}&to=${fTo}`); }
+  catch (e) { $('body').innerHTML = `<p class="late">${esc(e.message)}</p>`; return; }
+  $('body').innerHTML = !d.rows.length
+    ? '<p class="muted">Furniturasi yozilib chiqib ketgan buyurtma yo\'q.</p>'
+    : `<div class="tbox"><table><thead><tr><th>Chiqdi</th><th>Zakaz</th><th>Mijoz</th>
+        <th>Mahsulotlar</th><th>Berilgan furnitura</th></tr></thead><tbody>
+      ${d.rows.map((o) => `<tr class="click" onclick="och(${o.id})">
+        <td>${d8(o.shipped_on)}</td>
+        <td><b>${esc(o.order_no)}</b></td>
+        <td>${esc(o.customer || '')}</td>
+        <td>${(o.items || []).map((i) => `${i.berildi ? '✓' : '<span class="late">✗</span>'} ${esc(i.product)}
+          <span class="muted">· ${esc(i.product_type)} · ${i.qty}</span>`).join('<br>')}</td>
+        <td style="font-size:12.5px">${(o.materials || []).map((m) => `${esc(m.material)}
+          <span class="muted">· ${n3(m.qty)} ${esc(m.uom || '')}</span>`).join('<br>')}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
+
 async function load() {
+  tabs();
+  if (tab === 'chiqdi') return loadChiqdi();
   let d;
   try { d = await App.api('/api/materials/furn/orders'); }
   catch (e) { $('body').innerHTML = `<p class="late">${esc(e.message)}</p>`; return; }

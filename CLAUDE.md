@@ -3452,6 +3452,10 @@ qo'yilsa mahsulot sotilmaguncha furnitura pul bo'lib muzlardi. Mudir
 (qatorlar «Qaytarib olish» dan keyin qayta yoziladi). Narx chiqish
 paytida qotadi (`chiqishNarxi`), qoldiq to'sig'i (`yetarlimi`) bu
 yerda ham. Chiqib ketganidan keyin bekor qilinmaydi.
+**«Chiqib ketgan» tabi** (zavod qarori, 2026-11; `furn/orders?tab=shipped`):
+navbat chiqarilgach bo'shaydi, «nima berdik» degan savol esa qoladi —
+furniturasi yozilib chiqqan buyurtmalar chiqqan kuni bo'yicha, berilgan
+material va soni bilan, sana filtri bilan; bosilsa o'sha oyna (faqat ko'rish).
 
 **FURNITURASIZ CHIQMAYDI**: belgisi bor guruhning (`needs_hardware` —
 sp, penal, kamod) har mahsulotiga furnitura yozilmaguncha `/ship`

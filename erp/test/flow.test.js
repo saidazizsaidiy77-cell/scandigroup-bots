@@ -14296,6 +14296,14 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   assert.equal(f.status, 200, f.text);
   const sh = await admin('POST', `/api/sales/orders/${z.id}/ship`, { ship_on: '2032-04-10' });
   assert.equal(sh.status, 200, sh.text);
+  //  ★ Chiqib ketgach navbatdan tushadi, «Chiqib ketgan» tabida turadi.
+  assert.ok(!(await admin('GET', '/api/materials/furn/orders')).body.rows
+    .some((x) => x.id === z.id), 'navbatdan tushdi');
+  const chq = (await admin('GET',
+    '/api/materials/furn/orders?tab=shipped&from=2032-04-01&to=2032-04-30')).body.rows
+    .find((x) => x.id === z.id);
+  assert.ok(chq, 'chiqib ketganlar ro\'yxatida');
+  assert.equal(Number(chq.materials[0].qty), 6);
 
   const pl = (await admin('GET', '/api/cash/pl?from=2032-04&to=2032-04')).body;
   const cogs = pl.rows.filter((r) => r.kind === 'cogs');

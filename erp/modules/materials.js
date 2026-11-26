@@ -1477,6 +1477,38 @@ async function furnOmbor(client, req, id) {
 }
 
 router.get('/furn/orders', need(...VIEW), wrap(async (req, res) => {
+  //  ★ CHIQIB KETGANLARI HAM (zavod qarori, 2026-11; `?tab=shipped`).
+  //  Navbat chiqarilgach bo'shaydi va «nima berdik» degan savolga
+  //  javob qolmasdi. Furniturasi yozilib, chiqib ketgan buyurtmalar —
+  //  chiqqan kuni bo'yicha, berilgan material va soni bilan.
+  if (req.query.tab === 'shipped') {
+    const { rows } = await db.query(
+      `WITH k AS (${FURN_KERAK})
+       SELECT o.id, o.order_no, o.shipped_on, c.name AS customer,
+              (SELECT json_agg(json_build_object('product', k.product,
+                 'product_type', k.product_type, 'qty', k.qty,
+                 'berildi', k.berildi) ORDER BY k.product)
+                 FROM k WHERE k.order_id = o.id) AS items,
+              (SELECT json_agg(json_build_object('material', x.material,
+                 'uom', x.uom, 'qty', x.qty) ORDER BY x.material)
+                 FROM (SELECT m.name AS material, m.uom, SUM(mv.qty) AS qty
+                         FROM material_moves mv
+                         JOIN materials m ON m.id = mv.material_id
+                        WHERE mv.to_kind = 'order' AND mv.to_id = o.id
+                          AND mv.status = 'ok'
+                        GROUP BY m.name, m.uom) x) AS materials
+         FROM orders o
+         LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE o.status = 'shipped'
+          AND EXISTS (SELECT 1 FROM material_moves mv
+                       WHERE mv.to_kind = 'order' AND mv.to_id = o.id
+                         AND mv.status = 'ok')
+          AND ($1::date IS NULL OR o.shipped_on >= $1)
+          AND ($2::date IS NULL OR o.shipped_on <= $2)
+        ORDER BY o.shipped_on DESC NULLS LAST, o.id DESC
+        LIMIT 500`, [req.query.from || null, req.query.to || null]);
+    return res.json({ rows });
+  }
   const { rows } = await db.query(
     `WITH k AS (${FURN_KERAK})
      SELECT o.id, o.order_no, o.due_on, o.plan_on, c.name AS customer,
