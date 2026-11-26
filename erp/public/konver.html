@@ -199,14 +199,14 @@ async function sarf(d) {
       margin-bottom:10px">
       <h2 style="margin:0">Xom ashyo sarfi</h2>
       <div class="row no-print" style="gap:8px">
-        ${tuz && SARF.unitId ? `<button onclick="xqOch()">+ Xom ashyo</button>` : ''}
+        ${App.can('sales.fix') && SARF.unitId ? `<button onclick="xqOch()">+ Xom ashyo</button>` : ''}
         ${SARF.rows.length ? `<button onclick="sarfChop()">Chop etish</button>` : ''}</div>
     </div>
     <div id="sarfHead" class="print-only print-head"></div>
     ${!SARF.rows.length && !furn.length
       ? `<p class="muted" style="font-size:13px">Bu konverga hali xom ashyo
-           biriktirilmagan. Sarf tsex ekranidagi ▣ tugmasidan yoki shu yerdagi
-           «+ Xom ashyo» dan yoziladi.</p>`
+           biriktirilmagan. Sarf tsex ekranidagi ▣ tugmasidan yoziladi;
+           tsexdan chiqqaniga — administrator «+ Xom ashyo» dan.</p>`
       : `<div class="tbox"><table>
         <thead><tr><th>Sana</th><th>Material</th><th class="num">Soni</th>
           <th class="num">Donaga</th><th>Ombor · bo'lim</th><th>Kim</th>

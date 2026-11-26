@@ -6046,7 +6046,10 @@ konver, mahsulot, kun-soat va chop etgan xodim.
 ▣ faqat tsexda turgan konverda, chiqib ketgani u ro'yxatda yo'q va
 yozilmay qolgan material tannarxdan tushib qolardi. Yo'l ▣ bilan BITTA
 (`POST /unit/:id/consume`): ombor, doira, `yetarlimi` o'sha. Bo'lak —
-raqamning eng katta qatori (tannarx raqam bo'yicha). Sana tanlanadi
+raqamning eng katta qatori (tannarx raqam bo'yicha). **Faqat
+administrator** (`sales.fix`, zavod qarori 2026-11): tsexdan chiqqan
+(`status <> 'production'`) konverga sarfni server tsex boshlig'iga
+qabul qilmaydi (403) — u ▣ da, tsexda yozadi. Sana tanlanadi
 (standarti bugun) — ombor qoldig'i o'sha kundan kamayadi; tannarx esa
 konver chiqqan oyda, ya'ni o'sha oyning foyda-zarari o'zgaradi.
 

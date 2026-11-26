@@ -14337,6 +14337,10 @@ test('foyda-zarar: tannarx chiqqan oyda, ta\'minotchiga to\'lov chiqmaydi', asyn
   const qo = await admin('POST', `/api/materials/unit/${u.id}/consume`,
     { warehouse_id: furnWh.id, on: '2032-04-10', items: [{ material_id: mat, qty: 1 }] });
   assert.equal(qo.status, 200, qo.text);
+  //  Tsex boshlig'i tsexdan chiqqan konverga qo'sha olmaydi — faqat administrator.
+  const ku = H.api(base, await H.sessionFor('Korpus ustasi'));
+  assert.equal((await ku('POST', `/api/materials/unit/${u.id}/consume`,
+    { warehouse_id: furnWh.id, items: [{ material_id: mat, qty: 1 }] })).status, 403);
   await db.query(`UPDATE material_moves SET status = 'cancelled'
                    WHERE to_kind = 'unit' AND to_id = $1 AND moved_on = '2032-04-10'`, [u.id]);
   //  ★ TANNARX TAFSILOTI — nomi · soni · narxi · summasi (jami, donaga emas)
