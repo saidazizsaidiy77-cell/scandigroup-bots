@@ -3236,6 +3236,23 @@ test('konverga xom ashyo biriktirish: tsex boshlig\'ining ekranidan', async () =
   assert.equal((await begona('GET', '/api/materials/unit/' + u.id)).status, 403);
   assert.equal((await begona('POST', '/api/materials/unit/' + u.id + '/consume',
     { items: [{ material_id: m.id, qty: 1 }] })).status, 403);
+  //  ★ YOZILGAN BO'LIMNING TSEXI TUZATADI (C26-292): konver korpusniki,
+  //  lekin qator stul tsexi bo'limida yozilgan bo'lsa o'sha boshliq
+  //  ✎ va bekor qila oladi; korpus bo'limidagi qatorga esa 403.
+  assert.equal((await begona('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 12, reason: 'x' })).status, 403, 'begona qator');
+  const eskiBolim = (await H.id(`SELECT section_id AS id FROM material_moves
+                                  WHERE id = $1`, [tirik.id])).id;
+  await db.query(`UPDATE material_moves SET section_id =
+     (SELECT id FROM sections WHERE shop_id = $2 ORDER BY id LIMIT 1)
+     WHERE id = $1`, [tirik.id, stul]);
+  const bf = await begona('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 11, reason: 'lakda xato yozilgan' });
+  assert.equal(bf.status, 200, bf.text);
+  assert.equal((await begona('POST', '/api/materials/consume/' + tirik.id + '/fix',
+    { qty: 12, reason: 'qaytarildi' })).status, 200);
+  await db.query(`UPDATE material_moves SET section_id = $2 WHERE id = $1`,
+    [tirik.id, eskiBolim]);
   //  Boshqa tsexning ombori ham tanlanmaydi: ro'yxat doira bilan
   //  chegaralangan va id qo'lda yuborilsa ham qabul qilinmaydi.
   assert.equal((await usta('POST', '/api/materials/unit/' + u.id + '/consume',

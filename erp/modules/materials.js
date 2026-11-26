@@ -973,6 +973,28 @@ async function sarfDoira(q, req, unitId, sectionId) {
   return null;
 }
 
+//  ★ YOZILGAN SARF QATORI — YOZILGAN BO'LIMNING TSEXI HAM TUZATADI
+//  (zavod qarori, 2026-11; C26-292). Konver egasi Korpus, xato esa lak
+//  tsexida yozilgan: konver lakdan o'tib ketgan va lak boshlig'iga
+//  «doirangizda emas» chiqardi. Mavjud qatorni (tuzatish, bekor,
+//  tiklash) qator yozilgan BO'LIMNING tsexi yoki manba OMBORNING tsexi
+//  doirada bo'lsa ham ochiladi; bo'lmasa — eskicha `sarfDoira`.
+async function sarfQatorDoira(q, req, mv) {
+  const d = req.user.scope_shop_ids || [];
+  if (d.length) {
+    const ok = (await q.query(
+      `SELECT 1 FROM material_moves m
+         LEFT JOIN sections s   ON s.id = m.section_id
+         LEFT JOIN warehouses w ON w.id = m.from_id AND m.from_kind = 'warehouse'
+        WHERE m.id = $1
+          AND (s.shop_id = ANY($2)
+               OR COALESCE(w.owner_shop_id, w.shop_id) = ANY($2))`,
+      [mv.id, d])).rowCount;
+    if (ok) return null;
+  }
+  return sarfDoira(q, req, mv.to_id, mv.section_id);
+}
+
 //  ★ OMBOR RO'YXATI TARTIBLANADI, TANLAB QO'YILMAYDI. Eng to'g'risi
 //  birinchi turadi — konver turgan BO'LIMNING ombori, keyin o'sha
 //  bo'lim TSEXining ombori — va sahifa birinchisini oladi.
@@ -1219,7 +1241,7 @@ router.post('/consume/:id/cancel', need('materials.request', ...MANAGE),
       WHERE id = $1 AND to_kind = 'unit' AND status = 'ok'`,
     [req.params.id])).rows[0];
   if (!mv) return res.status(404).json({ error: 'Sarf topilmadi' });
-  await sarfDoira(db, req, mv.to_id, mv.section_id);
+  await sarfQatorDoira(db, req, mv);
   await db.query(`UPDATE material_moves SET status = 'cancelled' WHERE id = $1`,
                  [mv.id]);
   await audit(req, { module: 'materials', action: 'consume-cancel',
@@ -1249,10 +1271,10 @@ router.post('/consume/:id/fix', need('materials.request', ...MANAGE),
   if (!sabab) return res.status(400).json({ error: 'Sababini yozing' });
   //  Doira tranzaksiyadan OLDIN: `konverDoira` hovuzdan o'qiydi (3-qoida)
   const bor = (await db.query(
-    `SELECT to_id, section_id FROM material_moves
+    `SELECT id, to_id, section_id FROM material_moves
       WHERE id = $1 AND to_kind = 'unit' AND status = 'ok'`, [req.params.id])).rows[0];
   if (!bor) return res.status(404).json({ error: 'Sarf topilmadi' });
-  await sarfDoira(db, req, bor.to_id, bor.section_id);
+  await sarfQatorDoira(db, req, bor);
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -1341,7 +1363,7 @@ router.post('/consume/:id/restore', need('materials.request', ...MANAGE),
       [req.params.id])).rows[0];
     if (!mv) { const e = new Error('Bekor qilingan sarf topilmadi');
                e.status = 404; throw e; }
-    await sarfDoira(client, req, mv.to_id, mv.section_id);
+    await sarfQatorDoira(client, req, mv);
     //  Tiklash sarfni QAYTA ayiradi — ya'ni u yozishning o'zi bilan
     //  bir xil qoidaga bo'ysunadi. Aks holda bekor qilib, darrov
     //  tiklash to'siqni bitta bosishda chetlab o'tardi.
