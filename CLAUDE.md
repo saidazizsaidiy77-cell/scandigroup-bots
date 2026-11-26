@@ -2485,6 +2485,18 @@ tegmaydi. Qabul qilingandan keyin esa bu kassirning ishi — konver
 so'rovi bilan bir xil idiom (`rejected` boshqaniki, `cancelled`
 o'zinikidir).
 
+**★ MIJOZ PULINI MENEJER O'ZI TUZATADI — KASSIRGA TOPSHIRGUNCHA**
+(zavod qarori, 2026-11; `OZ_OCHIQ`, `PATCH /api/cash/ops/:id/own`,
+«Mening pulim» lentasidagi **✎** va **×**). Menejer mijozdan olgan
+pulni xato yozsa (summa, mijoz, kurs, sana) tuzatadigan yo'l yo'q edi.
+Endi o'zi yozgan `mijoz → o'zi` yozuvini, undan KEYIN kassaga
+topshirish (kutib turgani ham, qabul qilingani ham) yozilmaguncha,
+o'zi tuzatadi yoki bekor qiladi: pulni hali hech kim sanab olmagan.
+Topshirgach yopiladi — kassirning ishi; topshirish rad etilsa yana
+ochiladi. Qaysi qator ochiqligini SERVER aytadi (`/ops` dagi
+`tahrir`). Mijoz doirasi yozishdagi bilan bitta (`assertSide`),
+qo'ldagi pul minusga tushmaydi (`minus_cash`), audit `fix`.
+
 **Navbat menyuda turadi** (`/api/navbat`, `cash` bo'limi): kassir
 kassa sahifasini ochib ko'rmasa, pul xodimning qo'lida kechgacha
 qolib ketardi. Kassalar ro'yxatining USTIDA ham kartochka bo'lib
@@ -3440,6 +3452,10 @@ qo'yilsa mahsulot sotilmaguncha furnitura pul bo'lib muzlardi. Mudir
 (qatorlar «Qaytarib olish» dan keyin qayta yoziladi). Narx chiqish
 paytida qotadi (`chiqishNarxi`), qoldiq to'sig'i (`yetarlimi`) bu
 yerda ham. Chiqib ketganidan keyin bekor qilinmaydi.
+**«Chiqib ketgan» tabi** (zavod qarori, 2026-11; `furn/orders?tab=shipped`):
+navbat chiqarilgach bo'shaydi, «nima berdik» degan savol esa qoladi —
+furniturasi yozilib chiqqan buyurtmalar chiqqan kuni bo'yicha, berilgan
+material va soni bilan, sana filtri bilan; bosilsa o'sha oyna (faqat ko'rish).
 
 **FURNITURASIZ CHIQMAYDI**: belgisi bor guruhning (`needs_hardware` —
 sp, penal, kamod) har mahsulotiga furnitura yozilmaguncha `/ship`

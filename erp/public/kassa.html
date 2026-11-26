@@ -404,6 +404,9 @@ function drawOps() {
              <button class="ic" title="Rad etish" onclick="cancelOp(${o.id})">×</button>`
           : ''}</td>` : `<td class="num">${o.status === 'pending'
           ? `<button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
+          : o.tahrir
+          ? `<button class="ic" title="Tuzatish — kassirga topshirilgunga qadar" onclick="editOwn(${o.id})">✎</button>
+             <button class="ic" title="Bekor qilish" onclick="cancelOp(${o.id})">×</button>`
           : ''}</td>`}
       </tr>`).join('')}</tbody></table></div>`
       : `<p class="muted">${tab === 'in' ? 'Kirim' : tab === 'out' ? 'Chiqim' : 'Harakat'} yo'q.</p>`}

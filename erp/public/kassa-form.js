@@ -428,10 +428,31 @@ const FORMS = {
   hand: { t: 'Kassirga topshirish', who: 'Qayerga', fixed: 'Asosiy kassa' },
 };
 
+//  ★ MIJOZ PULINI MENEJER O'ZI TUZATADI — KASSIRGA TOPSHIRGUNCHA
+//  (izoh: modules/cash.js, `OZ_OCHIQ`). O'sha kirim oynasi, yozuv
+//  bilan to'ldirilgan; qaysi qator ochiqligini SERVER aytadi
+//  (`tahrir`).
+let editId = null;
+function editOwn(id) {
+  const o = ops.find((x) => x.id === id);
+  if (!o) return;
+  openForm('in');
+  editId = id;
+  document.querySelector('.ord-head .t').textContent = `Kirim orderi · ${o.doc_no} — tuzatish`;
+  $('fDate').value = String(o.op_date || '').slice(0, 10);
+  $('fSide').value = `customer:${o.from_id}`;
+  $('fCur').value = o.currency;
+  $('fAmt').value = o.amount;
+  if (o.rate) $('fRate').value = String(Number(o.rate));
+  $('fNote').value = o.note || '';
+  calc();
+}
+
 function openForm(kind) {
   const F = FORMS[kind];
   if (!F) return;
   form = kind;
+  editId = null;
   const bugun = isoDay(new Date());
   //  Harajat — chiqimning bir turi, alohida tugma emas: kassir «kimga»
   //  o'rniga harajat moddasini tanlaydi va shu zahoti foyda-zarar oyi
@@ -723,6 +744,18 @@ async function saveOp() {
     ...(almashish() ? { to_currency: $('fToCur').value,
                         to_amount: $('fToAmt').value } : {}),
   };
+  if (editId) {
+    try {
+      const r = await App.api(`/api/cash/ops/${editId}/own`, { method: 'PATCH',
+        body: JSON.stringify({ from_id: body.from_id, op_date: body.op_date,
+          currency: body.currency, amount: body.amount, rate: body.rate,
+          note: body.note }) });
+      toast(`${r.doc_no} tuzatildi · ${usd(r.amount_usd)} $`);
+      closeForm();
+      reload();
+    } catch (e) { toast(e.message, true); }
+    return;
+  }
   try {
     const r = await App.api('/api/cash/ops',
       { method: 'POST', body: JSON.stringify(body) });

@@ -34,6 +34,22 @@ const ANY = ['cash.view', 'cash.entry', 'cash.manage'];
 const can = (req, ...p) => p.some((x) => (req.user?.permissions || []).includes(x));
 const isBoss = (req) => can(req, 'cash.manage');
 
+//  ★ MIJOZDAN OLINGAN PULNI MENEJER O'ZI TUZATADI — KASSIRGA
+//  TOPSHIRGUNCHA (zavod qarori, 2026-11). Yozuv `mijoz → o'zi`, uni
+//  o'zi yozgan, va undan KEYIN kassaga topshirish (kutib turgani ham,
+//  qabul qilingani ham) yozilmagan: pul hali uning qo'lida va hech kim
+//  sanab olmagan. Topshirilgach yozuv kassirning hisobiga kirdi —
+//  tuzatish eskicha: kassir bekor qiladi, qaytadan yoziladi.
+//  Shart BITTA joyda: lentadagi ✎ ham, server ham shundan o'qiydi.
+const OZ_OCHIQ = (o) => `(${o}.status = 'ok'
+    AND ${o}.from_kind = 'customer' AND ${o}.to_kind = 'worker'
+    AND ${o}.created_by = ${o}.to_id
+    AND NOT EXISTS (SELECT 1 FROM cash_ops t
+                     WHERE t.from_kind = 'worker' AND t.from_id = ${o}.to_id
+                       AND t.to_kind = 'account'
+                       AND t.status IN ('ok', 'pending')
+                       AND t.created_at > ${o}.created_at))`;
+
 //  Savdo yo'nalishi chegarasi — savdo moduli bilan bir xil: B2B
 //  menejeri eksport mijozidan to'lov yozib qo'ya olmaydi.
 //  ★ INKASSATORDA IKKALA CHEGARA HAM OCHILADI (izoh: sql/cash.sql):
@@ -297,6 +313,15 @@ router.get('/ops', need(...ANY), wrap(async (req, res) => {
   //  ko'rinardi — minus bilan, «Kim» ustunida esa o'sha xodimning O'Z
   //  ismi yozilib turardi. Qoida ikki joyda bo'lsa yana ajralib
   //  ketardi, shuning uchun u BITTA joyda.
+  //  Menejerning O'Z yozuvlaridan qaysi biri hali tuzatiladi
+  //  (`OZ_OCHIQ`). Kassirga kerak emas — unda ✎ va × bor.
+  if (!boss && rows.length) {
+    const ochiq = new Set((await db.query(
+      `SELECT o.id FROM cash_ops o
+        WHERE o.id = ANY($1) AND o.to_id = $2 AND ${OZ_OCHIQ('o')}`,
+      [rows.map((r) => r.id), req.user.id])).rows.map((r) => r.id));
+    rows.forEach((r) => { r.tahrir = ochiq.has(r.id); });
+  }
   const davr = sideKind
     ? await davrHisobi(sideKind, sideId, req.query.from, req.query.to) : null;
   res.json({ rows, boss, davr,
@@ -844,9 +869,15 @@ router.patch('/ops/:id', need(...ANY), wrap(async (req, res) => {
     //  qolgan hamma narsa unga yopiq va javob ham shunday bo'lishi
     //  kerak — «topilmadi» degan javob «huquqim yo'q» degani emas.
     const o = (await db.query(
-      `SELECT status, created_by FROM cash_ops WHERE id = $1`,
-      [req.params.id])).rows[0];
-    if (!o || o.status !== 'pending' || o.created_by !== req.user.id)
+      `SELECT o.status, o.created_by,
+              (o.to_id = $2 AND ${OZ_OCHIQ('o')}) AS ochiq
+         FROM cash_ops o WHERE o.id = $1`,
+      [req.params.id, req.user.id])).rows[0];
+    //  O'zining kutib turgan topshirishi YOKI kassirga hali
+    //  topshirilmagan mijoz puli (`OZ_OCHIQ`) — ikkalasini ham hech
+    //  kim sanab olmagan.
+    if (!o || o.created_by !== req.user.id
+        || !(o.status === 'pending' || o.ochiq))
       return res.status(403).json({ error: 'Ruxsat yo\'q' });
   }
   const { rows } = await db.query(
@@ -858,6 +889,77 @@ router.patch('/ops/:id', need(...ANY), wrap(async (req, res) => {
                      entity_id: Number(req.params.id),
                      payload: { doc_no: rows[0].doc_no } });
   res.json({ ok: true });
+}));
+
+// ──────────────────────── MIJOZ PULINI MENEJER O'ZI TUZATADI
+//
+//  Shart — `OZ_OCHIQ` (yuqorida). Tuzatiladigani: mijoz, summa,
+//  valyuta, kurs, sana, izoh. Tomonning ikkinchisi baribir O'ZI. Mijoz
+//  doirasi yozishdagi bilan bitta (`assertSide`). Audit `fix`
+//  (`edi`/`boldi`) — «kim yozilgan pulga tegdi» degan savol uchun.
+router.patch('/ops/:id/own', need(...ANY), wrap(async (req, res) => {
+  const b = req.body || {};
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(
+      `SELECT o.*, (o.to_id = $2 AND o.created_by = $2 AND ${OZ_OCHIQ('o')}) AS ochiq
+         FROM cash_ops o WHERE o.id = $1 FOR UPDATE`,
+      [req.params.id, req.user.id])).rows[0];
+    if (!o) throw new Error('Operatsiya topilmadi');
+    if (!o.ochiq)
+      throw new Error(o.status === 'ok' && o.from_kind === 'customer'
+          && o.to_id === req.user.id
+        ? 'Pul kassirga topshirilgan — tuzatishni kassir qiladi'
+        : 'Ruxsat yo\'q');
+
+    const from_id = Number(b.from_id) || o.from_id;
+    await assertSide(client, 'customer', from_id, req);
+    const currency = b.currency === 'USD' ? 'USD' : 'UZS';
+    const amount = Number(b.amount);
+    if (!(amount > 0)) throw new Error('Summa kiritilmagan');
+    const rate = currency === 'USD' ? null : Number(b.rate);
+    if (currency === 'UZS' && !(rate > 0)) throw new Error('Kurs kiritilmagan');
+    const sana = String(b.op_date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sana)) throw new Error('Sana kiritilmagan');
+
+    const { rows } = await client.query(
+      `UPDATE cash_ops SET from_id = $2, amount = $3, currency = $4, rate = $5,
+              op_date = $6, note = $7
+        WHERE id = $1 RETURNING doc_no, amount_usd`,
+      [o.id, from_id, amount, currency, rate, sana, (b.note || '').trim() || null]);
+
+    //  Summa kamaysa qo'lidagi pul minusga tushmasin (kutib turgan
+    //  topshirish ham band) — yaratishdagi `minus_cash` bilan bir xil.
+    if (await kalit('minus_cash', client)) {
+      const q = (await client.query(
+        `SELECT COALESCE(c.uzs, 0) - COALESCE((SELECT SUM(amount) FROM cash_ops
+                  WHERE status = 'pending' AND from_kind = 'worker'
+                    AND from_id = $1 AND currency = 'UZS'), 0) AS uzs,
+                COALESCE(c.usd, 0) - COALESCE((SELECT SUM(amount) FROM cash_ops
+                  WHERE status = 'pending' AND from_kind = 'worker'
+                    AND from_id = $1 AND currency = 'USD'), 0) AS usd
+           FROM (SELECT $1::int AS id) x
+           LEFT JOIN v_worker_cash c ON c.id = x.id`, [req.user.id])).rows[0];
+      if (Number(q.uzs) < -0.005 || Number(q.usd) < -0.005)
+        throw new Error('Qo\'lingizdagi pul minusga tushadi — bu pul allaqachon sarflangan');
+    }
+
+    await audit(req, { module: 'cash', action: 'fix', entity: 'cash_op',
+                       entity_id: o.id,
+                       payload: { doc_no: rows[0].doc_no,
+                                  edi: { from_id: o.from_id, amount: o.amount,
+                                         currency: o.currency, rate: o.rate,
+                                         op_date: o.op_date, note: o.note },
+                                  boldi: { from_id, amount, currency, rate,
+                                           op_date: sana, note: b.note || null } } },
+                client);
+    await client.query('COMMIT');
+    res.json(rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: e.message });
+  } finally { client.release(); }
 }));
 
 // ─────────────────────────────────── YOZILGANINI TUZATISH
