@@ -6201,6 +6201,19 @@ boshliq faqat xom ashyo SARFINI ko'radi — materiallar, donaga soni va
 oldingi konver bilan farq (%); narx, summa va ish haqi javobdan
 SERVERDA olib tashlanadi (`pulsiz`, `modules/cost.js`).
 
+**★ USTUNLAR — TANNARXNING HAMMA QISMI** (zavod qarori, 2026-11):
+kirgan sana · konver · mahsulot nomi va turi · soni · **xom ashyo ·
+furnitura · matras · ish haqi · umumiy** · donaga · oldingi konver ·
+oldingi donaga · farq. Furnitura — yuk xatiga MAHSULOT bo'yicha
+yozilgani, shu buyurtmada shu mahsulotdan chiqqan donaga bo'lingan
+(konver pasporti bilan bir xil bog'lanish, `furn` CTE); matras —
+`buy_price` × soni (marshrutsiz, sotib olingan mahsulot ham ro'yxatda).
+Oldingi konver va farq UMUMIY donaga bo'yicha. Qator bosilsa to'rt
+bo'lim: xom ashyo, furnitura, matras — har qatorda nomi · soni · narxi
+· summasi (konverning JAMI raqami, `/api/cost/:no` dagi `xom`, `furn`,
+`matras`); ish haqi — qaysi bo'limga ishbay (dona · narx · summa,
+yozilmagani qizil) va qaysi tsex oyligidan taqsimlangani.
+
 **Mahsulot turi filtri** (penal, stul…) va qidiruv KLIENTDA: ro'yxatda
 LIMIT yo'q, ya'ni hammasi sahifada turadi. Turlar yuklangan qatorlardan
 yig'iladi; tanlangani chop etilgan varaqda ham yoziladi.
