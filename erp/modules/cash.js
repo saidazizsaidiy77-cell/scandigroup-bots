@@ -231,12 +231,21 @@ router.get('/list', need(...ANY), wrap(async (req, res) => {
   //  «kimdan pul olsam bo'ladi», ikkinchisi «kimga qoldiq yozishim
   //  kerak» degan savolning javobi. Zavodning yigirmata xodimini
   //  chiqarish ikkalasiga ham javob bermasdi.
+  //
+  //  ★ «HAMMA XODIMLAR» (`?all=1`, zavod qarori 2026-11; P26-1304).
+  //  Qoldig'i nol menejer ro'yxatdan tushardi va uning lentasidagi
+  //  hujjatni (mijozi adashgan to'lov) tuzatadigan joyga yo'l qolmasdi.
+  //  Endi kassada HARAKATI bo'lgan har faol xodim ham chiqadi.
+  const hammasi = req.query.all === '1';
   const workers = boss ? (await db.query(
     `SELECT c.*, (w.can_spend_cash AND NOT w.cash_all_customers) AS can_spend_cash
        FROM v_worker_cash c
        JOIN workers w ON w.id = c.id
-      WHERE w.active AND (w.can_hold_cash OR c.uzs <> 0 OR c.usd <> 0)
-      ORDER BY c.total_usd DESC, c.name`)).rows : [];
+      WHERE w.active AND (w.can_hold_cash OR c.uzs <> 0 OR c.usd <> 0
+            OR ($1 AND EXISTS (SELECT 1 FROM cash_ops o
+                 WHERE (o.from_kind = 'worker' AND o.from_id = w.id)
+                    OR (o.to_kind = 'worker' AND o.to_id = w.id))))
+      ORDER BY c.total_usd DESC, c.name`, [hammasi])).rows : [];
   res.json({
     boss,
     workers: workers.map((w) => ({ ...w, href: `/kassa.html?a=w${w.id}` })),

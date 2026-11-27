@@ -11872,6 +11872,30 @@ test('kassa summasi: kassir tegolmaydi, administrator tuzatadi', async () => {
 
 //  ★ MIJOZ ALMASHADI — FAQAT ADMINISTRATOR (P26-1304): pul to'g'ri
 //  kelgan, mijoz adashib tanlangan. Qarz eskisidan yangisiga o'tadi.
+//  ★ «HAMMA XODIMLAR» (`/api/cash/list?all=1`): qoldig'i nol, belgisi
+//  yo'q, lekin kassada harakati bor xodim ham chiqadi (P26-1304).
+test('kassa: hamma xodimlar ro\'yxati', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const w = (await db.query(
+    `INSERT INTO workers (name, active, can_hold_cash)
+     VALUES ('Sinov nol menejer', true, false) RETURNING id`)).rows[0].id;
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const c = (await H.id(`SELECT id FROM customers WHERE active ORDER BY id LIMIT 1`)).id;
+  await db.query(
+    `INSERT INTO cash_ops (doc_no, from_kind, from_id, to_kind, to_id, currency, amount, status)
+     VALUES ('TST-NOL-1', 'customer', $1, 'worker', $2, 'USD', 40, 'ok'),
+            ('TST-NOL-2', 'worker', $2, 'account', $3, 'USD', 40, 'ok')`, [c, w, kassa]);
+  const oddiy = (await kassir('GET', '/api/cash/list')).body.workers;
+  assert.ok(!oddiy.some((x) => x.id === w), 'qoldig\'i nol — oddiy ro\'yxatda yo\'q');
+  const hammasi = (await kassir('GET', '/api/cash/list?all=1')).body.workers;
+  const t = hammasi.find((x) => x.id === w);
+  assert.ok(t, 'hamma xodimlarda bor');
+  assert.equal(t.href, '/kassa.html?a=w' + w);
+  await db.query(`UPDATE cash_ops SET status = 'cancelled' WHERE doc_no LIKE 'TST-NOL-%'`);
+  await db.query(`UPDATE workers SET active = false WHERE id = $1`, [w]);
+});
+
 test('kassa: administrator mijozni almashtiradi', async () => {
   const { db } = require('../db');
   const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
