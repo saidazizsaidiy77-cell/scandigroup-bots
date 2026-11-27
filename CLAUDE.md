@@ -2543,6 +2543,8 @@ javobi.
 tushmasdi va uning lentasidagi hujjatni (P26-1304 — mijozi adashgan
 to'lov) tuzatadigan joyga yo'l qolmasdi. Tugma bosilsa kassada
 HARAKATI bo'lgan har faol xodim ham chiqadi; standart — eskicha.
+Xodimning O'Z sahifasi (`?a=w12`) ham shu ro'yxatdan o'qiydi
+(`kassa.html`, `reload`) — aks holda bosilgan xodim «topilmadi» edi.
 
 **Kassa — kartochka, xodim — JADVAL.** Kassa ikkita va har biri o'z
 joyi: qoldig'i yirik raqam bo'lib turishi kerak. Xodim esa o'ntacha va

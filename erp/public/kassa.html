@@ -437,7 +437,9 @@ async function reload() {
   //  chiqishi kerak — aks holda kassir yo'q pulni ikkinchi marta
   //  qabul qilib qo'yardi.
   const [d, r] = await Promise.all([
-    App.api('/api/cash/list'), App.api('/api/cash/refs')]);
+    //  Xodim sahifasi «Hamma xodimlar» ro'yxatidan ham ochiladi: qoldig'i
+    //  nol xodim oddiy ro'yxatda yo'q va «Xodim topilmadi» chiqardi.
+    App.api('/api/cash/list' + (W ? '?all=1' : '')), App.api('/api/cash/refs')]);
   refs = r;
   boss = d.boss;
   here = isMe() ? d.me
