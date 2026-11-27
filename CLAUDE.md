@@ -2608,6 +2608,14 @@ ham, foyda-zarar ham uni bazaning O'ZIDAN oladi.
 ham: boshqa odam — boshqa hodisa, tuzatish emas. Unda operatsiya
 bekor qilinadi va qaytadan yoziladi.
 
+**★ ISTISNO — MIJOZ ADASHIB TANLANGAN** (zavod qarori, 2026-11;
+P26-1304; `customer_id` `/fix` da). Pul to'g'ri kelgan, faqat mijoz
+boshqasi tanlangan: bekor qilib qayta yozish hujjat raqamini yoqardi
+va menejerning qo'lidagi pul bir zum minusga tushardi. `cash.fix`
+(administrator) ✎ oynasida mijozni BOSHQA MIJOZGA almashtiradi —
+qarz eskisidan yangisiga o'tadi; kassa, xodim va ta'minotchi tomoni
+baribir o'zgarmaydi. Eski mijoz auditda (`edi.from_id`/`to_id`).
+
 Ekranda summa, valyuta va kurs kataklari **faqat huquqi borida**
 chiziladi, **«KURSDA TIYIN BOR, SUMMADA YO'Q»** idiomi bilan: dollar
 yozilsa kurs o'zi chiqadi. Tekshiruv SERVERDA — huquqi yo'q odam

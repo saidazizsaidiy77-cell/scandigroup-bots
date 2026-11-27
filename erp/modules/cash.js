@@ -1076,16 +1076,34 @@ router.patch('/ops/:id/fix', need(...MANAGE), wrap(async (req, res) => {
       if (currency === 'UZS' && !(rate > 0)) throw new Error('Kurs kiritilmagan');
     }
 
+    //  ★ MIJOZ ALMASHADI — FAQAT `cash.fix` DA (zavod qarori, 2026-11;
+    //  P26-1304). Pul to'g'ri kelgan, mijoz esa adashib tanlangan:
+    //  bekor qilib qayta yozish hujjat raqamini yoqardi va menejerning
+    //  qo'lidagi pul bir zum minusga tushardi. Faqat MIJOZ → MIJOZ:
+    //  kassa, xodim va ta'minotchi tomoni baribir o'zgarmaydi.
+    let from_id = o.from_id, to_id = o.to_id;
+    const mijozTomon = o.from_kind === 'customer' ? 'from'
+                     : o.to_kind === 'customer' ? 'to' : null;
+    const yangiMijoz = Number(b.customer_id) || null;
+    if (pul && mijozTomon && yangiMijoz
+        && yangiMijoz !== Number(mijozTomon === 'from' ? o.from_id : o.to_id)) {
+      const c = (await client.query(
+        `SELECT 1 FROM customers WHERE id = $1 AND active`, [yangiMijoz])).rows[0];
+      if (!c) throw new Error('Bunday mijoz yo\'q');
+      if (mijozTomon === 'from') from_id = yangiMijoz; else to_id = yangiMijoz;
+    }
+
     //  `amount_usd` GENERATED — qarz, qoldiq va hisobotlar uni
     //  bazaning O'ZIDAN oladi, ya'ni qayta hisoblanadigan narsa yo'q.
     const { rows } = await client.query(
       `UPDATE cash_ops
           SET op_date = $2, note = $3,
               expense_item_id = $4, pl_month = $5::date, staff_id = $6,
-              amount = $7, currency = $8, rate = $9
+              amount = $7, currency = $8, rate = $9,
+              from_id = $10, to_id = $11
         WHERE id = $1 RETURNING doc_no`,
       [o.id, sana, (b.note || '').trim() || null, item_id, pl_month, staff_id,
-       amount, currency, rate]);
+       amount, currency, rate, from_id, to_id]);
 
     await audit(req, { module: 'cash', action: 'fix', entity: 'cash_op',
                        entity_id: o.id,
@@ -1095,11 +1113,13 @@ router.patch('/ops/:id/fix', need(...MANAGE), wrap(async (req, res) => {
                                          pl_month: o.pl_month,
                                          staff_id: o.staff_id,
                                          amount: o.amount, currency: o.currency,
-                                         rate: o.rate },
+                                         rate: o.rate,
+                                         from_id: o.from_id, to_id: o.to_id },
                                   boldi: { op_date: sana, note: b.note || null,
                                            expense_item_id: item_id,
                                            pl_month, staff_id,
-                                           amount, currency, rate } } }, client);
+                                           amount, currency, rate,
+                                           from_id, to_id } } }, client);
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {

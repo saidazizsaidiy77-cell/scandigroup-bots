@@ -11870,6 +11870,47 @@ test('kassa summasi: kassir tegolmaydi, administrator tuzatadi', async () => {
     `SELECT balance FROM v_supplier_debt WHERE id = $1`, [tam])).balance), oldinQarz);
 });
 
+//  ★ MIJOZ ALMASHADI — FAQAT ADMINISTRATOR (P26-1304): pul to'g'ri
+//  kelgan, mijoz adashib tanlangan. Qarz eskisidan yangisiga o'tadi.
+test('kassa: administrator mijozni almashtiradi', async () => {
+  const { db } = require('../db');
+  const kassir = H.api(base, await H.sessionFor('Sinov kassir'));
+  const admin = H.api(base, tokenAdmin);
+  const kassa = (await H.id(`SELECT id FROM cash_accounts WHERE code='MAIN'`)).id;
+  const cs = (await db.query(
+    `SELECT id FROM customers WHERE active ORDER BY id LIMIT 2`)).rows;
+  assert.equal(cs.length, 2);
+  const [c1, c2] = cs.map((c) => c.id);
+  const bal = async (c) => Number((await H.id(
+    `SELECT COALESCE(SUM(debit - credit), 0) AS b FROM v_customer_ledger
+      WHERE customer_id = $1`, [c])).b);
+  const b1 = await bal(c1), b2 = await bal(c2);
+  const r = await kassir('POST', '/api/cash/ops', {
+    from_kind: 'customer', from_id: c1, to_kind: 'account', to_id: kassa,
+    currency: 'USD', amount: 300, op_date: '2026-09-20' });
+  assert.equal(r.status, 200, r.text);
+  const id = (await H.id(`SELECT id FROM cash_ops ORDER BY id DESC LIMIT 1`)).id;
+
+  assert.equal((await kassir('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-20', customer_id: c2 })).status, 200);
+  assert.equal(Number((await H.id(`SELECT from_id FROM cash_ops WHERE id = $1`,
+    [id])).from_id), c1, 'kassir mijozga tegolmaydi');
+
+  const a = await admin('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-20', customer_id: c2 });
+  assert.equal(a.status, 200, a.text);
+  assert.equal(Number((await H.id(`SELECT from_id FROM cash_ops WHERE id = $1`,
+    [id])).from_id), c2);
+  assert.equal(await bal(c1), b1, 'eski mijozning qarzi joyiga qaytdi');
+  assert.equal(await bal(c2), b2 - 300, 'yangi mijozning qarzi kamaydi');
+  assert.ok(await H.id(`SELECT 1 AS x FROM audit_log WHERE action = 'fix'
+     AND entity = 'cash_op' AND entity_id = $1
+     AND payload->'edi'->>'from_id' = $2`, [String(id), String(c1)]), 'auditda');
+  assert.equal((await admin('PATCH', `/api/cash/ops/${id}/fix`,
+    { op_date: '2026-09-20', customer_id: 99999999 })).status, 400);
+  assert.equal((await kassir('PATCH', '/api/cash/ops/' + id)).status, 200);
+});
+
 //  ★ TA'MINOTCHIGA TO'LOV HAM HUJJAT BO'LIB OCHILADI (zavod qarori,
 //  2026-10). Qarzdorlik lentasida to'lov raqami bosilsa kassa orderi
 //  ochiladi — mijozning kirim orderi bilan BIR XIL sahifa, faqat

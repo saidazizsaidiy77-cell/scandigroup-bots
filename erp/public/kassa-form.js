@@ -893,7 +893,10 @@ function fixOp(id) {
                staff: o.staff_id || '',
                cur: o.currency, amount: String(o.amount || ''),
                rate: o.rate ? String(Number(o.rate)) : '',
-               note: o.note || '', date: String(o.op_date || '').slice(0, 10) };
+               note: o.note || '', date: String(o.op_date || '').slice(0, 10),
+               //  Mijoz tomoni (bo'lsa) — faqat `cash.fix` da almashadi
+               cust: o.from_kind === 'customer' ? o.from_id
+                   : o.to_kind === 'customer' ? o.to_id : null };
   drawFix();
 }
 
@@ -955,6 +958,16 @@ function drawFix() {
                 Number(F.staff) === w.id ? ' selected' : ''}>${esc(w.name)}${
                 w.position ? ' · ' + esc(w.position) : ''}</option>`).join('')}
             </select></div>`}`}
+          ${!pul || !F.cust ? '' : `
+          <div style="grid-column:1/-1"><label>Mijoz</label>
+            <select id="xCust">
+              ${(refs.customers || []).some((c) => c.id === Number(F.cust)) ? ''
+                : `<option value="${F.cust}" selected>${esc(o.from_kind === 'customer'
+                    ? o.from_name : o.to_name)}</option>`}
+              ${(refs.customers || []).map((c) => `<option value="${c.id}"${
+                c.id === Number(F.cust) ? ' selected' : ''}>${esc(c.name)}${
+                c.region ? ' · ' + esc(c.region) : ''}</option>`).join('')}
+            </select></div>`}
           ${!pul ? '' : `
           <div><label>Valyuta</label>
             <select id="xCur" onchange="fixSet('cur', this.value)">
@@ -982,9 +995,12 @@ function drawFix() {
         <p class="muted" style="font-size:12px;margin:12px 0 0">${pul
           ? `Summa o'zgarsa mijozning yoki ta'minotchining qarzi va kassa
              qoldig'i ham o'zgaradi — eski qiymat audit jurnalida qoladi.
-             <b>Tomonlar (kimdan → kimga) bu yerdan o'zgarmaydi</b>: boshqa
-             odam — boshqa hodisa, tuzatish emas. Unda operatsiya bekor
-             qilinadi va qaytadan yoziladi.`
+             ${F.cust ? `Mijoz adashib tanlangan bo'lsa shu yerda
+             almashtiriladi — qarz eski mijozdan yangisiga o'tadi.
+             Qolgan tomon (kassa, xodim) o'zgarmaydi.` : `<b>Tomonlar
+             (kimdan → kimga) bu yerdan o'zgarmaydi</b>: boshqa odam —
+             boshqa hodisa, tuzatish emas. Unda operatsiya bekor qilinadi
+             va qaytadan yoziladi.`}`
           : `Summa, valyuta, kurs va tomonlar bu yerdan o'zgarmaydi — ular
              haqiqatda bo'lib o'tgan harakat. Ularda xato bo'lsa operatsiya
              <b>bekor qilinadi</b> va qaytadan yoziladi: ikkala hujjat ham
@@ -1007,6 +1023,7 @@ function fixSet(k, v) {
   if ($('xStaff')) fixState.staff = $('xStaff').value;
   if ($('xNote')) fixState.note = $('xNote').value;
   if ($('xDate')) fixState.date = $('xDate').value;
+  if ($('xCust')) fixState.cust = $('xCust').value;
   //  Valyuta almashsa kurs tozalanadi: dollarda u yo'q, so'mga
   //  qaytilganda esa eski kurs yangi summaga tegishli emas.
   if (k === 'cur') { fixState.cur = v; fixState.rate = ''; }
@@ -1052,6 +1069,7 @@ async function saveFix() {
         staff_id: $('xStaff') ? $('xStaff').value || null : null,
         //  Huquqi bo'lmaganda umuman yuborilmaydi: server ham shu
         //  qoidani qo'yadi, lekin ikkalasi bir xil gapirsin.
+        ...($('xCust') ? { customer_id: $('xCust').value } : {}),
         ...($('xAmt') ? { amount: $('xAmt').value, currency: F.cur,
                           rate: F.cur === 'UZS' ? F.rate : null } : {}),
       }) });
