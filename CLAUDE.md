@@ -2538,6 +2538,12 @@ borlar VA belgisi bor xodimlar (`can_hold_cash`) — biri «kimdan pul
 olsam bo'ladi», ikkinchisi «kimga qoldiq yozishim kerak» degan savolning
 javobi.
 
+**★ «HAMMA XODIMLAR» TUGMASI** (zavod qarori, 2026-11;
+`/api/cash/list?all=1`). Qoldig'i nol, belgisi yo'q menejer ro'yxatga
+tushmasdi va uning lentasidagi hujjatni (P26-1304 — mijozi adashgan
+to'lov) tuzatadigan joyga yo'l qolmasdi. Tugma bosilsa kassada
+HARAKATI bo'lgan har faol xodim ham chiqadi; standart — eskicha.
+
 **Kassa — kartochka, xodim — JADVAL.** Kassa ikkita va har biri o'z
 joyi: qoldig'i yirik raqam bo'lib turishi kerak. Xodim esa o'ntacha va
 ko'pchiligining qo'lida nol turadi — o'nta kartochka butun ekranni

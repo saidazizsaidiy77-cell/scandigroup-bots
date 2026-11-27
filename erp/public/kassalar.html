@@ -172,8 +172,15 @@ function draw(d) {
         a, a.kind === 'bank' ? 'hisob raqami' : 'ok')).join('')
     + (d.boss ? '' : card(d.me.href, 'Mening pulim',
         "kassirga topshirilmagani", d.me, "qo'ldagi pul")))
+    + (d.boss ? `
+      <div class="row" style="justify-content:space-between;align-items:center;margin:26px 0 12px">
+        <h2 style="margin:0">Xodimlar qo'lidagi pul</h2>
+        <!--  Qoldig'i nol xodim ham (kassada harakati bo'lsa) — uning
+              lentasidagi hujjatni tuzatish uchun. -->
+        <button onclick="hammasi = !hammasi; boot()">${hammasi
+          ? 'Faqat puli borlar' : 'Hamma xodimlar'}</button>
+      </div>` : '')
     + (xodimlar.length ? `
-      <h2 style="margin:26px 0 12px">Xodimlar qo'lidagi pul</h2>
       <div class="card hands" style="padding:0;overflow:hidden">
       <table>
         <thead><tr><th>Xodim</th>${somli
@@ -207,10 +214,11 @@ async function rad(id) {
 }
 
 let kutish = [];
+let hammasi = false;
 
 async function boot() {
   const [d, p] = await Promise.all([
-    App.api('/api/cash/list'),
+    App.api('/api/cash/list' + (hammasi ? '?all=1' : '')),
     App.api('/api/cash/pending').catch(() => ({ rows: [] })),
   ]);
   kutish = p.rows || [];
