@@ -3670,6 +3670,10 @@ bu oyning «Zavodda» va «Chiqsa» siga kirmaydi — dekabrda chiqadigani
 noyabr rejasini yolg'on bajarardi. Sanasi o'tib ketgani va sanasizi
 qoladi (ular hozir chiqishi kerak). «Zavodda turibdi» kartochkasi
 (bugungi holat) o'zgarmadi.
+**Keyingi oyga o'tgani ALOHIDA summa bo'lib turadi** (`kel`,
+`keyingi_qty`/`keyingi_amount`): har kartochkada «Keyingi oyga» qatori
+(soni · $, faqat bo'lsa) va jami satrida summasi. «Chiqsa» ga
+qo'shilmaydi. Test: zavodda + keyingi oyga = hamma ochiq buyurtma.
 
 **★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR** (zavod qarori, 2026-11;
 `turkumKpi` dagi `zavodda_list`, `Panel.kpiTurkum`). Kartochkadagi

@@ -10358,6 +10358,18 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
         AND g.sales_category IS NOT NULL`)).rows[0];
   assert.equal(sd.turkum.reduce((a, r) => a + Number(r.zavodda_amount), 0).toFixed(2),
                Number(ochiq.s).toFixed(2));
+  //  «Keyingi oyga» + «Zavodda» = hamma ochiq buyurtma (sanasi keyingi
+  //  oyga qo'yilgani alohida sanaladi, yo'qolmaydi).
+  const hammaOchiq = (await tdb.query(
+    `SELECT COALESCE(SUM(i.qty * COALESCE(i.unit_price, 0)), 0)::numeric AS s
+       FROM v_sales_orders o JOIN order_items i ON i.order_id = o.id
+       JOIN products p ON p.id = i.product_id
+       JOIN product_groups g ON g.id = p.group_id
+      WHERE o.status NOT IN ('shipped', 'cancelled')
+        AND g.sales_category IS NOT NULL`)).rows[0];
+  assert.equal(sd.turkum.reduce((a, r) => a + Number(r.zavodda_amount)
+                 + Number(r.keyingi_amount), 0).toFixed(2),
+               Number(hammaOchiq.s).toFixed(2));
   const reja = (await tdb.query(
     `SELECT COALESCE(SUM(plan), 0)::numeric AS s FROM sales_kpi_targets t
        JOIN workers w ON w.id = t.worker_id AND w.active

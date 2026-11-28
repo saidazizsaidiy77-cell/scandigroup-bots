@@ -2846,6 +2846,23 @@ async function turkumKpi(mon, chans, own, kimga) {
             AND ($1::text[] IS NULL OR o.channel = ANY($1))
             AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
           GROUP BY 1),
+       --  ★ KEYINGI OYGA O'TGANI (zavod qarori, 2026-11): zav dan
+       --  chiqarilgan buyurtmalar — chiqish sanasi keyingi oy yoki undan
+       --  keyin. «Chiqsa» ga kirmaydi, faqat ko'rsatiladi.
+       kel AS (
+         SELECT g.sales_category AS c,
+                SUM(i.qty) FILTER (WHERE g.kpi_dona) AS q,
+                SUM(i.qty * COALESCE(i.unit_price, 0)) AS s
+           FROM v_sales_orders o
+           JOIN order_items i    ON i.order_id = o.id
+           JOIN products p       ON p.id = i.product_id
+           JOIN product_groups g ON g.id = p.group_id, oy
+          WHERE o.status NOT IN ('shipped', 'cancelled')
+            AND oy.m = date_trunc('month', CURRENT_DATE)::date
+            AND o.due_on >= (oy.m + INTERVAL '1 month')::date
+            AND ($1::text[] IS NULL OR o.channel = ANY($1))
+            AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
+          GROUP BY 1),
        --  ★ «ZAVODDA» NING O'ZI — QAYSI BUYURTMALAR (zavod qarori,
        --  2026-11). Shart zav bilan AYNAN bir xil, faqat buyurtma va
        --  mahsulot bo'yicha: kartochkadagi raqam bosilsa shu ro'yxat
@@ -2897,6 +2914,8 @@ async function turkumKpi(mon, chans, own, kimga) {
               COALESCE((SELECT SUM(s) FROM chiq WHERE c = sc.code), 0)::numeric AS chiqdi_amount,
               COALESCE((SELECT q FROM zav WHERE c = sc.code), 0)::int           AS zavodda_qty,
               COALESCE((SELECT s FROM zav WHERE c = sc.code), 0)::numeric       AS zavodda_amount,
+              COALESCE((SELECT q FROM kel WHERE c = sc.code), 0)::int           AS keyingi_qty,
+              COALESCE((SELECT s FROM kel WHERE c = sc.code), 0)::numeric       AS keyingi_amount,
               (SELECT q FROM reja WHERE c = sc.code)::numeric                   AS reja_qty,
               (SELECT s FROM reja WHERE c = sc.code)::numeric                   AS reja_amount,
               COALESCE((SELECT json_agg(json_build_object(
