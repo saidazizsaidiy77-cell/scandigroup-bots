@@ -96,7 +96,8 @@
       <button type="button" onclick="rangQosh()" style="margin-top:6px">+ Boshqa rang</button>
       <span class="hint" id="rangJami" style="margin-left:8px"></span></div>
     <div class="wide"><label id="noteLbl">Izoh</label>
-      <input id="fNote" placeholder="ixtiyoriy"></div>
+      <textarea id="fNote" rows="3" placeholder="ixtiyoriy — har mahsulot yangi qatorda"
+        style="width:100%;resize:vertical"></textarea></div>
     <!--  Zahira — buyurtmasiz, oldindan ishlanadigan mahsulot. Kutish
           bo'limida buyurtma kutadi va unga muddat bashorat qilinmaydi;
           rangi ham keyin, mijoz aytganda tanlanadi. -->
@@ -397,10 +398,10 @@ function draw() {
       <td>${esc(r.product)}${r.size_label ? ' · ' + esc(r.size_label) : ''}
         <div class="muted" style="font-size:12px">${esc(r.product_type)}</div>
         ${r.kinds ? `<div style="font-size:13px"><b>${esc(r.kinds)}</b></div>` : ''}
-        ${r.note ? `<div class="tag" style="font-size:12px;white-space:normal;
+        ${r.note ? `<div class="tag" style="font-size:12px;white-space:pre-line;
           margin-top:4px">${esc(r.note)}</div>` : ''}${
         [r.item_note, r.order_note].filter(Boolean).length
-          ? `<div class="tag" style="font-size:12px;white-space:normal;
+          ? `<div class="tag" style="font-size:12px;white-space:pre-line;
           margin-top:4px">Buyurtma: ${
             [r.item_note, r.order_note].filter(Boolean).map(esc).join(' · ')}</div>` : ''}</td>
       <td class="num">${r.qty}${r.uom ? ' <span class="muted">' + esc(r.uom) + '</span>' : ''}</td>
@@ -562,7 +563,7 @@ async function tahrir(id) {
             r.auto ? '' : ' <span class="muted" style="text-transform:none">— majburiy</span>'}</label>
             <input id="eNext" type="date" value="${esc(String(r.next_on || '').slice(0, 10))}"></div>` : ''}
           <div class="wide"><label>Izoh</label>
-            <input id="eNote" value="${esc(r.note || '')}"></div>
+            <textarea id="eNote" rows="4" style="width:100%;resize:vertical">${esc(r.note || '')}</textarea></div>
           <div class="wide"><label class="row" style="gap:10px;align-items:center;
             text-transform:none;font-size:14px;cursor:pointer">
             <input type="checkbox" id="eStock" style="width:auto"${r.is_stock ? ' checked' : ''}>

@@ -660,6 +660,10 @@ umumiy, buyurtma qatorida qo'yiladi. Mahsulot ro'yxatida guruhdan faqat
 «Maxsus buyurtma» turadi: saytdan ochilgan «Eshik», «HORECA mebellari»
 kabi nomlar ko'rinmaydi va server ham yangi so'rovda rad etadi
 (`maxsusTekshir`, `yangi`). Eski so'rov tahrirda tegilmaydi.
+Tafsilot katagi KO'P QATORLI (`textarea`, so'rov va tahrir oynasida;
+zavod qarori, 2026-11): har mahsulot o'z qatorida yoziladi, Telegramdan
+yopishtirilgan ro'yxat ham. Ekranda qatorlar saqlanadi (`.izoh`,
+`white-space: pre-line`).
 
 Buyurtmadan so'ralganda mijoz va sana BUYURTMANING o'zidan (`due_on`).
 **Raqam o'z hisobidan** (`Z26-0001`): `doc_no_start` dagi `Z26-` qatori
