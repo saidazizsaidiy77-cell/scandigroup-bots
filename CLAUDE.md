@@ -3664,6 +3664,13 @@ kartochkasi bilan bir xil shart; buyurtmadagi SUMMA ekranda yo'q,
 faqat jami «chiqsa %» ga kiradi — yonida o'sha summa ham (chiqdi +
 zavodda, dollarda; zavod qarori, 2026-11). Oraliq filtriga bog'liq emas.
 
+**★ «ZAVODDA» — FAQAT SHU OYDA CHIQADIGANI** (zavod qarori, 2026-11;
+`zav`, `zr`): chiqish sanasi (`due_on`) keyingi oyga qo'yilgan buyurtma
+bu oyning «Zavodda» va «Chiqsa» siga kirmaydi — dekabrda chiqadigani
+noyabr rejasini yolg'on bajarardi. Sanasi o'tib ketgani va sanasizi
+qoladi (ular hozir chiqishi kerak). «Zavodda turibdi» kartochkasi
+(bugungi holat) o'zgarmadi.
+
 **★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR** (zavod qarori, 2026-11;
 `turkumKpi` dagi `zavodda_list`, `Panel.kpiTurkum`). Kartochkadagi
 raqam bosilsa ostida buyurtmalar ochiladi: zakaz (bosilsa

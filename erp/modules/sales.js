@@ -2839,6 +2839,10 @@ async function turkumKpi(mon, chans, own, kimga) {
           WHERE o.status NOT IN ('shipped', 'cancelled')
             --  «Zavodda» — BUGUNGI holat: o'tgan oyda u savol emas.
             AND oy.m = date_trunc('month', CURRENT_DATE)::date
+            --  ★ FAQAT SHU OYDA CHIQADIGANI (zavod qarori, 2026-11):
+            --  chiqish sanasi keyingi oyga qo'yilgani bu oyning «Chiqsa»
+            --  siga kirmaydi. Sanasi o'tgani va sanasizi qoladi.
+            AND (o.due_on IS NULL OR o.due_on < (oy.m + INTERVAL '1 month')::date)
             AND ($1::text[] IS NULL OR o.channel = ANY($1))
             AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
           GROUP BY 1),
@@ -2857,6 +2861,10 @@ async function turkumKpi(mon, chans, own, kimga) {
            JOIN product_groups g ON g.id = p.group_id, oy
           WHERE o.status NOT IN ('shipped', 'cancelled')
             AND oy.m = date_trunc('month', CURRENT_DATE)::date
+            --  ★ FAQAT SHU OYDA CHIQADIGANI (zavod qarori, 2026-11):
+            --  chiqish sanasi keyingi oyga qo'yilgani bu oyning «Chiqsa»
+            --  siga kirmaydi. Sanasi o'tgani va sanasizi qoladi.
+            AND (o.due_on IS NULL OR o.due_on < (oy.m + INTERVAL '1 month')::date)
             AND ($1::text[] IS NULL OR o.channel = ANY($1))
             AND ($2::int IS NULL OR o.manager_id = $2 OR mijoz_meniki(o.customer_id, $2))
           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9),
