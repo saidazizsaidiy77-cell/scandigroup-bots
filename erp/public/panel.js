@@ -261,6 +261,7 @@ const Panel = (() => {
   const jCh = tk.reduce((a, r) => a + Number(r.chiqdi_amount || 0), 0);
   const jZa = tk.reduce((a, r) => a + Number(r.zavodda_amount || 0), 0);
   const jRe = tk.reduce((a, r) => a + Number(r.reja_amount || 0), 0);
+  const jKe = tk.reduce((a, r) => a + Number(r.keyingi_amount || 0), 0);
   const jf = foiz(jCh, jRe), jfz = foiz(jCh + jZa, jRe);
   //  ★ PUL TUSHUMI — turkumlar bilan YONMA-YON, lekin jamiga
   //  qo'shilmaydi: u savdo emas, kassaga KELGAN pul. Chiziq o'sha
@@ -288,6 +289,7 @@ const Panel = (() => {
       <span><span class="muted">Bajarildi</span> <b>${jf == null ? '—' : jf + '%'}</b></span>
       ${zavod ? `<span><span class="muted">Chiqsa</span> <b>${jfz == null ? '—' : jfz + '%'}</b>
         <span class="muted">· ${esc(pul(jCh + jZa, true))}</span></span>` : ''}
+      ${zavod && jKe ? `<span><span class="muted">Keyingi oyga</span> <b>${esc(pul(jKe, true))}</b></span>` : ''}
     </div>${bar(jCh, jZa, jRe)}`;
   //  ★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR (zavod qarori, 2026-11;
   //  `zavodda_list`). <details>: holat sahifada saqlanmaydi, ochiq
@@ -326,6 +328,8 @@ const Panel = (() => {
         reS ? ` · <b>${esc(pul(reS, true))}</b>` : ''}</span></div>
       <div class="kqator"><span>Chiqdi</span><span><b>${son(ch)}</b> ${u} · <b>${esc(pul(chS, true))}</b></span></div>
       ${zavod ? zavoddaRo(r, za, u) : ''}
+      ${zavod && (Number(r.keyingi_qty) || Number(r.keyingi_amount)) ? `<div class="kqator">
+        <span>Keyingi oyga</span><span><b>${son(Number(r.keyingi_qty) || 0)}</b> ${u} · <b>${esc(pul(Number(r.keyingi_amount) || 0, true))}</b></span></div>` : ''}
       ${zavod ? `<div class="kqator"><span>Chiqsa</span><span><b>${fz == null ? '—' : fz + '%'}</b></span></div>` : ''}
     </div>`;
   }).join('') + tushumKart(tushum)
