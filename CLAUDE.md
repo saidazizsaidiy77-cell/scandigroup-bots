@@ -3657,7 +3657,8 @@ chiqib ketgan KONVER, qabul qilingan qaytarish ayirilgan, dona faqat
 bo'lmaydi — ikki menejerli mijoz ikki marta sanalardi — shuning
 uchun konverning o'zidan, bir marta. **Zavodda** — «Zavodda turibdi»
 kartochkasi bilan bir xil shart; buyurtmadagi SUMMA ekranda yo'q,
-faqat jami «chiqsa %» ga kiradi. Oraliq filtriga bog'liq emas.
+faqat jami «chiqsa %» ga kiradi — yonida o'sha summa ham (chiqdi +
+zavodda, dollarda; zavod qarori, 2026-11). Oraliq filtriga bog'liq emas.
 
 **★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR** (zavod qarori, 2026-11;
 `turkumKpi` dagi `zavodda_list`, `Panel.kpiTurkum`). Kartochkadagi

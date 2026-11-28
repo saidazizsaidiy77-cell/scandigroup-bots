@@ -286,7 +286,8 @@ const Panel = (() => {
       <span><span class="muted">Jami chiqdi</span> <b>${esc(pul(jCh, true))}</b></span>
       <span><span class="muted">Reja</span> <b>${jRe ? esc(pul(jRe, true)) : '—'}</b></span>
       <span><span class="muted">Bajarildi</span> <b>${jf == null ? '—' : jf + '%'}</b></span>
-      ${zavod ? `<span><span class="muted">Chiqsa</span> <b>${jfz == null ? '—' : jfz + '%'}</b></span>` : ''}
+      ${zavod ? `<span><span class="muted">Chiqsa</span> <b>${jfz == null ? '—' : jfz + '%'}</b>
+        <span class="muted">· ${esc(pul(jCh + jZa, true))}</span></span>` : ''}
     </div>${bar(jCh, jZa, jRe)}`;
   //  ★ «ZAVODDA» BOSILSA — QAYSI BUYURTMALAR (zavod qarori, 2026-11;
   //  `zavodda_list`). <details>: holat sahifada saqlanmaydi, ochiq
