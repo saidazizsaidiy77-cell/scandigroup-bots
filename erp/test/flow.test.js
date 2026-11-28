@@ -10353,6 +10353,8 @@ test('to\'rtala panel ham ochiladi — doirasi bor xodimda ham', async () => {
        JOIN products p ON p.id = i.product_id
        JOIN product_groups g ON g.id = p.group_id
       WHERE o.status NOT IN ('shipped', 'cancelled')
+        AND (o.due_on IS NULL
+             OR o.due_on < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date)
         AND g.sales_category IS NOT NULL`)).rows[0];
   assert.equal(sd.turkum.reduce((a, r) => a + Number(r.zavodda_amount), 0).toFixed(2),
                Number(ochiq.s).toFixed(2));
